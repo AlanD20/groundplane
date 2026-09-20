@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -10,7 +11,7 @@ func (repository *HierarchyDeletionRepository) readHierarchyDeletionPrimary(
 	ctx context.Context,
 	key string,
 	action HierarchyDeletionAction,
-) (*KeyValue, error) {
+) (*etcdstore.KeyValue, error) {
 	result, err := repository.store.Get(ctx, key)
 	if err != nil {
 		return nil, err
@@ -64,20 +65,20 @@ func hierarchyDeletionOriginalRootValue(action HierarchyDeletionAction, value []
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionIndexedDelete(
 	ctx context.Context,
 	action HierarchyDeletionAction,
-	primary *KeyValue,
+	primary *etcdstore.KeyValue,
 	indexKeys []string,
 ) (hierarchyDeletionControllerEffects, error) {
-	conditions := []Condition{{Key: primary.Key, ModRevision: primary.ModRevision}}
-	mutations := make([]Mutation, 0, len(indexKeys)+1)
+	conditions := []etcdstore.Condition{{Key: primary.Key, ModRevision: primary.ModRevision}}
+	mutations := make([]etcdstore.Mutation, 0, len(indexKeys)+1)
 	if len(indexKeys) == 0 {
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: primary.Key})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: primary.Key})
 		return hierarchyDeletionControllerEffects{
 			fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value),
 			conditions:       conditions,
 			mutations:        mutations,
 		}, nil
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: indexKeys})
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: indexKeys})
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
@@ -93,10 +94,10 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionIndexedDe
 		if value == nil || value.Key != key || (index < 2 && string(value.Value) != action.TargetID) {
 			return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 		}
-		conditions = append(conditions, Condition{Key: key, ModRevision: value.ModRevision})
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
+		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: value.ModRevision})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	}
-	mutations = append(mutations, Mutation{Type: MutationDelete, Key: primary.Key})
+	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: primary.Key})
 	return hierarchyDeletionControllerEffects{
 		fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,
 	}, nil
@@ -108,7 +109,7 @@ func (repository *HierarchyDeletionRepository) requireHierarchyDeletionPrefixesE
 ) (int64, error) {
 	revision := int64(0)
 	for _, prefix := range prefixes {
-		page, err := repository.store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 1, Revision: revision})
+		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: 1, Revision: revision})
 		if err != nil {
 			return 0, err
 		}
@@ -132,7 +133,7 @@ func hierarchyDeletionConnectorReferencePrefixes(connectorID string) []string {
 }
 
 func clearRunnerAllocationEvidence(evidence runnerAllocationEvidence) {
-	for _, value := range []*KeyValue{evidence.owner, evidence.slug, evidence.quota, evidence.host, evidence.system} {
+	for _, value := range []*etcdstore.KeyValue{evidence.owner, evidence.slug, evidence.quota, evidence.host, evidence.system} {
 		if value != nil {
 			clear(value.Value)
 		}

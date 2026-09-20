@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -26,7 +27,7 @@ func (repository *HierarchyDeletionRepository) GetDeletionTaskIDAtRevision(
 	if !validHierarchyDeletionTarget(targetKind, targetID) || revision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "hierarchy deletion projection lookup is invalid")
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{hierarchyDeletionPrimaryKey(targetKind, targetID)}, Revision: revision,
 	})
 	if err != nil {
@@ -90,7 +91,7 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 	}
 	taskResult, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{taskKey(taskID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{taskKey(taskID)}, Revision: revision},
 	)
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
@@ -121,7 +122,7 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
-	replayResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	replayResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{intentKey, fenceKey, replayKey}, Revision: taskResult.ReadRevision,
 	})
 	if err != nil {
@@ -157,7 +158,7 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 		return HierarchyDeletionOperation{}, err
 	}
 	tombstoneKey := HierarchyDeletionTombstoneKey(string(intent.TargetKind), intent.TargetID)
-	tombstoneResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	tombstoneResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{tombstoneKey}, Revision: taskResult.ReadRevision,
 	})
 	if err != nil {

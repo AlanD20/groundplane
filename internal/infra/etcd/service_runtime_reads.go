@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -29,7 +30,7 @@ func (ledger *ReleaseLedger) LoadAcknowledgedServiceRuntimesAtRevision(
 	if len(keys) == 0 {
 		return []Versioned[serviceruntimerecord.Record]{}, nil
 	}
-	read, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}

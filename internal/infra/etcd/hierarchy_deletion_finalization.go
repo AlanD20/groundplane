@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -67,13 +68,13 @@ func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 	defer clear(fenceValue)
 	transaction, err := repository.store.Transact(
 		ctx,
-		[]Condition{
+		[]etcdstore.Condition{
 			{Key: tombstoneKey, ModRevision: current.TombstoneRevision},
 			{Key: fenceKey, ModRevision: current.FenceRevision},
 		},
-		[]Mutation{
-			{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
-			{Type: MutationPut, Key: fenceKey, Value: fenceValue},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
+			{Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue},
 		},
 	)
 	if err != nil {

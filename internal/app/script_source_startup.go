@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
@@ -11,7 +12,7 @@ import (
 // The source module owns the durable transitions and bounded release batches.
 func initializeExecutionSourceReferences(
 	ctx context.Context,
-	store etcd.Store,
+	store etcdstore.Store,
 ) (*etcd.ScriptSourceReferenceAuthority, error) {
 	if err := etcd.RecoverTaskSecretPinSources(ctx, store); err != nil {
 		return nil, err

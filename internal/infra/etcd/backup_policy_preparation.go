@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -221,7 +222,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 	tenantID string,
 	now time.Time,
 ) (backupPolicyReplacementCandidate, bool, error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		environmentKey(input.EnvironmentID),
 		projectKey(projectID),
 		backupPolicyKey(input.EnvironmentID),
@@ -529,7 +530,7 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 		primaryKey = attachKey(selection.TargetID)
 		ownerKey = attachOwnerKey(environmentID, selection.TargetID)
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		primaryKey,
 		ownerKey,
 		deletionTombstoneKey(string(selection.Kind), selection.TargetID),
@@ -581,7 +582,7 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 	if record.Kind == core.BackupSourceAttach {
 		keys = append(keys, attachKey(record.TargetID), attachOwnerKey(record.EnvironmentID, record.TargetID))
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return backupPolicySourceEvidence{}, err
 	}
@@ -637,8 +638,8 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorEvidence(
 	environmentID string,
 	connectorID string,
 	revision int64,
-) (*Versioned[ConnectorRecord], *KeyValue, error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+) (*Versioned[ConnectorRecord], *etcdstore.KeyValue, error) {
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		connectorRecordKey(connectorID),
 		connectorEnvironmentKey(environmentID, connectorID),
 	}, Revision: revision})
@@ -688,7 +689,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorReferences(
 	}
 	evidence := make([]backupPolicyConnectorReferenceEvidence, len(connectorIDs))
 	for index, connectorID := range connectorIDs {
-		result, err := repository.store.GetMany(ctx, GetManyRequest{
+		result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
 				backupPolicyConnectorReferenceKey(connectorID, candidate.Replacement.EnvironmentID),
 			},
@@ -780,7 +781,7 @@ func backupPolicyNextRunAt(value time.Time) *time.Time {
 	return &value
 }
 
-func cloneBackupPolicyEvidenceKeyValue(value *KeyValue) *KeyValue {
+func cloneBackupPolicyEvidenceKeyValue(value *etcdstore.KeyValue) *etcdstore.KeyValue {
 	if value == nil {
 		return nil
 	}

@@ -3,6 +3,7 @@ package etcd
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -68,12 +69,12 @@ func decodeServiceRuntimeRecord(value []byte) (ServiceRuntimeRecord, error) {
 	return record, nil
 }
 
-func serviceDesiredCondition(service Versioned[ServiceRecord]) Condition {
-	return Condition{Key: service.Record.desiredFenceKey, ModRevision: service.Revision}
+func serviceDesiredCondition(service Versioned[ServiceRecord]) etcdstore.Condition {
+	return etcdstore.Condition{Key: service.Record.desiredFenceKey, ModRevision: service.Revision}
 }
 
-func serviceRuntimeCondition(service Versioned[ServiceRecord]) Condition {
-	return Condition{Key: serviceRuntimeKey(service.Record.Desired.ID), ModRevision: service.Record.runtimeRevision}
+func serviceRuntimeCondition(service Versioned[ServiceRecord]) etcdstore.Condition {
+	return etcdstore.Condition{Key: serviceRuntimeKey(service.Record.Desired.ID), ModRevision: service.Record.runtimeRevision}
 }
 
 func ServiceRuntimeRevision(service Versioned[ServiceRecord]) int64 {

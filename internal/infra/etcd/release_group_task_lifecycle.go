@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
@@ -26,8 +27,8 @@ type releaseGroupStoredRecord struct {
 
 type releaseGroupTaskChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -67,7 +68,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 		retry.Params[TaskResourceKindParam] != TaskResourceReleaseGroup {
 		return releaseGroupTaskChange{}, errs.New(errs.KindInternal, "release group retry changed its durable target")
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releaseGroupRecordKey(source.Target), deletionTombstoneKey(string(DeletionTargetReleaseGroup), source.Target),
 	}, Revision: revision})
 	if err != nil {
@@ -83,7 +84,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 	if err != nil || group.ID != source.Target {
 		return releaseGroupTaskChange{}, corruptRecord()
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releaseGroupOwnerKey(group.EnvironmentID, group.ID), releaseGroupNameKey(group.EnvironmentID, group.Name),
 		environmentKey(group.EnvironmentID), environmentMutationEpochKey(group.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetEnvironment), group.EnvironmentID),
@@ -113,7 +114,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 	}
 	return releaseGroupTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: releaseGroupRecordKey(group.ID), ModRevision: stored.Values[0].ModRevision},
 			{Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID), ModRevision: indexes.Values[0].ModRevision},
 			{Key: releaseGroupNameKey(group.EnvironmentID, group.Name), ModRevision: indexes.Values[1].ModRevision},
@@ -124,8 +125,8 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 			{Key: deletionTombstoneKey(string(DeletionTargetTenant), source.Owner.TenantID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID)},
 		},
-		mutations: []Mutation{
-			{Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID), Value: value},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID), Value: value},
 		},
 		values: [][]byte{value},
 	}, nil
@@ -141,7 +142,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 	if err != nil || !applies {
 		return releaseGroupTaskChange{}, err
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releaseGroupRecordKey(task.Target), deletionTombstoneKey(string(DeletionTargetReleaseGroup), task.Target),
 	}, Revision: revision})
 	if err != nil {
@@ -162,7 +163,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 			"release group deletion tombstone does not match its task",
 		)
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releaseGroupOwnerKey(group.EnvironmentID, group.ID), releaseGroupNameKey(group.EnvironmentID, group.Name),
 		environmentMutationEpochKey(group.EnvironmentID), environmentKey(group.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetEnvironment), group.EnvironmentID),
@@ -193,7 +194,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 	}
 	change := releaseGroupTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: releaseGroupRecordKey(group.ID), ModRevision: stored.Values[0].ModRevision},
 			{
 				Key:         deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID),
@@ -206,8 +207,8 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 			{Key: deletionTombstoneKey(string(DeletionTargetProject), task.Owner.ProjectID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetTenant), task.Owner.TenantID)},
 		},
-		mutations: []Mutation{
-			{Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID)},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), group.ID)},
 		},
 	}
 	if terminal == TaskStatusCompleted {
@@ -223,17 +224,17 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 		}
 		change.conditions = append(
 			change.conditions,
-			Condition{
+			etcdstore.Condition{
 				Key:         environmentMutationEpochKey(group.EnvironmentID),
 				ModRevision: indexes.Values[2].ModRevision,
 			},
 			collectionCondition,
 		)
 		change.mutations = append(change.mutations,
-			Mutation{Type: MutationDelete, Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID)},
-			Mutation{Type: MutationDelete, Key: releaseGroupNameKey(group.EnvironmentID, group.Name)},
-			Mutation{Type: MutationDelete, Key: releaseGroupRecordKey(group.ID)},
-			Mutation{Type: MutationPut, Key: environmentMutationEpochKey(group.EnvironmentID), Value: epochValue},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupNameKey(group.EnvironmentID, group.Name)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupRecordKey(group.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(group.EnvironmentID), Value: epochValue},
 			collectionMutation,
 		)
 		change.values = append(change.values, epochValue, collectionMutation.Value)
@@ -253,7 +254,7 @@ func (repository *TaskRepository) validateReleaseGroupTaskAcknowledgementReplay(
 	if err != nil || !applies {
 		return err
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releaseGroupRecordKey(task.Target), deletionTombstoneKey(string(DeletionTargetReleaseGroup), task.Target),
 	}, Revision: revision})
 	if err != nil {

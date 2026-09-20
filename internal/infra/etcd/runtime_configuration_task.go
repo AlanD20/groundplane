@@ -3,6 +3,7 @@ package etcd
 import (
 	"cmp"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -73,7 +74,7 @@ func prepareRuntimeConfigurationTask(
 		)
 	}
 	environmentID := task.Owner.EnvironmentID
-	read, err := store.GetMany(ctx, GetManyRequest{
+	read, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			runtimeConfigurationHeadKey(environmentID),
 			environmentComposeProjectionKey(environmentID),
@@ -198,14 +199,14 @@ func taskRuntimeConfiguration(task TaskRecord) (*runtimeconfiguration.Reference,
 	return &reference, nil
 }
 
-func taskConfigurationCondition(task TaskRecord) (Condition, bool, error) {
+func taskConfigurationCondition(task TaskRecord) (etcdstore.Condition, bool, error) {
 	reference, err := taskRuntimeConfiguration(task)
 	if err != nil || reference == nil {
-		return Condition{}, false, err
+		return etcdstore.Condition{}, false, err
 	}
 	revision, prior := task.Configuration.PriorRevision, task.Configuration.Prior
 	if revision < 0 || (prior == nil) != (revision == 0) {
-		return Condition{}, false, errs.New(
+		return etcdstore.Condition{}, false, errs.New(
 			errs.KindStateConflict,
 			"Task configuration predecessor is invalid",
 		)
@@ -213,21 +214,21 @@ func taskConfigurationCondition(task TaskRecord) (Condition, bool, error) {
 	if revision > 0 {
 		if runtimeconfiguration.ValidateReference(*prior) != nil || prior.EnvironmentID != reference.EnvironmentID ||
 			prior.Generation > reference.Generation {
-			return Condition{}, false, errs.New(
+			return etcdstore.Condition{}, false, errs.New(
 				errs.KindStateConflict,
 				"Task prior configuration is invalid",
 			)
 		}
 	}
-	return Condition{
+	return etcdstore.Condition{
 		Key:         runtimeConfigurationHeadKey(reference.EnvironmentID),
 		ModRevision: revision,
 	}, true, nil
 }
 
 func bindRuntimeConfigurationPublication(
-	task TaskRecord, conditions []Condition, classify func(int64, []*KeyValue) error,
-) ([]Condition, func(int64, []*KeyValue) error, error) {
+	task TaskRecord, conditions []etcdstore.Condition, classify func(int64, []*etcdstore.KeyValue) error,
+) ([]etcdstore.Condition, func(int64, []*etcdstore.KeyValue) error, error) {
 	condition, present, err := taskConfigurationCondition(task)
 	if err != nil {
 		return nil, nil, err
@@ -237,7 +238,7 @@ func bindRuntimeConfigurationPublication(
 	}
 	base := len(conditions)
 	conditions = append(conditions, condition)
-	return conditions, func(revision int64, values []*KeyValue) error {
+	return conditions, func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != base+1 {
 			return errs.New(
 				errs.KindInternal,
@@ -264,14 +265,14 @@ func bindRuntimeConfigurationPublication(
 // Immutable source records are never reconstructed from old Task history.
 func (repository *TaskRepository) runtimeConfigurationClaimConditions(
 	ctx context.Context, task TaskRecord, revision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	condition, present, err := taskConfigurationCondition(task)
 	if err != nil || !present {
 		return nil, err
 	}
 	read, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{condition.Key}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{condition.Key}, Revision: revision},
 	)
 	if err != nil {
 		return nil, err
@@ -314,7 +315,7 @@ func (repository *TaskRepository) runtimeConfigurationClaimConditions(
 	if err != nil {
 		return nil, err
 	}
-	return append([]Condition{condition}, pins...), nil
+	return append([]etcdstore.Condition{condition}, pins...), nil
 }
 
 func prepareRuntimeConfigurationAcknowledgement(
@@ -335,8 +336,8 @@ func prepareRuntimeConfigurationAcknowledgement(
 		return taskMaterializationProjectionChange{}, err
 	}
 	return taskMaterializationProjectionChange{
-		applies: true, conditions: []Condition{condition},
-		mutations: []Mutation{{Type: MutationPut, Key: condition.Key,
+		applies: true, conditions: []etcdstore.Condition{condition},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: condition.Key,
 			Value: encoded}},
 	}, nil
 }

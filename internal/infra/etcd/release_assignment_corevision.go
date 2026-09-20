@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -9,7 +10,7 @@ import (
 func (repository *TaskRepository) incrementAssignmentEpoch(
 	ctx context.Context,
 	current TaskAssignment,
-	evidenceConditions []Condition,
+	evidenceConditions []etcdstore.Condition,
 ) error {
 	taskValue, err := encodeTaskRecord(current.Task.Record)
 	if err != nil {
@@ -30,7 +31,7 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 	defer clear(old)
 	lifecycleKey, lifecycleValue, proofRequired, err := repository.assignmentLifecycleIndexAtRevision(
 		ctx, current.Assignment.Record,
-		&KeyValue{Value: old, ModRevision: current.Assignment.Revision}, current.Task.ReadRevision,
+		&etcdstore.KeyValue{Value: old, ModRevision: current.Assignment.Revision}, current.Task.ReadRevision,
 	)
 	if err != nil || proofRequired != current.RecoveryProofRequired {
 		if err != nil {
@@ -38,7 +39,7 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 		}
 		return errs.New(errs.KindStateConflict, "Agent reconnect lifecycle authority changed")
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(record.TaskID), ModRevision: current.Task.Revision},
 		{
 			Key:         taskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID),
@@ -49,7 +50,7 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 	}
 	conditions = append(conditions, evidenceConditions...)
 	if record.ExecutionMode == TaskExecutionModeRecoveryOnly {
-		recoveryRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+		recoveryRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{releaseRecoveryKey(record.TaskID)}, Revision: current.Task.ReadRevision,
 		})
 		if readErr != nil || recoveryRead == nil || len(recoveryRead.Values) != 1 || recoveryRead.Values[0] == nil {
@@ -58,17 +59,17 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 			}
 			return corruptTaskAssignment()
 		}
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: releaseRecoveryKey(record.TaskID), ModRevision: recoveryRead.Values[0].ModRevision,
 		})
 	} else {
-		conditions = append(conditions, Condition{Key: releaseRecoveryKey(record.TaskID)})
+		conditions = append(conditions, etcdstore.Condition{Key: releaseRecoveryKey(record.TaskID)})
 	}
-	transaction, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: taskKey(record.TaskID), Value: taskValue},
-		{Type: MutationPut, Key: taskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID), Value: encoded},
-		{Type: MutationPut, Key: taskAssignmentIndexKey(record.TaskID), Value: encoded},
-		{Type: MutationPut, Key: lifecycleKey, Value: encoded},
+	transaction, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(record.TaskID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID), Value: encoded},
+		{Type: etcdstore.MutationPut, Key: taskAssignmentIndexKey(record.TaskID), Value: encoded},
+		{Type: etcdstore.MutationPut, Key: lifecycleKey, Value: encoded},
 	})
 	if err != nil {
 		return err

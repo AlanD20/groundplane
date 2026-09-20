@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -27,7 +28,7 @@ type BackingServiceRepository struct {
 	hierarchy *HierarchyRepository
 }
 
-func NewBackingServiceRepository(store Store) (*BackingServiceRepository, error) {
+func NewBackingServiceRepository(store etcdstore.Store) (*BackingServiceRepository, error) {
 	return newBackingServiceRepository(store)
 }
 
@@ -178,7 +179,7 @@ func (repository *BackingServiceRepository) singleOwnerID(
 	kind ids.Kind,
 	revision int64,
 ) (string, error) {
-	result, err := repository.store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 2, Revision: revision})
+	result, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: 2, Revision: revision})
 	if err != nil {
 		return "", err
 	}
@@ -200,8 +201,8 @@ func (repository *BackingServiceRepository) primaryAtRevision(
 	ctx context.Context,
 	key string,
 	revision int64,
-) (*KeyValue, error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+) (*etcdstore.KeyValue, error) {
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return nil, err
 	}

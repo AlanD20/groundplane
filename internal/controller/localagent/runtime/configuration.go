@@ -1,4 +1,4 @@
-package app
+package runtime
 
 import (
 	"context"
@@ -49,7 +49,7 @@ type durableLocalAgentConfigIdempotency struct {
 	repository  *etcd.IdempotencyRepository
 }
 
-func newDurableLocalAgentConfigIdempotency(
+func NewConfigIdempotency(
 	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableLocalAgentConfigIdempotency, error) {

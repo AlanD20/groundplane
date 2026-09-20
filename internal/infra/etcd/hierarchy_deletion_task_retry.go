@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -36,7 +37,7 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 				"system hierarchy Task retry initiation is invalid",
 			)
 		}
-		fences := append(append([]Condition(nil), initiation.fences...), provided.fences...)
+		fences := append(append([]etcdstore.Condition(nil), initiation.fences...), provided.fences...)
 		initiation, err = newTaskInitiation(source.Record.Owner, TaskActorSystem, fences...)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
@@ -72,21 +73,21 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer change.clear()
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(source.Record.ID), ModRevision: source.Revision}, {Key: taskKey(retry.ID)},
 		{Key: taskOperationIndexKey(retry.OperationID, retry.ID)}, {Key: taskActiveOperationKey(retry.OperationID)},
 		{Key: taskQueueKey(retry.Executor, retry.ID)},
 	}
 	conditions = append(conditions, change.conditions...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(retry.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(retry.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
 	}
 	mutations = append(mutations, change.mutations...)
 	baseConditions := len(conditions)
-	classifier := func(_ int64, values []*KeyValue) error {
+	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != baseConditions {
 			return errs.New(errs.KindInternal, "hierarchy Task retry compare evidence is incomplete")
 		}
@@ -145,7 +146,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 	fenceKey, _ := HierarchyDeletionCleanupFenceKey(operation.Tombstone.OperationID)
 	replayKey, _ := HierarchyDeletionReplayTargetKey(operation.Tombstone.OperationID)
 	lockKey := HierarchyDeletionLockKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{targetKey, replayKey, lockKey}, Revision: source.ReadRevision,
 	})
 	if err != nil {
@@ -203,18 +204,18 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 		return hierarchyDeletionRootAckChange{}, err
 	}
 	return hierarchyDeletionRootAckChange{
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: targetKey, ModRevision: read.Values[0].ModRevision},
 			{Key: tombstoneKey, ModRevision: operation.TombstoneRevision},
 			{Key: fenceKey, ModRevision: operation.FenceRevision},
 			{Key: replayKey, ModRevision: read.Values[1].ModRevision},
 			{Key: lockKey, ModRevision: read.Values[2].ModRevision},
 		},
-		mutations: []Mutation{
-			{Type: MutationPut, Key: targetKey, Value: targetValue},
-			{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
-			{Type: MutationPut, Key: fenceKey, Value: fenceValue},
-			{Type: MutationPut, Key: replayKey, Value: replayValue},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: targetKey, Value: targetValue},
+			{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
+			{Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue},
+			{Type: etcdstore.MutationPut, Key: replayKey, Value: replayValue},
 		},
 		values: [][]byte{targetValue, tombstoneValue, fenceValue, replayValue},
 	}, nil

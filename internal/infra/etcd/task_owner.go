@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -41,7 +42,7 @@ type TaskOwner struct {
 type TaskInitiation struct {
 	owner  TaskOwner
 	actor  TaskActor
-	fences []Condition
+	fences []etcdstore.Condition
 }
 
 func (initiation TaskInitiation) Owner() TaskOwner { return initiation.owner }
@@ -196,7 +197,7 @@ func newProjectTaskInitiation(
 	if err != nil {
 		return TaskInitiation{}, err
 	}
-	ancestry = append(ancestry, Condition{Key: projectKey(project.Record.ID), ModRevision: project.Revision})
+	ancestry = append(ancestry, etcdstore.Condition{Key: projectKey(project.Record.ID), ModRevision: project.Revision})
 	return newTaskInitiation(owner, actor, ancestry...)
 }
 
@@ -219,8 +220,8 @@ func newEnvironmentTaskInitiation(
 	}
 	ancestry = append(
 		ancestry,
-		Condition{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		Condition{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		etcdstore.Condition{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		etcdstore.Condition{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
 	)
 	return newTaskInitiation(owner, actor, ancestry...)
 }
@@ -242,14 +243,14 @@ func newEnvironmentCreationTaskInitiation(
 	if err != nil {
 		return TaskInitiation{}, err
 	}
-	ancestry = append(ancestry, Condition{Key: projectKey(project.Record.ID), ModRevision: project.Revision})
+	ancestry = append(ancestry, etcdstore.Condition{Key: projectKey(project.Record.ID), ModRevision: project.Revision})
 	return newTaskInitiation(owner, actor, ancestry...)
 }
 
 func loadTaskInitiationTenant(
 	ctx context.Context,
 	store interface {
-		Get(context.Context, string) (*GetResult, error)
+		Get(context.Context, string) (*etcdstore.GetResult, error)
 	},
 	project Versioned[ProjectRecord],
 ) (*Versioned[TenantRecord], error) {
@@ -284,13 +285,13 @@ func loadTaskInitiationTenant(
 func taskInitiationTenantFence(
 	tenant *Versioned[TenantRecord],
 	project Versioned[ProjectRecord],
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	switch project.Record.Kind {
 	case ProjectKindTenant:
 		if tenant == nil || tenant.Record.ID != project.Record.TenantID || tenant.Revision <= 0 {
 			return nil, errs.New(errs.KindValidationFailed, "task initiation tenant ancestry is invalid")
 		}
-		return []Condition{{Key: tenantKey(tenant.Record.ID), ModRevision: tenant.Revision}}, nil
+		return []etcdstore.Condition{{Key: tenantKey(tenant.Record.ID), ModRevision: tenant.Revision}}, nil
 	case ProjectKindBacking:
 		if tenant != nil || project.Record.TenantID != "" {
 			return nil, errs.New(errs.KindValidationFailed, "task initiation backing project ancestry is invalid")
@@ -314,7 +315,7 @@ func newInheritedTaskInitiation(
 	return newTaskInitiation(
 		parent.Record.Owner,
 		actor,
-		Condition{Key: taskKey(parent.Record.ID), ModRevision: parent.Revision},
+		etcdstore.Condition{Key: taskKey(parent.Record.ID), ModRevision: parent.Revision},
 	)
 }
 
@@ -330,14 +331,14 @@ func validateTaskInitiation(record TaskRecord, initiation TaskInitiation, requir
 
 func prepareTaskInitiationFences(
 	initiation TaskInitiation,
-	conditions []Condition,
+	conditions []etcdstore.Condition,
 	classify idempotencyPlanClassifier,
-) ([]Condition, idempotencyPlanClassifier, error) {
+) ([]etcdstore.Condition, idempotencyPlanClassifier, error) {
 	if classify == nil {
 		return nil, nil, errs.New(errs.KindInternal, "task initiation classifier is required")
 	}
 	baseConditionCount := len(conditions)
-	appended := make([]Condition, 0, len(initiation.fences))
+	appended := make([]etcdstore.Condition, 0, len(initiation.fences))
 	for _, required := range initiation.fences {
 		found := false
 		for _, condition := range conditions {
@@ -355,7 +356,7 @@ func prepareTaskInitiationFences(
 			appended = append(appended, required)
 		}
 	}
-	wrapped := func(revision int64, values []*KeyValue) error {
+	wrapped := func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != baseConditionCount+len(appended) {
 			return errs.New(errs.KindInternal, "task initiation compare evidence is incomplete")
 		}
@@ -394,10 +395,10 @@ func taskOwnerIndexKeys(owner TaskOwner, taskID string) ([]string, error) {
 
 func prepareTaskOwnerIndexPlan(
 	record TaskRecord,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	classify idempotencyPlanClassifier,
-) ([]Condition, []Mutation, idempotencyPlanClassifier, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	if err := validateTaskRecord(record); err != nil {
 		return nil, nil, nil, err
 	}
@@ -426,7 +427,7 @@ func prepareTaskOwnerIndexPlan(
 		if mutation.Key != taskKey(record.ID) {
 			continue
 		}
-		if matchedMutation || mutation.Type != MutationPut || mutation.Prefix || !bytes.Equal(mutation.Value, encoded) {
+		if matchedMutation || mutation.Type != etcdstore.MutationPut || mutation.Prefix || !bytes.Equal(mutation.Value, encoded) {
 			return nil, nil, nil, errs.New(errs.KindInternal, "task publication mutation is invalid")
 		}
 		matchedMutation = true
@@ -441,10 +442,10 @@ func prepareTaskOwnerIndexPlan(
 	baseConditionCount := len(conditions)
 	indexValue := []byte(record.ID)
 	for _, key := range indexKeys {
-		conditions = append(conditions, Condition{Key: key})
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: indexValue})
+		conditions = append(conditions, etcdstore.Condition{Key: key})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: indexValue})
 	}
-	wrapped := func(revision int64, values []*KeyValue) error {
+	wrapped := func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != baseConditionCount+len(indexKeys) {
 			return errs.New(errs.KindInternal, "task owner index compare evidence is incomplete")
 		}

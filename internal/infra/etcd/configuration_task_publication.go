@@ -1,6 +1,9 @@
 package etcd
 
-import "context"
+import (
+	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+)
 
 // configurationTaskPublication prepares the existing runtime-configuration
 // and Secret-pin authorities for one Task that will write files. It owns no
@@ -57,10 +60,10 @@ func (publication configurationTaskPublication) finish(
 }
 
 func (publication configurationTaskPublication) bind(
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	classify idempotencyPlanClassifier,
-) ([]Condition, []Mutation, idempotencyPlanClassifier, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	if !publication.active {
 		return conditions, mutations, classify, nil
 	}

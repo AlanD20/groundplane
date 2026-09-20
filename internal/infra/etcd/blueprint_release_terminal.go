@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -24,7 +25,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
 		environmentMutationEpochKey(task.Owner.EnvironmentID),
 	}
-	base, err := repository.store.GetMany(ctx, GetManyRequest{Keys: baseKeys, Revision: readRevision})
+	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: readRevision})
 	if err != nil {
 		return false, err
 	}
@@ -40,7 +41,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
 		return false, corruptReleaseRecord()
 	}
-	rootRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	rootRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentBlueprintRootKey(
 			task.Owner.EnvironmentID, task.Params[EnvironmentDesiredRevisionParam],
 		)},
@@ -64,7 +65,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	for index, member := range manifest.Members {
 		terminalKeys[index] = releaseTerminalKey(member.ReleaseID)
 	}
-	terminals, err := repository.store.GetMany(ctx, GetManyRequest{Keys: terminalKeys, Revision: readRevision})
+	terminals, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: terminalKeys, Revision: readRevision})
 	if err != nil {
 		return false, err
 	}
@@ -91,19 +92,19 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			releaseRetentionKey(member.ReleaseID),
 		)
 	}
-	details, err := repository.store.GetMany(ctx, GetManyRequest{Keys: detailKeys, Revision: readRevision})
+	details, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: detailKeys, Revision: readRevision})
 	if err != nil {
 		return false, err
 	}
 	if details == nil || details.ReadRevision != readRevision || len(details.Values) != len(detailKeys) {
 		return false, corruptReleaseRecord()
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: base.Values[0].Key, ModRevision: base.Values[0].ModRevision},
 		{Key: base.Values[1].Key, ModRevision: base.Values[1].ModRevision},
 		{Key: base.Values[2].Key, ModRevision: base.Values[2].ModRevision},
 	}
-	mutations := make([]Mutation, 0, len(pending)*4)
+	mutations := make([]etcdstore.Mutation, 0, len(pending)*4)
 	defer clearMutations(mutations)
 	for offset, index := range pending {
 		keys, values := detailKeys[offset*5:offset*5+5], details.Values[offset*5:offset*5+5]
@@ -178,15 +179,15 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			return false, encodeErr
 		}
 		conditions = append(conditions,
-			Condition{Key: values[0].Key, ModRevision: values[0].ModRevision},
-			Condition{Key: values[1].Key, ModRevision: values[1].ModRevision},
-			Condition{Key: keys[2], ModRevision: keyValueRevision(values[2])},
-			Condition{Key: keys[3]}, Condition{Key: keys[4]},
+			etcdstore.Condition{Key: values[0].Key, ModRevision: values[0].ModRevision},
+			etcdstore.Condition{Key: values[1].Key, ModRevision: values[1].ModRevision},
+			etcdstore.Condition{Key: keys[2], ModRevision: keyValueRevision(values[2])},
+			etcdstore.Condition{Key: keys[3]}, etcdstore.Condition{Key: keys[4]},
 		)
 		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: values[1].Key, Value: checkpointValue},
-			Mutation{Type: MutationPut, Key: keys[3], Value: terminalValue},
-			Mutation{Type: MutationPut, Key: keys[4], Value: retentionValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: values[1].Key, Value: checkpointValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[3], Value: terminalValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[4], Value: retentionValue},
 		)
 		if successful {
 			projectionValue, encodeErr := encodeReleaseRecord("service-release-projection", projection)
@@ -195,7 +196,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			}
 			mutations = append(
 				mutations,
-				Mutation{Type: MutationPut, Key: keys[2], Value: projectionValue},
+				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[2], Value: projectionValue},
 			)
 			runtimeValue, err := blueprintAcknowledgedRuntime(marker, task, assignment, member, result, terminalAt)
 			if err != nil {
@@ -206,7 +207,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			// epoch; another runtime writer cannot publish under that ownership.
 			mutations = append(
 				mutations,
-				Mutation{Type: MutationPut, Key: serviceruntimerecord.Key(member.ServiceID), Value: runtimeValue},
+				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: serviceruntimerecord.Key(member.ServiceID), Value: runtimeValue},
 			)
 		}
 	}

@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,7 +21,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 	if validateStableID(ids.KindTask, taskID) != nil {
 		return TaskAssignment{}, errs.New(errs.KindValidationFailed, "Task assignment id is invalid")
 	}
-	indexed, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	indexed, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(taskID), taskAssignmentIndexKey(taskID),
 	}})
 	if err != nil {
@@ -50,7 +51,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 		return TaskAssignment{}, errs.New(errs.KindStateConflict, "Task is not actively assigned")
 	}
 	claimKey := taskExecutionClaimKey(assignment.Executor, assignment.AgentID, taskID)
-	claim, err := repository.store.GetMany(ctx, GetManyRequest{
+	claim, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{claimKey},
 		Revision: indexed.ReadRevision,
 	})

@@ -2,12 +2,13 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type hierarchyCoordinationStore interface {
-	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 }
 
 type HierarchyMutationScope struct {
@@ -16,8 +17,8 @@ type HierarchyMutationScope struct {
 }
 
 type hierarchyMutationBinding struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -41,8 +42,8 @@ func bindHierarchyMutation(
 	store hierarchyCoordinationStore,
 	revision int64,
 	scope HierarchyMutationScope,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 ) (hierarchyMutationBinding, error) {
 	if err := validateContext(ctx); err != nil {
 		return hierarchyMutationBinding{}, err
@@ -57,7 +58,7 @@ func bindHierarchyMutation(
 	if scope.ProjectID != "" {
 		keys = append(keys, HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), scope.ProjectID))
 	}
-	result, err := store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return hierarchyMutationBinding{}, err
 	}
@@ -65,7 +66,7 @@ func bindHierarchyMutation(
 		return hierarchyMutationBinding{}, corruptHierarchyDeletion()
 	}
 	binding := hierarchyMutationBinding{
-		conditions: append([]Condition(nil), conditions...),
+		conditions: append([]etcdstore.Condition(nil), conditions...),
 		mutations:  cloneMutations(mutations),
 		values:     make([][]byte, 0, len(keys)),
 	}
@@ -91,10 +92,10 @@ func bindHierarchyMutation(
 			return hierarchyMutationBinding{}, encodeErr
 		}
 		binding.values = append(binding.values, encoded)
-		binding.conditions = append(binding.conditions, Condition{Key: key, ModRevision: value.ModRevision})
-		binding.mutations = append(binding.mutations, Mutation{Type: MutationPut, Key: key, Value: encoded})
+		binding.conditions = append(binding.conditions, etcdstore.Condition{Key: key, ModRevision: value.ModRevision})
+		binding.mutations = append(binding.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded})
 	}
-	if err := validateHierarchyDeletionTransaction(binding.conditions, binding.mutations, maximumTransactionOperations); err != nil {
+	if err := validateHierarchyDeletionTransaction(binding.conditions, binding.mutations, etcdstore.MaximumOperations); err != nil {
 		binding.clear()
 		return hierarchyMutationBinding{}, err
 	}

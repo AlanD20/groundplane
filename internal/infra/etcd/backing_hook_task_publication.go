@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -79,10 +80,10 @@ func (publication backingHookTaskPublication) finish(
 }
 
 func (publication backingHookTaskPublication) bind(
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	classify idempotencyPlanClassifier,
-) ([]Condition, []Mutation, idempotencyPlanClassifier, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	if publication.input == nil {
 		return conditions, mutations, classify, nil
 	}
@@ -91,8 +92,8 @@ func (publication backingHookTaskPublication) bind(
 		return nil, nil, nil, err
 	}
 	key := backingHookTaskInputKey(publication.task.OperationID)
-	conditions = append(conditions, Condition{Key: key})
-	mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: value})
+	conditions = append(conditions, etcdstore.Condition{Key: key})
+	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
 	conditions, mutations, classify = bindRecoverySecretPinPublication(
 		publication.pins, conditions, mutations, classify,
 	)

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"strings"
 
@@ -141,7 +142,7 @@ func findServiceAtRevision(
 	fixedRevision := revision
 	var matched *Versioned[ServiceRecord]
 	for {
-		page, err := store.Range(ctx, RangeRequest{
+		page, err := store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: environmentDesiredHeadScanPrefix, StartExclusive: start, Limit: 200, Revision: fixedRevision,
 		})
 		if err != nil {
@@ -252,7 +253,7 @@ func joinEnvironmentService(
 	if desired == nil {
 		return Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
 	}
-	read, err := store.GetMany(ctx, GetManyRequest{
+	read, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{serviceRuntimeKey(serviceID)}, Revision: projection.ReadRevision,
 	})
 	if err != nil {

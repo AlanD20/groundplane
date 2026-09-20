@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,16 +16,16 @@ func secretScriptSource(secretID string) ScriptSourceIdentity {
 	}
 }
 
-func secretScriptAbsenceConditions(secretID string) []Condition {
+func secretScriptAbsenceConditions(secretID string) []etcdstore.Condition {
 	source := secretScriptSource(secretID)
-	return []Condition{
+	return []etcdstore.Condition{
 		{Key: scriptSourceCountKey(source)},
 		{Key: scriptSourceForwardReferencePrefix + scriptSourceSuffix(source) + "/", Prefix: true},
 		{Key: tasksecretpinrecord.SecretPrefix(secretID), Prefix: true},
 	}
 }
 
-func classifySecretScriptReferences(secretID string, values []*KeyValue) error {
+func classifySecretScriptReferences(secretID string, values []*etcdstore.KeyValue) error {
 	if len(values) != 3 || (values[0] == nil) != (values[1] == nil) {
 		return errs.New(errs.KindInternal, "Secret Script reference absence proof is inconsistent")
 	}
@@ -65,9 +66,9 @@ func prepareSecretScriptAbsence(
 	ctx context.Context,
 	store hierarchyStore,
 	secretID string,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	conditions := secretScriptAbsenceConditions(secretID)
-	count, err := store.GetMany(ctx, GetManyRequest{Keys: []string{conditions[0].Key}})
+	count, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{conditions[0].Key}})
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +77,7 @@ func prepareSecretScriptAbsence(
 	}
 	members, err := store.Range(
 		ctx,
-		RangeRequest{Prefix: conditions[1].Key, Limit: 1, Revision: count.ReadRevision},
+		etcdstore.RangeRequest{Prefix: conditions[1].Key, Limit: 1, Revision: count.ReadRevision},
 	)
 	if err != nil {
 		return nil, err
@@ -85,13 +86,13 @@ func prepareSecretScriptAbsence(
 		(members.More && len(members.Values) == 0) {
 		return nil, errs.New(errs.KindInternal, "Secret Script membership evidence is incomplete")
 	}
-	var first *KeyValue
+	var first *etcdstore.KeyValue
 	if len(members.Values) == 1 {
 		first = &members.Values[0]
 	}
 	pins, err := store.Range(
 		ctx,
-		RangeRequest{Prefix: conditions[2].Key, Limit: 1, Revision: count.ReadRevision},
+		etcdstore.RangeRequest{Prefix: conditions[2].Key, Limit: 1, Revision: count.ReadRevision},
 	)
 	if err != nil {
 		return nil, err
@@ -100,11 +101,11 @@ func prepareSecretScriptAbsence(
 		(pins.More && len(pins.Values) == 0) {
 		return nil, errs.New(errs.KindInternal, "Secret recovery pin evidence is incomplete")
 	}
-	var firstPin *KeyValue
+	var firstPin *etcdstore.KeyValue
 	if len(pins.Values) == 1 {
 		firstPin = &pins.Values[0]
 	}
-	if err := classifySecretScriptReferences(secretID, []*KeyValue{count.Values[0], first, firstPin}); err != nil {
+	if err := classifySecretScriptReferences(secretID, []*etcdstore.KeyValue{count.Values[0], first, firstPin}); err != nil {
 		return nil, err
 	}
 	return conditions, nil

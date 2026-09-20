@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"time"
 
@@ -26,18 +27,18 @@ type backupRuntimeOwnedEvidence struct {
 // publication. Its lock, run, membership, exclusions, and epoch mutations are
 // appended to the caller's Task mutations and committed once.
 type backupRunPublicationPlan struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	record     BackupRunRecord
 	replay     func(context.Context, IdempotencyMarker, int64, int64) error
 }
 
 func (plan backupRunPublicationPlan) composeTransaction(
-	conditions []Condition,
-	mutations []Mutation,
-) ([]Condition, []Mutation, error) {
-	composedConditions := append(append([]Condition(nil), conditions...), plan.conditions...)
-	composedMutations := make([]Mutation, 0, len(mutations)+len(plan.mutations))
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
+	composedConditions := append(append([]etcdstore.Condition(nil), conditions...), plan.conditions...)
+	composedMutations := make([]etcdstore.Mutation, 0, len(mutations)+len(plan.mutations))
 	for _, mutation := range mutations {
 		copyOfMutation := mutation
 		copyOfMutation.Value = append([]byte(nil), mutation.Value...)
@@ -113,8 +114,8 @@ type backupTaskPublicationAuthority struct {
 
 func prepareBackupTaskIdempotencyPlan(
 	authority backupTaskPublicationAuthority,
-	domainConditions []Condition,
-	domainMutations []Mutation,
+	domainConditions []etcdstore.Condition,
+	domainMutations []etcdstore.Mutation,
 	record TaskRecord,
 	sealed *agentpb.ExecutionPlan,
 	marker IdempotencyMarker,
@@ -157,21 +158,21 @@ func prepareBackupTaskIdempotencyPlan(
 		return nil, err
 	}
 	defer clear(reference)
-	taskConditions := []Condition{
+	taskConditions := []etcdstore.Condition{
 		{Key: taskKey(record.ID)},
 		{Key: taskOperationIndexKey(record.OperationID, record.ID)},
 		{Key: taskActiveOperationKey(record.OperationID)},
 		{Key: taskQueueKey(record.Executor, record.ID)},
 	}
-	taskMutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(record.ID), Value: taskValue},
+	taskMutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(record.ID), Value: taskValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   taskOperationIndexKey(record.OperationID, record.ID),
 			Value: reference,
 		},
-		{Type: MutationPut, Key: taskActiveOperationKey(record.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(record.Executor, record.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(record.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(record.Executor, record.ID), Value: reference},
 	}
 	domain := backupRunPublicationPlan{conditions: domainConditions, mutations: domainMutations}
 	conditions, mutations, err := domain.composeTransaction(taskConditions, taskMutations)
@@ -180,7 +181,7 @@ func prepareBackupTaskIdempotencyPlan(
 	}
 	defer clearBackupRuntimeMutations(mutations)
 	taskClassifier := classifyTaskCreateConflict(record.OperationID)
-	classify := func(revision int64, values []*KeyValue) error {
+	classify := func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "backup Task publication evidence is incomplete")
 		}
@@ -207,7 +208,7 @@ func prepareBackupTaskIdempotencyPlan(
 	return idempotencyPlan, nil
 }
 
-func NewBackupRuntimeRepository(store Store) (*BackupRuntimeRepository, error) {
+func NewBackupRuntimeRepository(store etcdstore.Store) (*BackupRuntimeRepository, error) {
 	return newBackupRuntimeRepository(store)
 }
 
@@ -251,7 +252,7 @@ func (repository *BackupRuntimeRepository) GetBackupRun(
 	if err != nil {
 		return Versioned[BackupRunRecord]{}, corruptBackupRuntimeRecord()
 	}
-	authority, err := repository.store.GetMany(ctx, GetManyRequest{
+	authority, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{primaryKey, membershipKey}, Revision: result.ReadRevision,
 	})
 	if err != nil {
@@ -331,9 +332,9 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		return backupRunPublicationPlan{}, err
 	}
 	keys := []string{backupRunKey(record.TaskID), membershipKey}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: keys[0], Value: runValue},
-		{Type: MutationPut, Key: keys[1], Value: []byte(record.TaskID)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: keys[0], Value: runValue},
+		{Type: etcdstore.MutationPut, Key: keys[1], Value: []byte(record.TaskID)},
 	}
 	for _, exclusion := range exclusions {
 		key, keyErr := backupSourceTargetExclusionKey(exclusion.TargetKind, exclusion.TargetID)
@@ -349,7 +350,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 			return backupRunPublicationPlan{}, encodeErr
 		}
 		keys = append(keys, key)
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: value})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
 	}
 	anchor, err := repository.readFixedKeys(ctx, keys, fixedRevision)
 	if err != nil {
@@ -358,7 +359,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		return backupRunPublicationPlan{}, err
 	}
 	defer clearKeyValues(anchor.Values)
-	connectorEvidence, err := repository.store.GetMany(ctx, GetManyRequest{
+	connectorEvidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			connectorRecordKey(record.ConnectorID), connectorCredentialValueKey(record.ConnectorID),
 		},
@@ -422,7 +423,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		clear(lockValue)
 		return backupRunPublicationPlan{}, err
 	}
-	policyFence := []Condition(nil)
+	policyFence := []etcdstore.Condition(nil)
 	if retrySource == nil {
 		policyFence, err = repository.loadManualBackupPolicyFence(ctx, record, fixedRevision)
 		if err != nil {
@@ -431,12 +432,12 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 			return backupRunPublicationPlan{}, err
 		}
 	}
-	conditions := make([]Condition, 0, len(keys)+len(fence.conditions)+len(policyFence))
+	conditions := make([]etcdstore.Condition, 0, len(keys)+len(fence.conditions)+len(policyFence))
 	for index, key := range keys {
 		if index == 1 {
 			continue
 		}
-		conditions = append(conditions, Condition{Key: key})
+		conditions = append(conditions, etcdstore.Condition{Key: key})
 	}
 	conditions = append(conditions, backupRunExternalConditions(record, snapshotConditions)...)
 	conditions = append(conditions, fence.transactionConditions()...)
@@ -444,16 +445,16 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	if retrySource != nil {
 		conditions = append(
 			conditions,
-			Condition{Key: taskKey(retrySource.task.Record.ID), ModRevision: retrySource.task.Revision},
-			Condition{Key: backupRunKey(retrySource.run.Record.TaskID), ModRevision: retrySource.run.Revision},
-			Condition{
+			etcdstore.Condition{Key: taskKey(retrySource.task.Record.ID), ModRevision: retrySource.task.Revision},
+			etcdstore.Condition{Key: backupRunKey(retrySource.run.Record.TaskID), ModRevision: retrySource.run.Revision},
+			etcdstore.Condition{
 				Key:         backupTerminalReceiptKey(retrySource.task.Record.ID),
 				ModRevision: retrySource.receiptRevision,
 			},
 		)
 	}
-	mutations = append(mutations, Mutation{
-		Type: MutationPut, Key: environmentOperationLockKey(record.EnvironmentID), Value: lockValue,
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: environmentOperationLockKey(record.EnvironmentID), Value: lockValue,
 	})
 	mutations = append(mutations, snapshotMutations...)
 	epoch, err := fence.epochRewriteMutation()
@@ -491,8 +492,8 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 // epoch and operation lock serialize the remaining consumer-owned evidence.
 func backupRunExternalConditions(
 	run BackupRunRecord,
-	conditions []Condition,
-) []Condition {
+	conditions []etcdstore.Condition,
+) []etcdstore.Condition {
 	allowed := make(map[string]struct{}, len(run.Sources)*2+2)
 	allowed[connectorRecordKey(run.ConnectorID)] = struct{}{}
 	if run.ConnectorHasDirectCredentials {
@@ -519,7 +520,7 @@ func backupRunExternalConditions(
 			allowed[environmentKey(run.EnvironmentID)] = struct{}{}
 		}
 	}
-	result := make([]Condition, 0, len(allowed))
+	result := make([]etcdstore.Condition, 0, len(allowed))
 	for _, condition := range conditions {
 		if _, keep := allowed[condition.Key]; keep {
 			result = append(result, condition)
@@ -866,23 +867,23 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 	if err != nil {
 		return backupRunPublicationPlan{}, err
 	}
-	conditions := []Condition{{Key: keys[0], ModRevision: current.Revision}}
-	mutations := []Mutation{{Type: MutationPut, Key: keys[0], Value: value}}
+	conditions := []etcdstore.Condition{{Key: keys[0], ModRevision: current.Revision}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: keys[0], Value: value}}
 	for index, key := range keys[1 : len(records)+1] {
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: key, ModRevision: anchor.Values[index+1].ModRevision,
 		})
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	}
 	if retainsTerminalOrphan || absentOrphan != nil {
 		for index, value := range anchor.Values[orphanOffset : orphanOffset+3] {
-			conditions = append(conditions, Condition{
+			conditions = append(conditions, etcdstore.Condition{
 				Key: keys[orphanOffset+index], ModRevision: value.ModRevision,
 			})
 		}
 		if absentOrphan != nil {
 			for _, key := range keys[orphanOffset : orphanOffset+3] {
-				mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
+				mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 			}
 		}
 	}
@@ -922,21 +923,21 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 		orphanKey := backupOrphanKey(orphan.Point.ID)
 		conditions = append(
 			conditions,
-			Condition{Key: orphanKey},
-			Condition{Key: connectorIndex},
-			Condition{Key: environmentIndex},
+			etcdstore.Condition{Key: orphanKey},
+			etcdstore.Condition{Key: connectorIndex},
+			etcdstore.Condition{Key: environmentIndex},
 		)
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationPut, Key: orphanKey, Value: orphanValue},
-			Mutation{Type: MutationPut, Key: connectorIndex, Value: []byte(orphan.Point.ID)},
-			Mutation{Type: MutationPut, Key: environmentIndex, Value: []byte(orphan.Point.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: orphanKey, Value: orphanValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(orphan.Point.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(orphan.Point.ID)},
 		)
 	}
 	conditions = append(conditions, evidence.fence.transactionConditions()...)
 	conditions = append(conditions, checkpointPlan.conditions...)
-	mutations = append(mutations, Mutation{
-		Type: MutationDelete, Key: environmentOperationLockKey(current.Record.EnvironmentID),
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationDelete, Key: environmentOperationLockKey(current.Record.EnvironmentID),
 	})
 	epoch, err := evidence.fence.epochRewriteMutation()
 	if err != nil {
@@ -945,7 +946,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 	}
 	mutations = append(mutations, epoch)
 	for _, mutation := range checkpointPlan.mutations {
-		mutations = append(mutations, Mutation{
+		mutations = append(mutations, etcdstore.Mutation{
 			Type: mutation.Type, Key: mutation.Key, Value: append([]byte(nil), mutation.Value...),
 		})
 	}
@@ -1042,9 +1043,9 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	ctx context.Context,
 	current Versioned[BackupRunRecord],
 	next BackupRunRecord,
-	extraConditions []Condition,
-	extraMutations []Mutation,
-	validateExtra func([]*KeyValue) error,
+	extraConditions []etcdstore.Condition,
+	extraMutations []etcdstore.Mutation,
+	validateExtra func([]*etcdstore.KeyValue) error,
 	authority *BackupAssignmentInput,
 	checkpoint *BackupCheckpointInput,
 ) (Versioned[BackupRunRecord], error) {
@@ -1107,7 +1108,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 		}
 	}
 	var checkpointPlan backupCheckpointPlan
-	var assignmentConditions []Condition
+	var assignmentConditions []etcdstore.Condition
 	if authority != nil {
 		if authority.TaskID != current.Record.TaskID {
 			return Versioned[BackupRunRecord]{}, errs.New(
@@ -1187,12 +1188,12 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	if err != nil {
 		return Versioned[BackupRunRecord]{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: backupRunKey(current.Record.TaskID), ModRevision: current.Revision},
 	}
 	conditions = append(conditions, extraConditions...)
 	conditions = append(conditions, evidence.fence.transactionConditions()...)
-	mutations := []Mutation{{Type: MutationPut, Key: backupRunKey(next.TaskID), Value: value}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: backupRunKey(next.TaskID), Value: value}}
 	mutations = append(mutations, extraMutations...)
 	epoch, err := evidence.fence.epochRewriteMutation()
 	if err != nil {
@@ -1243,15 +1244,15 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 }
 
 func exactBackupRuntimeReplayCompanions(
-	values []*KeyValue,
-	conditions []Condition,
-	mutations []Mutation,
+	values []*etcdstore.KeyValue,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	resultRevision int64,
 ) bool {
 	if len(values) != len(conditions) || resultRevision <= 0 {
 		return false
 	}
-	byKey := make(map[string]Mutation, len(mutations))
+	byKey := make(map[string]etcdstore.Mutation, len(mutations))
 	for _, mutation := range mutations {
 		if _, exists := byKey[mutation.Key]; exists {
 			return false
@@ -1269,12 +1270,12 @@ func exactBackupRuntimeReplayCompanions(
 		}
 		delete(byKey, condition.Key)
 		switch mutation.Type {
-		case MutationPut:
+		case etcdstore.MutationPut:
 			if value == nil || value.ModRevision != resultRevision ||
 				!bytes.Equal(value.Value, mutation.Value) {
 				return false
 			}
-		case MutationDelete:
+		case etcdstore.MutationDelete:
 			if value != nil {
 				return false
 			}
@@ -1342,14 +1343,14 @@ func (repository *BackupRuntimeRepository) loadOwnedEvidence(
 func (repository *BackupRuntimeRepository) readCurrentKeys(
 	ctx context.Context,
 	keys []string,
-) (*GetManyResult, error) {
-	if len(keys) == 0 || len(keys) > maximumTransactionOperations {
+) (*etcdstore.GetManyResult, error) {
+	if len(keys) == 0 || len(keys) > etcdstore.MaximumOperations {
 		return nil, errs.New(
 			errs.KindValidationFailed,
 			"backup runtime fixed read key count is invalid",
 		)
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return nil, err
 	}
@@ -1369,14 +1370,14 @@ func (repository *BackupRuntimeRepository) readFixedKeys(
 	ctx context.Context,
 	keys []string,
 	revision int64,
-) (*GetManyResult, error) {
-	if len(keys) == 0 || len(keys) > maximumTransactionOperations || revision <= 0 {
+) (*etcdstore.GetManyResult, error) {
+	if len(keys) == 0 || len(keys) > etcdstore.MaximumOperations || revision <= 0 {
 		return nil, errs.New(
 			errs.KindValidationFailed,
 			"backup runtime fixed read input is invalid",
 		)
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
@@ -1397,9 +1398,9 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 	run BackupRunRecord,
 	retrySource *backupRunRetrySource,
 	fixedRevision int64,
-) ([]Condition, []Mutation, error) {
-	conditions := make([]Condition, 0, len(run.Sources)*2+3)
-	mutations := make([]Mutation, 0, 3)
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
+	conditions := make([]etcdstore.Condition, 0, len(run.Sources)*2+3)
+	mutations := make([]etcdstore.Mutation, 0, 3)
 	conditionRevisions := make(map[string]int64, len(run.Sources)*2+3)
 	addCondition := func(key string, revision int64) error {
 		if previous, exists := conditionRevisions[key]; exists {
@@ -1412,7 +1413,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			return nil
 		}
 		conditionRevisions[key] = revision
-		conditions = append(conditions, Condition{Key: key, ModRevision: revision})
+		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: revision})
 		return nil
 	}
 	if retrySource == nil {
@@ -1673,21 +1674,21 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			}
 			mutations = append(
 				mutations,
-				Mutation{
-					Type:  MutationPut,
+				etcdstore.Mutation{
+					Type:  etcdstore.MutationPut,
 					Key:   backupConfigSnapshotKey(snapshot.ConfigSnapshotID),
 					Value: value,
 				},
-				Mutation{
-					Type: MutationPut,
+				etcdstore.Mutation{
+					Type: etcdstore.MutationPut,
 					Key: backupConfigSnapshotTaskReferenceKey(
 						run.TaskID,
 						snapshot.ConfigSnapshotID,
 					),
 					Value: []byte(snapshot.ConfigSnapshotID),
 				},
-				Mutation{
-					Type: MutationPut,
+				etcdstore.Mutation{
+					Type: etcdstore.MutationPut,
 					Key: backupConfigSnapshotReferenceTaskKey(
 						snapshot.ConfigSnapshotID,
 						run.TaskID,
@@ -1708,7 +1709,7 @@ func checkedBackupRuntimeRetentionKeep(keep int64) (int64, error) {
 }
 
 func validateBackupPostgresPublicationEvidence(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	source BackupRunSourceAttemptRecord,
 	snapshot BackupPostgresSourceSnapshot,
 ) error {
@@ -1740,7 +1741,7 @@ func validateBackupPostgresPublicationEvidence(
 }
 
 func validateBackupVolumePublicationEvidence(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	source BackupRunSourceAttemptRecord,
 	snapshot BackupVolumeSourceSnapshot,
 ) error {
@@ -1801,21 +1802,21 @@ func equalBackupMountPaths(left, right []string) bool {
 
 func (repository *BackupRuntimeRepository) transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) (etcdstore.TransactionResult, error) {
 	if err := validateBackupRuntimeTransactionBounds(conditions, mutations); err != nil {
-		return TransactionResult{}, err
+		return etcdstore.TransactionResult{}, err
 	}
 	return repository.store.Transact(ctx, conditions, mutations)
 }
 
-func validateBackupRuntimeTransactionBounds(conditions []Condition, mutations []Mutation) error {
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
+func validateBackupRuntimeTransactionBounds(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
+	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return errs.Newf(
 			errs.KindInternal,
 			"backup runtime transaction exceeds the %d-operation limit",
-			maximumTransactionOperations,
+			etcdstore.MaximumOperations,
 		)
 	}
 	size := 0
@@ -2064,7 +2065,7 @@ func backupRunExclusionRecords(
 }
 
 func exactBackupExclusions(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	records []BackupSourceTargetExclusionRecord,
 	resultRevision int64,
 ) bool {
@@ -2097,7 +2098,7 @@ func terminalBackupRunState(state BackupRunState) bool {
 		state == BackupRunTimedOut
 }
 
-func clearBackupRuntimeMutations(mutations []Mutation) {
+func clearBackupRuntimeMutations(mutations []etcdstore.Mutation) {
 	for index := range mutations {
 		clear(mutations[index].Value)
 		mutations[index].Value = nil
@@ -2108,12 +2109,12 @@ func (repository *BackupRuntimeRepository) loadManualBackupPolicyFence(
 	ctx context.Context,
 	record BackupRunRecord,
 	fixedRevision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	if record.Initiator != BackupRunInitiatorOperator {
 		return nil, nil
 	}
 	key := environmentCoordinationKey(record.EnvironmentID)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{key}, Revision: fixedRevision,
 	})
 	if err != nil {
@@ -2129,5 +2130,5 @@ func (repository *BackupRuntimeRepository) loadManualBackupPolicyFence(
 		coordination.CurrentBackupScheduleState == nil {
 		return nil, errs.New(errs.KindStateConflict, "backup policy schedule coordination is invalid")
 	}
-	return []Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}, nil
+	return []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}, nil
 }

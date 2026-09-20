@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"reflect"
 	"sort"
 	"time"
@@ -136,7 +137,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 			)
 		}
 	}
-	appliedState, err := repository.store.GetMany(ctx, GetManyRequest{
+	appliedState, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentComposeProjectionKey(environmentID)}, Revision: fixedRevision,
 	})
 	if err != nil {
@@ -237,7 +238,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	for _, zoneID := range zones {
 		keys = append(keys, componentAddressRegistryKey(zoneID))
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}

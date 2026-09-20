@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -11,8 +12,8 @@ import (
 
 type blueprintAttachTaskChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -71,11 +72,11 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskAcknowledgement(
 		return blueprintAttachTaskChange{}, err
 	}
 	change.values = append(change.values, intentBytes)
-	change.mutations = append(change.mutations, Mutation{
-		Type: MutationPut, Key: blueprintAttachTaskIntentKey(task.ID), Value: intentBytes,
+	change.mutations = append(change.mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: blueprintAttachTaskIntentKey(task.ID), Value: intentBytes,
 	})
 	if intent.OwnsEnvironmentFence {
-		active, activeErr := repository.store.GetMany(ctx, GetManyRequest{
+		active, activeErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{componentTaskActiveEnvironmentKey(intent.EnvironmentID)}, Revision: revision,
 		})
 		if activeErr != nil || active == nil || len(active.Values) != 1 ||
@@ -89,11 +90,11 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskAcknowledgement(
 				"Blueprint Attach Task lost its Environment fence",
 			)
 		}
-		change.conditions = append(change.conditions, Condition{
+		change.conditions = append(change.conditions, etcdstore.Condition{
 			Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: active.Values[0].ModRevision,
 		})
-		change.mutations = append(change.mutations, Mutation{
-			Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		change.mutations = append(change.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		})
 	}
 	return change, nil
@@ -123,14 +124,14 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 	if intent.OwnsEnvironmentFence {
 		keys = append(keys, componentTaskActiveEnvironmentKey(intent.EnvironmentID))
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return blueprintAttachTaskChange{}, err
 	}
 	if state == nil || len(state.Values) != len(keys) {
 		return blueprintAttachTaskChange{}, errs.New(errs.KindInternal, "Blueprint Attach retry state is incomplete")
 	}
-	change := blueprintAttachTaskChange{applies: true, conditions: []Condition{
+	change := blueprintAttachTaskChange{applies: true, conditions: []etcdstore.Condition{
 		{Key: blueprintAttachTaskIntentKey(source.ID), ModRevision: intentValue.ModRevision},
 		{Key: blueprintAttachTaskIntentKey(retry.ID)},
 	}}
@@ -165,11 +166,11 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 		change.values = append(change.values, encoded)
 		change.conditions = append(
 			change.conditions,
-			Condition{Key: attachKey(current.ID), ModRevision: value.ModRevision},
+			etcdstore.Condition{Key: attachKey(current.ID), ModRevision: value.ModRevision},
 		)
 		change.mutations = append(
 			change.mutations,
-			Mutation{Type: MutationPut, Key: attachKey(current.ID), Value: encoded},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachKey(current.ID), Value: encoded},
 		)
 		retryCandidates = append(retryCandidates, retrying)
 	}
@@ -184,10 +185,10 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 		}
 		change.conditions = append(
 			change.conditions,
-			Condition{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+			etcdstore.Condition{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 		)
-		change.mutations = append(change.mutations, Mutation{
-			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
+		change.mutations = append(change.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
 		})
 	}
 	retryIntent := BlueprintAttachTaskIntent{
@@ -200,8 +201,8 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskRetry(
 		return blueprintAttachTaskChange{}, err
 	}
 	change.values = append(change.values, intentBytes)
-	change.mutations = append(change.mutations, Mutation{
-		Type: MutationPut, Key: blueprintAttachTaskIntentKey(retry.ID), Value: intentBytes,
+	change.mutations = append(change.mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: blueprintAttachTaskIntentKey(retry.ID), Value: intentBytes,
 	})
 	return change, nil
 }
@@ -227,7 +228,7 @@ func (repository *TaskRepository) validateBlueprintAttachTaskAcknowledgementRepl
 	if intent.OwnsEnvironmentFence {
 		keys = append(keys, componentTaskActiveEnvironmentKey(intent.EnvironmentID))
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return err
 	}
@@ -258,7 +259,7 @@ func (repository *TaskRepository) validateBlueprintAttachTaskAcknowledgementRepl
 func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 	ctx context.Context,
 	task TaskRecord,
-	intentValue *KeyValue,
+	intentValue *etcdstore.KeyValue,
 	intent BlueprintAttachTaskIntent,
 	revision int64,
 	transition func(AttachRecord) (AttachRecord, error),
@@ -273,7 +274,7 @@ func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 	for _, candidate := range intent.Candidates {
 		keys = append(keys, attachKey(candidate.ID))
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return blueprintAttachTaskChange{}, err
 	}
@@ -282,7 +283,7 @@ func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 	}
 	change := blueprintAttachTaskChange{
 		applies:    true,
-		conditions: []Condition{{Key: blueprintAttachTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision}},
+		conditions: []etcdstore.Condition{{Key: blueprintAttachTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision}},
 	}
 	for index, candidate := range intent.Candidates {
 		value := state.Values[index]
@@ -312,11 +313,11 @@ func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 		change.values = append(change.values, encoded)
 		change.conditions = append(
 			change.conditions,
-			Condition{Key: attachKey(current.ID), ModRevision: value.ModRevision},
+			etcdstore.Condition{Key: attachKey(current.ID), ModRevision: value.ModRevision},
 		)
 		change.mutations = append(
 			change.mutations,
-			Mutation{Type: MutationPut, Key: attachKey(current.ID), Value: encoded},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachKey(current.ID), Value: encoded},
 		)
 	}
 	return change, nil
@@ -326,8 +327,8 @@ func (repository *TaskRepository) readBlueprintAttachTaskIntent(
 	ctx context.Context,
 	task TaskRecord,
 	revision int64,
-) (*KeyValue, BlueprintAttachTaskIntent, bool, error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+) (*etcdstore.KeyValue, BlueprintAttachTaskIntent, bool, error) {
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{blueprintAttachTaskIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {

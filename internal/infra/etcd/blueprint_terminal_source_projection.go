@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"time"
 
@@ -12,10 +13,10 @@ import (
 // while the caller composes and validates the entire terminal transaction.
 type blueprintTerminalSourceAdvance struct {
 	task                 TaskRecord
-	taskValue            *KeyValue
+	taskValue            *etcdstore.KeyValue
 	assignment           TaskAssignmentRecord
-	assignmentValue      *KeyValue
-	assignmentIndexValue *KeyValue
+	assignmentValue      *etcdstore.KeyValue
+	assignmentIndexValue *etcdstore.KeyValue
 	recovery             releaseRecoveryAcknowledgement
 	terminalStatus       TaskStatus
 	terminalAt           time.Time
@@ -37,20 +38,20 @@ func (advance *blueprintTerminalSourceAdvance) execute(ctx context.Context, repo
 // changed by release. Prefix-absence guards remain zero. The enclosing envelope
 // is budget-only and cannot be passed to a terminal commit.
 func (advance *blueprintTerminalSourceAdvance) projection(
-	executionGuards []Condition,
+	executionGuards []etcdstore.Condition,
 ) scriptTerminalSourceRelease {
 	rootKey, reportKey := scriptSourceRootKey(advance.task.OperationID), blueprintClosingReportKey(advance.task.ID)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: rootKey, ModRevision: math.MaxInt64},
 		{Key: ref.ReversePrefix(advance.task.OperationID), Prefix: true},
 		{Key: reportKey, ModRevision: math.MaxInt64},
 	}
 	for _, condition := range executionGuards {
-		conditions = append(conditions, Condition{Key: condition.Key, ModRevision: math.MaxInt64})
+		conditions = append(conditions, etcdstore.Condition{Key: condition.Key, ModRevision: math.MaxInt64})
 	}
 	return scriptTerminalSourceRelease{
 		conditions: conditions,
-		mutations:  []Mutation{{Type: MutationDelete, Key: rootKey}, {Type: MutationDelete, Key: reportKey}},
+		mutations:  []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: rootKey}, {Type: etcdstore.MutationDelete, Key: reportKey}},
 		advance:    advance,
 	}
 }

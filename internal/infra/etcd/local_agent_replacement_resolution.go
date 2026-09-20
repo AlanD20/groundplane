@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -49,10 +50,10 @@ func (repository *LocalAgentRepository) FenceReplacementAttempt(
 				"local Agent replacement generation changed",
 			)
 		}
-		result, err := repository.store.Transact(ctx, []Condition{
+		result, err := repository.store.Transact(ctx, []etcdstore.Condition{
 			{Key: localAgentSingletonKey, ModRevision: evidence.singleton.ModRevision},
 			{Key: localAgentPrimaryKey(agentID), ModRevision: revision},
-		}, []Mutation{{Type: MutationPut, Key: localAgentPrimaryKey(agentID), Value: evidence.primary.Value}})
+		}, []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: localAgentPrimaryKey(agentID), Value: evidence.primary.Value}})
 		if err != nil {
 			return Versioned[LocalAgentRecord]{}, err
 		}

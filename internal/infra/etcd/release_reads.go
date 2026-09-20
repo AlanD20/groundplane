@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"strings"
 
@@ -71,7 +72,7 @@ func (ledger *ReleaseLedger) ResolveCurrentSuccessful(
 	}
 	projectionRead, err := ledger.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision},
 	)
 	if err != nil {
 		return CurrentSuccessfulRelease{}, err
@@ -87,7 +88,7 @@ func (ledger *ReleaseLedger) ResolveCurrentSuccessful(
 		ids.Validate(ids.KindDeployment, projection.CurrentSuccessfulReleaseID) != nil {
 		return CurrentSuccessfulRelease{}, corruptReleaseRecord()
 	}
-	intentRead, err := ledger.store.GetMany(ctx, GetManyRequest{
+	intentRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			releaseIntentStagingKey("", projection.CurrentSuccessfulReleaseID),
 			releaseTerminalKey(projection.CurrentSuccessfulReleaseID),
@@ -129,7 +130,7 @@ func (ledger *ReleaseLedger) ResolveServing(
 	}
 	projectionRead, err := ledger.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision},
 	)
 	if err != nil {
 		return ServingRelease{}, err
@@ -150,7 +151,7 @@ func (ledger *ReleaseLedger) ResolveServing(
 	if ids.Validate(ids.KindDeployment, projection.ServingReleaseID) != nil {
 		return ServingRelease{}, corruptReleaseRecord()
 	}
-	intentRead, err := ledger.store.GetMany(ctx, GetManyRequest{
+	intentRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{releaseIntentStagingKey("", projection.ServingReleaseID)}, Revision: projectionRead.ReadRevision,
 	})
 	if err != nil {
@@ -197,7 +198,7 @@ func (ledger *ReleaseLedger) Get(ctx context.Context, releaseID string) (Release
 	if err != nil || intent.ID != releaseID || domain.ValidateIntent(intent) != nil {
 		return ReleaseView{}, corruptReleaseRecord()
 	}
-	headRead, err := ledger.store.GetMany(ctx, GetManyRequest{
+	headRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{releaseOperationKey(intent.OperationID)}, Revision: intentRead.ReadRevision,
 	})
 	if err != nil {
@@ -207,7 +208,7 @@ func (ledger *ReleaseLedger) Get(ctx context.Context, releaseID string) (Release
 		if intent.OperationKind != domain.OperationBlueprintApply {
 			return ReleaseView{}, errs.New(errs.KindReleaseNotFound, "release was not published")
 		}
-		indexRead, indexErr := ledger.store.GetMany(ctx, GetManyRequest{
+		indexRead, indexErr := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys:     []string{releaseServiceIndexKey(intent.EnvironmentID, intent.ServiceID, releaseID)},
 			Revision: intentRead.ReadRevision,
 		})
@@ -253,7 +254,7 @@ func (ledger *ReleaseLedger) List(ctx context.Context, request ReleasePageReques
 	}
 	page, err := ledger.store.Range(
 		ctx,
-		RangeRequest{Prefix: prefix, StartExclusive: start, Limit: int64(request.Limit + 1), Revision: revision},
+		etcdstore.RangeRequest{Prefix: prefix, StartExclusive: start, Limit: int64(request.Limit + 1), Revision: revision},
 	)
 	if err != nil {
 		return ReleasePage{}, err
@@ -312,7 +313,7 @@ func (ledger *ReleaseLedger) readViewAt(
 		releaseIntentStagingKey(publicationID, releaseID), releaseCheckpointStagingKey(publicationID, releaseID),
 		releasePublicationKey(publicationID), releaseTerminalKey(releaseID), releaseRetentionKey(releaseID),
 	}
-	read, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return ReleaseView{}, err
 	}
@@ -347,7 +348,7 @@ func (ledger *ReleaseLedger) readViewAt(
 		}
 		view.Retention = &retention
 	}
-	projectionRead, err := ledger.store.GetMany(ctx, GetManyRequest{
+	projectionRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			releaseProjectionKey(intent.ServiceID),
 			releaseOperationKey(intent.OperationID),

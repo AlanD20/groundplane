@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -9,8 +10,8 @@ import (
 // releaseTaskPublicationFragment is the only authority allowed to contribute
 // Task-owned keys to an atomic Release publication.
 type releaseTaskPublicationFragment struct {
-	condition Condition
-	mutations []Mutation
+	condition etcdstore.Condition
+	mutations []etcdstore.Mutation
 }
 
 func (repository *TaskRepository) prepareReleaseTaskPublicationFragment(
@@ -52,15 +53,15 @@ func (repository *TaskRepository) prepareReleaseTaskPublicationFragment(
 			"release task owner indexes are incomplete",
 		)
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: ownerKeys[0], Value: []byte(task.ID)},
-		{Type: MutationPut, Key: ownerKeys[1], Value: []byte(task.ID)},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: ownerKeys[0], Value: []byte(task.ID)},
+		{Type: etcdstore.MutationPut, Key: ownerKeys[1], Value: []byte(task.ID)},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 	}
-	return releaseTaskPublicationFragment{condition: Condition{Key: taskKey(task.ID)}, mutations: mutations}, nil
+	return releaseTaskPublicationFragment{condition: etcdstore.Condition{Key: taskKey(task.ID)}, mutations: mutations}, nil
 }
 
 func clearReleaseTaskPublicationFragment(fragment releaseTaskPublicationFragment) {
@@ -70,7 +71,7 @@ func clearReleaseTaskPublicationFragment(fragment releaseTaskPublicationFragment
 	fragment.mutations = nil
 }
 
-func cloneReleaseTaskMutations(fragment releaseTaskPublicationFragment) []Mutation {
+func cloneReleaseTaskMutations(fragment releaseTaskPublicationFragment) []etcdstore.Mutation {
 	mutations := slices.Clone(fragment.mutations)
 	for index := range mutations {
 		mutations[index].Value = slices.Clone(mutations[index].Value)

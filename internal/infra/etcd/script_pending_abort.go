@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,8 +16,8 @@ type pendingScriptAbortChange struct {
 	applies    bool
 	advanced   bool
 	terminalAt time.Time
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 }
 
 func (change *pendingScriptAbortChange) clear() {
@@ -44,7 +45,7 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 		return ScriptSourceReleaseFragment{}, true, nil
 	}
 	key := scriptSourceRootKey(task.OperationID)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return ScriptSourceReleaseFragment{}, false, err
 	}
@@ -66,7 +67,7 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 		read.Values[0].ModRevision != taskRevision {
 		return ScriptSourceReleaseFragment{}, false, corruptReleaseRecord()
 	}
-	change := ScriptSourceReleaseFragment{conditions: []Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}
+	change := ScriptSourceReleaseFragment{conditions: []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}
 	if task.Type == TaskScript {
 		execution, value, err := (&ScriptRepository{store: repository.store}).manualScriptExecutionAtRevision(
 			ctx,
@@ -90,7 +91,7 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 				return ScriptSourceReleaseFragment{}, false, err
 			}
 		}
-		change.conditions = append(change.conditions, Condition{Key: value.Key, ModRevision: value.ModRevision})
+		change.conditions = append(change.conditions, etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision})
 	}
 	return change, true, nil
 }
@@ -115,7 +116,7 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 	for _, step := range steps {
 		keys = append(keys, scriptExecutionKey(step.executionID))
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: task.ReadRevision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: task.ReadRevision})
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
@@ -158,10 +159,10 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
-	guards := make([]Condition, 0, len(executions)+1)
-	guards = append(guards, Condition{Key: taskKey(task.Record.ID), ModRevision: task.Revision})
+	guards := make([]etcdstore.Condition, 0, len(executions)+1)
+	guards = append(guards, etcdstore.Condition{Key: taskKey(task.Record.ID), ModRevision: task.Revision})
 	for index := range executions {
-		guards = append(guards, Condition{Key: read.Values[index+1].Key, ModRevision: read.Values[index+1].ModRevision})
+		guards = append(guards, etcdstore.Condition{Key: read.Values[index+1].Key, ModRevision: read.Values[index+1].ModRevision})
 	}
 	processed, drained, err := authority.ReleaseNext(ctx, task.Record.OperationID, guards)
 	if err != nil {
@@ -180,9 +181,9 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
-	conditions := append([]Condition(nil), final.conditions...)
+	conditions := append([]etcdstore.Condition(nil), final.conditions...)
 	conditions = append(conditions, guards[1:]...)
-	mutations := append([]Mutation(nil), final.mutations...)
+	mutations := append([]etcdstore.Mutation(nil), final.mutations...)
 	final.Clear()
 	return pendingScriptAbortChange{
 		applies: true, terminalAt: terminalAt, conditions: conditions, mutations: mutations,
@@ -195,7 +196,7 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 	requestedTerminalAt time.Time,
 	steps []releaseHookExecutionStep,
 	executions []ScriptExecutionRecord,
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 ) (pendingScriptAbortChange, error) {
 	terminal, err := transitionTaskStatus(task.Record, TaskStatusPending, TaskStatusAborted, requestedTerminalAt)
 	if err != nil {
@@ -218,8 +219,8 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 	if len(release.conditions) == 0 || len(release.mutations) == 0 {
 		return pendingScriptAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
 	}
-	conditions := append([]Condition{{Key: taskKey(task.Record.ID), ModRevision: task.Revision}}, release.conditions...)
-	mutations := append([]Mutation(nil), release.mutations...)
+	conditions := append([]etcdstore.Condition{{Key: taskKey(task.Record.ID), ModRevision: task.Revision}}, release.conditions...)
+	mutations := append([]etcdstore.Mutation(nil), release.mutations...)
 	defer clearMutationValues(mutations)
 	for index, execution := range executions {
 		next, encodeErr := abortScriptExecutionBeforeStart(
@@ -232,8 +233,8 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 		if encodeErr != nil {
 			return pendingScriptAbortChange{}, encodeErr
 		}
-		conditions = append(conditions, Condition{Key: values[index+1].Key, ModRevision: values[index+1].ModRevision})
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: values[index+1].Key, Value: encoded})
+		conditions = append(conditions, etcdstore.Condition{Key: values[index+1].Key, ModRevision: values[index+1].ModRevision})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: values[index+1].Key, Value: encoded})
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
@@ -246,7 +247,7 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 func decodePendingScriptAbortExecutions(
 	task TaskRecord,
 	steps []releaseHookExecutionStep,
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 ) ([]ScriptExecutionRecord, error) {
 	if len(values) != len(steps) {
 		return nil, corruptReleaseRecord()
@@ -389,7 +390,7 @@ func (repository *TaskRepository) validatePendingScriptAbortReplay(
 	for _, step := range steps {
 		keys = append(keys, scriptExecutionKey(step.executionID))
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: task.ReadRevision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: task.ReadRevision})
 	if err != nil {
 		return err
 	}

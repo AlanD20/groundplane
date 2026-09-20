@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -45,7 +46,7 @@ func (repository *ServiceRepository) ValidateServiceRemovalReferences(
 	} {
 		page, err := repository.store.Range(
 			ctx,
-			RangeRequest{Prefix: prefix, Limit: 1, Revision: projection.ReadRevision},
+			etcdstore.RangeRequest{Prefix: prefix, Limit: 1, Revision: projection.ReadRevision},
 		)
 		if err != nil {
 			return err
@@ -158,7 +159,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if err := repository.ValidateServiceRemovalReferences(ctx, current, projection); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		environmentBlueprintHeadKey(environment.Record.ID),
 		environmentComposeProjectionKey(environment.Record.ID),
 		serviceLifecycleActiveKey(current.Record.Desired.ID),
@@ -213,7 +214,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)}, {Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskQueueKey(task.Executor, task.ID)},
 		serviceDesiredCondition(current),
@@ -230,20 +231,20 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   deletionTombstoneKey(string(DeletionTargetService), current.Record.Desired.ID),
 			Value: tombstoneValue,
 		},
-		{Type: MutationPut, Key: serviceRemovalIntentKey(task.ID), Value: intentValue},
-		{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID)},
+		{Type: etcdstore.MutationPut, Key: serviceRemovalIntentKey(task.ID), Value: intentValue},
+		{Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID)},
 	}
-	originalClassify := func(_ int64, values []*KeyValue) error {
+	originalClassify := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "Service removal compare evidence is incomplete")
 		}
@@ -290,7 +291,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	plan, err := newTaskIdempotencyMutationPlan(task, initiation, finalConditions, binding.mutations,
-		func(revision int64, values []*KeyValue) error {
+		func(revision int64, values []*etcdstore.KeyValue) error {
 			if len(values) != len(finalConditions) {
 				return errs.New(errs.KindInternal, "Service removal Script compare evidence is incomplete")
 			}

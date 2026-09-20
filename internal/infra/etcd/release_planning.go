@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"strings"
 
@@ -62,19 +63,19 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 	if ctx == nil || ledger == nil || ledger.store == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil {
 		return ReleasePlanningScope{}, errs.New(errs.KindValidationFailed, "release planning environment is invalid")
 	}
-	var initial *GetResult
+	var initial *etcdstore.GetResult
 	var err error
 	if revision == 0 {
 		initial, err = ledger.store.Get(ctx, environmentKey(environmentID))
 	} else {
-		loaded, loadErr := ledger.store.GetMany(ctx, GetManyRequest{Keys: []string{environmentKey(environmentID)}, Revision: revision})
+		loaded, loadErr := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{environmentKey(environmentID)}, Revision: revision})
 		if loadErr != nil {
 			return ReleasePlanningScope{}, loadErr
 		}
 		if loaded == nil || loaded.ReadRevision != revision || len(loaded.Values) != 1 {
 			return ReleasePlanningScope{}, corruptReleaseRecord()
 		}
-		initial = &GetResult{Entry: loaded.Values[0], ReadRevision: loaded.ReadRevision}
+		initial = &etcdstore.GetResult{Entry: loaded.Values[0], ReadRevision: loaded.ReadRevision}
 	}
 	if err != nil {
 		return ReleasePlanningScope{}, err
@@ -89,7 +90,7 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 	if err != nil || environment.ID != environmentID || environment.ProvisioningState != EnvironmentProvisioningReady {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
-	projectRead, err := ledger.store.GetMany(ctx, GetManyRequest{
+	projectRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{projectKey(environment.ProjectID)}, Revision: initial.ReadRevision,
 	})
 	if err != nil {
@@ -121,7 +122,7 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 		deletionTombstoneKey("environment", environmentID), deletionTombstoneKey("project", project.ID),
 		deletionTombstoneKey("tenant", project.TenantID),
 	}
-	loaded, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: initial.ReadRevision})
+	loaded, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: initial.ReadRevision})
 	if err != nil {
 		return ReleasePlanningScope{}, err
 	}
@@ -196,7 +197,7 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 		seen[serviceID] = struct{}{}
 		keys = append(keys, deletionTombstoneKey("service", serviceID), releaseProjectionKey(serviceID))
 	}
-	loaded, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: scope.ReadRevision})
+	loaded, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: scope.ReadRevision})
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +262,7 @@ func (ledger *ReleaseLedger) GetPlanningServingIntent(
 	if service.Projection.ServingReleaseID == "" {
 		return domain.Intent{}, false, nil
 	}
-	index, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	index, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releaseServiceIndexKey(
 			scope.Environment.Record.ID,
 			service.Service.Record.Desired.ID,
@@ -297,7 +298,7 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 	prefix := scriptSetOwnerPrefix(scope.Environment.Record.ID, active.Record.GenerationID)
 	start := ""
 	for {
-		page, err := ledger.store.Range(ctx, RangeRequest{
+		page, err := ledger.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: prefix, StartExclusive: start, Limit: 200, Revision: scope.ReadRevision,
 		})
 		if err != nil {
@@ -316,7 +317,7 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 				}
 				keys[index] = scriptSetScriptKey(scope.Environment.Record.ID, active.Record.GenerationID, scriptID)
 			}
-			records, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: scope.ReadRevision})
+			records, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: scope.ReadRevision})
 			if err != nil {
 				return err
 			}

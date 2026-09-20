@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
@@ -69,7 +70,7 @@ func (repository *HierarchyDeletionRepository) requireProjectVolumeRemovalAbsent
 func (repository *HierarchyDeletionRepository) requireEnvironmentVolumeRemovalAbsent(
 	ctx context.Context, revision int64, environmentID string,
 ) error {
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{removalrecord.EnvironmentLockKey(environmentID)}, Revision: revision,
 	})
 	if err != nil {

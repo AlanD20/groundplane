@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -10,7 +11,7 @@ import (
 
 func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	ctx context.Context, task TaskRecord, terminalStatus TaskStatus, terminalAt time.Time, readRevision int64,
-) ([]Condition, []Mutation, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	environmentID, operationID, err := zoneRemovalTaskIdentity(task)
 	if err != nil {
 		return nil, nil, err
@@ -21,7 +22,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		zoneRemovalIntentKey(operationID), environmentBlueprintHeadKey(environmentID),
 		environmentComposeProjectionKey(environmentID), componentTaskActiveEnvironmentKey(environmentID),
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: readRevision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -73,7 +74,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 			return nil, nil, errs.New(errs.KindResourceInUse, "Zone gained a Component address reservation")
 		}
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: keys[0], ModRevision: state.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: state.Values[1].ModRevision},
 		{Key: keys[2], ModRevision: keyValueRevision(state.Values[2])},
@@ -91,10 +92,10 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		if encodeErr != nil {
 			return nil, nil, encodeErr
 		}
-		return conditions, []Mutation{
-			{Type: MutationPut, Key: keys[3], Value: intentValue},
-			{Type: MutationDelete, Key: keys[0]},
-			{Type: MutationDelete, Key: keys[6]},
+		return conditions, []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: keys[3], Value: intentValue},
+			{Type: etcdstore.MutationDelete, Key: keys[0]},
+			{Type: etcdstore.MutationDelete, Key: keys[6]},
 		}, nil
 	}
 	hierarchy := &HierarchyRepository{store: repository.store}
@@ -127,34 +128,34 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	}
 	conditions = append(
 		conditions,
-		Condition{
+		etcdstore.Condition{
 			Key:         environmentBlueprintRootKey(intent.EnvironmentID, intent.Claim.RevisionID),
 			ModRevision: publication.rootRevision,
 		},
-		Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
-		Condition{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
+		etcdstore.Condition{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
+		etcdstore.Condition{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
-		{Type: MutationDelete, Key: publication.locatorKey},
-		{Type: MutationPut, Key: keys[4], Value: headValue},
-		{Type: MutationPut, Key: keys[5], Value: projectionValue},
-		{Type: MutationDelete, Key: keys[3]},
-		{Type: MutationDelete, Key: keys[0]},
-		{Type: MutationDelete, Key: keys[6]},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
+		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
+		{Type: etcdstore.MutationPut, Key: keys[4], Value: headValue},
+		{Type: etcdstore.MutationPut, Key: keys[5], Value: projectionValue},
+		{Type: etcdstore.MutationDelete, Key: keys[3]},
+		{Type: etcdstore.MutationDelete, Key: keys[0]},
+		{Type: etcdstore.MutationDelete, Key: keys[6]},
 	}
 	if state.Values[2] != nil {
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: keys[2]})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[2]})
 	}
 	if len(nextPool.Reservations) == 0 {
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: keys[1]})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[1]})
 	} else {
 		poolValue, encodeErr := encodeEnvelope("zone_pool_registry", nextPool)
 		if encodeErr != nil {
 			clearMutationValues(mutations)
 			return nil, nil, encodeErr
 		}
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: keys[1], Value: poolValue})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[1], Value: poolValue})
 	}
 	return conditions, mutations, nil
 }
@@ -172,7 +173,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 		environmentBlueprintHeadKey(environmentID), environmentComposeProjectionKey(environmentID),
 		componentTaskActiveEnvironmentKey(environmentID),
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: readRevision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
 		return err
 	}

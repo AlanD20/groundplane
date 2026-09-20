@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -11,7 +12,7 @@ import (
 // accept an attempt after releasing its sources or release a winning attempt.
 func (repository *TaskRepository) newRetryTaskIdempotencyMutationPlan(
 	ctx context.Context, task TaskRecord, initiation TaskInitiation,
-	conditions []Condition, mutations []Mutation, classify idempotencyPlanClassifier,
+	conditions []etcdstore.Condition, mutations []etcdstore.Mutation, classify idempotencyPlanClassifier,
 ) (*idempotencyMutationPlan, error) {
 	if task.Configuration == nil || task.Configuration.SecretPins == nil {
 		return newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations, classify)

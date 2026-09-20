@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -35,7 +36,7 @@ func (repository *TaskRepository) LatestControllerUpdate(ctx context.Context) (V
 	}
 	index, err := repository.store.Range(
 		ctx,
-		RangeRequest{Prefix: controllerUpdateHistoryPrefix, Limit: 1, Descending: true},
+		etcdstore.RangeRequest{Prefix: controllerUpdateHistoryPrefix, Limit: 1, Descending: true},
 	)
 	if err != nil {
 		return Versioned[TaskRecord]{}, false, err
@@ -57,7 +58,7 @@ func (repository *TaskRepository) LatestControllerUpdate(ctx context.Context) (V
 	}
 	primary, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{taskKey(id)}, Revision: index.ReadRevision},
+		etcdstore.GetManyRequest{Keys: []string{taskKey(id)}, Revision: index.ReadRevision},
 	)
 	if err != nil {
 		return Versioned[TaskRecord]{}, false, err

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"time"
 
@@ -12,8 +13,8 @@ import (
 
 type blueprintCandidateTerminalChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 }
 
 func (change *blueprintCandidateTerminalChange) clear() {
@@ -29,17 +30,17 @@ type blueprintCandidateTerminalCaptureStore struct {
 	taskRepositoryStore
 	revision   int64
 	called     bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 }
 
 func (store *blueprintCandidateTerminalCaptureStore) Transact(
 	_ context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) (etcdstore.TransactionResult, error) {
 	if store.called {
-		return TransactionResult{}, errs.New(
+		return etcdstore.TransactionResult{}, errs.New(
 			errs.KindInternal,
 			"Blueprint candidate terminal contribution split across transactions",
 		)
@@ -47,11 +48,11 @@ func (store *blueprintCandidateTerminalCaptureStore) Transact(
 	store.called = true
 	store.conditions = slices.Clone(conditions)
 	store.mutations = cloneBlueprintCandidateMutations(mutations)
-	return TransactionResult{Succeeded: true, Revision: store.revision}, nil
+	return etcdstore.TransactionResult{Succeeded: true, Revision: store.revision}, nil
 }
 
-func cloneBlueprintCandidateMutations(input []Mutation) []Mutation {
-	cloned := make([]Mutation, len(input))
+func cloneBlueprintCandidateMutations(input []etcdstore.Mutation) []etcdstore.Mutation {
+	cloned := make([]etcdstore.Mutation, len(input))
 	for index, mutation := range input {
 		cloned[index] = mutation
 		cloned[index].Value = slices.Clone(mutation.Value)
@@ -60,14 +61,14 @@ func cloneBlueprintCandidateMutations(input []Mutation) []Mutation {
 }
 
 func mergeBlueprintCandidateTerminalChange(
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	change blueprintCandidateTerminalChange,
-) ([]Condition, []Mutation, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if !change.applies {
 		return conditions, mutations, nil
 	}
-	byKey := make(map[string]Condition, len(conditions)+len(change.conditions))
+	byKey := make(map[string]etcdstore.Condition, len(conditions)+len(change.conditions))
 	for _, condition := range conditions {
 		byKey[condition.Key] = condition
 	}
@@ -208,7 +209,7 @@ func (repository *TaskRepository) validateBlueprintCandidateUnpublished(
 	manifest ReleaseStagedManifest,
 	compensationResult *TaskResultRecord,
 	revision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	keys := make([]string, 0, len(manifest.Members)*6)
 	for _, member := range manifest.Members {
 		keys = append(keys,
@@ -220,14 +221,14 @@ func (repository *TaskRepository) validateBlueprintCandidateUnpublished(
 			releaseRetentionKey(member.ReleaseID),
 		)
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
 		return nil, corruptReleaseRecord()
 	}
-	conditions := make([]Condition, 0, len(keys))
+	conditions := make([]etcdstore.Condition, 0, len(keys))
 	for index, member := range manifest.Members {
 		values := read.Values[index*6 : index*6+6]
 		if values[0] == nil || values[1] == nil || values[2] == nil || values[4] != nil || values[5] != nil {
@@ -273,7 +274,7 @@ func (repository *TaskRepository) validateBlueprintCandidateUnpublished(
 			}
 		}
 		for offset, value := range values {
-			condition := Condition{Key: keys[index*6+offset], ModRevision: keyValueRevision(value)}
+			condition := etcdstore.Condition{Key: keys[index*6+offset], ModRevision: keyValueRevision(value)}
 			conditions = append(conditions, condition)
 		}
 	}
@@ -296,7 +297,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 		releaseManifestStagingKey(publicationID),
 		environmentBlueprintRootKey(task.Owner.EnvironmentID, desiredRevisionID),
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return err
 	}
@@ -351,7 +352,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			)
 		}
 	}
-	details, err := repository.store.GetMany(ctx, GetManyRequest{Keys: detailKeys, Revision: revision})
+	details, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: detailKeys, Revision: revision})
 	if err != nil {
 		return err
 	}
@@ -497,7 +498,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 		return releaseTaskRetryChange{}, err
 	}
 	desiredRevisionID := source.Params[EnvironmentDesiredRevisionParam]
-	rootRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	rootRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{environmentBlueprintRootKey(source.Owner.EnvironmentID, desiredRevisionID)},
 		Revision: revision,
 	})
@@ -542,14 +543,14 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 	defer clear(attemptAuthorityValue)
 	conditions := append(baseConditions, candidateConditions...)
 	conditions = append(conditions, hookTransfer.conditions...)
-	conditions = append(conditions, Condition{Key: blueprintCandidateAttemptAuthorityKey(retry.ID)})
+	conditions = append(conditions, etcdstore.Condition{Key: blueprintCandidateAttemptAuthorityKey(retry.ID)})
 	steps, err := releaseHookExecutionSteps(source)
 	if err != nil {
 		return releaseTaskRetryChange{}, err
 	}
 	if len(steps) != 0 {
 		rootKey := scriptSourceRootKey(source.OperationID)
-		rootRead, readErr := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{rootKey}, Revision: revision})
+		rootRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{rootKey}, Revision: revision})
 		if readErr != nil {
 			return releaseTaskRetryChange{}, readErr
 		}
@@ -567,15 +568,15 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 				"Blueprint Script source authority is not active",
 			)
 		}
-		conditions = append(conditions, Condition{Key: rootKey, ModRevision: rootRead.Values[0].ModRevision})
+		conditions = append(conditions, etcdstore.Condition{Key: rootKey, ModRevision: rootRead.Values[0].ModRevision})
 	}
 	mutations := cloneBlueprintCandidateMutations(hookTransfer.mutations)
-	mutations = append(mutations, Mutation{
-		Type: MutationPut, Key: blueprintCandidateAttemptAuthorityKey(retry.ID),
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: blueprintCandidateAttemptAuthorityKey(retry.ID),
 		Value: slices.Clone(attemptAuthorityValue),
 	})
-	mutations = append(mutations, Mutation{
-		Type: MutationPut, Key: environmentMutationEpochKey(source.Owner.EnvironmentID),
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(source.Owner.EnvironmentID),
 		Value: slices.Clone(epochValue),
 	})
 	return releaseTaskRetryChange{applies: true, conditions: conditions, mutations: mutations}, nil

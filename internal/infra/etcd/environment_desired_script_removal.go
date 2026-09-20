@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -9,7 +10,7 @@ import (
 type preparedDesiredScriptRemoval struct {
 	entryIDs   []string
 	volumeID   string
-	conditions []Condition
+	conditions []etcdstore.Condition
 }
 
 // Desired publication may remove Entries or the one explicitly targeted Volume.
@@ -83,7 +84,7 @@ func (removal preparedDesiredScriptRemoval) classifyConflict(
 	if removal.volumeID == "" {
 		return entries
 	}
-	return func(revision int64, values []*KeyValue) error {
+	return func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != baseCount+len(removal.conditions) {
 			return errs.New(errs.KindInternal, "desired removal Script compare evidence is incomplete")
 		}

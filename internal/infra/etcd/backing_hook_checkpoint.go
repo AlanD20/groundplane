@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -87,8 +88,8 @@ func (repository *AttachRepository) CheckpointBackingHook(
 		if err != nil {
 			return Versioned[BackingHookCheckpointRecord]{}, false, err
 		}
-		transaction, err := repository.store.Transact(ctx, anchor.conditions, []Mutation{{
-			Type: MutationPut, Key: backingHookCheckpointKey(input.TaskID, input.StepID), Value: value,
+		transaction, err := repository.store.Transact(ctx, anchor.conditions, []etcdstore.Mutation{{
+			Type: etcdstore.MutationPut, Key: backingHookCheckpointKey(input.TaskID, input.StepID), Value: value,
 		}})
 		clear(value)
 		clearKeyValues(transaction.FailureReads)
@@ -109,7 +110,7 @@ type backingHookCheckpointAnchor struct {
 	current            *BackingHookCheckpointRecord
 	checkpointRevision int64
 	readRevision       int64
-	conditions         []Condition
+	conditions         []etcdstore.Condition
 }
 
 func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
@@ -117,7 +118,7 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 	input BackingHookCheckpointInput,
 ) (backingHookCheckpointAnchor, error) {
 	checkpointKey := backingHookCheckpointKey(input.TaskID, input.StepID)
-	primary, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	primary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(input.TaskID), taskAssignmentIndexKey(input.TaskID), checkpointKey,
 	}})
 	if err != nil {
@@ -150,7 +151,7 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 		)
 	}
 	claimKey := taskExecutionClaimKey(TaskExecutorAgent, input.AgentID, input.TaskID)
-	claim, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{claimKey}, Revision: primary.ReadRevision})
+	claim, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{claimKey}, Revision: primary.ReadRevision})
 	if err != nil {
 		return backingHookCheckpointAnchor{}, err
 	}
@@ -165,13 +166,13 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 		!bytes.Equal(claim.Values[0].Value, primary.Values[1].Value) {
 		return backingHookCheckpointAnchor{}, errs.New(errs.KindInternal, "Backing hook assignment copies diverged")
 	}
-	anchor := backingHookCheckpointAnchor{readRevision: primary.ReadRevision, conditions: []Condition{
+	anchor := backingHookCheckpointAnchor{readRevision: primary.ReadRevision, conditions: []etcdstore.Condition{
 		{Key: taskKey(input.TaskID), ModRevision: primary.Values[0].ModRevision},
 		{Key: taskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
 		{Key: claimKey, ModRevision: claim.Values[0].ModRevision},
 	}}
 	if primary.Values[2] == nil {
-		anchor.conditions = append(anchor.conditions, Condition{Key: checkpointKey, ModRevision: 0})
+		anchor.conditions = append(anchor.conditions, etcdstore.Condition{Key: checkpointKey, ModRevision: 0})
 		return anchor, nil
 	}
 	record, err := decodeEnvelope[BackingHookCheckpointRecord](
@@ -183,7 +184,7 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 	}
 	anchor.current = &record
 	anchor.checkpointRevision = primary.Values[2].ModRevision
-	anchor.conditions = append(anchor.conditions, Condition{Key: checkpointKey, ModRevision: primary.Values[2].ModRevision})
+	anchor.conditions = append(anchor.conditions, etcdstore.Condition{Key: checkpointKey, ModRevision: primary.Values[2].ModRevision})
 	return anchor, nil
 }
 

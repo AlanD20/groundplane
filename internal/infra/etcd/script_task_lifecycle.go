@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,8 +11,8 @@ import (
 
 type scriptTaskChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -36,7 +37,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{deletionTombstoneKey(string(DeletionTargetScript), source.Target)}, Revision: revision,
 	})
 	if err != nil {
@@ -50,7 +51,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	if err != nil || service.Record.EnvironmentID != record.EnvironmentID {
 		return scriptTaskChange{}, errs.New(errs.KindResourceInUse, "Script target Service is unavailable")
 	}
-	dependencies, err := repository.store.GetMany(ctx, GetManyRequest{
+	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 			scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
@@ -75,7 +76,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	if dependencies.Values[3].ModRevision != service.Revision {
 		return scriptTaskChange{}, corruptRecord()
 	}
-	parents, err := repository.store.GetMany(ctx, GetManyRequest{
+	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			projectKey(environment.ProjectID),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
@@ -97,7 +98,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	}
 	change := scriptTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{
 				Key:         scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 				ModRevision: storage.Script.Revision,
@@ -121,7 +122,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		},
 	}
 	if project.TenantID != "" {
-		tenantFence, err := repository.store.GetMany(ctx, GetManyRequest{
+		tenantFence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID)}, Revision: revision,
 		})
 		if err != nil {
@@ -130,7 +131,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		if tenantFence == nil || len(tenantFence.Values) != 1 || tenantFence.Values[0] != nil {
 			return scriptTaskChange{}, errs.New(errs.KindResourceInUse, "Script owner is unavailable")
 		}
-		change.conditions = append(change.conditions, Condition{
+		change.conditions = append(change.conditions, etcdstore.Condition{
 			Key: deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID),
 		})
 	}
@@ -149,9 +150,9 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		return scriptTaskChange{}, err
 	}
 	change.values = append(change.values, activeValue)
-	change.mutations = append(change.mutations, Mutation{
-		Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetScript), record.Desired.ID), Value: value,
-	}, Mutation{Type: MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue})
+	change.mutations = append(change.mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetScript), record.Desired.ID), Value: value,
+	}, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue})
 	return change, nil
 }
 
@@ -169,7 +170,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{deletionTombstoneKey(string(DeletionTargetScript), task.Target)}, Revision: revision,
 	})
 	if err != nil {
@@ -185,7 +186,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 		tombstone.Phase != DeletionPhaseFinalizing {
 		return scriptTaskChange{}, errs.New(errs.KindStateConflict, "Script deletion tombstone does not match its Task")
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 			scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
@@ -201,7 +202,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 	}
 	change := scriptTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{
 				Key:         scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
 				ModRevision: storage.Script.Revision,
@@ -225,32 +226,32 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 				ModRevision: storage.EnvironmentLocator.Revision,
 			},
 		},
-		mutations: []Mutation{{
-			Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetScript), task.Target),
+		mutations: []etcdstore.Mutation{{
+			Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetScript), task.Target),
 		}},
 	}
 	if terminalStatus == TaskStatusCompleted {
 		change.mutations = append(
 			change.mutations,
-			Mutation{
-				Type: MutationDelete,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
 				Key:  scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
 			},
-			Mutation{
-				Type: MutationDelete,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
 				Key:  scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 			},
-			Mutation{
-				Type:   MutationDelete,
+			etcdstore.Mutation{
+				Type:   etcdstore.MutationDelete,
 				Key:    scriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
 				Prefix: true,
 			},
-			Mutation{
-				Type: MutationDelete,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
 				Key:  scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
 			},
-			Mutation{Type: MutationDelete, Key: scriptLocatorKey(task.Target)},
-			Mutation{Type: MutationDelete, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, task.Target)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptLocatorKey(task.Target)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, task.Target)},
 		)
 	}
 	activeValue, err := encodeScriptSetGeneration(storage.Active.Record)
@@ -260,7 +261,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 	change.values = append(change.values, activeValue)
 	change.mutations = append(
 		change.mutations,
-		Mutation{Type: MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
 	)
 	return change, nil
 }
@@ -275,7 +276,7 @@ func (repository *TaskRepository) validateScriptTaskAcknowledgementReplay(
 	if err != nil || !applies {
 		return err
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{deletionTombstoneKey(string(DeletionTargetScript), task.Target)}, Revision: revision,
 	})
 	if err != nil {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sync"
 	"time"
 
@@ -11,11 +12,11 @@ import (
 
 type blueprintBackupPolicySourceEvidence struct {
 	record           BackupSourceRecord
-	primary          *KeyValue
-	environmentIndex *KeyValue
-	identityIndex    *KeyValue
+	primary          *etcdstore.KeyValue
+	environmentIndex *etcdstore.KeyValue
+	identityIndex    *etcdstore.KeyValue
 	attach           *Versioned[AttachRecord]
-	attachOwner      *KeyValue
+	attachOwner      *etcdstore.KeyValue
 	candidateAttach  bool
 }
 
@@ -28,8 +29,8 @@ type blueprintBackupPolicyPreparationState struct {
 	desired             *EnvironmentBlueprintBackupPolicy
 	candidate           backupPolicyReplacementCandidate
 	sources             []blueprintBackupPolicySourceEvidence
-	connectorNameIndex  *KeyValue
-	connectorTombstone  *KeyValue
+	connectorNameIndex  *etcdstore.KeyValue
+	connectorTombstone  *etcdstore.KeyValue
 	retainedConnectorID string
 	retain              bool
 	requiresInitialKey  bool
@@ -238,11 +239,11 @@ func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
 	environmentID string,
 	name string,
 	revision int64,
-) (string, *Versioned[ConnectorRecord], *KeyValue, *KeyValue, error) {
+) (string, *Versioned[ConnectorRecord], *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
 	if name == "" {
 		return "", nil, nil, nil, nil
 	}
-	nameRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	nameRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{connectorNameKey(environmentID, name)}, Revision: revision,
 	})
 	if err != nil {
@@ -265,7 +266,7 @@ func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
 	if connector.Record.Connector.Name != name {
 		return "", nil, nil, nil, corruptConnectorRecord()
 	}
-	tombstone, err := repository.store.GetMany(ctx, GetManyRequest{
+	tombstone, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{deletionTombstoneKey(string(DeletionTargetConnector), connectorID)}, Revision: revision,
 	})
 	if err != nil {

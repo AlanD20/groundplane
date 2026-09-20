@@ -4,11 +4,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func newHierarchyDeletionRuntime(
-	store etcd.Store,
+	store etcdstore.Store,
 	idempotency *etcd.IdempotencyRepository,
 	coordinator *requestidempotency.Coordinator,
 ) (*hierarchydeletion.Service, error) {

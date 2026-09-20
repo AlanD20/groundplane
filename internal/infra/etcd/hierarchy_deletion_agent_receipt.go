@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -58,7 +59,7 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 		entry.ChildOperationID,
 		entry.CurrentAttemptID,
 	)
-	evidence, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{receiptKey, progressKey}})
+	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{receiptKey, progressKey}})
 	if err != nil {
 		return nil, err
 	}
@@ -236,15 +237,15 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 	defer clear(entryValue)
 	childKey, _ := HierarchyDeletionChildKey(operation.Tombstone.OperationID, entry.ChildOperationID)
 	transaction, err := repository.store.Transact(ctx,
-		[]Condition{
+		[]etcdstore.Condition{
 			{Key: taskKey(task.ID), ModRevision: taskRevision},
 			{Key: childKey, ModRevision: entryRevision}, {Key: receiptKey},
 			{Key: pointerKey, ModRevision: pointerRevision},
 		},
-		[]Mutation{
-			{Type: MutationPut, Key: receiptKey, Value: receiptValue},
-			{Type: MutationPut, Key: pointerKey, Value: pointerValue},
-			{Type: MutationPut, Key: childKey, Value: entryValue},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: receiptKey, Value: receiptValue},
+			{Type: etcdstore.MutationPut, Key: pointerKey, Value: pointerValue},
+			{Type: etcdstore.MutationPut, Key: childKey, Value: entryValue},
 		},
 	)
 	if err != nil {
@@ -319,11 +320,11 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionProgress(
 	}
 	clear(childRead.Entry.Value)
 	transaction, err := repository.store.Transact(ctx,
-		[]Condition{
+		[]etcdstore.Condition{
 			{Key: receiptKey, ModRevision: receiptRead.Entry.ModRevision},
 			{Key: progressKey}, {Key: childKey, ModRevision: childRead.Entry.ModRevision},
 		},
-		[]Mutation{{Type: MutationPut, Key: progressKey, Value: progressValue}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: progressKey, Value: progressValue}},
 	)
 	if err != nil {
 		return err

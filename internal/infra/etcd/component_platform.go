@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -48,7 +49,7 @@ func (repository *ComponentRepository) createPlatformComponent(
 		return Versioned[ComponentRecord]{}, err
 	}
 	defer clear(value)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: componentKey(record.Desired.ID)},
 		{Key: platformComponentOwnerKey(record.Desired.ID)},
 		{
@@ -56,16 +57,16 @@ func (repository *ComponentRepository) createPlatformComponent(
 		},
 		{Key: deletionTombstoneKey("component", record.Desired.ID)},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: componentKey(record.Desired.ID), Value: value},
-		{Type: MutationPut, Key: platformComponentOwnerKey(record.Desired.ID), Value: []byte(record.Desired.ID)},
-		{Type: MutationPut, Key: platformComponentKindKey(record.Desired.Kind), Value: []byte(record.Desired.ID)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: componentKey(record.Desired.ID), Value: value},
+		{Type: etcdstore.MutationPut, Key: platformComponentOwnerKey(record.Desired.ID), Value: []byte(record.Desired.ID)},
+		{Type: etcdstore.MutationPut, Key: platformComponentKindKey(record.Desired.Kind), Value: []byte(record.Desired.ID)},
 		componentWriteFenceMutation(record.Desired.ID),
 	}
 	if bootstrap {
-		conditions = append(conditions, Condition{Key: platformComponentBootstrapKey(record.Desired.ID)})
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: platformComponentBootstrapKey(record.Desired.ID),
+		conditions = append(conditions, etcdstore.Condition{Key: platformComponentBootstrapKey(record.Desired.ID)})
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: platformComponentBootstrapKey(record.Desired.ID),
 			Value: []byte(record.Desired.ID),
 		})
 	}
@@ -143,7 +144,7 @@ func (repository *ComponentRepository) replacePlatform(
 	}
 	indexes, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{
+		etcdstore.GetManyRequest{
 			Keys: []string{
 				platformComponentOwnerKey(current.Record.Desired.ID),
 				platformComponentKindKey(current.Record.Desired.Kind),
@@ -167,13 +168,13 @@ func (repository *ComponentRepository) replacePlatform(
 		return Versioned[ComponentRecord]{}, err
 	}
 	defer clear(value)
-	result, err := repository.store.Transact(ctx, []Condition{
+	result, err := repository.store.Transact(ctx, []etcdstore.Condition{
 		{Key: componentKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{Key: platformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
 		{Key: deletionTombstoneKey("component", current.Record.Desired.ID)},
-	}, []Mutation{
-		{Type: MutationPut, Key: componentKey(replacement.Desired.ID), Value: value},
+	}, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: componentKey(replacement.Desired.ID), Value: value},
 		componentWriteFenceMutation(replacement.Desired.ID),
 	})
 	if err != nil {
@@ -317,12 +318,12 @@ func (repository *ComponentRepository) PutPlatformComponentObservation(
 	defer clear(value)
 	result, err := repository.store.Transact(
 		ctx,
-		[]Condition{
+		[]etcdstore.Condition{
 			{Key: componentKey(record.ComponentID), ModRevision: expectedComponentRevision},
 			{Key: componentObservationKey(record.ComponentID), ModRevision: expectedObservationRevision},
 			{Key: deletionTombstoneKey("component", record.ComponentID)},
 		},
-		[]Mutation{{Type: MutationPut, Key: componentObservationKey(record.ComponentID), Value: value}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: componentObservationKey(record.ComponentID), Value: value}},
 	)
 	if err != nil {
 		return Versioned[ComponentObservationRecord]{}, err

@@ -3,6 +3,7 @@ package releasegroup
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
@@ -40,12 +41,12 @@ func (store *Store) createDirectFixture(ctx context.Context, group domain.Group)
 	if err != nil {
 		return Versioned{}, err
 	}
-	result, err := store.backend.Transact(ctx, evidence.conditions, []infraetcd.Mutation{
-		{Type: infraetcd.MutationPut, Key: recordKey(group.ID), Value: value},
-		{Type: infraetcd.MutationPut, Key: ownerKey(group.EnvironmentID, group.ID), Value: []byte(group.ID)},
-		{Type: infraetcd.MutationPut, Key: nameKey(group.EnvironmentID, group.Name), Value: []byte(group.ID)},
+	result, err := store.backend.Transact(ctx, evidence.conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: recordKey(group.ID), Value: value},
+		{Type: etcdstore.MutationPut, Key: ownerKey(group.EnvironmentID, group.ID), Value: []byte(group.ID)},
+		{Type: etcdstore.MutationPut, Key: nameKey(group.EnvironmentID, group.Name), Value: []byte(group.ID)},
 		{
-			Type:  infraetcd.MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   environmentMutationEpochKey(group.EnvironmentID),
 			Value: evidence.epochValue,
 		},
@@ -98,19 +99,19 @@ func (store *Store) updateDirectFixture(
 	if err != nil {
 		return Versioned{}, err
 	}
-	mutations := []infraetcd.Mutation{{Type: infraetcd.MutationPut, Key: recordKey(replacement.ID), Value: value}}
-	mutations = append(mutations, infraetcd.Mutation{
-		Type: infraetcd.MutationPut, Key: environmentMutationEpochKey(replacement.EnvironmentID), Value: evidence.epochValue,
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: recordKey(replacement.ID), Value: value}}
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(replacement.EnvironmentID), Value: evidence.epochValue,
 	})
 	if replacement.Name != current.Group.Name {
 		mutations = append(
 			mutations,
-			infraetcd.Mutation{
-				Type: infraetcd.MutationDelete,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
 				Key:  nameKey(replacement.EnvironmentID, current.Group.Name),
 			},
-			infraetcd.Mutation{
-				Type:  infraetcd.MutationPut,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   nameKey(replacement.EnvironmentID, replacement.Name),
 				Value: []byte(replacement.ID),
 			},
@@ -138,7 +139,7 @@ func (store *Store) removeDirectForbidden(ctx context.Context, current Versioned
 }
 
 type mutationEvidence struct {
-	conditions []infraetcd.Condition
+	conditions []etcdstore.Condition
 	epochValue []byte
 }
 
@@ -157,7 +158,7 @@ func (store *Store) loadMutationEvidence(
 	if oldName != "" && oldName != group.Name {
 		baseKeys = append(baseKeys, nameKey(group.EnvironmentID, oldName))
 	}
-	result, err := store.backend.GetMany(ctx, infraetcd.GetManyRequest{Keys: baseKeys})
+	result, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys})
 	if err != nil {
 		return mutationEvidence{}, err
 	}
@@ -199,7 +200,7 @@ func (store *Store) loadMutationEvidence(
 	if result.Values[8] != nil {
 		return mutationEvidence{}, errs.New(errs.KindResourceInUse, "release group deletion is already in progress")
 	}
-	conditions := []infraetcd.Condition{
+	conditions := []etcdstore.Condition{
 		{Key: baseKeys[0], ModRevision: result.Values[0].ModRevision},
 		{Key: baseKeys[1], ModRevision: result.Values[1].ModRevision},
 		{Key: baseKeys[2]}, {Key: baseKeys[3]},
@@ -217,9 +218,9 @@ func (store *Store) loadMutationEvidence(
 		}
 		conditions = append(
 			conditions,
-			infraetcd.Condition{Key: baseKeys[4]},
-			infraetcd.Condition{Key: baseKeys[5]},
-			infraetcd.Condition{Key: baseKeys[6]},
+			etcdstore.Condition{Key: baseKeys[4]},
+			etcdstore.Condition{Key: baseKeys[5]},
+			etcdstore.Condition{Key: baseKeys[6]},
 		)
 	} else {
 		if result.Values[4] == nil || result.Values[4].ModRevision != revision || result.Values[5] == nil {
@@ -231,8 +232,8 @@ func (store *Store) loadMutationEvidence(
 			return mutationEvidence{}, corruptRecord()
 		}
 		conditions = append(conditions,
-			infraetcd.Condition{Key: baseKeys[4], ModRevision: revision},
-			infraetcd.Condition{Key: baseKeys[5], ModRevision: result.Values[5].ModRevision},
+			etcdstore.Condition{Key: baseKeys[4], ModRevision: revision},
+			etcdstore.Condition{Key: baseKeys[5], ModRevision: result.Values[5].ModRevision},
 		)
 		if oldName != group.Name {
 			if result.Values[6] != nil {
@@ -243,18 +244,18 @@ func (store *Store) loadMutationEvidence(
 				return mutationEvidence{}, corruptRecord()
 			}
 			conditions = append(conditions,
-				infraetcd.Condition{Key: baseKeys[6]},
-				infraetcd.Condition{Key: baseKeys[9], ModRevision: oldNameIndex.ModRevision},
+				etcdstore.Condition{Key: baseKeys[6]},
+				etcdstore.Condition{Key: baseKeys[9], ModRevision: oldNameIndex.ModRevision},
 			)
 		} else {
 			if result.Values[6] == nil || !bytes.Equal(result.Values[6].Value, []byte(group.ID)) {
 				return mutationEvidence{}, corruptRecord()
 			}
-			conditions = append(conditions, infraetcd.Condition{Key: baseKeys[6], ModRevision: result.Values[6].ModRevision})
+			conditions = append(conditions, etcdstore.Condition{Key: baseKeys[6], ModRevision: result.Values[6].ModRevision})
 		}
 	}
 
-	projectResult, err := store.backend.GetMany(ctx, infraetcd.GetManyRequest{Keys: []string{
+	projectResult, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		projectKey(environment.ProjectID), environmentOwnerKey(environment.ProjectID, environment.ID),
 		deletionKey("project", environment.ProjectID),
 	}})
@@ -275,19 +276,19 @@ func (store *Store) loadMutationEvidence(
 	}
 	conditions = append(
 		conditions,
-		infraetcd.Condition{Key: projectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision},
-		infraetcd.Condition{
+		etcdstore.Condition{Key: projectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision},
+		etcdstore.Condition{
 			Key:         environmentOwnerKey(project.ID, environment.ID),
 			ModRevision: projectResult.Values[1].ModRevision,
 		},
-		infraetcd.Condition{Key: deletionKey("project", project.ID)},
+		etcdstore.Condition{Key: deletionKey("project", project.ID)},
 	)
 	ownerIndex := projectOwnerKey(project)
 	ownerKeys := []string{ownerIndex}
 	if project.Kind == infraetcd.ProjectKindTenant {
 		ownerKeys = append(ownerKeys, tenantKey(project.TenantID), deletionKey("tenant", project.TenantID))
 	}
-	ownerResult, err := store.backend.GetMany(ctx, infraetcd.GetManyRequest{Keys: ownerKeys})
+	ownerResult, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{Keys: ownerKeys})
 	if err != nil {
 		return mutationEvidence{}, err
 	}
@@ -297,7 +298,7 @@ func (store *Store) loadMutationEvidence(
 	}
 	conditions = append(
 		conditions,
-		infraetcd.Condition{Key: ownerIndex, ModRevision: ownerResult.Values[0].ModRevision},
+		etcdstore.Condition{Key: ownerIndex, ModRevision: ownerResult.Values[0].ModRevision},
 	)
 	if project.Kind == infraetcd.ProjectKindTenant {
 		if ownerResult.Values[1] == nil {
@@ -311,8 +312,8 @@ func (store *Store) loadMutationEvidence(
 			return mutationEvidence{}, errs.New(errs.KindResourceInUse, "release group tenant deletion is in progress")
 		}
 		conditions = append(conditions,
-			infraetcd.Condition{Key: tenantKey(project.TenantID), ModRevision: ownerResult.Values[1].ModRevision},
-			infraetcd.Condition{Key: deletionKey("tenant", project.TenantID)},
+			etcdstore.Condition{Key: tenantKey(project.TenantID), ModRevision: ownerResult.Values[1].ModRevision},
+			etcdstore.Condition{Key: deletionKey("tenant", project.TenantID)},
 		)
 	}
 
@@ -335,7 +336,7 @@ func (store *Store) loadMutationEvidence(
 			deletionKey("service", serviceID),
 		)
 	}
-	serviceResult, err := store.backend.GetMany(ctx, infraetcd.GetManyRequest{Keys: serviceKeys})
+	serviceResult, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{Keys: serviceKeys})
 	if err != nil {
 		return mutationEvidence{}, err
 	}
@@ -386,7 +387,7 @@ func (store *Store) loadMutationEvidence(
 				"release group member service deletion is in progress",
 			)
 		}
-		conditions = append(conditions, infraetcd.Condition{Key: deletionKey("service", serviceID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletionKey("service", serviceID)})
 	}
 	return mutationEvidence{conditions: conditions, epochValue: epochValue}, nil
 }
@@ -409,7 +410,7 @@ func (store *Store) find(ctx context.Context, id string) (Versioned, bool, error
 	if group.ID != id {
 		return Versioned{}, false, corruptRecord()
 	}
-	indexes, err := store.backend.GetMany(ctx, infraetcd.GetManyRequest{
+	indexes, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{ownerKey(group.EnvironmentID, id), nameKey(group.EnvironmentID, group.Name)},
 		Revision: result.ReadRevision,
 	})
@@ -426,7 +427,7 @@ func (store *Store) find(ctx context.Context, id string) (Versioned, bool, error
 }
 
 func (store *Store) classifyConflict(ctx context.Context, desired domain.Group, expectedRevision int64) error {
-	lock, err := store.backend.GetMany(ctx, infraetcd.GetManyRequest{Keys: []string{
+	lock, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		environmentOperationLockKey(desired.EnvironmentID), environmentDeletionKey(desired.EnvironmentID),
 		nameKey(desired.EnvironmentID, desired.Name), recordKey(desired.ID),
 	}})

@@ -1,4 +1,4 @@
-package app
+package runtime
 
 import (
 	"context"
@@ -30,7 +30,7 @@ type staleAgentTaskMaintenance struct {
 	tasks    staleAgentTaskTimeout
 }
 
-func newStaleAgentTaskMaintenance(
+func NewStaleTaskMaintenance(
 	agents staleAgentReader,
 	sessions *agentchannel.Registry,
 	tasks staleAgentTaskTimeout,

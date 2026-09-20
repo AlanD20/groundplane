@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -11,7 +12,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	ctx context.Context,
 	task TaskRecord,
 	taskRevision int64,
-	retention KeyValue,
+	retention etcdstore.KeyValue,
 	revision int64,
 	now time.Time,
 ) (bool, bool, error) {
@@ -26,7 +27,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	intentKey, _ := HierarchyDeletionIntentKey(operationID)
 	intentRead, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{intentKey, markerKey}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{intentKey, markerKey}, Revision: revision},
 	)
 	if err != nil {
 		return false, false, err
@@ -48,7 +49,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	tombstoneKey := HierarchyDeletionTombstoneKey(string(intent.TargetKind), intent.TargetID)
 	tombstoneRead, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{tombstoneKey}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{tombstoneKey}, Revision: revision},
 	)
 	if err != nil {
 		return false, false, err
@@ -74,13 +75,13 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	}
 	if tombstone.Terminal.Status != string(TaskStatusCompleted) || tombstone.Phase != HierarchyDeletionRetained {
 		transaction, transactErr := repository.store.Transact(ctx,
-			[]Condition{
+			[]etcdstore.Condition{
 				{Key: taskKey(task.ID), ModRevision: taskRevision},
 				{Key: retention.Key, ModRevision: retention.ModRevision},
 				{Key: tombstoneKey, ModRevision: tombstoneRead.Values[0].ModRevision},
 				{Key: markerKey},
 			},
-			[]Mutation{{Type: MutationDelete, Key: retention.Key}},
+			[]etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: retention.Key}},
 		)
 		if transactErr != nil {
 			return false, false, transactErr
@@ -107,11 +108,11 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		}
 		defer clear(value)
 		transaction, transactErr := repository.store.Transact(ctx,
-			[]Condition{
+			[]etcdstore.Condition{
 				{Key: pruneKey}, {Key: tombstoneKey, ModRevision: tombstoneRead.Values[0].ModRevision},
 				{Key: taskKey(task.ID), ModRevision: taskRevision}, {Key: markerKey},
 			},
-			[]Mutation{{Type: MutationPut, Key: pruneKey, Value: value}},
+			[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: pruneKey, Value: value}},
 		)
 		if transactErr != nil {
 			return false, false, transactErr
@@ -156,7 +157,7 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 		return false, err
 	}
 	for _, prefix := range prefixes {
-		page, rangeErr := repository.store.Range(ctx, RangeRequest{
+		page, rangeErr := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: prefix, Limit: int64(maximumTaskPruneBatchRecords + 1),
 		})
 		if rangeErr != nil {
@@ -169,14 +170,14 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 			continue
 		}
 		count := min(len(page.Values), maximumTaskPruneBatchRecords)
-		conditions := []Condition{{Key: mustHierarchyDeletionPruneIntentKey(operationID), ModRevision: pruneRevision}}
-		mutations := make([]Mutation, 0, count)
+		conditions := []etcdstore.Condition{{Key: mustHierarchyDeletionPruneIntentKey(operationID), ModRevision: pruneRevision}}
+		mutations := make([]etcdstore.Mutation, 0, count)
 		for index := 0; index < count; index++ {
 			conditions = append(
 				conditions,
-				Condition{Key: page.Values[index].Key, ModRevision: page.Values[index].ModRevision},
+				etcdstore.Condition{Key: page.Values[index].Key, ModRevision: page.Values[index].ModRevision},
 			)
-			mutations = append(mutations, Mutation{Type: MutationDelete, Key: page.Values[index].Key})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: page.Values[index].Key})
 		}
 		transaction, transactErr := repository.store.Transact(ctx, conditions, mutations)
 		if transactErr != nil {
@@ -198,8 +199,8 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 		}
 		defer clear(value)
 		transaction, transactErr := repository.store.Transact(ctx,
-			[]Condition{{Key: mustHierarchyDeletionPruneIntentKey(operationID), ModRevision: pruneRevision}},
-			[]Mutation{{Type: MutationPut, Key: mustHierarchyDeletionPruneIntentKey(operationID), Value: value}},
+			[]etcdstore.Condition{{Key: mustHierarchyDeletionPruneIntentKey(operationID), ModRevision: pruneRevision}},
+			[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: mustHierarchyDeletionPruneIntentKey(operationID), Value: value}},
 		)
 		if transactErr != nil {
 			return false, transactErr
@@ -278,7 +279,7 @@ func (repository *TaskRepository) finishHierarchyDeletionPrune(
 		mustHierarchyDeletionOperationKey(HierarchyDeletionCompletionScanCursorKey(operationID, task.ID)),
 		mustHierarchyDeletionPruneIntentKey(operationID),
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return false, err
 	}
@@ -287,12 +288,12 @@ func (repository *TaskRepository) finishHierarchyDeletionPrune(
 		read.Values[9] == nil || read.Values[9].ModRevision != pruneRevision {
 		return false, corruptHierarchyDeletion()
 	}
-	conditions := make([]Condition, len(keys))
-	mutations := make([]Mutation, 0, len(keys))
+	conditions := make([]etcdstore.Condition, len(keys))
+	mutations := make([]etcdstore.Mutation, 0, len(keys))
 	for index, key := range keys {
-		conditions[index] = Condition{Key: key, ModRevision: keyValueRevision(read.Values[index])}
+		conditions[index] = etcdstore.Condition{Key: key, ModRevision: keyValueRevision(read.Values[index])}
 		if read.Values[index] != nil {
-			mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 		}
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)

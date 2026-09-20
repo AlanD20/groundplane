@@ -3,13 +3,14 @@ package etcd
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sync"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type taskEventWatchStore interface {
-	Watch(context.Context, string, int64) (*WatchStream, error)
+	Watch(context.Context, string, int64) (*etcdstore.WatchStream, error)
 }
 
 // TaskEventStream owns one gap-free Task primary and event-journal follow.
@@ -25,8 +26,8 @@ type TaskEventStream struct {
 
 type taskEventWatches struct {
 	cancel context.CancelFunc
-	task   *WatchStream
-	events *WatchStream
+	task   *etcdstore.WatchStream
+	events *etcdstore.WatchStream
 	once   sync.Once
 }
 
@@ -149,11 +150,11 @@ func (stream *TaskEventStream) Run(
 
 func (stream *TaskEventStream) consumeEvent(
 	ctx context.Context,
-	event Event,
+	event etcdstore.Event,
 	last uint64,
 	emit func(TaskEventRecord) error,
 ) (uint64, error) {
-	if event.Type == EventDelete {
+	if event.Type == etcdstore.EventDelete {
 		sequence, err := taskEventSequenceFromKey(stream.taskID, event.Key)
 		if err != nil {
 			return last, err
@@ -163,7 +164,7 @@ func (stream *TaskEventStream) consumeEvent(
 		}
 		return last, errs.New(errs.KindCursorExpired, "Task event history overtook its reader")
 	}
-	if event.Type != EventPut {
+	if event.Type != etcdstore.EventPut {
 		return last, errs.New(errs.KindInternal, "task event journal was deleted during streaming")
 	}
 	sequence, err := taskEventSequenceFromKey(stream.taskID, event.Key)
@@ -189,8 +190,8 @@ func (stream *TaskEventStream) consumeEvent(
 	return sequence, nil
 }
 
-func (stream *TaskEventStream) consumeTask(event Event) (int64, bool, error) {
-	if event.Type != EventPut {
+func (stream *TaskEventStream) consumeTask(event etcdstore.Event) (int64, bool, error) {
+	if event.Type != etcdstore.EventPut {
 		return 0, false, errs.New(errs.KindTaskNotFound, "Task disappeared during event streaming")
 	}
 	if event.Key != taskKey(stream.taskID) {
@@ -337,7 +338,7 @@ func (watches *taskEventWatches) stop() {
 	})
 }
 
-func drainWatchStream(stream *WatchStream) {
+func drainWatchStream(stream *etcdstore.WatchStream) {
 	if stream == nil {
 		return
 	}

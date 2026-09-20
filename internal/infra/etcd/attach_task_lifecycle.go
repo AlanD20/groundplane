@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -12,8 +13,8 @@ import (
 type attachTaskChange struct {
 	applies    bool
 	mutates    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -32,7 +33,7 @@ func (repository *TaskRepository) prepareAttachTaskClaim(
 	}
 	change := attachTaskChange{
 		applies:    true,
-		conditions: []Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
+		conditions: []etcdstore.Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
 	}
 	runtimeConditions, err := repository.attachRuntimeClaimConditions(ctx, task, revision)
 	if err != nil {
@@ -77,7 +78,7 @@ func (repository *TaskRepository) prepareAttachTaskRetry(
 	}
 	change, err := encodeAttachTaskChange(attachTaskChange{
 		applies:    true,
-		conditions: []Condition{{Key: attachKey(source.Target), ModRevision: current.Revision}},
+		conditions: []etcdstore.Condition{{Key: attachKey(source.Target), ModRevision: current.Revision}},
 	}, retrying)
 	if err != nil {
 		return attachTaskChange{}, err
@@ -97,9 +98,9 @@ func (repository *TaskRepository) prepareAttachTaskRetry(
 		clearAttachTaskChange(change)
 		return attachTaskChange{}, err
 	}
-	change.conditions = append(change.conditions, Condition{Key: planReferenceKey})
-	change.mutations = append(change.mutations, Mutation{
-		Type: MutationPut, Key: planReferenceKey, Value: planReferenceValue,
+	change.conditions = append(change.conditions, etcdstore.Condition{Key: planReferenceKey})
+	change.mutations = append(change.mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: planReferenceKey, Value: planReferenceValue,
 	})
 	change.values = append(change.values, planReferenceValue)
 	return change, nil
@@ -133,7 +134,7 @@ func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 		}
 		return encodeAttachTaskChange(attachTaskChange{
 			applies:    true,
-			conditions: []Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
+			conditions: []etcdstore.Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
 		}, terminal)
 	}
 	terminal, err := CompleteAttachDetaching(current.Record, task.ID, succeeded)
@@ -143,7 +144,7 @@ func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 	if !succeeded {
 		return encodeAttachTaskChange(attachTaskChange{
 			applies:    true,
-			conditions: []Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
+			conditions: []etcdstore.Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
 		}, terminal)
 	}
 	conditions, mutations, values, err := prepareAttachRemoval(
@@ -200,7 +201,7 @@ func (repository *TaskRepository) readTaskAttach(
 	task TaskRecord,
 	revision int64,
 ) (Versioned[AttachRecord], error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{attachKey(task.Target)}, Revision: revision,
 	})
 	if err != nil {
@@ -227,7 +228,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	task TaskRecord,
 	revision int64,
 ) error {
-	evidence, err := repository.store.GetMany(ctx, GetManyRequest{
+	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{attachTaskRenderInputKey(task.PlanID)}, Revision: revision,
 	})
 	if err != nil {
@@ -294,7 +295,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		replayTargetIndex = len(keys)
 		keys = append(keys, replayTargetKey)
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return err
 	}
@@ -336,7 +337,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	}
 	if successorNameOwnerID != "" {
 		successorKey := attachKey(successorNameOwnerID)
-		successor, successorErr := repository.store.GetMany(ctx, GetManyRequest{
+		successor, successorErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{successorKey}, Revision: revision,
 		})
 		if successorErr != nil {
@@ -354,7 +355,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 			return errs.New(errs.KindInternal, "attach detach replay successor name owner is corrupt")
 		}
 	}
-	grants, err := repository.store.Range(ctx, RangeRequest{
+	grants, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: attachGrantedByPrefix(task.Target), Limit: 1, Revision: revision,
 	})
 	if err != nil {
@@ -369,7 +370,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	if len(grants.Values) != 0 {
 		return errs.New(errs.KindStateConflict, "attach detach replay retained grant membership")
 	}
-	dependentGrants, err := repository.store.Range(ctx, RangeRequest{
+	dependentGrants, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: attachDependentGrantPrefix(task.Target),
 		Limit:  2, Revision: revision,
 	})
@@ -420,7 +421,7 @@ func encodeAttachTaskChange(change attachTaskChange, record AttachRecord) (attac
 	}
 	change.mutates = true
 	change.values = append(change.values, value)
-	change.mutations = append(change.mutations, Mutation{Type: MutationPut, Key: attachKey(record.ID), Value: value})
+	change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachKey(record.ID), Value: value})
 	return change, nil
 }
 

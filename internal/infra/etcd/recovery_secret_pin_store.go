@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
@@ -21,7 +22,7 @@ func recoverySecretPinRepository(store hierarchyStore, projectID string) (*tasks
 func (adapter recoverySecretPinStore) GetMany(
 	ctx context.Context, keys []string, revision int64,
 ) (*tasksecretpins.GetManyResult, error) {
-	read, err := adapter.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil || read == nil {
 		return nil, err
 	}
@@ -40,7 +41,7 @@ func (adapter recoverySecretPinStore) GetMany(
 func (adapter recoverySecretPinStore) Range(
 	ctx context.Context, prefix string, limit int64,
 ) (*tasksecretpins.RangeResult, error) {
-	read, err := adapter.store.Range(ctx, RangeRequest{Prefix: prefix, Limit: limit})
+	read, err := adapter.store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: limit})
 	if err != nil || read == nil {
 		return nil, err
 	}
@@ -68,23 +69,23 @@ func (adapter recoverySecretPinStore) Transact(
 	return tasksecretpins.TransactionResult{Succeeded: result.Succeeded, Revision: result.Revision}, err
 }
 
-func recoverySecretPinFragment(fragment tasksecretpins.Fragment) ([]Condition, []Mutation, error) {
-	conditions := make([]Condition, len(fragment.Conditions))
+func recoverySecretPinFragment(fragment tasksecretpins.Fragment) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
+	conditions := make([]etcdstore.Condition, len(fragment.Conditions))
 	for index, condition := range fragment.Conditions {
-		conditions[index] = Condition{Key: condition.Key, ModRevision: condition.ModRevision, Prefix: condition.Prefix}
+		conditions[index] = etcdstore.Condition{Key: condition.Key, ModRevision: condition.ModRevision, Prefix: condition.Prefix}
 	}
-	mutations := make([]Mutation, len(fragment.Mutations))
+	mutations := make([]etcdstore.Mutation, len(fragment.Mutations))
 	for index, mutation := range fragment.Mutations {
-		var kind MutationType
+		var kind etcdstore.MutationType
 		switch mutation.Type {
 		case tasksecretpins.MutationPut:
-			kind = MutationPut
+			kind = etcdstore.MutationPut
 		case tasksecretpins.MutationDelete:
-			kind = MutationDelete
+			kind = etcdstore.MutationDelete
 		default:
 			return nil, nil, errs.New(errs.KindInternal, "unknown recovery Secret pin mutation")
 		}
-		mutations[index] = Mutation{Type: kind, Key: mutation.Key, Value: mutation.Value, Prefix: mutation.Prefix}
+		mutations[index] = etcdstore.Mutation{Type: kind, Key: mutation.Key, Value: mutation.Value, Prefix: mutation.Prefix}
 	}
 	return conditions, mutations, nil
 }
@@ -96,7 +97,7 @@ func (adapter recoverySecretPinStore) VerifySecret(
 		return tasksecretpins.SecretAuthority{}, err
 	}
 	keys := []string{secretRecordKey(pin.SecretID), secretValueKey(pin.SecretID)}
-	read, err := adapter.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	read, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return tasksecretpins.SecretAuthority{}, err
 	}
@@ -141,7 +142,7 @@ func (adapter recoverySecretPinStore) VerifySecret(
 		)
 	}
 	ownerKey := projectKey(adapter.projectID)
-	owners, err := adapter.store.GetMany(ctx, GetManyRequest{Keys: []string{ownerKey}, Revision: read.ReadRevision})
+	owners, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{ownerKey}, Revision: read.ReadRevision})
 	if err != nil {
 		return tasksecretpins.SecretAuthority{}, err
 	}

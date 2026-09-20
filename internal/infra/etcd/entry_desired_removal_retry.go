@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -23,7 +24,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 			desired.RevisionID,
 		), blueprintEntryEnvironmentPrefix + intent.EntryID,
 		taskMaterializationWriterKey(intent.EnvironmentID)}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -88,19 +89,19 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 		return routeTaskChange{}, err
 	}
 	change := routeTaskChange{applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: entryRemovalIntentKey(source.ID), ModRevision: sourceIntentRevision},
 			{Key: entryRemovalIntentKey(retry.ID)},
 		},
-		mutations: []Mutation{{Type: MutationPut, Key: entryRemovalIntentKey(retry.ID), Value: value},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: entryRemovalIntentKey(retry.ID), Value: value},
 			{
-				Type:  MutationPut,
+				Type:  etcdstore.MutationPut,
 				Key:   keys[1],
 				Value: tombstone,
-			}, {Type: MutationPut, Key: keys[2], Value: []byte(retry.ID)}},
+			}, {Type: etcdstore.MutationPut, Key: keys[2], Value: []byte(retry.ID)}},
 		values: [][]byte{value, tombstone}}
 	for index, key := range keys {
-		condition := Condition{Key: key}
+		condition := etcdstore.Condition{Key: key}
 		if read.Values[index] != nil {
 			condition.ModRevision = read.Values[index].ModRevision
 		}

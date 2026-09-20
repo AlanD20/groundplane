@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -30,7 +31,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 			return TaskEventAppend{}, err
 		}
 		claimKey := taskAssignmentKey(input.Identity.AgentID, input.Identity.TaskID)
-		result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+		result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 			taskKey(input.Identity.TaskID), taskEventDedupKey(input.Identity), claimKey,
 			taskAssignmentIndexKey(input.Identity.TaskID), blueprintClosingReportKey(input.Identity.TaskID),
 			manualScriptClosingReportKey(input.Identity.TaskID),
@@ -108,10 +109,10 @@ func (repository *TaskRepository) AppendTaskEvent(
 			)
 		}
 
-		var recoveryValue *KeyValue
-		var recoveryMutation []Mutation
+		var recoveryValue *etcdstore.KeyValue
+		var recoveryMutation []etcdstore.Mutation
 		if assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
-			recoveryRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+			recoveryRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 				Keys: []string{releaseRecoveryKey(task.ID)}, Revision: result.ReadRevision,
 			})
 			if readErr != nil {
@@ -142,14 +143,14 @@ func (repository *TaskRepository) AppendTaskEvent(
 					return TaskEventAppend{}, encodeErr
 				}
 				defer clear(encoded)
-				recoveryMutation = []Mutation{{Type: MutationPut, Key: recoveryValue.Key, Value: encoded}}
+				recoveryMutation = []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: recoveryValue.Key, Value: encoded}}
 			}
 		} else if assignment.ExecutionMode != TaskExecutionModeForward {
 			return TaskEventAppend{}, corruptTaskAssignment()
 		}
 
 		eventKey := taskEventKey(task.ID, prepared.Sequence)
-		eventAtRevision, err := repository.store.GetMany(ctx, GetManyRequest{
+		eventAtRevision, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{eventKey}, Revision: result.ReadRevision,
 		})
 		if err != nil {
@@ -178,7 +179,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
-		conditions := []Condition{
+		conditions := []etcdstore.Condition{
 			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 			{Key: claimKey, ModRevision: assignmentValue.ModRevision},
 			{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
@@ -187,12 +188,12 @@ func (repository *TaskRepository) AppendTaskEvent(
 			{Key: scriptClosingReportKey(task)},
 		}
 		if recoveryValue != nil {
-			conditions = append(conditions, Condition{Key: recoveryValue.Key, ModRevision: recoveryValue.ModRevision})
+			conditions = append(conditions, etcdstore.Condition{Key: recoveryValue.Key, ModRevision: recoveryValue.ModRevision})
 		}
-		mutations := []Mutation{
-			{Type: MutationPut, Key: taskKey(task.ID), Value: encodedTask},
-			{Type: MutationPut, Key: eventKey, Value: encodedEvent},
-			{Type: MutationPut, Key: taskEventDedupKey(input.Identity), Value: encodedDedup},
+		mutations := []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: encodedTask},
+			{Type: etcdstore.MutationPut, Key: eventKey, Value: encodedEvent},
+			{Type: etcdstore.MutationPut, Key: taskEventDedupKey(input.Identity), Value: encodedDedup},
 		}
 		mutations = append(mutations, recoveryMutation...)
 		conditions = append(conditions, trimConditions...)

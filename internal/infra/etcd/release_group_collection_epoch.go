@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,7 +11,7 @@ import (
 const releaseGroupCollectionEpochPrefix = "/v1/runtime/release-group-collection-epochs/"
 
 type releaseGroupCollectionReader interface {
-	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 }
 
 type releaseGroupCollectionEpochRecord struct {
@@ -47,31 +48,31 @@ func loadReleaseGroupCollectionEpoch(
 	store releaseGroupCollectionReader,
 	environmentID string,
 	revision int64,
-) (Condition, Mutation, error) {
-	result, err := store.GetMany(ctx, GetManyRequest{
+) (etcdstore.Condition, etcdstore.Mutation, error) {
+	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{releaseGroupCollectionEpochKey(environmentID)},
 		Revision: revision,
 	})
 	if err != nil {
-		return Condition{}, Mutation{}, err
+		return etcdstore.Condition{}, etcdstore.Mutation{}, err
 	}
 	if result == nil || len(result.Values) != 1 ||
 		(revision > 0 && result.ReadRevision != revision) {
-		return Condition{}, Mutation{}, corruptRecord()
+		return etcdstore.Condition{}, etcdstore.Mutation{}, corruptRecord()
 	}
-	condition := Condition{Key: releaseGroupCollectionEpochKey(environmentID)}
+	condition := etcdstore.Condition{Key: releaseGroupCollectionEpochKey(environmentID)}
 	if result.Values[0] != nil {
 		if err := validateReleaseGroupCollectionEpoch(result.Values[0].Value, environmentID); err != nil {
-			return Condition{}, Mutation{}, err
+			return etcdstore.Condition{}, etcdstore.Mutation{}, err
 		}
 		condition.ModRevision = result.Values[0].ModRevision
 	}
 	value, err := encodeReleaseGroupCollectionEpoch(environmentID)
 	if err != nil {
-		return Condition{}, Mutation{}, err
+		return etcdstore.Condition{}, etcdstore.Mutation{}, err
 	}
-	return condition, Mutation{
-		Type:  MutationPut,
+	return condition, etcdstore.Mutation{
+		Type:  etcdstore.MutationPut,
 		Key:   releaseGroupCollectionEpochKey(environmentID),
 		Value: value,
 	}, nil

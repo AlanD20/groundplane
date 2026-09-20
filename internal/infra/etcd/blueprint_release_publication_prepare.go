@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -40,7 +41,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	if err != nil {
 		return BlueprintReleasePublication{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{
 			Key:         releaseManifestStagingKey(evidence.Manifest.Record.PublicationID),
 			ModRevision: evidence.Manifest.Revision,
@@ -74,9 +75,9 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 	if err != nil {
 		return BlueprintReleasePublication{}, err
 	}
-	mutations := []Mutation{
+	mutations := []etcdstore.Mutation{
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   releasePublicationKey(evidence.Manifest.Record.PublicationID),
 			Value: publicationValue,
 		},
@@ -99,13 +100,13 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		}
 		mutations = append(
 			mutations,
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   releaseEnvironmentIndexKey(evidence.EnvironmentID, member.ReleaseID),
 				Value: environmentValue,
 			},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   releaseServiceIndexKey(evidence.EnvironmentID, member.ServiceID, member.ReleaseID),
 				Value: serviceValue,
 			},
@@ -122,12 +123,12 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 		}
 		conditions = append(
 			conditions,
-			Condition{Key: evidence.HookPrepared.key, ModRevision: evidence.HookPrepared.revision},
+			etcdstore.Condition{Key: evidence.HookPrepared.key, ModRevision: evidence.HookPrepared.revision},
 		)
 		for _, hook := range evidence.Hooks {
 			conditions = append(conditions, scriptAttachSourceConditions(hook.Sources.AttachSources)...)
 		}
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: evidence.HookPrepared.key})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: evidence.HookPrepared.key})
 	}
 	var sourceFragment ScriptSourcePublicationFragment
 	if !evidence.SourcePrepared.IsZero() {

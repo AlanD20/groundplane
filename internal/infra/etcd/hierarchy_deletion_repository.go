@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 	"time"
 
@@ -17,18 +18,18 @@ const (
 )
 
 type hierarchyDeletionStore interface {
-	Get(context.Context, string) (*GetResult, error)
-	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
-	Range(context.Context, RangeRequest) (*RangeResult, error)
-	MeasureTransaction(context.Context, []Condition, []Mutation) (TransactionBudget, error)
-	Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
+	Get(context.Context, string) (*etcdstore.GetResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+	MeasureTransaction(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionBudget, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
 type HierarchyDeletionRepository struct {
 	store hierarchyDeletionStore
 }
 
-func NewHierarchyDeletionRepository(store Store) (*HierarchyDeletionRepository, error) {
+func NewHierarchyDeletionRepository(store etcdstore.Store) (*HierarchyDeletionRepository, error) {
 	return newHierarchyDeletionRepository(store)
 }
 
@@ -212,7 +213,7 @@ type hierarchyDeletionRoot struct {
 	rootSlug         string
 	workspace        HierarchyDeletionWorkspace
 	owner            TaskOwner
-	primaryFences    []Condition
+	primaryFences    []etcdstore.Condition
 	coordination     []Versioned[HierarchyCoordinationRecord]
 	coordinationKeys []string
 }
@@ -275,16 +276,16 @@ func (repository *HierarchyDeletionRepository) Begin(
 	}
 	defer clear(taskReference)
 	conditions = append(conditions,
-		Condition{Key: taskKey(task.ID)},
-		Condition{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		Condition{Key: taskActiveOperationKey(task.OperationID)},
-		Condition{Key: taskQueueKey(task.Executor, task.ID)},
+		etcdstore.Condition{Key: taskKey(task.ID)},
+		etcdstore.Condition{Key: taskOperationIndexKey(task.OperationID, task.ID)},
+		etcdstore.Condition{Key: taskActiveOperationKey(task.OperationID)},
+		etcdstore.Condition{Key: taskQueueKey(task.Executor, task.ID)},
 	)
 	mutations = append(mutations,
-		Mutation{Type: MutationPut, Key: taskKey(task.ID), Value: encodedTask},
-		Mutation{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		Mutation{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
-		Mutation{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: encodedTask},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
 	)
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,
@@ -296,7 +297,7 @@ func (repository *HierarchyDeletionRepository) Begin(
 	if err != nil {
 		return HierarchyDeletionBeginResult{}, err
 	}
-	if err := plan.enforceTransactionBounds(func(finalConditions []Condition, finalMutations []Mutation) error {
+	if err := plan.enforceTransactionBounds(func(finalConditions []etcdstore.Condition, finalMutations []etcdstore.Mutation) error {
 		return validateHierarchyDeletionTransaction(finalConditions, finalMutations, 64)
 	}); err != nil {
 		return HierarchyDeletionBeginResult{}, err
@@ -383,7 +384,7 @@ func hierarchyDeletionTask(
 }
 
 func classifyHierarchyDeletionBegin(begin HierarchyDeletionBegin) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		for _, value := range values {
 			if value != nil {
 				return errs.New(errs.KindStateConflict, "hierarchy deletion publication evidence changed")

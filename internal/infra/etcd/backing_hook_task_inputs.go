@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -154,7 +155,7 @@ func (repository *AttachRepository) GetBackingHookTaskInputs(
 			"Task backing hook input authority is missing",
 		)
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{backingHookTaskInputKey(task.OperationID)},
 	})
 	if err != nil {
@@ -180,12 +181,12 @@ func (repository *TaskRepository) backingHookInputClaimConditions(
 	ctx context.Context,
 	task TaskRecord,
 	revision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	if task.Configuration == nil || task.Configuration.BackingHookInputs == nil {
 		return nil, nil
 	}
 	key := backingHookTaskInputKey(task.OperationID)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +206,7 @@ func (repository *TaskRepository) backingHookInputClaimConditions(
 		record.CiphertextSHA256 != task.Configuration.BackingHookInputs.CiphertextSHA256 {
 		return nil, errs.New(errs.KindStateConflict, "Backing hook Task input authority changed before claim")
 	}
-	conditions := []Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}
+	conditions := []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}
 	pins, err := repository.recoverySecretPinClaimConditions(ctx, task)
 	if err != nil {
 		return nil, err

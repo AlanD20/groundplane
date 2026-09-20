@@ -1,9 +1,13 @@
 package etcd
 
+import etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+
+import etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+
 // transactionSize returns the exact protobuf request size after logical keys
-// have been expanded beneath this Store's configured root. Capability modules
-// use it to enforce ceilings narrower than the Store-wide 1 MiB limit.
-func (s *store) transactionSize(conditions []Condition, mutations []Mutation) (int, error) {
+// have been expanded beneath this etcdstore.Store's configured root. Capability modules
+// use it to enforce ceilings narrower than the etcdstore.Store-wide 1 MiB limit.
+func (s *store) transactionSize(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) (int, error) {
 	physicalConditions := make([]string, len(conditions))
 	for index, condition := range conditions {
 		key, err := s.physicalKey(condition.Key)

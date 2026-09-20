@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -93,11 +94,11 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 	}
 	currentIDs := sortedReleaseGroupIDs(currentByID)
 	desiredIDs := sortedReleaseGroupIDs(desiredByID)
-	conditions := []Condition{collectionCondition}
-	mutations := []Mutation{collectionMutation}
+	conditions := []etcdstore.Condition{collectionCondition}
+	mutations := []etcdstore.Mutation{collectionMutation}
 	for _, id := range currentIDs {
 		versioned := currentByID[id]
-		indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+		indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
 				releaseGroupOwnerKey(environmentID, id),
 				releaseGroupNameKey(environmentID, versioned.Group.Name),
@@ -117,13 +118,13 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 		}
 		conditions = append(
 			conditions,
-			Condition{Key: releaseGroupRecordKey(id), ModRevision: versioned.Revision},
-			Condition{Key: releaseGroupOwnerKey(environmentID, id), ModRevision: indexes.Values[0].ModRevision},
-			Condition{
+			etcdstore.Condition{Key: releaseGroupRecordKey(id), ModRevision: versioned.Revision},
+			etcdstore.Condition{Key: releaseGroupOwnerKey(environmentID, id), ModRevision: indexes.Values[0].ModRevision},
+			etcdstore.Condition{
 				Key:         releaseGroupNameKey(environmentID, versioned.Group.Name),
 				ModRevision: indexes.Values[1].ModRevision,
 			},
-			Condition{Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), id)},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetReleaseGroup), id)},
 		)
 		next, retained := desiredByID[id]
 		if retained {
@@ -138,8 +139,8 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 				if err != nil {
 					return ReleaseGroupBlueprintPreparedMutation{}, err
 				}
-				mutations = append(mutations, Mutation{
-					Type:  MutationPut,
+				mutations = append(mutations, etcdstore.Mutation{
+					Type:  etcdstore.MutationPut,
 					Key:   releaseGroupRecordKey(id),
 					Value: value,
 				})
@@ -147,9 +148,9 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 			continue
 		}
 		mutations = append(mutations,
-			Mutation{Type: MutationDelete, Key: releaseGroupRecordKey(id)},
-			Mutation{Type: MutationDelete, Key: releaseGroupOwnerKey(environmentID, id)},
-			Mutation{Type: MutationDelete, Key: releaseGroupNameKey(environmentID, versioned.Group.Name)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupRecordKey(id)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupOwnerKey(environmentID, id)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupNameKey(environmentID, versioned.Group.Name)},
 		)
 	}
 	for _, id := range desiredIDs {
@@ -163,7 +164,7 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 			releaseGroupNameKey(environmentID, group.Name),
 			deletionTombstoneKey(string(DeletionTargetReleaseGroup), id),
 		}
-		absent, err := repository.store.GetMany(ctx, GetManyRequest{
+		absent, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys:     keys,
 			Revision: readRevision,
 		})
@@ -187,12 +188,12 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 			return ReleaseGroupBlueprintPreparedMutation{}, err
 		}
 		for _, key := range keys {
-			conditions = append(conditions, Condition{Key: key})
+			conditions = append(conditions, etcdstore.Condition{Key: key})
 		}
 		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: releaseGroupRecordKey(id), Value: value},
-			Mutation{Type: MutationPut, Key: releaseGroupOwnerKey(environmentID, id), Value: []byte(id)},
-			Mutation{Type: MutationPut, Key: releaseGroupNameKey(environmentID, group.Name), Value: []byte(id)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: releaseGroupRecordKey(id), Value: value},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: releaseGroupOwnerKey(environmentID, id), Value: []byte(id)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: releaseGroupNameKey(environmentID, group.Name), Value: []byte(id)},
 		)
 	}
 	return newReleaseGroupBlueprintPreparedMutation(

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -84,8 +85,8 @@ type backupCheckpointDedupRecord struct {
 }
 
 type backupCheckpointPlan struct {
-	conditions     []Condition
-	mutations      []Mutation
+	conditions     []etcdstore.Condition
+	mutations      []etcdstore.Mutation
 	readRevision   int64
 	commitRevision int64
 	digest         string
@@ -99,12 +100,12 @@ type backupCheckpointBinding struct {
 }
 
 func (plan backupCheckpointPlan) composeTransaction(
-	conditions []Condition,
-	mutations []Mutation,
-) ([]Condition, []Mutation, error) {
-	composedConditions := append(append([]Condition(nil), conditions...), plan.conditions...)
-	composedMutations := make([]Mutation, 0, len(mutations)+len(plan.mutations))
-	for _, mutation := range append(append([]Mutation(nil), mutations...), plan.mutations...) {
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
+	composedConditions := append(append([]etcdstore.Condition(nil), conditions...), plan.conditions...)
+	composedMutations := make([]etcdstore.Mutation, 0, len(mutations)+len(plan.mutations))
+	for _, mutation := range append(append([]etcdstore.Mutation(nil), mutations...), plan.mutations...) {
 		copyOfMutation := mutation
 		copyOfMutation.Value = append([]byte(nil), mutation.Value...)
 		composedMutations = append(composedMutations, copyOfMutation)
@@ -153,7 +154,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			"backup checkpoint is invalid",
 		)
 	}
-	taskRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	taskRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskKey(input.TaskID)}, Revision: revision,
 	})
 	if err != nil {
@@ -187,7 +188,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 	claimKey := taskExecutionClaimKey(task.Executor, input.AgentID, input.TaskID)
 	cursorKey := backupCheckpointCursorKey(input)
 	dedupKey := backupCheckpointDedupKey(input)
-	assignmentRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	assignmentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			claimKey,
 			taskAssignmentIndexKey(input.TaskID),
@@ -228,7 +229,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			"backup task assignment changed",
 		)
 	}
-	timeoutRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	timeoutRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskTimeoutIndexKey(input.TaskID, assignment.Deadline)}, Revision: revision,
 	})
 	if err != nil {
@@ -311,7 +312,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 		clear(cursorValue)
 		return backupCheckpointPlan{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(input.TaskID), ModRevision: taskRead.Values[0].ModRevision},
 		{Key: claimKey, ModRevision: claimValue.ModRevision},
 		{Key: taskAssignmentIndexKey(input.TaskID), ModRevision: indexValue.ModRevision},
@@ -322,17 +323,17 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 		{Key: dedupKey},
 	}
 	if assignmentRead.Values[2] == nil {
-		conditions = append(conditions, Condition{Key: cursorKey})
+		conditions = append(conditions, etcdstore.Condition{Key: cursorKey})
 	} else {
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: cursorKey, ModRevision: assignmentRead.Values[2].ModRevision,
 		})
 	}
 	return backupCheckpointPlan{
 		conditions: conditions,
-		mutations: []Mutation{
-			{Type: MutationPut, Key: cursorKey, Value: cursorValue},
-			{Type: MutationPut, Key: dedupKey, Value: dedupValue},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: cursorKey, Value: cursorValue},
+			{Type: etcdstore.MutationPut, Key: dedupKey, Value: dedupValue},
 		},
 		readRevision: revision,
 		digest:       digest,
@@ -351,7 +352,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 	ctx context.Context,
 	input BackupAssignmentInput,
 	revision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	if validateStableID(ids.KindTask, input.TaskID) != nil ||
 		validateStableID(ids.KindAssignment, input.AssignmentID) != nil ||
 		validateStableID(ids.KindStep, input.StepID) != nil || revision <= 0 ||
@@ -360,7 +361,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 			(validateStableID(ids.KindAgent, input.AgentID) != nil || input.AgentGeneration == 0)) {
 		return nil, errs.New(errs.KindValidationFailed, "backup assignment fence is invalid")
 	}
-	taskResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskKey(input.TaskID)}, Revision: revision,
 	})
 	if err != nil {
@@ -379,7 +380,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
 	}
 	claimKey := taskExecutionClaimKey(task.Executor, input.AgentID, input.TaskID)
-	assignmentResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	assignmentResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{claimKey, taskAssignmentIndexKey(input.TaskID)}, Revision: revision,
 	})
 	if err != nil {
@@ -399,7 +400,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 		assignment.AgentID != input.AgentID || assignment.AgentGeneration != input.AgentGeneration {
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
 	}
-	timeoutResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	timeoutResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskTimeoutIndexKey(input.TaskID, assignment.Deadline)}, Revision: revision,
 	})
 	if err != nil {
@@ -413,7 +414,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
 	}
 	defer clearKeyValues(timeoutResult.Values)
-	return []Condition{
+	return []etcdstore.Condition{
 		{Key: taskKey(input.TaskID), ModRevision: taskResult.Values[0].ModRevision},
 		{Key: claimKey, ModRevision: assignmentResult.Values[0].ModRevision},
 		{

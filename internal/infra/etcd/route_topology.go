@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"strings"
 
@@ -19,7 +20,7 @@ func findRouteAtRevision(
 	fixedRevision := revision
 	var matched *Versioned[RouteRecord]
 	for {
-		page, err := store.Range(ctx, RangeRequest{
+		page, err := store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: environmentDesiredHeadScanPrefix, StartExclusive: start,
 			Limit: 200, Revision: fixedRevision,
 		})

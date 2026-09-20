@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -98,7 +99,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clearRouteHeadPublication(publication)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey("route", record.Desired.ID)},
@@ -107,7 +108,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
 		{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
 	}
-	var mutations []Mutation
+	var mutations []etcdstore.Mutation
 
 	task = cloneTaskRecord(task)
 	if task.ID != intent.TaskID || task.OperationID != intent.OperationID ||
@@ -148,18 +149,18 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	defer clear(intentValue)
 
 	conditions = append(conditions,
-		Condition{Key: taskKey(task.ID)},
-		Condition{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		Condition{Key: taskActiveOperationKey(task.OperationID)},
-		Condition{Key: taskQueueKey(task.Executor, task.ID)},
-		Condition{Key: routeMutationIntentKey(task.ID)},
+		etcdstore.Condition{Key: taskKey(task.ID)},
+		etcdstore.Condition{Key: taskOperationIndexKey(task.OperationID, task.ID)},
+		etcdstore.Condition{Key: taskActiveOperationKey(task.OperationID)},
+		etcdstore.Condition{Key: taskQueueKey(task.Executor, task.ID)},
+		etcdstore.Condition{Key: routeMutationIntentKey(task.ID)},
 	)
 	mutations = append(mutations,
-		Mutation{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		Mutation{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		Mutation{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		Mutation{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		Mutation{Type: MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
 	)
 	conditions = append(conditions, publication.conditions...)
 	conditions, err = routeHeadTargetConditions(conditions, serviceDesiredCondition(target))
@@ -167,8 +168,8 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	mutations = append(mutations, publication.mutations...)
-	mutations = append(mutations, Mutation{
-		Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 	})
 
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
@@ -179,8 +180,8 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	baseConditions := append([]Condition(nil), conditions...)
-	classify := func(_ int64, values []*KeyValue) error {
+	baseConditions := append([]etcdstore.Condition(nil), conditions...)
+	classify := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(baseConditions) {
 			return errs.New(errs.KindInternal, "Route mutation compare evidence is incomplete")
 		}
@@ -204,7 +205,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 
 // A Blueprint-owned target Service and its Route may share the same desired
 // head. One exact comparison fences both; different revisions are a conflict.
-func routeHeadTargetConditions(conditions []Condition, target Condition) ([]Condition, error) {
+func routeHeadTargetConditions(conditions []etcdstore.Condition, target etcdstore.Condition) ([]etcdstore.Condition, error) {
 	for _, condition := range conditions {
 		if condition.Key != target.Key {
 			continue
@@ -284,12 +285,12 @@ func applyRouteMutationTaskMarkers(
 	defer clearMutationValues(mutations)
 	baseConditionCount := len(conditions)
 	conditions = append(conditions,
-		Condition{Key: taskKeyValue},
-		Condition{Key: directKeyValue},
+		etcdstore.Condition{Key: taskKeyValue},
+		etcdstore.Condition{Key: directKeyValue},
 	)
 	mutations = append(mutations,
-		Mutation{Type: MutationPut, Key: taskKeyValue, Value: taskValue},
-		Mutation{Type: MutationPut, Key: directKeyValue, Value: directValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskKeyValue, Value: taskValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: directKeyValue, Value: directValue},
 	)
 	if !directMarker.RetainUntil.IsZero() {
 		retentionKey, err := idempotencyRetentionKey(directKeyValue, directMarker.RetainUntil)
@@ -300,7 +301,7 @@ func applyRouteMutationTaskMarkers(
 		if err != nil {
 			return IdempotencyTransactionResult{}, errs.Wrap(errs.KindInternal, err)
 		}
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: retentionKey, Value: retentionValue})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue})
 	}
 	if validate := plan.transactionValidator(); validate != nil {
 		if err := validate(conditions, mutations); err != nil {

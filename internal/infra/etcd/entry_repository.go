@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -41,8 +42,8 @@ func (repository *EntryRepository) BindBlueprintEntryEnvironment(
 	key := blueprintEntryEnvironmentPrefix + entryID
 	result, err := repository.store.Transact(
 		ctx,
-		[]Condition{{Key: key}},
-		[]Mutation{{Type: MutationPut, Key: key, Value: []byte(environmentID)}},
+		[]etcdstore.Condition{{Key: key}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: []byte(environmentID)}},
 	)
 	if err != nil {
 		return err
@@ -87,7 +88,7 @@ func (repository *EntryRepository) ResolveBlueprintEntryEnvironment(
 	return environmentID, true, nil
 }
 
-func NewEntryRepository(store Store) (*EntryRepository, error) {
+func NewEntryRepository(store etcdstore.Store) (*EntryRepository, error) {
 	return newEntryRepository(store)
 }
 
@@ -143,13 +144,13 @@ func (repository *EntryRepository) CreateEntry(
 		entryWriteConditions(record, generationKey, 0, 0),
 		fence.transactionConditions()...,
 	)
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: entryRecordKey(record.Entry.ID), Value: primaryValue},
+	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: entryRecordKey(record.Entry.ID), Value: primaryValue},
 		{
-			Type: MutationPut, Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID),
+			Type: etcdstore.MutationPut, Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID),
 			Value: []byte(record.Entry.ID),
 		},
-		{Type: MutationPut, Key: generationKey, Value: generationValue},
+		{Type: etcdstore.MutationPut, Key: generationKey, Value: generationValue},
 		epochMutation,
 	})
 	if err != nil {
@@ -224,16 +225,16 @@ func (repository *EntryRepository) CreateEntryIdempotent(
 			entryWriteConditions(record, generationKey, 0, 0),
 			fence.transactionConditions()...,
 		),
-		[]Mutation{
-			{Type: MutationPut, Key: entryRecordKey(record.Entry.ID), Value: primaryValue},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: entryRecordKey(record.Entry.ID), Value: primaryValue},
 			{
-				Type: MutationPut, Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID),
+				Type: etcdstore.MutationPut, Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID),
 				Value: []byte(record.Entry.ID),
 			},
-			{Type: MutationPut, Key: generationKey, Value: generationValue},
+			{Type: etcdstore.MutationPut, Key: generationKey, Value: generationValue},
 			epochMutation,
 		},
-		func(_ int64, values []*KeyValue) error {
+		func(_ int64, values []*etcdstore.KeyValue) error {
 			return classifyEntryWriteConflict(values, record, 0, 0, fence)
 		},
 	)
@@ -347,9 +348,9 @@ func (repository *EntryRepository) ReplaceEntry(
 		entryWriteConditions(current.Record, generationKey, current.Revision, ownerRevision),
 		fence.transactionConditions()...,
 	)
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: entryRecordKey(current.Record.Entry.ID), Value: primaryValue},
-		{Type: MutationPut, Key: generationKey, Value: generationValue},
+	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: entryRecordKey(current.Record.Entry.ID), Value: primaryValue},
+		{Type: etcdstore.MutationPut, Key: generationKey, Value: generationValue},
 		epochMutation,
 	})
 	if err != nil {
@@ -437,12 +438,12 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 			entryWriteConditions(current.Record, generationKey, current.Revision, ownerRevision),
 			fence.transactionConditions()...,
 		),
-		[]Mutation{
-			{Type: MutationPut, Key: entryRecordKey(current.Record.Entry.ID), Value: primaryValue},
-			{Type: MutationPut, Key: generationKey, Value: generationValue},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: entryRecordKey(current.Record.Entry.ID), Value: primaryValue},
+			{Type: etcdstore.MutationPut, Key: generationKey, Value: generationValue},
 			epochMutation,
 		},
-		func(_ int64, values []*KeyValue) error {
+		func(_ int64, values []*etcdstore.KeyValue) error {
 			return classifyEntryWriteConflict(
 				values, current.Record, current.Revision, ownerRevision, fence,
 			)
@@ -503,7 +504,7 @@ func (repository *EntryRepository) loadEntryMutationFence(
 	keys = append(keys, environmentKey(environment.Record.ID))
 	projectIndex := len(keys)
 	keys = append(keys, projectKey(project.Record.ID))
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: keys,
 	})
 	if err != nil {
@@ -567,8 +568,8 @@ func entryWriteConditions(
 	generationKey string,
 	entryRevision int64,
 	ownerRevision int64,
-) []Condition {
-	conditions := []Condition{
+) []etcdstore.Condition {
+	conditions := []etcdstore.Condition{
 		{Key: entryRecordKey(record.Entry.ID), ModRevision: entryRevision},
 		{Key: entryOwnerKey(record.EnvironmentID, record.Entry.ID), ModRevision: ownerRevision},
 		{Key: generationKey},
@@ -580,8 +581,8 @@ func entryWriteConditions(
 func entryDeleteConditions(
 	current Versioned[EntryRecord],
 	ownerRevision int64,
-) []Condition {
-	conditions := []Condition{
+) []etcdstore.Condition {
+	conditions := []etcdstore.Condition{
 		{Key: entryRecordKey(current.Record.Entry.ID), ModRevision: current.Revision},
 		{Key: entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID), ModRevision: ownerRevision},
 		{Key: deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID)},
@@ -626,7 +627,7 @@ func validateEntryVersion(current Versioned[EntryRecord]) error {
 }
 
 func classifyEntryWriteConflict(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	record EntryRecord,
 	expectedEntryRevision int64,
 	expectedOwnerRevision int64,
@@ -667,7 +668,7 @@ func classifyEntryWriteConflict(
 }
 
 func classifyEntryDeleteConflict(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	current Versioned[EntryRecord],
 	expectedOwnerRevision int64,
 	fence environmentMutationFenceEvidence,

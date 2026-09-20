@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -31,7 +32,7 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 			errs.KindValidationFailed, "Blueprint Backup snapshot identity is invalid",
 		)
 	}
-	base, err := repository.store.GetMany(ctx, GetManyRequest{
+	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{backupPolicyKey(environmentID)}, Revision: revision,
 	})
 	if err != nil {
@@ -61,9 +62,9 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 			connectorEnvironmentKey(environmentID, policy.ConnectorID),
 		)
 	}
-	support := &GetManyResult{ReadRevision: base.ReadRevision}
+	support := &etcdstore.GetManyResult{ReadRevision: base.ReadRevision}
 	if len(keys) != 0 {
-		support, err = repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: base.ReadRevision})
+		support, err = repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: base.ReadRevision})
 		if err != nil {
 			return EnvironmentBlueprintBackupPolicySnapshot{}, err
 		}

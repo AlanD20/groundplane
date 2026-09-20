@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -11,10 +12,10 @@ import (
 // compares the original terminal Task and retention index; neither is rewritten
 // to manufacture a new cleanup Task or extend the retry deadline.
 func (repository *TaskRepository) prepareManualScriptExpiry(
-	ctx context.Context, task TaskRecord, taskRevision int64, retention KeyValue,
+	ctx context.Context, task TaskRecord, taskRevision int64, retention etcdstore.KeyValue,
 	revision int64, now time.Time,
 ) (bool, error) {
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		scriptSourceRootKey(task.OperationID), scriptExecutionKey(task.Params[ScriptExecutionIDParam]),
 		taskActiveOperationKey(
 			task.OperationID,
@@ -51,7 +52,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		(task.Status != TaskStatusFailed && task.Status != TaskStatusTimedOut) {
 		return false, corruptTaskPruneIntent()
 	}
-	guards := []Condition{
+	guards := []etcdstore.Condition{
 		{Key: taskKey(task.ID), ModRevision: taskRevision},
 		{Key: retention.Key, ModRevision: retention.ModRevision},
 		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskAssignmentIndexKey(task.ID)},
@@ -78,7 +79,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		}
 		defer clear(encoded)
 		mutations := append(cloneBlueprintCandidateMutations(fragment.mutations),
-			Mutation{Type: MutationPut, Key: read.Values[1].Key, Value: encoded})
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: read.Values[1].Key, Value: encoded})
 		defer clearMutationValues(mutations)
 		transaction, err := repository.store.Transact(ctx, append(guards, fragment.conditions...), mutations)
 		if err != nil {

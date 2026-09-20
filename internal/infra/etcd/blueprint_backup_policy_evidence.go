@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -15,7 +16,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 	revision int64,
 	createdAt time.Time,
 ) (*Versioned[BackupPolicyRecord], Versioned[EnvironmentCoordinationRecord], *VersionedBackupKey, error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		backupPolicyKey(environmentID), environmentCoordinationKey(environmentID),
 		backupKeyKey(environmentID), backupKeyValueKey(environmentID),
 	}, Revision: revision})
@@ -137,7 +138,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupSources(
 ) ([]blueprintBackupPolicySourceEvidence, error) {
 	result := make([]blueprintBackupPolicySourceEvidence, len(policy.SourceIDs))
 	for index, sourceID := range policy.SourceIDs {
-		values, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+		values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 			backupSourceKey(sourceID), backupSourceEnvironmentKey(policy.EnvironmentID, sourceID),
 		}, Revision: revision})
 		if err != nil {
@@ -153,7 +154,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupSources(
 			clearKeyValues(values.Values)
 			return nil, corruptRecord()
 		}
-		identity, identityErr := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+		identity, identityErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 			backupSourceIdentityKey(policy.EnvironmentID, source.Kind, source.TargetID),
 		}, Revision: revision})
 		if identityErr != nil || identity == nil || identity.ReadRevision != revision || len(identity.Values) != 1 ||
@@ -184,12 +185,12 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 	connectorID string,
 	enabled bool,
 	revision int64,
-) (*Versioned[ConnectorRecord], *KeyValue, *KeyValue, *KeyValue, error) {
+) (*Versioned[ConnectorRecord], *etcdstore.KeyValue, *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
 	keys := []string{
 		connectorRecordKey(connectorID), connectorEnvironmentKey(environmentID, connectorID),
 		deletionTombstoneKey(string(DeletionTargetConnector), connectorID),
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -209,7 +210,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 		result.Values[1] == nil || string(result.Values[1].Value) != connectorID || result.Values[2] != nil {
 		return nil, nil, nil, nil, corruptConnectorRecord()
 	}
-	name, err := repository.store.GetMany(ctx, GetManyRequest{
+	name, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{connectorNameKey(environmentID, record.Connector.Name)}, Revision: revision,
 	})
 	if err != nil {
@@ -236,7 +237,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 			return nil, err
 		}
 		identityKey := backupSourceIdentityKey(input.EnvironmentID, selection.Kind, selection.TargetID)
-		identity, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{identityKey}, Revision: revision})
+		identity, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{identityKey}, Revision: revision})
 		if err != nil {
 			return nil, err
 		}
@@ -259,7 +260,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 			identityIndex: cloneBackupPolicyEvidenceKeyValue(identity.Values[0]),
 		}
 		if identity.Values[0] != nil {
-			triples, readErr := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+			triples, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 				backupSourceKey(sourceID), backupSourceEnvironmentKey(input.EnvironmentID, sourceID),
 			}, Revision: revision})
 			if readErr != nil {
@@ -284,7 +285,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 			if candidate != nil {
 				item.candidateAttach = true
 			} else {
-				attachRead, readErr := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+				attachRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 					attachKey(selection.TargetID), attachOwnerKey(input.EnvironmentID, selection.TargetID),
 					deletionTombstoneKey("attach", selection.TargetID),
 				}, Revision: revision})

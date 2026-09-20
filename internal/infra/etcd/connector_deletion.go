@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -138,21 +139,21 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(epochMutation.Value)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   taskOperationIndexKey(task.OperationID, task.ID),
 			Value: reference,
 		},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   deletionTombstoneKey(string(DeletionTargetConnector), connector.ID),
 			Value: tombstoneValue,
 		},
-		{Type: MutationPut, Key: connectorRemovalIntentKey(task.ID), Value: intentValue},
+		{Type: etcdstore.MutationPut, Key: connectorRemovalIntentKey(task.ID), Value: intentValue},
 		epochMutation,
 	}
 	taskTenant, err := loadConnectorTaskInitiationTenantAtRevision(
@@ -250,15 +251,15 @@ func requireConnectorReferencePrefixesEmpty(
 	connectorID string,
 	environmentID string,
 	revision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	prefixes := []string{
 		backupPolicyConnectorReferencePrefix(connectorID),
 		backupRecoveryPointConnectorPrefix + connectorID + "/",
 		backupOrphanConnectorPrefix + connectorID + "/",
 	}
-	conditions := make([]Condition, 0, len(prefixes))
+	conditions := make([]etcdstore.Condition, 0, len(prefixes))
 	for index, prefix := range prefixes {
-		result, err := store.Range(ctx, RangeRequest{
+		result, err := store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: prefix, Limit: 1, Revision: revision,
 		})
 		if err != nil {
@@ -270,14 +271,14 @@ func requireConnectorReferencePrefixesEmpty(
 		if len(result.Values) != 0 {
 			return nil, classifyConnectorReference(index, result.Values[0], connectorID, environmentID)
 		}
-		conditions = append(conditions, Condition{Key: prefix, Prefix: true})
+		conditions = append(conditions, etcdstore.Condition{Key: prefix, Prefix: true})
 	}
 	return conditions, nil
 }
 
 func classifyConnectorReference(
 	index int,
-	value KeyValue,
+	value etcdstore.KeyValue,
 	connectorID string,
 	environmentID string,
 ) error {
@@ -308,7 +309,7 @@ func classifyConnectorReference(
 }
 
 type connectorDeletionEvidence struct {
-	conditions       []Condition
+	conditions       []etcdstore.Condition
 	task             int
 	operation        int
 	active           int
@@ -329,17 +330,17 @@ type connectorDeletionEvidence struct {
 
 func newConnectorDeletionEvidence(
 	current Versioned[ConnectorRecord],
-	dependencies *GetManyResult,
+	dependencies *etcdstore.GetManyResult,
 	task TaskRecord,
 	fence environmentMutationFenceEvidence,
-	referenceConditions []Condition,
+	referenceConditions []etcdstore.Condition,
 ) connectorDeletionEvidence {
 	connector := current.Record.Connector
 	evidence := connectorDeletionEvidence{
 		task: 0, operation: 1, active: 2, queue: 3, primary: 4,
 		environmentIndex: 5, nameIndex: 6, credentials: 7, tombstone: 8, intent: 9,
 		reference: 10, referenceStart: 11, current: current, operationID: task.OperationID, fence: fence,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: taskKey(task.ID)},
 			{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 			{Key: taskActiveOperationKey(task.OperationID)},
@@ -369,7 +370,7 @@ func newConnectorDeletionEvidence(
 }
 
 func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(evidence.conditions) {
 			return errs.New(errs.KindInternal, "connector deletion compare evidence is incomplete")
 		}
@@ -460,7 +461,7 @@ func loadConnectorTaskInitiationTenantAtRevision(
 	if project.Record.Kind == ProjectKindBacking {
 		return nil, nil
 	}
-	result, err := store.GetMany(ctx, GetManyRequest{
+	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{tenantKey(project.Record.TenantID)}, Revision: readRevision,
 	})
 	if err != nil {

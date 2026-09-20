@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -438,7 +439,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMe
 		for index, desired := range projection.Record.DesiredServices[begin:end] {
 			keys[index] = serviceRuntimeKey(desired.Desired.ID)
 		}
-		read, readErr := repository.store.GetMany(ctx, GetManyRequest{
+		read, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: keys, Revision: operation.Tombstone.SnapshotRevision,
 		})
 		if readErr != nil {
@@ -532,7 +533,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionIndexedTargets(
 	idsAtRevision := make([]string, 0)
 	start := ""
 	for {
-		page, err := repository.store.Range(ctx, RangeRequest{
+		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: prefix, StartExclusive: start, Limit: 128, Revision: revision,
 		})
 		if err != nil {
@@ -570,7 +571,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionIndexedTargets(
 		for index, id := range idsAtRevision[begin:end] {
 			keys[index] = primaryKey(id)
 		}
-		read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 		if err != nil {
 			return nil, err
 		}
@@ -709,7 +710,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 			targetKind,
 		)
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return "", err
 	}

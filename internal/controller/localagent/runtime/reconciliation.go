@@ -1,4 +1,4 @@
-package app
+package runtime
 
 import (
 	"context"
@@ -23,7 +23,7 @@ type localAgentReconciliation struct {
 	after     func(time.Duration) <-chan time.Time
 }
 
-func newLocalAgentReconciliation(
+func NewReconciliation(
 	lifecycle localAgentLifecycle,
 	interval time.Duration,
 	logger *slog.Logger,

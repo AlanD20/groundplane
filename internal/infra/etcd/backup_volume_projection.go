@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"hash"
 	"sort"
 	"time"
@@ -83,7 +84,7 @@ func (repository *BackupRuntimeRepository) ResolveVolumeRemovalImpactAtRevision(
 			errs.KindValidationFailed, "Volume Backup impact lookup is invalid",
 		)
 	}
-	policyRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	policyRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{backupPolicyKey(environmentID)}, Revision: revision,
 	})
 	if err != nil {
@@ -121,7 +122,7 @@ func (repository *BackupRuntimeRepository) ResolveVolumeRemovalImpactAtRevision(
 		if pointErr != nil {
 			return BackupVolumeRemovalImpact{}, pointErr
 		}
-		sourceRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+		sourceRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{backupSourceKey(sourceID)}, Revision: revision,
 		})
 		if readErr != nil {
@@ -152,8 +153,8 @@ func (repository *BackupRuntimeRepository) backupVolumeSourceIDsAtRevision(
 	start := ""
 	result := make([]string, 0)
 	for {
-		page, err := repository.store.Range(ctx, RangeRequest{
-			Prefix: prefix, StartExclusive: start, Limit: maximumTransactionOperations, Revision: revision,
+		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
+			Prefix: prefix, StartExclusive: start, Limit: etcdstore.MaximumOperations, Revision: revision,
 		})
 		if err != nil {
 			return nil, err
@@ -164,7 +165,7 @@ func (repository *BackupRuntimeRepository) backupVolumeSourceIDsAtRevision(
 		for _, index := range page.Values {
 			sourceID := string(index.Value)
 			start = index.Key
-			read, readErr := repository.store.GetMany(ctx, GetManyRequest{
+			read, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 				Keys: []string{backupSourceKey(sourceID)}, Revision: revision,
 			})
 			clear(index.Value)
@@ -201,8 +202,8 @@ func (repository *BackupRuntimeRepository) backupVolumeHistoricalImpactAtRevisio
 	start := ""
 	pointIDs := make([]string, 0)
 	for {
-		page, err := repository.store.Range(ctx, RangeRequest{
-			Prefix: prefix, StartExclusive: start, Limit: maximumTransactionOperations, Revision: revision,
+		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
+			Prefix: prefix, StartExclusive: start, Limit: etcdstore.MaximumOperations, Revision: revision,
 		})
 		if err != nil {
 			return 0, "", err
@@ -227,7 +228,7 @@ func (repository *BackupRuntimeRepository) backupVolumeHistoricalImpactAtRevisio
 	digest := sha256.New()
 	digest.Write([]byte("groundplane.volume.backup-history.v1"))
 	for _, pointID := range pointIDs {
-		read, err := repository.store.GetMany(ctx, GetManyRequest{
+		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{backupRecoveryPointKey(pointID)}, Revision: revision,
 		})
 		if err != nil {
@@ -268,7 +269,7 @@ func loadBackupVolumeProjectionEvidence(
 			errs.KindValidationFailed, "backup Volume projection lookup is invalid",
 		)
 	}
-	headRead, err := store.GetMany(ctx, GetManyRequest{
+	headRead, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{environmentKey(environmentID), environmentBlueprintHeadKey(environmentID)},
 		Revision: fixedRevision,
 	})
@@ -291,7 +292,7 @@ func loadBackupVolumeProjectionEvidence(
 	}
 	fixedRevision = headRead.ReadRevision
 	rootKey := environmentBlueprintRootKey(environmentID, revisionID)
-	rootRead, err := store.GetMany(ctx, GetManyRequest{Keys: []string{rootKey}, Revision: fixedRevision})
+	rootRead, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{rootKey}, Revision: fixedRevision})
 	if err != nil {
 		return backupVolumeProjectionEvidence{}, err
 	}

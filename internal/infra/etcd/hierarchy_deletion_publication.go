@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -28,7 +29,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 	}
 	root := hierarchyDeletionRoot{
 		targetKey: key, targetRevision: result.Entry.ModRevision,
-		primaryFences: []Condition{{Key: key, ModRevision: result.Entry.ModRevision}},
+		primaryFences: []etcdstore.Condition{{Key: key, ModRevision: result.Entry.ModRevision}},
 	}
 	root.targetValue = append([]byte(nil), result.Entry.Value...)
 	switch targetKind {
@@ -84,7 +85,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		clear(root.targetValue)
 		return hierarchyDeletionRoot{}, 0, err
 	}
-	coordination, err := repository.store.GetMany(ctx, GetManyRequest{
+	coordination, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: root.coordinationKeys, Revision: result.ReadRevision,
 	})
 	if err != nil {
@@ -133,7 +134,7 @@ func (repository *HierarchyDeletionRepository) readProjectParentAtRevision(
 	project ProjectRecord,
 	root hierarchyDeletionRoot,
 ) (hierarchyDeletionRoot, error) {
-	parents, err := repository.store.GetMany(ctx, GetManyRequest{
+	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{tenantKey(project.TenantID)}, Revision: revision,
 	})
 	if err != nil {
@@ -146,7 +147,7 @@ func (repository *HierarchyDeletionRepository) readProjectParentAtRevision(
 	if err != nil || tenant.ID != project.TenantID || tenant.DeletionTaskID != "" {
 		return hierarchyDeletionRoot{}, hierarchyDeletionUnavailable(HierarchyDeletionTargetProject)
 	}
-	root.primaryFences = append(root.primaryFences, Condition{
+	root.primaryFences = append(root.primaryFences, etcdstore.Condition{
 		Key: tenantKey(tenant.ID), ModRevision: parents.Values[0].ModRevision,
 	})
 	root.coordinationKeys = append([]string{
@@ -161,7 +162,7 @@ func (repository *HierarchyDeletionRepository) readEnvironmentParentsAtRevision(
 	environment EnvironmentRecord,
 	root hierarchyDeletionRoot,
 ) (hierarchyDeletionRoot, error) {
-	projectResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	projectResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{projectKey(environment.ProjectID)}, Revision: revision,
 	})
 	if err != nil {
@@ -175,7 +176,7 @@ func (repository *HierarchyDeletionRepository) readEnvironmentParentsAtRevision(
 	if err != nil || project.ID != environment.ProjectID || project.DeletionTaskID != "" {
 		return hierarchyDeletionRoot{}, hierarchyDeletionUnavailable(HierarchyDeletionTargetEnvironment)
 	}
-	root.primaryFences = append(root.primaryFences, Condition{
+	root.primaryFences = append(root.primaryFences, etcdstore.Condition{
 		Key: projectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision,
 	})
 	root.owner, err = EnvironmentTaskOwner(project, environment)
@@ -202,7 +203,7 @@ func prepareHierarchyDeletionPublication(
 	begin HierarchyDeletionBegin,
 	root hierarchyDeletionRoot,
 	snapshotRevision int64,
-) (HierarchyDeletionOperation, []Condition, []Mutation, TaskInitiation, error) {
+) (HierarchyDeletionOperation, []etcdstore.Condition, []etcdstore.Mutation, TaskInitiation, error) {
 	if begin.OperationKind == HierarchyDeletionOperationProject && root.workspace.Type == "platform" ||
 		begin.OperationKind == HierarchyDeletionOperationBacking && root.workspace.Type != "platform" {
 		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, errs.New(
@@ -310,18 +311,18 @@ func prepareHierarchyDeletionPublication(
 		clear(fenceValue)
 		return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
-	conditions := append([]Condition(nil), root.primaryFences...)
+	conditions := append([]etcdstore.Condition(nil), root.primaryFences...)
 	conditions = append(conditions,
-		Condition{Key: tombstoneKey}, Condition{Key: lockKey}, Condition{Key: replayKey},
-		Condition{Key: fenceKey}, Condition{Key: intentKey},
+		etcdstore.Condition{Key: tombstoneKey}, etcdstore.Condition{Key: lockKey}, etcdstore.Condition{Key: replayKey},
+		etcdstore.Condition{Key: fenceKey}, etcdstore.Condition{Key: intentKey},
 	)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: root.targetKey, Value: mutatedRootValue},
-		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
-		{Type: MutationPut, Key: lockKey, Value: lockValue},
-		{Type: MutationPut, Key: replayKey, Value: replayValue},
-		{Type: MutationPut, Key: fenceKey, Value: fenceValue},
-		{Type: MutationPut, Key: intentKey, Value: intentValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: root.targetKey, Value: mutatedRootValue},
+		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
+		{Type: etcdstore.MutationPut, Key: lockKey, Value: lockValue},
+		{Type: etcdstore.MutationPut, Key: replayKey, Value: replayValue},
+		{Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue},
+		{Type: etcdstore.MutationPut, Key: intentKey, Value: intentValue},
 	}
 	for index, current := range root.coordination {
 		next := current.Record
@@ -332,12 +333,12 @@ func prepareHierarchyDeletionPublication(
 			return HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, encodeErr
 		}
 		key := root.coordinationKeys[index]
-		conditions = append(conditions, Condition{Key: key, ModRevision: current.Revision})
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: encoded})
+		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: current.Revision})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded})
 	}
-	initiationFences := append([]Condition(nil), root.primaryFences...)
+	initiationFences := append([]etcdstore.Condition(nil), root.primaryFences...)
 	for index, current := range root.coordination {
-		initiationFences = append(initiationFences, Condition{
+		initiationFences = append(initiationFences, etcdstore.Condition{
 			Key: root.coordinationKeys[index], ModRevision: current.Revision,
 		})
 	}

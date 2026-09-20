@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -11,7 +12,7 @@ import (
 // no longer permitted; in particular cleanup itself cannot trigger recovery.
 func (repository *TaskRepository) prepareReleaseTerminalReport(
 	ctx context.Context, current TaskAssignment, status TaskStatus, result *TaskResultRecord,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	task, assignment := current.Task.Record, current.Assignment.Record
 	if task.Executor != TaskExecutorAgent || result == nil ||
 		(task.Type != TaskScript && task.Params[TaskReleasePublicationParam] == "") {
@@ -21,7 +22,7 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 		(result.ExecutionEpoch != assignment.ExecutionEpoch || result.ReleaseRecoveryRecordSHA256 != "") {
 		return nil, errs.New(errs.KindStateConflict, "release terminal execution epoch changed")
 	}
-	var conditions []Condition
+	var conditions []etcdstore.Condition
 	if taskHasScriptClosingReport(task) {
 		report, value, err := repository.readScriptClosingReport(ctx, current)
 		if err != nil {
@@ -40,7 +41,7 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 	if assignment.ExecutionMode != TaskExecutionModeForward ||
 		result.Diagnostic != TaskResultDiagnosticTimeoutBeforeEffect || result.ReconciliationRequired {
 		if task.Type == TaskUpdate && result.ReconciliationRequired {
-			conditions = append(conditions, Condition{Key: blueprintClosingReportKey(task.ID)})
+			conditions = append(conditions, etcdstore.Condition{Key: blueprintClosingReportKey(task.ID)})
 		}
 		return conditions, nil
 	}
@@ -62,7 +63,7 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 		result.Diagnostic = TaskResultDiagnosticNone
 		result.ReconciliationRequired = true
 		if task.Type == TaskUpdate {
-			conditions = append(conditions, Condition{Key: blueprintClosingReportKey(task.ID)})
+			conditions = append(conditions, etcdstore.Condition{Key: blueprintClosingReportKey(task.ID)})
 		}
 	}
 	if err := validateTaskResult(*result, task.Steps, status); err != nil {

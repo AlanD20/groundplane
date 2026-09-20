@@ -3,15 +3,16 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type releaseGroupMutationEvidence struct {
-	conditions      []Condition
-	epochMutation   Mutation
-	collectionEpoch Mutation
+	conditions      []etcdstore.Condition
+	epochMutation   etcdstore.Mutation
+	collectionEpoch etcdstore.Mutation
 }
 
 func (repository *TaskRepository) PrepareReleaseGroupCreate(
@@ -31,10 +32,10 @@ func (repository *TaskRepository) PrepareReleaseGroupCreate(
 	}
 	return newReleaseGroupPreparedMutation(
 		group.EnvironmentID, group.ID, 0, TaskCreate, evidence.conditions,
-		[]Mutation{
-			{Type: MutationPut, Key: releaseGroupRecordKey(group.ID), Value: value},
-			{Type: MutationPut, Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID), Value: []byte(group.ID)},
-			{Type: MutationPut, Key: releaseGroupNameKey(group.EnvironmentID, group.Name), Value: []byte(group.ID)},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: releaseGroupRecordKey(group.ID), Value: value},
+			{Type: etcdstore.MutationPut, Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID), Value: []byte(group.ID)},
+			{Type: etcdstore.MutationPut, Key: releaseGroupNameKey(group.EnvironmentID, group.Name), Value: []byte(group.ID)},
 			evidence.epochMutation,
 			evidence.collectionEpoch,
 		},
@@ -70,17 +71,17 @@ func (repository *TaskRepository) PrepareReleaseGroupUpdate(
 	if err != nil {
 		return ReleaseGroupPreparedMutation{}, err
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: releaseGroupRecordKey(replacement.ID), Value: value},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: releaseGroupRecordKey(replacement.ID), Value: value},
 		evidence.epochMutation,
 		evidence.collectionEpoch,
 	}
 	if current.Name != replacement.Name {
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationDelete, Key: releaseGroupNameKey(replacement.EnvironmentID, current.Name)},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupNameKey(replacement.EnvironmentID, current.Name)},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   releaseGroupNameKey(replacement.EnvironmentID, replacement.Name),
 				Value: []byte(replacement.ID),
 			},
@@ -115,7 +116,7 @@ func (repository *TaskRepository) PrepareReleaseGroupRemove(
 	return newReleaseGroupPreparedMutation(
 		current.EnvironmentID, current.ID, currentRevision, TaskRemove,
 		evidence.conditions,
-		[]Mutation{evidence.epochMutation, evidence.collectionEpoch},
+		[]etcdstore.Mutation{evidence.epochMutation, evidence.collectionEpoch},
 	), nil
 }
 
@@ -150,7 +151,7 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 	if oldName != "" && oldName != group.Name {
 		baseKeys = append(baseKeys, releaseGroupNameKey(group.EnvironmentID, oldName))
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: baseKeys})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys})
 	if err != nil {
 		return releaseGroupMutationEvidence{}, err
 	}
@@ -205,7 +206,7 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 		clear(epochValue)
 		return releaseGroupMutationEvidence{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: baseKeys[0], ModRevision: result.Values[0].ModRevision},
 		{Key: baseKeys[1], ModRevision: result.Values[1].ModRevision},
 		{Key: baseKeys[2]},
@@ -228,9 +229,9 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 			)
 		}
 		conditions = append(conditions,
-			Condition{Key: baseKeys[4]},
-			Condition{Key: baseKeys[5]},
-			Condition{Key: baseKeys[6]},
+			etcdstore.Condition{Key: baseKeys[4]},
+			etcdstore.Condition{Key: baseKeys[5]},
+			etcdstore.Condition{Key: baseKeys[6]},
 		)
 	} else {
 		if result.Values[4] == nil || result.Values[4].ModRevision != revision ||
@@ -247,8 +248,8 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 			return releaseGroupMutationEvidence{}, corruptRecord()
 		}
 		conditions = append(conditions,
-			Condition{Key: baseKeys[4], ModRevision: revision},
-			Condition{Key: baseKeys[5], ModRevision: result.Values[5].ModRevision},
+			etcdstore.Condition{Key: baseKeys[4], ModRevision: revision},
+			etcdstore.Condition{Key: baseKeys[5], ModRevision: result.Values[5].ModRevision},
 		)
 		if oldName != group.Name {
 			if result.Values[6] != nil {
@@ -262,15 +263,15 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 				return releaseGroupMutationEvidence{}, corruptRecord()
 			}
 			conditions = append(conditions,
-				Condition{Key: baseKeys[6]},
-				Condition{Key: baseKeys[9], ModRevision: oldNameIndex.ModRevision},
+				etcdstore.Condition{Key: baseKeys[6]},
+				etcdstore.Condition{Key: baseKeys[9], ModRevision: oldNameIndex.ModRevision},
 			)
 		} else {
 			if result.Values[6] == nil || !bytes.Equal(result.Values[6].Value, []byte(group.ID)) {
 				return releaseGroupMutationEvidence{}, corruptRecord()
 			}
 			conditions = append(conditions,
-				Condition{Key: baseKeys[6], ModRevision: result.Values[6].ModRevision},
+				etcdstore.Condition{Key: baseKeys[6], ModRevision: result.Values[6].ModRevision},
 			)
 		}
 	}
@@ -286,8 +287,8 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 	conditions = append(conditions, memberConditions...)
 	return releaseGroupMutationEvidence{
 		conditions: conditions,
-		epochMutation: Mutation{
-			Type:  MutationPut,
+		epochMutation: etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
 			Key:   environmentMutationEpochKey(group.EnvironmentID),
 			Value: epochValue,
 		},

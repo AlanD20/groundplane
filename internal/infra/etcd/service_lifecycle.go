@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -134,7 +135,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	}
 	defer clear(reference)
 
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -149,20 +150,20 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		{Key: deletionTombstoneKey("service", current.Record.Desired.ID)},
 	}
 	if tenant != nil {
-		conditions = append(conditions[:9], append([]Condition{
+		conditions = append(conditions[:9], append([]etcdstore.Condition{
 			{Key: tenantKey(tenant.Record.ID), ModRevision: tenant.Revision},
 		}, conditions[9:]...)...)
-		conditions = append(conditions[:12], append([]Condition{
+		conditions = append(conditions[:12], append([]etcdstore.Condition{
 			{Key: deletionTombstoneKey(string(DeletionTargetTenant), tenant.Record.ID)},
 		}, conditions[12:]...)...)
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: serviceRuntimeKey(current.Record.Desired.ID), Value: serviceValue},
-		{Type: MutationPut, Key: serviceLifecycleActiveKey(current.Record.Desired.ID), Value: reference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: serviceRuntimeKey(current.Record.Desired.ID), Value: serviceValue},
+		{Type: etcdstore.MutationPut, Key: serviceLifecycleActiveKey(current.Record.Desired.ID), Value: reference},
 	}
 	if renderInput != nil {
 		inputValue, encodeErr := encodeServiceLifecycleRenderInput(*renderInput)
@@ -172,32 +173,32 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		defer clear(inputValue)
 		conditions = append(
 			conditions,
-			Condition{Key: serviceLifecycleRenderInputKey(task.ID)},
-			Condition{
+			etcdstore.Condition{Key: serviceLifecycleRenderInputKey(task.ID)},
+			etcdstore.Condition{
 				Key:         serviceLifecycleProjectionFenceKey(renderInput.EnvironmentID),
 				ModRevision: renderInput.AppliedProjectionRevision,
 			},
-			Condition{
+			etcdstore.Condition{
 				Key:         releaseProjectionKey(renderInput.ServiceID),
 				ModRevision: renderInput.Release.ProjectionRevision,
 			},
-			Condition{
+			etcdstore.Condition{
 				Key:         releaseIntentStagingKey("", renderInput.Release.ServingReleaseID),
 				ModRevision: renderInput.Release.IntentRevision,
 			},
-			Condition{
+			etcdstore.Condition{
 				Key:         releaseRenderInputStagingKey("", renderInput.Release.ServingReleaseID),
 				ModRevision: renderInput.Release.RenderRevision,
 			},
 		)
 		if renderInput.Release.RetainedPrior != nil {
-			conditions = append(conditions, Condition{
+			conditions = append(conditions, etcdstore.Condition{
 				Key:         releaseRenderInputStagingKey("", renderInput.Release.PriorServingReleaseID),
 				ModRevision: renderInput.Release.RetainedPriorRenderRevision,
 			})
 		}
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: serviceLifecycleRenderInputKey(task.ID), Value: inputValue,
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: serviceLifecycleRenderInputKey(task.ID), Value: inputValue,
 		})
 	}
 	initiation, err := newEnvironmentTaskInitiation(
@@ -224,7 +225,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	if err := binding.preparedConflict(originalClassify); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	classify := func(revision int64, values []*KeyValue) error {
+	classify := func(revision int64, values []*etcdstore.KeyValue) error {
 		return binding.classify(revision, values, originalClassify)
 	}
 	conditions, mutations, classify, err = publication.bind(binding.conditions, binding.mutations, classify)
@@ -391,7 +392,7 @@ func classifyServiceLifecycleStartConflict(
 	input *ServiceLifecycleRenderInput,
 	operationID string,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		hierarchyEnd := 9
 		deletionStart := hierarchyEnd
 		if tenant != nil {

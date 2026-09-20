@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -9,8 +10,8 @@ import (
 
 type environmentTaskChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -61,17 +62,17 @@ func (repository *TaskRepository) prepareEnvironmentTaskRetry(
 	}
 	return environmentTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: environmentKey(source.Target), ModRevision: current.Revision},
 			{Key: environmentMutationEpochKey(source.Target), ModRevision: state.EpochRevision},
 			{Key: environmentOperationLockKey(source.Target)},
 		},
-		mutations: []Mutation{
+		mutations: []etcdstore.Mutation{
 			{
-				Type: MutationPut, Key: environmentKey(source.Target), Value: value,
+				Type: etcdstore.MutationPut, Key: environmentKey(source.Target), Value: value,
 			},
 			{
-				Type:  MutationPut,
+				Type:  etcdstore.MutationPut,
 				Key:   environmentMutationEpochKey(source.Target),
 				Value: state.EpochValue,
 			},
@@ -86,7 +87,7 @@ func (repository *TaskRepository) readTaskEnvironmentMutationState(
 	revision int64,
 	requireUnlocked bool,
 ) (taskEnvironmentMutationState, error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			environmentKey(environmentID),
 			environmentMutationEpochKey(environmentID),

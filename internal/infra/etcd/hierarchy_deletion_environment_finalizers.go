@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -31,7 +32,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	action HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
 	if err := cleanupEnvironmentDeletionScriptLocators(
-		ctx, repository.store, action.TargetID, Condition{
+		ctx, repository.store, action.TargetID, etcdstore.Condition{
 			Key:         HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), action.TargetID),
 			ModRevision: operation.TombstoneRevision,
 		},
@@ -47,7 +48,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	if err != nil || record.ID != action.TargetID {
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		environmentNameKey(record.ProjectID, record.Name), environmentOwnerKey(record.ProjectID, record.ID),
 		environmentBlueprintHeadKey(record.ID), environmentComposeProjectionKey(record.ID),
 		releaseGroupCollectionEpochKey(record.ID),
@@ -68,7 +69,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	); err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	revisions, err := repository.store.Range(ctx, RangeRequest{
+	revisions, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: environmentBlueprintRevisionsPrefix(record.ID), Limit: 1, Revision: indexes.ReadRevision,
 	})
 	if err != nil {
@@ -83,7 +84,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 			"hierarchy deletion Environment retained Blueprint revisions",
 		)
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: primary.Key, ModRevision: primary.ModRevision},
 		{Key: indexes.Values[0].Key, ModRevision: indexes.Values[0].ModRevision},
 		{Key: indexes.Values[1].Key, ModRevision: indexes.Values[1].ModRevision},
@@ -94,17 +95,17 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	conditions = append(
 		conditions,
 		environmentDeletionLiveAuthorityConditions(record.ID, operation.Tombstone.OperationID)...)
-	conditions = append(conditions, Condition{Key: environmentBlueprintRevisionsPrefix(record.ID), Prefix: true})
-	conditions = append(conditions, Condition{Key: scriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true})
-	mutations := []Mutation{
-		{Type: MutationDelete, Key: environmentBlueprintHeadKey(record.ID)},
-		{Type: MutationDelete, Key: environmentComposeProjectionKey(record.ID)},
-		{Type: MutationDelete, Key: releaseGroupCollectionEpochKey(record.ID)},
-		{Type: MutationDelete, Key: environmentNameKey(record.ProjectID, record.Name)},
-		{Type: MutationDelete, Key: environmentOwnerKey(record.ProjectID, record.ID)},
-		{Type: MutationDelete, Key: environmentKey(record.ID)},
-		{Type: MutationDelete, Key: scriptSetEnvironmentPrefix(record.ID), Prefix: true},
-		{Type: MutationDelete, Key: scriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true},
+	conditions = append(conditions, etcdstore.Condition{Key: environmentBlueprintRevisionsPrefix(record.ID), Prefix: true})
+	conditions = append(conditions, etcdstore.Condition{Key: scriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true})
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationDelete, Key: environmentBlueprintHeadKey(record.ID)},
+		{Type: etcdstore.MutationDelete, Key: environmentComposeProjectionKey(record.ID)},
+		{Type: etcdstore.MutationDelete, Key: releaseGroupCollectionEpochKey(record.ID)},
+		{Type: etcdstore.MutationDelete, Key: environmentNameKey(record.ProjectID, record.Name)},
+		{Type: etcdstore.MutationDelete, Key: environmentOwnerKey(record.ProjectID, record.ID)},
+		{Type: etcdstore.MutationDelete, Key: environmentKey(record.ID)},
+		{Type: etcdstore.MutationDelete, Key: scriptSetEnvironmentPrefix(record.ID), Prefix: true},
+		{Type: etcdstore.MutationDelete, Key: scriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true},
 	}
 	return hierarchyDeletionControllerEffects{
 		fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,

@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -777,16 +778,16 @@ func decodeReplayTargetReference(value []byte, markerKey string) error {
 	return nil
 }
 
-type idempotencyPlanClassifier func(int64, []*KeyValue) error
+type idempotencyPlanClassifier func(int64, []*etcdstore.KeyValue) error
 
 type idempotencyMutationPlan struct {
 	mu               sync.Mutex
 	consumed         bool
 	markerKind       IdempotencyMarkerKind
-	conditions       []Condition
-	mutations        []Mutation
+	conditions       []etcdstore.Condition
+	mutations        []etcdstore.Mutation
 	classify         idempotencyPlanClassifier
-	validate         func([]Condition, []Mutation) error
+	validate         func([]etcdstore.Condition, []etcdstore.Mutation) error
 	validateExisting func(context.Context, IdempotencyMarker, int64, int64) error
 }
 
@@ -822,7 +823,7 @@ func (plan *idempotencyMutationPlan) existingReplayValidator() func(
 // enforceTransactionBounds defers a domain envelope check until Apply has
 // appended the real idempotency marker, replay target, and retention writes.
 func (plan *idempotencyMutationPlan) enforceTransactionBounds(
-	validate func([]Condition, []Mutation) error,
+	validate func([]etcdstore.Condition, []etcdstore.Mutation) error,
 ) error {
 	if plan == nil || validate == nil {
 		return errs.New(errs.KindInternal, "idempotency transaction validator is required")
@@ -836,7 +837,7 @@ func (plan *idempotencyMutationPlan) enforceTransactionBounds(
 	return nil
 }
 
-func (plan *idempotencyMutationPlan) transactionValidator() func([]Condition, []Mutation) error {
+func (plan *idempotencyMutationPlan) transactionValidator() func([]etcdstore.Condition, []etcdstore.Mutation) error {
 	if plan == nil {
 		return nil
 	}
@@ -846,8 +847,8 @@ func (plan *idempotencyMutationPlan) transactionValidator() func([]Condition, []
 }
 
 func newIdempotencyMutationPlan(
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	classify idempotencyPlanClassifier,
 ) (*idempotencyMutationPlan, error) {
 	return newIdempotencyMutationPlanForMarker(
@@ -861,8 +862,8 @@ func newIdempotencyMutationPlan(
 func newTaskIdempotencyMutationPlan(
 	record TaskRecord,
 	initiation TaskInitiation,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	classify idempotencyPlanClassifier,
 ) (*idempotencyMutationPlan, error) {
 	if err := validateTaskInitiation(record, initiation, true); err != nil {
@@ -886,8 +887,8 @@ func newTaskIdempotencyMutationPlan(
 
 func newIdempotencyMutationPlanForMarker(
 	markerKind IdempotencyMarkerKind,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	classify idempotencyPlanClassifier,
 ) (*idempotencyMutationPlan, error) {
 	if markerKind != IdempotencyMarkerDirect && markerKind != IdempotencyMarkerTask {
@@ -901,13 +902,13 @@ func newIdempotencyMutationPlanForMarker(
 	}
 	return &idempotencyMutationPlan{
 		markerKind: markerKind,
-		conditions: append([]Condition(nil), conditions...),
+		conditions: append([]etcdstore.Condition(nil), conditions...),
 		mutations:  cloneMutations(mutations),
 		classify:   classify,
 	}, nil
 }
 
-func validateIdempotencyPlanKeys(conditions []Condition, mutations []Mutation) error {
+func validateIdempotencyPlanKeys(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
 	compareKeys := make(map[string]struct{}, len(conditions))
 	for _, condition := range conditions {
 		if invalidIdempotencyPlanKey(condition.Key) {
@@ -937,7 +938,7 @@ func invalidIdempotencyPlanKey(key string) bool {
 		strings.HasPrefix(key, idempotencyReplayTargetPrefix)
 }
 
-func (plan *idempotencyMutationPlan) consume() ([]Condition, []Mutation, idempotencyPlanClassifier, error) {
+func (plan *idempotencyMutationPlan) consume() ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	if plan == nil {
 		return nil, nil, nil, errs.New(errs.KindInternal, "idempotency mutation plan is required")
 	}
@@ -947,7 +948,7 @@ func (plan *idempotencyMutationPlan) consume() ([]Condition, []Mutation, idempot
 		return nil, nil, nil, errs.New(errs.KindInternal, "idempotency mutation plan was already consumed")
 	}
 	plan.consumed = true
-	conditions := append([]Condition(nil), plan.conditions...)
+	conditions := append([]etcdstore.Condition(nil), plan.conditions...)
 	mutations := cloneMutations(plan.mutations)
 	classify := plan.classify
 	clearMutationValues(plan.mutations)
@@ -959,15 +960,15 @@ func (plan *idempotencyMutationPlan) consume() ([]Condition, []Mutation, idempot
 	return conditions, mutations, classify, nil
 }
 
-func cloneMutations(values []Mutation) []Mutation {
-	result := make([]Mutation, len(values))
+func cloneMutations(values []etcdstore.Mutation) []etcdstore.Mutation {
+	result := make([]etcdstore.Mutation, len(values))
 	for index, value := range values {
-		result[index] = Mutation{Type: value.Type, Key: value.Key, Value: append([]byte(nil), value.Value...)}
+		result[index] = etcdstore.Mutation{Type: value.Type, Key: value.Key, Value: append([]byte(nil), value.Value...)}
 	}
 	return result
 }
 
-func clearMutationValues(values []Mutation) {
+func clearMutationValues(values []etcdstore.Mutation) {
 	for index := range values {
 		clear(values[index].Value)
 		values[index].Value = nil
@@ -1047,10 +1048,10 @@ func cloneIdempotencyReplayTarget(target *IdempotencyReplayTarget) *IdempotencyR
 }
 
 type idempotencyRepositoryStore interface {
-	Get(context.Context, string) (*GetResult, error)
-	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
-	Range(context.Context, RangeRequest) (*RangeResult, error)
-	Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
+	Get(context.Context, string) (*etcdstore.GetResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
 type IdempotencyRepository struct{ store idempotencyRepositoryStore }
@@ -1065,7 +1066,7 @@ type idempotencyPruneCandidate struct {
 	ReplayTargetModRevision int64
 }
 
-func NewIdempotencyRepository(store Store) (*IdempotencyRepository, error) {
+func NewIdempotencyRepository(store etcdstore.Store) (*IdempotencyRepository, error) {
 	return newIdempotencyRepository(store)
 }
 
@@ -1092,9 +1093,9 @@ func (repository *IdempotencyRepository) applyEnvironmentBlueprint(
 ) (IdempotencyTransactionResult, error) {
 	return repository.apply(ctx, marker, plan, func(
 		ctx context.Context,
-		conditions []Condition,
-		mutations []Mutation,
-	) (TransactionResult, error) {
+		conditions []etcdstore.Condition,
+		mutations []etcdstore.Mutation,
+	) (etcdstore.TransactionResult, error) {
 		return executeEnvironmentBlueprintTransaction(ctx, transactions, conditions, mutations)
 	})
 }
@@ -1103,7 +1104,7 @@ func (repository *IdempotencyRepository) apply(
 	ctx context.Context,
 	marker IdempotencyMarker,
 	plan *idempotencyMutationPlan,
-	transact func(context.Context, []Condition, []Mutation) (TransactionResult, error),
+	transact func(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error),
 ) (IdempotencyTransactionResult, error) {
 	if ctx == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "idempotency context is required")
@@ -1131,8 +1132,8 @@ func (repository *IdempotencyRepository) apply(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clearMutationValues(mutations)
-	conditions = append([]Condition{{Key: markerKey, ModRevision: 0}}, conditions...)
-	mutations = append(mutations, Mutation{Type: MutationPut, Key: markerKey, Value: markerValue})
+	conditions = append([]etcdstore.Condition{{Key: markerKey, ModRevision: 0}}, conditions...)
+	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue})
 	if marker.ReplayTarget != nil {
 		targetKey, targetErr := idempotencyReplayTargetKey(
 			*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
@@ -1145,8 +1146,8 @@ func (repository *IdempotencyRepository) apply(
 			return IdempotencyTransactionResult{}, targetErr
 		}
 		defer clear(targetValue)
-		conditions = append(conditions[:1], append([]Condition{{Key: targetKey, ModRevision: 0}}, conditions[1:]...)...)
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: targetKey, Value: targetValue})
+		conditions = append(conditions[:1], append([]etcdstore.Condition{{Key: targetKey, ModRevision: 0}}, conditions[1:]...)...)
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: targetKey, Value: targetValue})
 	}
 	if !marker.RetainUntil.IsZero() {
 		retentionKey, err := idempotencyRetentionKey(markerKey, marker.RetainUntil)
@@ -1157,7 +1158,7 @@ func (repository *IdempotencyRepository) apply(
 		if err != nil {
 			return IdempotencyTransactionResult{}, errs.Wrap(errs.KindInternal, err)
 		}
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: retentionKey, Value: retentionValue})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue})
 	}
 	if validateTransaction != nil {
 		if err := validateTransaction(conditions, mutations); err != nil {
@@ -1218,7 +1219,7 @@ func (repository *IdempotencyRepository) apply(
 	}, nil
 }
 
-func clearKeyValues(values []*KeyValue) {
+func clearKeyValues(values []*etcdstore.KeyValue) {
 	for _, value := range values {
 		if value != nil {
 			clear(value.Value)

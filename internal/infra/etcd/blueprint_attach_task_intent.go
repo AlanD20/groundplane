@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"sort"
 	"time"
@@ -173,7 +174,7 @@ func (repository *AttachRepository) GetBlueprintAttachTaskIntent(
 			"Blueprint Attach Task id is invalid",
 		)
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{blueprintAttachTaskIntentKey(taskID)}})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{blueprintAttachTaskIntentKey(taskID)}})
 	if err != nil {
 		return Versioned[BlueprintAttachTaskIntent]{}, false, err
 	}

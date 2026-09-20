@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -46,7 +47,7 @@ func prepareComponentTaskSecretReferences(
 	taskID string,
 	candidates []ComponentTaskCandidate,
 	revision int64,
-) ([]componentTaskSecretReference, []Condition, []Mutation, error) {
+) ([]componentTaskSecretReference, []etcdstore.Condition, []etcdstore.Mutation, error) {
 	references := make([]componentTaskSecretReference, 0, len(candidates))
 	for _, candidate := range candidates {
 		secretIDs, err := componentSecretReferences(candidate.Candidate)
@@ -76,15 +77,15 @@ func prepareComponentTaskSecretReferences(
 			deletionTombstoneKey(string(DeletionTargetSecret), reference.secretID),
 		)
 	}
-	stored, err := store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	stored, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if stored == nil || len(stored.Values) != len(keys) {
 		return nil, nil, nil, errs.New(errs.KindInternal, "Component Secret reference read is incomplete")
 	}
-	conditions := make([]Condition, 0, len(references)*3)
-	mutations := make([]Mutation, 0, len(references))
+	conditions := make([]etcdstore.Condition, 0, len(references)*3)
+	mutations := make([]etcdstore.Mutation, 0, len(references))
 	for index := range references {
 		recordValue := stored.Values[index*2]
 		tombstoneValue := stored.Values[index*2+1]
@@ -112,12 +113,12 @@ func prepareComponentTaskSecretReferences(
 		)
 		conditions = append(
 			conditions,
-			Condition{Key: secretRecordKey(references[index].secretID), ModRevision: recordValue.ModRevision},
-			Condition{Key: deletionTombstoneKey(string(DeletionTargetSecret), references[index].secretID)},
-			Condition{Key: candidateKey},
+			etcdstore.Condition{Key: secretRecordKey(references[index].secretID), ModRevision: recordValue.ModRevision},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetSecret), references[index].secretID)},
+			etcdstore.Condition{Key: candidateKey},
 		)
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: candidateKey, Value: []byte(references[index].componentID),
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: candidateKey, Value: []byte(references[index].componentID),
 		})
 	}
 	return references, conditions, mutations, nil
@@ -127,8 +128,8 @@ func componentTaskTerminalSecretMutations(
 	intent ComponentTaskIntent,
 	taskID string,
 	terminalStatus TaskStatus,
-) ([]Mutation, error) {
-	mutations := make([]Mutation, 0, len(intent.Candidates)*3)
+) ([]etcdstore.Mutation, error) {
+	mutations := make([]etcdstore.Mutation, 0, len(intent.Candidates)*3)
 	for _, candidate := range intent.Candidates {
 		currentIDs, err := componentSecretReferences(candidate.Current)
 		if err != nil {
@@ -139,8 +140,8 @@ func componentTaskTerminalSecretMutations(
 			return nil, err
 		}
 		for _, nextID := range nextIDs {
-			mutations = append(mutations, Mutation{
-				Type: MutationDelete,
+			mutations = append(mutations, etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
 				Key:  componentCandidateSecretReferenceKey(nextID, taskID, candidate.Candidate.Desired.ID),
 			})
 		}
@@ -148,14 +149,14 @@ func componentTaskTerminalSecretMutations(
 			continue
 		}
 		for _, currentID := range currentIDs {
-			mutations = append(mutations, Mutation{
-				Type: MutationDelete,
+			mutations = append(mutations, etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
 				Key:  componentActiveSecretReferenceKey(currentID, candidate.Current.Desired.ID),
 			})
 		}
 		for _, nextID := range nextIDs {
-			mutations = append(mutations, Mutation{
-				Type:  MutationPut,
+			mutations = append(mutations, etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   componentActiveSecretReferenceKey(nextID, candidate.Candidate.Desired.ID),
 				Value: []byte(candidate.Candidate.Desired.ID),
 			})

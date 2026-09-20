@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -25,7 +26,7 @@ type BackupPolicyRepository struct {
 	now   func() time.Time
 }
 
-func NewBackupPolicyRepository(store Store) (*BackupPolicyRepository, error) {
+func NewBackupPolicyRepository(store etcdstore.Store) (*BackupPolicyRepository, error) {
 	return newBackupPolicyRepository(store)
 }
 
@@ -183,7 +184,7 @@ func (repository *BackupPolicyRepository) createBackupSource(
 	defer clear(epochValue)
 	environment := evidence.environment
 	project := evidence.project
-	result, err := repository.store.Transact(ctx, []Condition{
+	result, err := repository.store.Transact(ctx, []etcdstore.Condition{
 		{Key: backupSourceKey(record.ID)},
 		{Key: backupSourceEnvironmentKey(record.EnvironmentID, record.ID)},
 		{Key: backupSourceIdentityKey(record.EnvironmentID, record.Kind, record.TargetID)},
@@ -197,18 +198,18 @@ func (repository *BackupPolicyRepository) createBackupSource(
 			ModRevision: evidence.mutationEpoch.Revision,
 		},
 		{Key: environmentOperationLockKey(environment.Record.ID)},
-	}, []Mutation{
-		{Type: MutationPut, Key: backupSourceKey(record.ID), Value: value},
+	}, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: backupSourceKey(record.ID), Value: value},
 		{
-			Type: MutationPut, Key: backupSourceEnvironmentKey(record.EnvironmentID, record.ID),
+			Type: etcdstore.MutationPut, Key: backupSourceEnvironmentKey(record.EnvironmentID, record.ID),
 			Value: []byte(record.ID),
 		},
 		{
-			Type: MutationPut, Key: backupSourceIdentityKey(record.EnvironmentID, record.Kind, record.TargetID),
+			Type: etcdstore.MutationPut, Key: backupSourceIdentityKey(record.EnvironmentID, record.Kind, record.TargetID),
 			Value: []byte(record.ID),
 		},
 		{
-			Type: MutationPut, Key: environmentMutationEpochKey(environment.Record.ID),
+			Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(environment.Record.ID),
 			Value: epochValue,
 		},
 	})
@@ -234,7 +235,7 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 	targetID string,
 	revision int64,
 ) (backupSourceCreationEvidence, error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			backupSourceIdentityKey(environment.Record.ID, kind, targetID),
 			environmentKey(environment.Record.ID),
@@ -342,7 +343,7 @@ func (repository *BackupPolicyRepository) getBackupSourceByIdentity(
 	if err := validateID(ids.KindBackupSource, sourceID); err != nil {
 		return Versioned[BackupSourceRecord]{}, false, corruptRecord()
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			backupSourceKey(sourceID),
 			backupSourceEnvironmentKey(environmentID, sourceID),
@@ -399,7 +400,7 @@ func validateBackupSourceHierarchy(
 }
 
 func classifyBackupSourceCreateConflict(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	evidence backupSourceCreationEvidence,
 ) error {
 	if len(values) != 10 {

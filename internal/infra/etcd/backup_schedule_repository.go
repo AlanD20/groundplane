@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 	"time"
 
@@ -46,7 +47,7 @@ func (repository *BackupRuntimeRepository) ListBackupScheduleCandidates(
 	var candidates []BackupScheduleCandidate
 	start := ""
 	for {
-		page, err := repository.store.Range(ctx, RangeRequest{
+		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: backupPolicyPrefix, StartExclusive: start,
 			Limit: maximumBackupRuntimeListLimit,
 		})
@@ -104,7 +105,7 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 		environmentCoordinationKey(environmentID),
 		environmentOperationLockKey(environmentID),
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return BackupScheduleEvaluation{}, err
 	}
@@ -161,11 +162,11 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 			defer clear(value)
 			result, txErr := repository.store.Transact(
 				ctx,
-				[]Condition{
+				[]etcdstore.Condition{
 					{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 					{Key: keys[1], ModRevision: read.Values[1].ModRevision},
 				},
-				[]Mutation{{Type: MutationPut, Key: keys[1], Value: value}},
+				[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: keys[1], Value: value}},
 			)
 			if txErr != nil {
 				return BackupScheduleEvaluation{}, txErr
@@ -215,7 +216,7 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 	}
 	read, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: append(keys, dueKey), Revision: evaluation.ReadRevision},
+		etcdstore.GetManyRequest{Keys: append(keys, dueKey), Revision: evaluation.ReadRevision},
 	)
 	if err != nil {
 		return err
@@ -256,17 +257,17 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 	defer clear(dueValue)
 	result, err := repository.store.Transact(
 		ctx,
-		[]Condition{
+		[]etcdstore.Condition{
 			{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 			{Key: keys[1], ModRevision: read.Values[1].ModRevision},
 			{Key: keys[2], ModRevision: read.Values[2].ModRevision},
 			{Key: dueKey},
 			{Key: retentionKey},
 		},
-		[]Mutation{
-			{Type: MutationPut, Key: dueKey, Value: dueValue},
-			{Type: MutationPut, Key: retentionKey, Value: []byte(dueKey)},
-			{Type: MutationPut, Key: keys[1], Value: coordValue},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: dueKey, Value: dueValue},
+			{Type: etcdstore.MutationPut, Key: retentionKey, Value: []byte(dueKey)},
+			{Type: etcdstore.MutationPut, Key: keys[1], Value: coordValue},
 		},
 	)
 	if err != nil {
@@ -280,7 +281,7 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 
 func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 	ctx context.Context, record BackupRunRecord, fixedRevision int64,
-) ([]Condition, []Mutation, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if record.ScheduledAt == nil || record.Initiator != BackupRunInitiatorSchedule {
 		return nil, nil, errs.New(errs.KindValidationFailed, "scheduled backup publication metadata is missing")
 	}
@@ -299,7 +300,7 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 	if err != nil {
 		return nil, nil, err
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: append(keys, dueKey), Revision: fixedRevision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: append(keys, dueKey), Revision: fixedRevision})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -347,15 +348,15 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 		clear(coordValue)
 		return nil, nil, err
 	}
-	return []Condition{
-			{Key: keys[1], ModRevision: read.Values[1].ModRevision},
-			{Key: dueKey},
-			{Key: retentionKey},
-		}, []Mutation{
-			{Type: MutationPut, Key: dueKey, Value: dueValue},
-			{Type: MutationPut, Key: retentionKey, Value: []byte(dueKey)},
-			{Type: MutationPut, Key: keys[1], Value: coordValue},
-		}, nil
+	return []etcdstore.Condition{
+		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
+		{Key: dueKey},
+		{Key: retentionKey},
+	}, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: dueKey, Value: dueValue},
+		{Type: etcdstore.MutationPut, Key: retentionKey, Value: []byte(dueKey)},
+		{Type: etcdstore.MutationPut, Key: keys[1], Value: coordValue},
+	}, nil
 }
 
 func (repository *BackupRuntimeRepository) exactScheduledBackupRunSubordinates(
@@ -378,7 +379,7 @@ func (repository *BackupRuntimeRepository) exactScheduledBackupRunSubordinates(
 	if err != nil {
 		return false
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentCoordinationKey(run.EnvironmentID), dueKey, retentionKey}, Revision: readRevision,
 	})
 	if err != nil || read == nil || read.ReadRevision != readRevision || len(read.Values) != 3 {

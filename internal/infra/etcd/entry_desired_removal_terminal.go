@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,7 +17,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 	if task.Executor == TaskExecutorController {
 		keys = append(keys, taskMaterializationWriterKey(intent.EnvironmentID))
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -39,13 +40,13 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 		return routeTaskChange{}, err
 	}
 	change := routeTaskChange{applies: true,
-		conditions: []Condition{{Key: entryRemovalIntentKey(task.ID), ModRevision: intentRevision},
+		conditions: []etcdstore.Condition{{Key: entryRemovalIntentKey(task.ID), ModRevision: intentRevision},
 			{
 				Key:         keys[0],
 				ModRevision: read.Values[0].ModRevision,
 			}, {Key: keys[1], ModRevision: read.Values[1].ModRevision}},
-		mutations: []Mutation{{Type: MutationPut, Key: entryRemovalIntentKey(task.ID), Value: value},
-			{Type: MutationDelete, Key: keys[0]}, {Type: MutationDelete, Key: keys[1]}}, values: [][]byte{value}}
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: entryRemovalIntentKey(task.ID), Value: value},
+			{Type: etcdstore.MutationDelete, Key: keys[0]}, {Type: etcdstore.MutationDelete, Key: keys[1]}}, values: [][]byte{value}}
 	if task.Executor == TaskExecutorController {
 		if read.Values[2] == nil {
 			clearRouteTaskChange(change)
@@ -62,8 +63,8 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 				"Entry removal materialization exclusion changed",
 			)
 		}
-		change.conditions = append(change.conditions, Condition{Key: keys[2], ModRevision: read.Values[2].ModRevision})
-		change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: keys[2]})
+		change.conditions = append(change.conditions, etcdstore.Condition{Key: keys[2], ModRevision: read.Values[2].ModRevision})
+		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[2]})
 	}
 	if status != TaskStatusCompleted {
 		return change, nil
@@ -87,7 +88,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 		environmentBlueprintDescriptorKeyByID(desired.DescriptorID),
 		environmentBlueprintRootKey(intent.EnvironmentID, desired.RevisionID),
 		environmentComposeProjectionKey(intent.EnvironmentID), blueprintEntryEnvironmentPrefix + intent.EntryID}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -164,22 +165,22 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 		return routeTaskChange{}, err
 	}
 	change := routeTaskChange{applies: true,
-		conditions: []Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision},
+		conditions: []etcdstore.Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 			{
 				Key:         keys[1],
 				ModRevision: read.Values[1].ModRevision,
 			}, {Key: keys[2], ModRevision: read.Values[2].ModRevision},
 			{Key: keys[4], ModRevision: read.Values[4].ModRevision}},
-		mutations: []Mutation{{Type: MutationPut, Key: keys[0], Value: reference},
-			{Type: MutationPut, Key: keys[1], Value: descriptorValue}, {Type: MutationDelete, Key: locatorKey},
-			{Type: MutationDelete, Key: keys[4]},
-			{Type: MutationDelete, Key: entryPlainValueGenerationPrefix + intent.EntryID + "/", Prefix: true},
-			{Type: MutationDelete, Key: entrySecretValueGenerationPrefix + intent.EntryID + "/", Prefix: true}},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: keys[0], Value: reference},
+			{Type: etcdstore.MutationPut, Key: keys[1], Value: descriptorValue}, {Type: etcdstore.MutationDelete, Key: locatorKey},
+			{Type: etcdstore.MutationDelete, Key: keys[4]},
+			{Type: etcdstore.MutationDelete, Key: entryPlainValueGenerationPrefix + intent.EntryID + "/", Prefix: true},
+			{Type: etcdstore.MutationDelete, Key: entrySecretValueGenerationPrefix + intent.EntryID + "/", Prefix: true}},
 		values: [][]byte{descriptorValue, reference}}
 	change.conditions = append(change.conditions, sources...)
 	change.conditions = append(
 		change.conditions,
-		Condition{Key: keys[3], ModRevision: keyValueRevision(read.Values[3])},
+		etcdstore.Condition{Key: keys[3], ModRevision: keyValueRevision(read.Values[3])},
 	)
 	if intent.CurrentProjection == nil && read.Values[3] != nil {
 		applied, err := decodeEnvironmentComposeProjection(read.Values[3].Value)
@@ -209,7 +210,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 			clearRouteTaskChange(change)
 			return routeTaskChange{}, err
 		}
-		change.mutations = append(change.mutations, Mutation{Type: MutationPut, Key: keys[3], Value: appliedValue})
+		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[3], Value: appliedValue})
 		change.values = append(change.values, appliedValue)
 	}
 	return change, nil

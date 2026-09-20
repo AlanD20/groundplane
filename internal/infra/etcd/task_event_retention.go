@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"time"
 
@@ -86,14 +87,14 @@ func trimmedTaskEventReplay(task TaskRecord, input TaskEventInput, hash string) 
 // must match the oldest event exactly; partial eviction is never committed.
 func (repository *TaskRepository) prepareTaskEventTrim(
 	ctx context.Context, task TaskRecord, prepared *PreparedTaskEvent, revision int64,
-) ([]Condition, []Mutation, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if task.EventCount < MaximumTaskEvents {
 		return nil, nil, nil
 	}
 	oldest := firstTaskEventSequence(task)
 	read, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{taskEventKey(task.ID, oldest)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{taskEventKey(task.ID, oldest)}, Revision: revision},
 	)
 	if err != nil {
 		return nil, nil, err
@@ -107,7 +108,7 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 		return nil, nil, corruptRecord()
 	}
 	dedupKey := taskEventDedupKey(event.Identity)
-	dedupRead, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{dedupKey}, Revision: revision})
+	dedupRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{dedupKey}, Revision: revision})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -154,7 +155,7 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 			return 0
 		})
 	}
-	return []Condition{{Key: read.Values[0].Key, ModRevision: read.Values[0].ModRevision},
+	return []etcdstore.Condition{{Key: read.Values[0].Key, ModRevision: read.Values[0].ModRevision},
 			{Key: dedupKey, ModRevision: dedupRead.Values[0].ModRevision}},
-		[]Mutation{{Type: MutationDelete, Key: read.Values[0].Key}, {Type: MutationDelete, Key: dedupKey}}, nil
+		[]etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: read.Values[0].Key}, {Type: etcdstore.MutationDelete, Key: dedupKey}}, nil
 }

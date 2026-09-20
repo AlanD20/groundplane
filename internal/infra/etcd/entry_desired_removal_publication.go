@@ -2,14 +2,15 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type entryDesiredRemovalPublication struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	deferred   map[string]bool
 }
 
@@ -61,7 +62,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 		deletionTombstoneKey(string(DeletionTargetEntry), task.Target), entryRemovalIntentKey(task.ID),
 		componentTaskActiveEnvironmentKey(claim.EnvironmentID), taskMaterializationWriterKey(claim.EnvironmentID),
 		environmentBlueprintDescriptorKeyByID(claim.DescriptorID)}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return entryDesiredRemovalPublication{}, err
 	}
@@ -72,9 +73,9 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 		)
 	}
 	var applied *Versioned[EnvironmentComposeProjection]
-	conditions := make([]Condition, len(keys)-1)
+	conditions := make([]etcdstore.Condition, len(keys)-1)
 	for index, key := range keys[:len(conditions)] {
-		conditions[index] = Condition{Key: key}
+		conditions[index] = etcdstore.Condition{Key: key}
 		if index != 0 && read.Values[index] != nil {
 			return entryDesiredRemovalPublication{}, errs.New(
 				errs.KindResourceInUse,
@@ -155,15 +156,15 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 		return entryDesiredRemovalPublication{}, err
 	}
 	return entryDesiredRemovalPublication{conditions: conditions,
-		mutations: append([]Mutation{{Type: MutationPut, Key: keys[1], Value: tombstone},
-			{Type: MutationPut, Key: keys[2], Value: intentValue},
-			{Type: MutationPut, Key: keys[3], Value: []byte(task.ID)},
-			{Type: MutationPut, Key: keys[5], Value: descriptorValue}}, writer...),
+		mutations: append([]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: keys[1], Value: tombstone},
+			{Type: etcdstore.MutationPut, Key: keys[2], Value: intentValue},
+			{Type: etcdstore.MutationPut, Key: keys[3], Value: []byte(task.ID)},
+			{Type: etcdstore.MutationPut, Key: keys[5], Value: descriptorValue}}, writer...),
 		deferred: map[string]bool{environmentBlueprintHeadKey(claim.EnvironmentID): true,
 			environmentBlueprintDescriptorKeyByID(claim.DescriptorID): true, locatorKey: true}}, nil
 }
 
-func entryRemovalControllerWriter(task TaskRecord) ([]Mutation, error) {
+func entryRemovalControllerWriter(task TaskRecord) ([]etcdstore.Mutation, error) {
 	if task.Executor != TaskExecutorController {
 		return nil, nil
 	}
@@ -172,12 +173,12 @@ func entryRemovalControllerWriter(task TaskRecord) ([]Mutation, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []Mutation{{Type: MutationPut, Key: taskMaterializationWriterKey(environmentID), Value: value}}, nil
+	return []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: taskMaterializationWriterKey(environmentID), Value: value}}, nil
 }
 
 func (publication entryDesiredRemovalPublication) bind(
-	conditions []Condition, mutations []Mutation, classify idempotencyPlanClassifier,
-) ([]Condition, []Mutation, idempotencyPlanClassifier) {
+	conditions []etcdstore.Condition, mutations []etcdstore.Mutation, classify idempotencyPlanClassifier,
+) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier) {
 	if publication.deferred == nil {
 		return conditions, mutations, classify
 	}
@@ -190,7 +191,7 @@ func (publication entryDesiredRemovalPublication) bind(
 		}
 	}
 	mutations = append(retained, publication.mutations...)
-	return conditions, mutations, func(revision int64, values []*KeyValue) error {
+	return conditions, mutations, func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != base+len(publication.conditions) {
 			return errs.New(errs.KindInternal, "Entry removal compare evidence is incomplete")
 		}

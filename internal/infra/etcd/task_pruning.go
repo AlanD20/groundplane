@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -9,7 +10,7 @@ import (
 )
 
 const (
-	maximumTaskPruneBatchRecords = (maximumTransactionOperations - 2) / 2
+	maximumTaskPruneBatchRecords = (etcdstore.MaximumOperations - 2) / 2
 	maximumTaskPruneCASAttempts  = 8
 )
 
@@ -105,7 +106,7 @@ func (repository *TaskRepository) PruneExpiredTasks(
 func (repository *TaskRepository) nextTaskPruneIntent(
 	ctx context.Context,
 ) (Versioned[taskPruneIntent], bool, error) {
-	page, err := repository.store.Range(ctx, RangeRequest{Prefix: taskPruneIntentPrefix, Limit: 1})
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskPruneIntentPrefix, Limit: 1})
 	if err != nil {
 		return Versioned[taskPruneIntent]{}, false, err
 	}
@@ -153,7 +154,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	if err != nil || indexedTaskID != taskID {
 		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
-	taskResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskKey(taskID)}, Revision: page.ReadRevision,
 	})
 	if err != nil {
@@ -229,7 +230,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		backupTerminalReceiptIndex = len(companionKeys)
 		companionKeys = append(companionKeys, backupTerminalReceiptKey(task.ID))
 	}
-	companions, err := repository.store.GetMany(ctx, GetManyRequest{
+	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: companionKeys, Revision: page.ReadRevision,
 	})
 	if err != nil {
@@ -255,7 +256,7 @@ func (repository *TaskRepository) beginTaskPrune(
 			return Versioned[taskPruneIntent]{}, false, err
 		}
 	}
-	activeOperationCondition := Condition{Key: taskActiveOperationKey(task.OperationID)}
+	activeOperationCondition := etcdstore.Condition{Key: taskActiveOperationKey(task.OperationID)}
 	if companions.Values[1] != nil {
 		activeTaskID, decodeErr := decodeTaskReference(companions.Values[1].Value)
 		if decodeErr != nil {
@@ -330,12 +331,12 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	if environmentDeletionFenceStart >= 0 {
 		if environmentDeletionBlocked {
-			conditions := []Condition{
+			conditions := []etcdstore.Condition{
 				{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 				{Key: retentionEntry.Key, ModRevision: retentionEntry.ModRevision},
 			}
 			for index, key := range environmentDeletionFenceKeys {
-				conditions = append(conditions, Condition{
+				conditions = append(conditions, etcdstore.Condition{
 					Key:         key,
 					ModRevision: companions.Values[environmentDeletionFenceStart+index].ModRevision,
 				})
@@ -343,7 +344,7 @@ func (repository *TaskRepository) beginTaskPrune(
 			transaction, transactErr := repository.store.Transact(
 				ctx,
 				conditions,
-				[]Mutation{{Type: MutationDelete, Key: retentionEntry.Key}},
+				[]etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: retentionEntry.Key}},
 			)
 			if transactErr != nil {
 				return Versioned[taskPruneIntent]{}, false, transactErr
@@ -389,7 +390,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		return Versioned[taskPruneIntent]{}, false, err
 	}
 	defer clear(intentValue)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 		{Key: retentionEntry.Key, ModRevision: retentionEntry.ModRevision},
 		{Key: markerKey},
@@ -399,7 +400,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	conditions = append(conditions, taskSourcePruneConditions(task)...)
 	for index, key := range environmentDeletionFenceKeys {
-		condition := Condition{Key: key}
+		condition := etcdstore.Condition{Key: key}
 		value := companions.Values[environmentDeletionFenceStart+index]
 		if value != nil {
 			condition.ModRevision = value.ModRevision
@@ -407,67 +408,67 @@ func (repository *TaskRepository) beginTaskPrune(
 		conditions = append(conditions, condition)
 	}
 	if backupPruneDispatchIndex >= 0 {
-		conditions = append(conditions, Condition{Key: backupRecoveryPointPruneDispatchKey(task.ID)})
+		conditions = append(conditions, etcdstore.Condition{Key: backupRecoveryPointPruneDispatchKey(task.ID)})
 	}
 	conditions = backupReceiptCompanion.appendStartCondition(conditions)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskPruneIntentKey(task.ID), Value: intentValue},
-		{Type: MutationDelete, Key: serviceLifecycleRenderInputKey(task.ID)},
-		{Type: MutationDelete, Key: backingHookCheckpointTaskPrefix(task.ID), Prefix: true},
-		{Type: MutationDelete, Key: retentionEntry.Key},
-		{Type: MutationDelete, Key: taskOperationIndexKey(task.OperationID, task.ID)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskPruneIntentKey(task.ID), Value: intentValue},
+		{Type: etcdstore.MutationDelete, Key: serviceLifecycleRenderInputKey(task.ID)},
+		{Type: etcdstore.MutationDelete, Key: backingHookCheckpointTaskPrefix(task.ID), Prefix: true},
+		{Type: etcdstore.MutationDelete, Key: retentionEntry.Key},
+		{Type: etcdstore.MutationDelete, Key: taskOperationIndexKey(task.OperationID, task.ID)},
 	}
 	for index, key := range ownerIndexKeys {
 		value := companions.Values[ownerIndexStart+index]
-		conditions = append(conditions, Condition{Key: key, ModRevision: value.ModRevision})
+		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: value.ModRevision})
 	}
-	componentCondition := Condition{Key: componentTaskIntentKey(task.ID)}
+	componentCondition := etcdstore.Condition{Key: componentTaskIntentKey(task.ID)}
 	if companions.Values[4] != nil {
 		componentCondition.ModRevision = companions.Values[4].ModRevision
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationDelete, Key: componentTaskIntentKey(task.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: componentTaskIntentKey(task.ID)},
 		)
 	}
 	conditions = append(conditions, componentCondition)
-	routeCondition := Condition{Key: routeRemovalIntentKey(task.ID)}
+	routeCondition := etcdstore.Condition{Key: routeRemovalIntentKey(task.ID)}
 	if companions.Values[5] != nil {
 		routeCondition.ModRevision = companions.Values[5].ModRevision
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationDelete, Key: routeRemovalIntentKey(task.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routeRemovalIntentKey(task.ID)},
 		)
 	}
 	conditions = append(conditions, routeCondition)
-	mutationCondition := Condition{Key: routeMutationIntentKey(task.ID)}
+	mutationCondition := etcdstore.Condition{Key: routeMutationIntentKey(task.ID)}
 	if companions.Values[6] != nil {
 		mutationCondition.ModRevision = companions.Values[6].ModRevision
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: routeMutationIntentKey(task.ID)})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routeMutationIntentKey(task.ID)})
 	}
 	conditions = append(conditions, mutationCondition)
-	entryCondition := Condition{Key: entryRemovalIntentKey(task.ID)}
+	entryCondition := etcdstore.Condition{Key: entryRemovalIntentKey(task.ID)}
 	if companions.Values[7] != nil {
 		entryCondition.ModRevision = companions.Values[7].ModRevision
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationDelete, Key: entryRemovalIntentKey(task.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryRemovalIntentKey(task.ID)},
 		)
 	}
 	conditions = append(conditions, entryCondition)
 	if companions.Values[8] != nil {
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: blueprintAttachTaskIntentKey(task.ID), ModRevision: companions.Values[8].ModRevision,
 		})
-		mutations = append(mutations, Mutation{
-			Type: MutationDelete, Key: blueprintAttachTaskIntentKey(task.ID),
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete, Key: blueprintAttachTaskIntentKey(task.ID),
 		})
 	}
 	if planReferenceIndex >= 0 {
 		planReferenceValue := companions.Values[planReferenceIndex]
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: planReferenceValue.Key, ModRevision: planReferenceValue.ModRevision,
 		})
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: planReferenceValue.Key})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: planReferenceValue.Key})
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
@@ -538,7 +539,7 @@ func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 	if cursors {
 		prefix = backupCheckpointCursorTaskPrefix(current.Record.TaskID)
 	}
-	page, err := repository.store.Range(ctx, RangeRequest{
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix,
 		Limit:  int64(maximumTaskPruneBatchRecords + 1),
 	})
@@ -560,7 +561,7 @@ func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 			ctx,
 			current,
 			next,
-			[]Condition{{Key: prefix, Prefix: true}},
+			[]etcdstore.Condition{{Key: prefix, Prefix: true}},
 			nil,
 		)
 	}
@@ -568,8 +569,8 @@ func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 	if count > maximumTaskPruneBatchRecords {
 		count = maximumTaskPruneBatchRecords
 	}
-	conditions := make([]Condition, 0, count)
-	mutations := make([]Mutation, 0, count)
+	conditions := make([]etcdstore.Condition, 0, count)
+	mutations := make([]etcdstore.Mutation, 0, count)
 	for index := 0; index < count; index++ {
 		entry := page.Values[index]
 		if err := validateTaskBackupCheckpointPruneEntry(
@@ -579,8 +580,8 @@ func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 		); err != nil {
 			return Versioned[taskPruneIntent]{}, err
 		}
-		conditions = append(conditions, Condition{Key: entry.Key, ModRevision: entry.ModRevision})
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: entry.Key})
+		conditions = append(conditions, etcdstore.Condition{Key: entry.Key, ModRevision: entry.ModRevision})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entry.Key})
 	}
 	return repository.advanceTaskPruneIntent(ctx, current, next, conditions, mutations)
 }
@@ -589,7 +590,7 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	ctx context.Context,
 	current Versioned[taskPruneIntent],
 ) (Versioned[taskPruneIntent], error) {
-	taskResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskKey(current.Record.TaskID)},
 	})
 	if err != nil {
@@ -612,7 +613,7 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	if err != nil {
 		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
-	ownerResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	ownerResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: ownerKeys, Revision: taskResult.ReadRevision,
 	})
 	if err != nil {
@@ -626,19 +627,19 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
 	defer clearKeyValues(ownerResult.Values)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(current.Record.TaskID), ModRevision: current.Record.TaskRevision},
 		{Key: backupCheckpointCursorTaskPrefix(current.Record.TaskID), Prefix: true},
 		{Key: backupCheckpointDedupTaskPrefix(current.Record.TaskID), Prefix: true},
 	}
-	mutations := []Mutation{{Type: MutationDelete, Key: taskKey(current.Record.TaskID)}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: taskKey(current.Record.TaskID)}}
 	for index, key := range ownerKeys {
 		value := ownerResult.Values[index]
 		if value == nil || value.Key != key || value.ModRevision <= 0 || string(value.Value) != task.ID {
 			return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 		}
-		conditions = append(conditions, Condition{Key: key, ModRevision: value.ModRevision})
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
+		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: value.ModRevision})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	}
 	next := current.Record
 	next.TaskPrimaryDeleted = true
@@ -655,21 +656,21 @@ func (repository *TaskRepository) advanceTaskPruneIntent(
 	ctx context.Context,
 	current Versioned[taskPruneIntent],
 	next taskPruneIntent,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 ) (Versioned[taskPruneIntent], error) {
 	intentValue, err := encodeTaskPruneIntent(next)
 	if err != nil {
 		return Versioned[taskPruneIntent]{}, err
 	}
 	defer clear(intentValue)
-	conditions = append([]Condition{{
+	conditions = append([]etcdstore.Condition{{
 		Key: taskPruneIntentKey(current.Record.TaskID), ModRevision: current.Revision,
 	}}, conditions...)
-	mutations = append(mutations, Mutation{
-		Type: MutationPut, Key: taskPruneIntentKey(current.Record.TaskID), Value: intentValue,
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: taskPruneIntentKey(current.Record.TaskID), Value: intentValue,
 	})
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
+	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return Versioned[taskPruneIntent]{}, errs.New(
 			errs.KindInternal,
 			"task prune batch exceeds transaction limit",
@@ -693,7 +694,7 @@ func (repository *TaskRepository) advanceTaskPruneIntent(
 
 func validateTaskBackupCheckpointPruneEntry(
 	taskID string,
-	entry KeyValue,
+	entry etcdstore.KeyValue,
 	cursor bool,
 ) error {
 	if entry.ModRevision <= 0 {
@@ -724,12 +725,12 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 	ctx context.Context,
 	current Versioned[taskPruneIntent],
 ) error {
-	conditions := []Condition{{
+	conditions := []etcdstore.Condition{{
 		Key: taskPruneIntentKey(current.Record.TaskID), ModRevision: current.Revision,
 	}}
-	mutations := []Mutation{{Type: MutationDelete, Key: taskPruneIntentKey(current.Record.TaskID)}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: taskPruneIntentKey(current.Record.TaskID)}}
 	if current.Record.AttachPlanID != "" {
-		references, err := repository.store.Range(ctx, RangeRequest{
+		references, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: attachTaskPlanReferenceScopePrefix(current.Record.AttachPlanID), Limit: 1,
 		})
 		if err != nil {
@@ -751,7 +752,7 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 			inputKey := attachTaskRenderInputKey(current.Record.AttachPlanID)
 			inputResult, err := repository.store.GetMany(
 				ctx,
-				GetManyRequest{Keys: []string{inputKey}},
+				etcdstore.GetManyRequest{Keys: []string{inputKey}},
 			)
 			if err != nil {
 				return err
@@ -764,10 +765,10 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 			if err != nil || input.PlanID != current.Record.AttachPlanID {
 				return corruptTaskPruneIntent()
 			}
-			conditions = append(conditions, Condition{
+			conditions = append(conditions, etcdstore.Condition{
 				Key: inputKey, ModRevision: inputResult.Values[0].ModRevision,
 			})
-			mutations = append(mutations, Mutation{Type: MutationDelete, Key: inputKey})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: inputKey})
 		}
 	}
 	conditions, mutations = appendBackupTerminalReceiptPruneFinalization(
@@ -801,7 +802,7 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	if remaining < maximumTaskPruneBatchRecords {
 		limit = int64(remaining) + 1
 	}
-	page, err := repository.store.Range(ctx, RangeRequest{Prefix: prefix, Limit: limit})
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: limit})
 	if err != nil {
 		return Versioned[taskPruneIntent]{}, err
 	}
@@ -822,19 +823,19 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	if !page.More && uint32(len(page.Values)) < remaining {
 		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
-	conditions := make([]Condition, 1, count+1)
-	conditions[0] = Condition{
+	conditions := make([]etcdstore.Condition, 1, count+1)
+	conditions[0] = etcdstore.Condition{
 		Key:         taskPruneIntentKey(current.Record.TaskID),
 		ModRevision: current.Revision,
 	}
-	mutations := make([]Mutation, 0, count+1)
+	mutations := make([]etcdstore.Mutation, 0, count+1)
 	for index := 0; index < count; index++ {
 		entry := page.Values[index]
 		if err := validateTaskPruneSubordinate(current.Record.TaskID, entry, events); err != nil {
 			return Versioned[taskPruneIntent]{}, err
 		}
-		conditions = append(conditions, Condition{Key: entry.Key, ModRevision: entry.ModRevision})
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: entry.Key})
+		conditions = append(conditions, etcdstore.Condition{Key: entry.Key, ModRevision: entry.ModRevision})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entry.Key})
 	}
 	next := current.Record
 	if events {
@@ -847,10 +848,10 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 		return Versioned[taskPruneIntent]{}, err
 	}
 	defer clear(intentValue)
-	mutations = append(mutations, Mutation{
-		Type: MutationPut, Key: taskPruneIntentKey(next.TaskID), Value: intentValue,
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: taskPruneIntentKey(next.TaskID), Value: intentValue,
 	})
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
+	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return Versioned[taskPruneIntent]{}, errs.New(
 			errs.KindInternal,
 			"task prune batch exceeds transaction limit",
@@ -872,7 +873,7 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	}, nil
 }
 
-func validateTaskPruneSubordinate(taskID string, entry KeyValue, events bool) error {
+func validateTaskPruneSubordinate(taskID string, entry etcdstore.KeyValue, events bool) error {
 	if entry.ModRevision <= 0 {
 		return corruptTaskPruneIntent()
 	}
@@ -904,7 +905,7 @@ func (repository *TaskRepository) verifyTaskPrunePrefixEmpty(
 	if events {
 		prefix = taskEventScopePrefix(taskID)
 	}
-	page, err := repository.store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 1})
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: 1})
 	if err != nil {
 		return err
 	}

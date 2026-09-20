@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -15,8 +16,8 @@ func getBackupSecretManyOwned(
 	store backupSecretResolutionStore,
 	keys []string,
 	revision int64,
-) (*GetManyResult, error) {
-	result, err := store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+) (*etcdstore.GetManyResult, error) {
+	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		if result != nil {
 			clearKeyValues(result.Values)

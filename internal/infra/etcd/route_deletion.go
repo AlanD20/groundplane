@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -123,7 +124,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	defer clear(reference)
 
 	tombstoneKey := deletionTombstoneKey(string(DeletionTargetRoute), route.Record.Desired.ID)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -137,24 +138,24 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
 	}
 	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
-	conditions = append(conditions, Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)})
+	conditions = append(conditions, etcdstore.Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)})
 	conditions = append(conditions, publication.conditions...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
-		{Type: MutationPut, Key: routeRemovalIntentKey(task.ID), Value: intentValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
+		{Type: etcdstore.MutationPut, Key: routeRemovalIntentKey(task.ID), Value: intentValue},
 	}
 	mutations = append(
 		mutations,
-		Mutation{
-			Type:  MutationPut,
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
 			Key:   componentTaskActiveEnvironmentKey(environment.Record.ID),
 			Value: []byte(task.ID),
 		},
@@ -168,8 +169,8 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	baseConditions := append([]Condition(nil), conditions...)
-	classify := func(revision int64, values []*KeyValue) error {
+	baseConditions := append([]etcdstore.Condition(nil), conditions...)
+	classify := func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) == len(baseConditions) {
 			activeKey := componentTaskActiveEnvironmentKey(environment.Record.ID)
 			for index, condition := range baseConditions {
@@ -228,10 +229,10 @@ func classifyRouteDeletionStartConflict(
 	target Versioned[ServiceRecord],
 	route Versioned[RouteRecord],
 	projection *Versioned[EnvironmentComposeProjection],
-	indexes []*KeyValue,
+	indexes []*etcdstore.KeyValue,
 	operationID string,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		expected := 15
 		if project.Record.TenantID != "" {
 			expected++

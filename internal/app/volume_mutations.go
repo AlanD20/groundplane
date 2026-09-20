@@ -4,13 +4,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	"github.com/AlanD20/groundplane/internal/volume"
 )
 
 type volumeEvidenceStore interface {
-	etcd.Store
-	VolumeRemovalEvidenceTransactionSize([]etcd.Condition, []etcd.Mutation) (int, error)
+	etcdstore.Store
+	VolumeRemovalEvidenceTransactionSize([]etcdstore.Condition, []etcdstore.Mutation) (int, error)
 }
 
 func configureVolumeMutationPlans(

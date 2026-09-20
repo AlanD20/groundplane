@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -99,7 +100,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 	}
 	defer clear(epochMutation.Value)
 
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{
 			Key:         environmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID),
 			ModRevision: publication.rootRevision,
@@ -110,17 +111,17 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		{Key: zonePoolRegistryKey(input.Environment.Record.ID), ModRevision: registry.Revision},
 	}
 	removalLockIndex := len(conditions)
-	conditions = append(conditions, Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)})
+	conditions = append(conditions, etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)})
 	fenceOffset := len(conditions)
 	conditions = append(conditions, fence.transactionConditions()...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
-		{Type: MutationDelete, Key: publication.locatorKey},
-		{Type: MutationPut, Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
-		{Type: MutationPut, Key: zonePoolRegistryKey(input.Environment.Record.ID), Value: registryValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
+		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
+		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
+		{Type: etcdstore.MutationPut, Key: zonePoolRegistryKey(input.Environment.Record.ID), Value: registryValue},
 		epochMutation,
 	}
-	classifier := func(_ int64, values []*KeyValue) error {
+	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "direct Zone publication compare evidence is incomplete")
 		}

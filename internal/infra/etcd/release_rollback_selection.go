@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -26,7 +27,7 @@ func (ledger *ReleaseLedger) SelectRollback(
 		explicitTag != strings.TrimSpace(explicitTag) {
 		return ReleaseRollbackSelection{}, errs.New(errs.KindValidationFailed, "rollback selection input is invalid")
 	}
-	projectionRead, err := ledger.store.GetMany(ctx, GetManyRequest{
+	projectionRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision,
 	})
 	if err != nil {
@@ -47,7 +48,7 @@ func (ledger *ReleaseLedger) SelectRollback(
 	}
 	servingTag := ""
 	if projection.ServingReleaseID != "" {
-		servingIndex, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: []string{
+		servingIndex, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 			releaseServiceIndexKey(environmentID, serviceID, projection.ServingReleaseID),
 		}, Revision: revision})
 		if err != nil {
@@ -75,7 +76,7 @@ func (ledger *ReleaseLedger) SelectRollback(
 	structural := false
 	materialUnavailable := false
 	for {
-		page, err := ledger.store.Range(ctx, RangeRequest{
+		page, err := ledger.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: prefix, StartExclusive: start, Limit: 200, Revision: revision, Descending: true,
 		})
 		if err != nil {

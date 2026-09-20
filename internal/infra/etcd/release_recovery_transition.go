@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"slices"
 	"time"
@@ -16,10 +17,10 @@ const releaseRecoveryProofExecutionBudget = 5 * time.Minute
 func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	ctx context.Context,
 	task TaskRecord,
-	taskValue *KeyValue,
+	taskValue *etcdstore.KeyValue,
 	assignment TaskAssignmentRecord,
-	assignmentValue *KeyValue,
-	assignmentIndexValue *KeyValue,
+	assignmentValue *etcdstore.KeyValue,
+	assignmentIndexValue *etcdstore.KeyValue,
 	status TaskStatus,
 	result TaskResultRecord,
 	revision int64,
@@ -85,7 +86,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	}
 	defer clear(nextValue)
 	timeoutKey := taskTimeoutIndexKey(task.ID, assignment.Deadline)
-	timeoutRead, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{timeoutKey}, Revision: revision})
+	timeoutRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{timeoutKey}, Revision: revision})
 	if err != nil {
 		return Versioned[TaskRecord]{}, true, err
 	}
@@ -97,7 +98,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 			"release recovery timeout authority changed",
 		)
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 		{Key: assignmentValue.Key, ModRevision: assignmentValue.ModRevision},
 		{Key: assignmentIndexValue.Key, ModRevision: assignmentIndexValue.ModRevision},
@@ -107,13 +108,13 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 		{Key: taskRecoveryProofRequiredKey(task.ID)},
 	}
 	conditions = append(conditions, evidenceConditions...)
-	transaction, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue.Value},
-		{Type: MutationPut, Key: assignmentValue.Key, Value: nextValue},
-		{Type: MutationPut, Key: assignmentIndexValue.Key, Value: nextValue},
-		{Type: MutationDelete, Key: timeoutKey},
-		{Type: MutationPut, Key: taskTimeoutIndexKey(task.ID, assignment.RecoveryDeadline), Value: nextValue},
-		{Type: MutationPut, Key: releaseRecoveryKey(task.ID), Value: recoveryValue},
+	transaction, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue.Value},
+		{Type: etcdstore.MutationPut, Key: assignmentValue.Key, Value: nextValue},
+		{Type: etcdstore.MutationPut, Key: assignmentIndexValue.Key, Value: nextValue},
+		{Type: etcdstore.MutationDelete, Key: timeoutKey},
+		{Type: etcdstore.MutationPut, Key: taskTimeoutIndexKey(task.ID, assignment.RecoveryDeadline), Value: nextValue},
+		{Type: etcdstore.MutationPut, Key: releaseRecoveryKey(task.ID), Value: recoveryValue},
 	})
 	if err != nil {
 		return Versioned[TaskRecord]{}, true, err
@@ -135,7 +136,7 @@ func (repository *TaskRepository) releaseEffectEvidenceAtRevision(
 	assignment TaskAssignmentRecord,
 	procedure *agentpb.CandidateReleaseProcedure,
 	revision int64,
-) (bool, []Condition, error) {
+) (bool, []etcdstore.Condition, error) {
 	effect, _, err := repository.releaseCandidateMutationEvidenceAtRevision(ctx, task, assignment, procedure, revision)
 	if err != nil {
 		return false, nil, err
@@ -166,7 +167,7 @@ func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 ) (releaseRecoveryAcknowledgement, error) {
 	read, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{releaseRecoveryKey(task.ID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{releaseRecoveryKey(task.ID)}, Revision: revision},
 	)
 	if err != nil || read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
 		if err != nil {
@@ -249,7 +250,7 @@ func (repository *TaskRepository) releaseRecoveryAcknowledgementAtRevision(
 	resolved.final, resolved.status, resolved.result = true, record.PrimaryStatus, *primary
 	resolved.conditions = append(
 		conditions,
-		Condition{Key: releaseRecoveryKey(task.ID), ModRevision: read.Values[0].ModRevision},
+		etcdstore.Condition{Key: releaseRecoveryKey(task.ID), ModRevision: read.Values[0].ModRevision},
 	)
 	return resolved, nil
 }
@@ -322,7 +323,7 @@ func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 	if len(steps) != 0 {
 		keys = append(keys, scriptSourceRootKey(task.OperationID))
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil || read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
 		if err != nil {
 			return status, nil, true, err
@@ -368,16 +369,16 @@ func (repository *TaskRepository) candidateReleaseTimeoutResult(
 func (repository *TaskRepository) assignmentLifecycleIndexAtRevision(
 	ctx context.Context,
 	assignment TaskAssignmentRecord,
-	assignmentValue *KeyValue,
+	assignmentValue *etcdstore.KeyValue,
 	revision int64,
-) (string, *KeyValue, bool, error) {
+) (string, *etcdstore.KeyValue, bool, error) {
 	deadline := assignment.Deadline
 	if assignment.ExecutionMode == TaskExecutionModeRecoveryOnly {
 		deadline = assignment.RecoveryDeadline
 	}
 	timeoutKey := taskTimeoutIndexKey(assignment.TaskID, deadline)
 	proofKey := taskRecoveryProofRequiredKey(assignment.TaskID)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{timeoutKey, proofKey}, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{timeoutKey, proofKey}, Revision: revision})
 	if err != nil {
 		return "", nil, false, err
 	}
@@ -422,7 +423,7 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 	indexKey := taskAssignmentIndexKey(assignment.TaskID)
 	timeoutKey := taskTimeoutIndexKey(assignment.TaskID, assignment.RecoveryDeadline)
 	proofKey := taskRecoveryProofRequiredKey(assignment.TaskID)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(assignment.TaskID), claimKey, indexKey, timeoutKey, proofKey, releaseRecoveryKey(assignment.TaskID),
 	}, Revision: revision})
 	if err != nil {
@@ -467,19 +468,19 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 		return false, err
 	}
 	defer clear(nextValue)
-	transaction, err := repository.store.Transact(ctx, []Condition{
+	transaction, err := repository.store.Transact(ctx, []etcdstore.Condition{
 		{Key: taskKey(task.ID), ModRevision: read.Values[0].ModRevision},
 		{Key: claimKey, ModRevision: read.Values[1].ModRevision},
 		{Key: indexKey, ModRevision: read.Values[2].ModRevision},
 		{Key: timeoutKey, ModRevision: read.Values[3].ModRevision},
 		{Key: proofKey},
 		{Key: releaseRecoveryKey(task.ID), ModRevision: read.Values[5].ModRevision},
-	}, []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: read.Values[0].Value},
-		{Type: MutationPut, Key: claimKey, Value: nextValue},
-		{Type: MutationPut, Key: indexKey, Value: nextValue},
-		{Type: MutationDelete, Key: timeoutKey},
-		{Type: MutationPut, Key: proofKey, Value: nextValue},
+	}, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: read.Values[0].Value},
+		{Type: etcdstore.MutationPut, Key: claimKey, Value: nextValue},
+		{Type: etcdstore.MutationPut, Key: indexKey, Value: nextValue},
+		{Type: etcdstore.MutationDelete, Key: timeoutKey},
+		{Type: etcdstore.MutationPut, Key: proofKey, Value: nextValue},
 	})
 	if err != nil {
 		return false, err

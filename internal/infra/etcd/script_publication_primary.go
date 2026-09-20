@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -13,20 +14,20 @@ func preparedScriptPrimary(
 	ctx context.Context,
 	store hierarchyStore,
 	sources ScriptExecutionSources,
-) (Condition, error) {
+) (etcdstore.Condition, error) {
 	expected := sources.Script.Record
 	key := scriptSetScriptKey(expected.EnvironmentID, expected.ScriptSetGeneration, expected.Desired.ID)
 	read, err := store.Get(ctx, key)
 	if err != nil {
-		return Condition{}, err
+		return etcdstore.Condition{}, err
 	}
 	if read == nil || read.Entry == nil {
-		return Condition{}, errs.New(errs.KindStateConflict, "Script disappeared during source preparation")
+		return etcdstore.Condition{}, errs.New(errs.KindStateConflict, "Script disappeared during source preparation")
 	}
 	defer clear(read.Entry.Value)
 	current, err := decodeScriptRecord(read.Entry.Value)
 	if err != nil {
-		return Condition{}, err
+		return etcdstore.Condition{}, err
 	}
 	expected.ActiveReferences = current.ActiveReferences
 	// Blueprint's fixed-read primary is bodyless. The immutable body is needed
@@ -34,20 +35,20 @@ func preparedScriptPrimary(
 	expected.Desired.Body = sources.BodyGeneration.Record.Body
 	value, err := encodeScriptRecord(expected)
 	if err != nil {
-		return Condition{}, err
+		return etcdstore.Condition{}, err
 	}
 	defer clear(value)
 	if current.ActiveReferences == 0 || !bytes.Equal(value, read.Entry.Value) {
-		return Condition{}, errs.New(errs.KindStateConflict, "Script changed during source preparation")
+		return etcdstore.Condition{}, errs.New(errs.KindStateConflict, "Script changed during source preparation")
 	}
-	return Condition{Key: key, ModRevision: read.Entry.ModRevision}, nil
+	return etcdstore.Condition{Key: key, ModRevision: read.Entry.ModRevision}, nil
 }
 
 func (ledger *ReleaseLedger) blueprintScriptPrimaryConditions(
 	ctx context.Context, hooks []ReleaseHookExecutionPublication,
-) ([]Condition, error) {
-	conditions := make([]Condition, 0, len(hooks))
-	byKey := make(map[string]Condition, len(hooks))
+) ([]etcdstore.Condition, error) {
+	conditions := make([]etcdstore.Condition, 0, len(hooks))
+	byKey := make(map[string]etcdstore.Condition, len(hooks))
 	for _, hook := range hooks {
 		script, execution := hook.Sources.Script.Record, hook.Execution
 		if script.Desired.ID != execution.ScriptID || script.EnvironmentID != execution.EnvironmentID ||

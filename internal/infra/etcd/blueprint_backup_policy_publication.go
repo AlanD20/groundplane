@@ -2,12 +2,13 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type preparedBlueprintBackupPolicyPublication struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	evidence   []backupPolicyReplacementCompare
 }
 
@@ -49,12 +50,12 @@ func prepareBlueprintBackupPolicyPublication(
 			return preparedBlueprintBackupPolicyPublication{}, err
 		}
 		publication.mutations = append(publication.mutations,
-			Mutation{Type: MutationPut, Key: backupPolicyKey(state.environmentID), Value: policyValue},
-			Mutation{Type: MutationPut, Key: environmentCoordinationKey(state.environmentID), Value: coordinationValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupPolicyKey(state.environmentID), Value: policyValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentCoordinationKey(state.environmentID), Value: coordinationValue},
 		)
 	}
 	compare := func(kind backupPolicyReplacementCompareKind, id, key string, revision int64) {
-		publication.conditions = append(publication.conditions, Condition{Key: key, ModRevision: revision})
+		publication.conditions = append(publication.conditions, etcdstore.Condition{Key: key, ModRevision: revision})
 		publication.evidence = append(publication.evidence, backupPolicyReplacementCompare{
 			Kind: kind, ID: id, ExpectedRevision: revision,
 		})
@@ -98,14 +99,14 @@ func prepareBlueprintBackupPolicyPublication(
 			}
 			publication.mutations = append(
 				publication.mutations,
-				Mutation{Type: MutationPut, Key: backupSourceKey(source.record.ID), Value: sourceValue},
-				Mutation{
-					Type:  MutationPut,
+				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupSourceKey(source.record.ID), Value: sourceValue},
+				etcdstore.Mutation{
+					Type:  etcdstore.MutationPut,
 					Key:   backupSourceEnvironmentKey(state.environmentID, source.record.ID),
 					Value: []byte(source.record.ID),
 				},
-				Mutation{
-					Type:  MutationPut,
+				etcdstore.Mutation{
+					Type:  etcdstore.MutationPut,
 					Key:   backupSourceIdentityKey(state.environmentID, source.record.Kind, source.record.TargetID),
 					Value: []byte(source.record.ID),
 				},
@@ -192,8 +193,8 @@ func prepareBlueprintBackupPolicyPublication(
 		if oldConnectorID != "" && oldConnectorID != newConnectorID {
 			publication.mutations = append(
 				publication.mutations,
-				Mutation{
-					Type: MutationDelete,
+				etcdstore.Mutation{
+					Type: etcdstore.MutationDelete,
 					Key:  backupPolicyConnectorReferenceKey(oldConnectorID, state.environmentID),
 				},
 			)
@@ -201,8 +202,8 @@ func prepareBlueprintBackupPolicyPublication(
 		if newConnectorID != "" && newConnectorID != oldConnectorID {
 			publication.mutations = append(
 				publication.mutations,
-				Mutation{
-					Type:  MutationPut,
+				etcdstore.Mutation{
+					Type:  etcdstore.MutationPut,
 					Key:   backupPolicyConnectorReferenceKey(newConnectorID, state.environmentID),
 					Value: []byte(state.environmentID),
 				},
@@ -229,8 +230,8 @@ func prepareBlueprintBackupPolicyPublication(
 			return preparedBlueprintBackupPolicyPublication{}, encodeErr
 		}
 		publication.mutations = append(publication.mutations,
-			Mutation{Type: MutationPut, Key: backupKeyKey(state.environmentID), Value: recordValue},
-			Mutation{Type: MutationPut, Key: backupKeyValueKey(state.environmentID), Value: encryptedValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupKeyKey(state.environmentID), Value: recordValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupKeyValueKey(state.environmentID), Value: encryptedValue},
 		)
 	}
 	return publication, nil
@@ -261,7 +262,7 @@ func classifyEnvironmentBlueprintBackupPolicyPublication(
 	publication preparedBlueprintBackupPolicyPublication,
 ) idempotencyPlanClassifier {
 	count := len(publication.conditions)
-	return func(revision int64, values []*KeyValue) error {
+	return func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) < count {
 			return errs.New(errs.KindInternal, "Blueprint Backup compare evidence is incomplete")
 		}

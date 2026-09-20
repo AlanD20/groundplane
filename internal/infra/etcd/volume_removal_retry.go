@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"slices"
 	"strconv"
@@ -43,7 +44,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	runtimeKey := removalrecord.RuntimeKey(source.Record.OperationID)
 	runtimeRead, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{runtimeKey}, Revision: source.ReadRevision},
+		etcdstore.GetManyRequest{Keys: []string{runtimeKey}, Revision: source.ReadRevision},
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -84,7 +85,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 			HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetTenant), source.Record.Owner.TenantID),
 		)
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: source.ReadRevision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: source.ReadRevision})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -92,7 +93,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 	}
 	defer clearKeyValues(read.Values)
-	conditions := []Condition{{Key: taskKey(source.Record.ID), ModRevision: source.Revision},
+	conditions := []etcdstore.Condition{{Key: taskKey(source.Record.ID), ModRevision: source.Revision},
 		{Key: taskKey(retry.ID)}, {Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
 		{Key: taskActiveOperationKey(retry.OperationID)}, {Key: taskQueueKey(retry.Executor, retry.ID)},
 		{Key: runtimeKey, ModRevision: runtimeRead.Values[0].ModRevision}}
@@ -105,7 +106,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		// Reserved idempotency keys are bound by the closed commit below, not
 		// exposed as writable keys in a generic Task mutation plan.
 		if index != 5 && index != 6 {
-			conditions = append(conditions, Condition{Key: keys[index], ModRevision: keyValueRevision(value)})
+			conditions = append(conditions, etcdstore.Condition{Key: keys[index], ModRevision: keyValueRevision(value)})
 		}
 	}
 	progress, err := removalrecord.DecodeProgress(read.Values[0].Value)
@@ -123,7 +124,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 			key := taskKey(pending.TaskID)
 			prior, err := repository.store.GetMany(
 				ctx,
-				GetManyRequest{Keys: []string{key}, Revision: source.ReadRevision},
+				etcdstore.GetManyRequest{Keys: []string{key}, Revision: source.ReadRevision},
 			)
 			if err != nil {
 				return IdempotencyTransactionResult{}, err
@@ -137,7 +138,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 			if err != nil {
 				return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 			}
-			conditions = append(conditions, Condition{Key: key, ModRevision: prior.Values[0].ModRevision})
+			conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: prior.Values[0].ModRevision})
 		}
 		if ValidateEnvironmentVolumeRemovalPendingRecovery(runtime, progress, pending, origin) != nil {
 			return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
@@ -203,13 +204,13 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(attemptValue)
-	conditions = append(conditions, Condition{Key: removalrecord.AttemptKey(runtime.OperationID, attempt.Ordinal)})
-	mutations := []Mutation{{Type: MutationPut, Key: taskKey(retry.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
-		{Type: MutationPut, Key: runtimeKey, Value: runtimeValue},
-		{Type: MutationPut, Key: removalrecord.AttemptKey(runtime.OperationID, attempt.Ordinal), Value: attemptValue}}
+	conditions = append(conditions, etcdstore.Condition{Key: removalrecord.AttemptKey(runtime.OperationID, attempt.Ordinal)})
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: taskKey(retry.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: runtimeKey, Value: runtimeValue},
+		{Type: etcdstore.MutationPut, Key: removalrecord.AttemptKey(runtime.OperationID, attempt.Ordinal), Value: attemptValue}}
 	ancestry, err := bindHierarchyMutation(
 		ctx,
 		repository.store,
@@ -230,7 +231,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	plan, err := newTaskIdempotencyMutationPlan(retry, initiation, ancestry.conditions, ancestry.mutations,
-		func(_ int64, _ []*KeyValue) error { return volumeRemovalTerminalConflict() })
+		func(_ int64, _ []*etcdstore.KeyValue) error { return volumeRemovalTerminalConflict() })
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -242,18 +243,18 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		ctx,
 		marker,
 		plan,
-		func(ctx context.Context, compares []Condition, writes []Mutation) (TransactionResult, error) {
-			all := append(append([]Condition(nil), compares...),
-				Condition{Key: rootKey, ModRevision: read.Values[5].ModRevision},
-				Condition{Key: replayKey, ModRevision: read.Values[6].ModRevision})
+		func(ctx context.Context, compares []etcdstore.Condition, writes []etcdstore.Mutation) (etcdstore.TransactionResult, error) {
+			all := append(append([]etcdstore.Condition(nil), compares...),
+				etcdstore.Condition{Key: rootKey, ModRevision: read.Values[5].ModRevision},
+				etcdstore.Condition{Key: replayKey, ModRevision: read.Values[6].ModRevision})
 			if len(all) > 24 || len(writes) > 24 {
-				return TransactionResult{}, errs.New(
+				return etcdstore.TransactionResult{}, errs.New(
 					errs.KindInternal,
 					"Volume removal retry exceeds its operation budget",
 				)
 			}
 			if err := validateBlueprintTransaction(repository.store, all, writes, 48, 900*1024); err != nil {
-				return TransactionResult{}, err
+				return etcdstore.TransactionResult{}, err
 			}
 			result, err := repository.store.Transact(ctx, all, writes)
 			if err != nil || result.Succeeded {
@@ -261,7 +262,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 			}
 			if len(result.FailureReads) != len(all) {
 				clearKeyValues(result.FailureReads)
-				return TransactionResult{}, volumeRemovalTerminalConflict()
+				return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 			}
 			// The plan classifies every losing operation fence as StateConflict.
 			// Its caller owns only the plan and new-marker failure reads.

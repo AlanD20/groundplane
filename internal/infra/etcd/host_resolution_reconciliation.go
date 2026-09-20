@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/netip"
 	"sort"
 	"strings"
@@ -17,8 +18,8 @@ import (
 // transaction; no handler or scheduler writes the projection directly.
 type hostResolutionReconciliationChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -143,7 +144,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		return err
 	}
 	defer clear(reference)
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			platformComponentOwnerKey(task.Target),
 			platformComponentKindKey(current.Record.Desired.Kind),
@@ -161,7 +162,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		string(indexes.Values[2].Value) != task.Target {
 		return errs.New(errs.KindStateConflict, "platform Component bootstrap provenance is unavailable")
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: componentKey(task.Target), ModRevision: current.Revision},
 		{Key: platformComponentOwnerKey(task.Target), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
@@ -172,22 +173,22 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		{Key: taskKey(task.ID)}, {Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskQueueKey(task.Executor, task.ID)},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: hostResolutionProjectionKey, Value: projectionValue},
-		{Type: MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderValue},
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: platformComponentTaskActiveKey(task.Target), Value: []byte(task.ID)},
-		{Type: MutationDelete, Key: platformComponentBootstrapKey(task.Target)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: hostResolutionProjectionKey, Value: projectionValue},
+		{Type: etcdstore.MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderValue},
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(task.Target), Value: []byte(task.ID)},
+		{Type: etcdstore.MutationDelete, Key: platformComponentBootstrapKey(task.Target)},
 	}
 	initiation, err := newPlatformTaskInitiation(TaskActorSystem)
 	if err != nil {
 		return err
 	}
 	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations,
-		func(_ int64, _ []*KeyValue) error {
+		func(_ int64, _ []*etcdstore.KeyValue) error {
 			return errs.New(errs.KindStateConflict, "platform DNS resolver Task publication conflicted")
 		})
 	if err != nil {
@@ -212,10 +213,10 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	current Versioned[ComponentRecord],
 	projection HostResolutionProjectionRecord,
 	task TaskRecord,
-	active *KeyValue,
+	active *etcdstore.KeyValue,
 	sealedPredecessor *TaskRecord,
 	priorObservation *ComponentObservationRecord,
-	baseConditions []Condition,
+	baseConditions []etcdstore.Condition,
 ) (hostResolutionReconciliationChange, error) {
 	if repository.platformResolverTaskPreparer == nil {
 		return hostResolutionReconciliationChange{}, errs.New(
@@ -254,7 +255,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 				"platform resolver predecessor does not own the active fence",
 			)
 		}
-		predecessorRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+		predecessorRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{taskKey(sealedPredecessor.ID)}, Revision: active.ModRevision,
 		})
 		if readErr != nil {
@@ -270,7 +271,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		if decodeErr != nil {
 			return hostResolutionReconciliationChange{}, decodeErr
 		}
-		predecessorInputRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+		predecessorInputRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{platformComponentTaskRenderInputKey(predecessor.PlanID)}, Revision: active.ModRevision,
 		})
 		if readErr != nil {
@@ -347,7 +348,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 			"platform resolver render input identity changed",
 		)
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			platformComponentOwnerKey(current.Record.Desired.ID),
 			platformComponentKindKey(current.Record.Desired.Kind),
@@ -382,8 +383,8 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		clear(taskValue)
 		return hostResolutionReconciliationChange{}, err
 	}
-	conditions := append([]Condition(nil), baseConditions...)
-	for _, condition := range []Condition{
+	conditions := append([]etcdstore.Condition(nil), baseConditions...)
+	for _, condition := range []etcdstore.Condition{
 		{Key: componentKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{Key: platformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
@@ -394,19 +395,19 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	} {
 		conditions = appendHostResolutionCondition(conditions, condition)
 	}
-	activeCondition := Condition{Key: platformComponentTaskActiveKey(current.Record.Desired.ID)}
+	activeCondition := etcdstore.Condition{Key: platformComponentTaskActiveKey(current.Record.Desired.ID)}
 	if active != nil {
 		activeCondition.ModRevision = active.ModRevision
 	}
 	conditions = appendHostResolutionCondition(conditions, activeCondition)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderValue},
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskWorkspacePlatformIndexKey(task.ID), Value: []byte(task.ID)},
-		{Type: MutationPut, Key: platformComponentTaskActiveKey(current.Record.Desired.ID), Value: []byte(task.ID)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderValue},
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskWorkspacePlatformIndexKey(task.ID), Value: []byte(task.ID)},
+		{Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(current.Record.Desired.ID), Value: []byte(task.ID)},
 	}
 	return hostResolutionReconciliationChange{
 		applies: true, conditions: conditions, mutations: mutations,
@@ -536,7 +537,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 			source.Record.Params[TaskPlatformComponentDesiredSHA256Param] {
 		return hostResolutionReconciliationChange{}, nil
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			platformComponentTaskRenderInputKey(source.Record.PlanID),
 			platformComponentTaskActiveKey(source.Record.Target),
@@ -566,7 +567,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 	}
 	origin := source
 	if input.TaskID != source.Record.ID {
-		originRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+		originRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{taskKey(input.TaskID)}, Revision: source.ReadRevision,
 		})
 		if readErr != nil {
@@ -597,19 +598,19 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 			"platform resolver already has an active successor",
 		)
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: platformComponentTaskRenderInputKey(input.PlanID), ModRevision: state.Values[0].ModRevision},
 		{Key: platformComponentTaskActiveKey(input.ComponentID)},
 	}
 	if origin.Record.ID != source.Record.ID {
-		conditions = append(conditions, Condition{Key: taskKey(origin.Record.ID), ModRevision: origin.Revision})
+		conditions = append(conditions, etcdstore.Condition{Key: taskKey(origin.Record.ID), ModRevision: origin.Revision})
 	}
 	value := []byte(retry.ID)
 	return hostResolutionReconciliationChange{
 		applies:    true,
 		conditions: conditions,
-		mutations: []Mutation{{
-			Type: MutationPut, Key: platformComponentTaskActiveKey(input.ComponentID), Value: value,
+		mutations: []etcdstore.Mutation{{
+			Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(input.ComponentID), Value: value,
 		}},
 		values: [][]byte{value},
 	}, nil
@@ -622,7 +623,7 @@ func (repository *TaskRepository) platformResolverAtRevision(
 	componentIDs := make([]string, 0, 1)
 	start := ""
 	for {
-		page, err := repository.store.Range(ctx, RangeRequest{
+		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: platformComponentOwnerPrefix, StartExclusive: start,
 			Limit: MaximumPageLimit, Revision: revision,
 		})
@@ -674,7 +675,7 @@ func (repository *TaskRepository) platformResolverAtRevision(
 	for index, componentID := range componentIDs {
 		keys[index] = componentKey(componentID)
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return Versioned[ComponentRecord]{}, err
 	}
@@ -733,8 +734,8 @@ func (repository *TaskRepository) platformResolverActiveAtRevision(
 	ctx context.Context,
 	componentID string,
 	revision int64,
-) (*KeyValue, error) {
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+) (*etcdstore.KeyValue, error) {
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{platformComponentTaskActiveKey(componentID)}, Revision: revision,
 	})
 	if err != nil {
@@ -751,7 +752,7 @@ func (repository *TaskRepository) platformResolverActiveAtRevision(
 		ids.Validate(ids.KindTask, string(active.Value)) != nil {
 		return nil, errs.New(errs.KindInternal, "platform resolver active fence is corrupt")
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskKey(string(active.Value))}, Revision: revision,
 	})
 	if err != nil {
@@ -773,7 +774,7 @@ func (repository *TaskRepository) platformResolverTaskInputAtRevision(
 	task TaskRecord,
 	revision int64,
 ) (PlatformComponentTaskRenderInput, error) {
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{platformComponentTaskRenderInputKey(task.PlanID)}, Revision: revision,
 	})
 	if err != nil {
@@ -816,7 +817,7 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	task TaskRecord,
 	terminalStatus TaskStatus,
 	revision int64,
-	baseConditions []Condition,
+	baseConditions []etcdstore.Condition,
 	platformChange platformComponentTaskChange,
 ) (hostResolutionReconciliationChange, error) {
 	resource := task.Params[TaskResourceKindParam]
@@ -857,7 +858,7 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		components[id] = record
 	}
 	hostRoutes := make([]HostResolutionRouteRecord, 0, len(routes))
-	conditions := append([]Condition(nil), baseConditions...)
+	conditions := append([]etcdstore.Condition(nil), baseConditions...)
 	for _, condition := range componentConditions {
 		conditions = appendHostResolutionCondition(conditions, condition)
 	}
@@ -887,7 +888,7 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 			IPv4: provider.Runtime.PinnedIPv4,
 		})
 	}
-	currentRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	currentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{hostResolutionProjectionKey}, Revision: revision,
 	})
 	if err != nil {
@@ -970,17 +971,17 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 	}
 	resolverTask := resolverAttempt
 	if active != nil && !resolverTask {
-		change.conditions = appendHostResolutionCondition(change.conditions, Condition{
+		change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
 			Key: active.Key, ModRevision: active.ModRevision,
 		})
 		return change, nil
 	}
 	if !resolver.Record.Desired.Enabled {
 		if resolverTask {
-			change.conditions = appendHostResolutionCondition(change.conditions, Condition{
+			change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
 				Key: active.Key, ModRevision: active.ModRevision,
 			})
-			change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: active.Key})
+			change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key})
 		}
 		return change, nil
 	}
@@ -1000,10 +1001,10 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 		stale := stored == nil || stored.InputRevision != input.HostResolutionInputRevision ||
 			stored.InputSHA256 != input.HostResolutionSHA256
 		if !stale {
-			change.conditions = appendHostResolutionCondition(change.conditions, Condition{
+			change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
 				Key: active.Key, ModRevision: active.ModRevision,
 			})
-			change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: active.Key})
+			change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key})
 			return change, nil
 		}
 		successor := newPlatformDNSResolverTask(
@@ -1019,10 +1020,10 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 			return hostResolutionReconciliationChange{}, contributionErr
 		}
 		if !contribution.applies {
-			change.conditions = appendHostResolutionCondition(change.conditions, Condition{
+			change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
 				Key: active.Key, ModRevision: active.ModRevision,
 			})
-			change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: active.Key})
+			change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key})
 			return change, nil
 		}
 		change.conditions = contribution.conditions
@@ -1077,7 +1078,7 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 	result := make([]scannedRoute, 0)
 	start := ""
 	for {
-		page, err := repository.store.Range(ctx, RangeRequest{
+		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: environmentComposeProjectionPrefix, StartExclusive: start,
 			Limit: MaximumPageLimit, Revision: revision,
 		})
@@ -1130,7 +1131,7 @@ func (repository *TaskRepository) hostResolutionComponents(
 	ctx context.Context,
 	idsByComponent map[string]struct{},
 	revision int64,
-) (map[string]ComponentRecord, []Condition, error) {
+) (map[string]ComponentRecord, []etcdstore.Condition, error) {
 	keys := make([]string, 0, len(idsByComponent))
 	for id := range idsByComponent {
 		keys = append(keys, componentKey(id))
@@ -1141,14 +1142,14 @@ func (repository *TaskRepository) hostResolutionComponents(
 		return result, nil, nil
 	}
 	stateKeys := append([]string{componentWriteFenceKey}, keys...)
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
 		return nil, nil, err
 	}
 	if state == nil || state.ReadRevision != revision || len(state.Values) != len(stateKeys) {
 		return nil, nil, errs.New(errs.KindInternal, "host-resolution Component read is incomplete")
 	}
-	fence := Condition{Key: componentWriteFenceKey}
+	fence := etcdstore.Condition{Key: componentWriteFenceKey}
 	if state.Values[0] != nil {
 		fence.ModRevision = state.Values[0].ModRevision
 	}
@@ -1166,7 +1167,7 @@ func (repository *TaskRepository) hostResolutionComponents(
 		}
 		result[id] = record
 	}
-	return result, []Condition{fence}, nil
+	return result, []etcdstore.Condition{fence}, nil
 }
 
 func validHostResolutionProvider(record ComponentRecord) bool {
@@ -1182,7 +1183,7 @@ func validHostResolutionProvider(record ComponentRecord) bool {
 		!address.IsMulticast() && address.String() == record.Runtime.PinnedIPv4
 }
 
-func appendHostResolutionCondition(conditions []Condition, candidate Condition) []Condition {
+func appendHostResolutionCondition(conditions []etcdstore.Condition, candidate etcdstore.Condition) []etcdstore.Condition {
 	for _, existing := range conditions {
 		if existing.Key != candidate.Key {
 			continue
@@ -1203,7 +1204,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 	componentOverride := make(map[string]ComponentRecord)
 	switch task.Params[TaskResourceKindParam] {
 	case TaskResourceRoute:
-		mutationRead, err := repository.store.GetMany(ctx, GetManyRequest{
+		mutationRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{routeMutationIntentKey(task.ID)}, Revision: revision,
 		})
 		if err != nil {
@@ -1213,7 +1214,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 			return "", nil, nil, errs.New(errs.KindInternal, "host-resolution Route intent read is incomplete")
 		}
 		if mutationRead.Values[0] == nil {
-			removalRead, removalErr := repository.store.GetMany(ctx, GetManyRequest{
+			removalRead, removalErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 				Keys: []string{routeRemovalIntentKey(task.ID)}, Revision: revision,
 			})
 			if removalErr != nil {
@@ -1253,7 +1254,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 			}
 		}
 	case TaskResourceComponent:
-		read, err := repository.store.GetMany(ctx, GetManyRequest{
+		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{componentTaskIntentKey(task.ID)}, Revision: revision,
 		})
 		if err != nil {

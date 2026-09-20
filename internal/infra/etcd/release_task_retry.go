@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -11,8 +12,8 @@ import (
 
 type releaseTaskRetryChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 }
 
 func (change *releaseTaskRetryChange) clear() {
@@ -50,7 +51,7 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 		releaseOperationKey(source.OperationID), releaseFenceSetKey(source.Owner.EnvironmentID),
 		environmentMutationEpochKey(source.Owner.EnvironmentID),
 	}
-	base, err := repository.store.GetMany(ctx, GetManyRequest{Keys: baseKeys, Revision: revision})
+	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: revision})
 	if err != nil {
 		return releaseTaskRetryChange{}, err
 	}
@@ -100,16 +101,16 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 			releaseRenderInputStagingKey(publicationID, member.ReleaseID),
 		)
 	}
-	members, err := repository.store.GetMany(ctx, GetManyRequest{Keys: memberKeys, Revision: revision})
+	members, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: memberKeys, Revision: revision})
 	if err != nil {
 		return releaseTaskRetryChange{}, err
 	}
 	if members == nil || members.ReadRevision != revision || len(members.Values) != len(memberKeys) {
 		return releaseTaskRetryChange{}, corruptReleaseRecord()
 	}
-	conditions := make([]Condition, 0, len(baseKeys)+len(memberKeys))
+	conditions := make([]etcdstore.Condition, 0, len(baseKeys)+len(memberKeys))
 	for index, value := range base.Values {
-		conditions = append(conditions, Condition{Key: baseKeys[index], ModRevision: value.ModRevision})
+		conditions = append(conditions, etcdstore.Condition{Key: baseKeys[index], ModRevision: value.ModRevision})
 	}
 	for index, reference := range manifest.Members {
 		intentValue, renderValue := members.Values[index*2], members.Values[index*2+1]
@@ -133,8 +134,8 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 			return releaseTaskRetryChange{}, corruptReleaseRecord()
 		}
 		conditions = append(conditions,
-			Condition{Key: memberKeys[index*2], ModRevision: intentValue.ModRevision},
-			Condition{Key: memberKeys[index*2+1], ModRevision: renderValue.ModRevision},
+			etcdstore.Condition{Key: memberKeys[index*2], ModRevision: intentValue.ModRevision},
+			etcdstore.Condition{Key: memberKeys[index*2+1], ModRevision: renderValue.ModRevision},
 		)
 	}
 	hookTransfer, err := repository.prepareReleaseHookExecutionRetryTransfer(ctx, source, retry, revision)
@@ -169,10 +170,10 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 	}
 	epochValue := slices.Clone(base.Values[4].Value)
 	conditions = append(conditions, hookTransfer.conditions...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: baseKeys[2], Value: headValue},
-		{Type: MutationPut, Key: baseKeys[3], Value: fenceValue},
-		{Type: MutationPut, Key: baseKeys[4], Value: epochValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: baseKeys[2], Value: headValue},
+		{Type: etcdstore.MutationPut, Key: baseKeys[3], Value: fenceValue},
+		{Type: etcdstore.MutationPut, Key: baseKeys[4], Value: epochValue},
 	}
 	mutations = append(mutations, hookTransfer.mutations...)
 	hookTransfer.mutations = nil

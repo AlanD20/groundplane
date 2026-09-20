@@ -1,21 +1,24 @@
 package etcd
 
-import "github.com/AlanD20/groundplane/pkg/errs"
+import (
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
 
 func attachDesiredHeadConditions(
 	consumerEnvironmentID string,
 	consumerRevision int64,
 	backingService Versioned[ServiceRecord],
 	services []Versioned[ServiceRecord],
-) ([]Condition, error) {
-	candidates := []Condition{{
+) ([]etcdstore.Condition, error) {
+	candidates := []etcdstore.Condition{{
 		Key: environmentBlueprintHeadKey(consumerEnvironmentID), ModRevision: consumerRevision,
 	}, serviceDesiredCondition(backingService)}
 	for _, service := range services {
 		candidates = append(candidates, serviceDesiredCondition(service))
 	}
 
-	conditions := make([]Condition, 0, len(candidates))
+	conditions := make([]etcdstore.Condition, 0, len(candidates))
 	for _, candidate := range candidates {
 		duplicate := false
 		for _, condition := range conditions {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -14,7 +15,7 @@ type ComponentRepository struct {
 	store hierarchyStore
 }
 
-func NewComponentRepository(store Store) (*ComponentRepository, error) {
+func NewComponentRepository(store etcdstore.Store) (*ComponentRepository, error) {
 	return newComponentRepository(store)
 }
 
@@ -50,15 +51,15 @@ func (repository *ComponentRepository) CreateEnvironmentComponent(
 	result, err := repository.store.Transact(
 		ctx,
 		componentWriteConditions(environment, project, record, nil, 0, 0),
-		[]Mutation{
-			{Type: MutationPut, Key: componentKey(record.Desired.ID), Value: value},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: componentKey(record.Desired.ID), Value: value},
 			{
-				Type:  MutationPut,
+				Type:  etcdstore.MutationPut,
 				Key:   componentEnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID),
 				Value: []byte(record.Desired.ID),
 			},
 			{
-				Type:  MutationPut,
+				Type:  etcdstore.MutationPut,
 				Key:   componentEnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind),
 				Value: []byte(record.Desired.ID),
 			},
@@ -185,7 +186,7 @@ func (repository *ComponentRepository) replace(
 			"Component Secret reference changes require Component reconciliation",
 		)
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			componentEnvironmentOwnerKey(current.Record.Desired.OwnerID, current.Record.Desired.ID),
 			componentEnvironmentKindKey(current.Record.Desired.OwnerID, current.Record.Desired.Kind),
@@ -215,8 +216,8 @@ func (repository *ComponentRepository) replace(
 			indexes.Values[0].ModRevision,
 			indexes.Values[1].ModRevision,
 		),
-		[]Mutation{
-			{Type: MutationPut, Key: componentKey(replacement.Desired.ID), Value: value},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: componentKey(replacement.Desired.ID), Value: value},
 			componentWriteFenceMutation(replacement.Desired.ID),
 		},
 	)
@@ -240,16 +241,16 @@ func componentWriteConditions(
 	current *Versioned[ComponentRecord],
 	ownerRevision int64,
 	kindRevision int64,
-) []Condition {
-	primary := Condition{Key: componentKey(record.Desired.ID)}
-	owner := Condition{Key: componentEnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID)}
-	kind := Condition{Key: componentEnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind)}
+) []etcdstore.Condition {
+	primary := etcdstore.Condition{Key: componentKey(record.Desired.ID)}
+	owner := etcdstore.Condition{Key: componentEnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID)}
+	kind := etcdstore.Condition{Key: componentEnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind)}
 	if current != nil {
 		primary.ModRevision = current.Revision
 		owner.ModRevision = ownerRevision
 		kind.ModRevision = kindRevision
 	}
-	return []Condition{
+	return []etcdstore.Condition{
 		primary,
 		owner,
 		kind,
@@ -299,7 +300,7 @@ func validateComponentVersion(current Versioned[ComponentRecord]) error {
 }
 
 func classifyComponentWriteConflict(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
 	record ComponentRecord,

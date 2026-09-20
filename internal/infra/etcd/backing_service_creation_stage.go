@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -45,8 +46,8 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 	}
 	defer clear(value)
 	result, err := repository.store.Transact(ctx,
-		[]Condition{{Key: key}},
-		[]Mutation{{Type: MutationPut, Key: key, Value: value}},
+		[]etcdstore.Condition{{Key: key}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: value}},
 	)
 	if err != nil {
 		return Versioned[BackingServiceCreationStage]{}, err

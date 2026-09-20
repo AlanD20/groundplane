@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"net/netip"
 	"strconv"
@@ -17,8 +18,8 @@ import (
 // publisher, not an independently executable removal transaction. Task and
 // marker are supplied at construction so unrelated publication cannot reuse it.
 type volumeRemovalInitialPublication struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 }
 
 // PublishEnvironmentVolumeRemovalWithTask is the closed Volume entry into the
@@ -114,11 +115,11 @@ func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 				}
 				lockKey := removalrecord.EnvironmentLockKey(runtime.EnvironmentID)
 				publication.conditions = append(publication.conditions,
-					Condition{Key: taskMaterializationWriterKey(runtime.EnvironmentID)}, Condition{Key: lockKey},
+					etcdstore.Condition{Key: taskMaterializationWriterKey(runtime.EnvironmentID)}, etcdstore.Condition{Key: lockKey},
 				)
 				publication.conditions = append(publication.conditions, evidenceConditions...)
-				publication.mutations = append(publication.mutations, Mutation{
-					Type: MutationPut, Key: lockKey, Value: lockValue,
+				publication.mutations = append(publication.mutations, etcdstore.Mutation{
+					Type: etcdstore.MutationPut, Key: lockKey, Value: lockValue,
 				})
 				ancestry, err := bindHierarchyMutation(ctx, repository.store, readRevision,
 					HierarchyMutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, nil, nil)
@@ -143,7 +144,7 @@ func (publication volumeRemovalInitialPublication) classifyConflict(
 	baseCount int,
 	previous idempotencyPlanClassifier,
 ) idempotencyPlanClassifier {
-	return func(revision int64, values []*KeyValue) error {
+	return func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != baseCount+len(publication.conditions) {
 			return errs.New(errs.KindInternal, "Volume removal publication compare evidence is incomplete")
 		}
@@ -217,15 +218,15 @@ func prepareVolumeRemovalInitialPublication(
 	return volumeRemovalInitialPublication{
 		// Any retained record excludes operation-id reuse, including orphaned
 		// successor/completion evidence. One bounded prefix fence covers them.
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: removalrecord.Root(runtime.OperationID), Prefix: true},
 			{Key: removalrecord.OwnerKey(runtime.VolumeID)},
 		},
-		mutations: []Mutation{
-			{Type: MutationPut, Key: removalrecord.RuntimeKey(runtime.OperationID), Value: runtimeValue},
-			{Type: MutationPut, Key: removalrecord.AttemptKey(runtime.OperationID, 1), Value: attemptValue},
-			{Type: MutationPut, Key: removalrecord.ProgressKey(runtime.OperationID), Value: progressValue},
-			{Type: MutationPut, Key: removalrecord.OwnerKey(runtime.VolumeID), Value: ownerValue},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: removalrecord.RuntimeKey(runtime.OperationID), Value: runtimeValue},
+			{Type: etcdstore.MutationPut, Key: removalrecord.AttemptKey(runtime.OperationID, 1), Value: attemptValue},
+			{Type: etcdstore.MutationPut, Key: removalrecord.ProgressKey(runtime.OperationID), Value: progressValue},
+			{Type: etcdstore.MutationPut, Key: removalrecord.OwnerKey(runtime.VolumeID), Value: ownerValue},
 		},
 	}, nil
 }

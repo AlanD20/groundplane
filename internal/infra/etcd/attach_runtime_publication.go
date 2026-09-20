@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -11,7 +12,7 @@ import (
 func (repository *AttachRepository) publishAttachRuntimeTask(
 	ctx context.Context, task TaskRecord, input AttachTaskRenderInput, initiation TaskInitiation,
 	marker IdempotencyMarker, mutationContext *ordinaryEnvironmentMutationContext,
-	conditions []Condition, mutations []Mutation, classifyConflict func(int64, []*KeyValue) error,
+	conditions []etcdstore.Condition, mutations []etcdstore.Mutation, classifyConflict func(int64, []*etcdstore.KeyValue) error,
 ) (IdempotencyTransactionResult, error) {
 	conditions = append(conditions, attachRuntimeSourceConditions(input)...)
 	binding, err := mutationContext.bind(ctx, repository.store, conditions, mutations, true)
@@ -20,14 +21,14 @@ func (repository *AttachRepository) publishAttachRuntimeTask(
 	}
 	defer binding.clear()
 	defer clearMutationValues(binding.mutations)
-	classify := func(revision int64, values []*KeyValue) error {
+	classify := func(revision int64, values []*etcdstore.KeyValue) error {
 		return binding.classify(revision, values, classifyConflict)
 	}
 	plan, err := newTaskIdempotencyMutationPlan(task, initiation, binding.conditions, binding.mutations, classify)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := plan.enforceTransactionBounds(func(conditions []Condition, mutations []Mutation) error {
+	if err := plan.enforceTransactionBounds(func(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
 		budget, err := repository.store.MeasureTransaction(ctx, conditions, mutations)
 		if err != nil {
 			return err

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"sort"
 	"time"
@@ -277,7 +278,7 @@ type BlueprintReleasePublicationEvidence struct {
 func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 	ctx context.Context,
 	evidence BlueprintReleasePublicationEvidence,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	native := make([]BlueprintNativePredecessor, len(evidence.NativePredecessors))
 	for index, capture := range evidence.NativePredecessors {
 		native[index] = capture.Runtime()
@@ -347,11 +348,11 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 		conditions = append(conditions, guards...)
 		conditions = append(
 			conditions,
-			Condition{Key: releaseProjectionKey(captured.ServiceID), ModRevision: captured.ProjectionRevision},
-			Condition{Key: environmentComposeProjectionKey(evidence.EnvironmentID), ModRevision: applied.Revision},
+			etcdstore.Condition{Key: releaseProjectionKey(captured.ServiceID), ModRevision: captured.ProjectionRevision},
+			etcdstore.Condition{Key: environmentComposeProjectionKey(evidence.EnvironmentID), ModRevision: applied.Revision},
 		)
 		if captured.Serving != nil {
-			conditions = append(conditions, Condition{
+			conditions = append(conditions, etcdstore.Condition{
 				Key:         serviceruntimerecord.Key(captured.ServiceID),
 				ModRevision: captured.RuntimeRevision,
 			})

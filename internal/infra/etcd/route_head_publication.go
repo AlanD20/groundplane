@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -11,8 +12,8 @@ import (
 )
 
 type routeHeadPublication struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -104,14 +105,14 @@ func prepareRouteHeadPublication(
 		return routeHeadPublication{}, err
 	}
 	publication := routeHeadPublication{
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID)},
 			{Key: environmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID)},
 			{Key: environmentBlueprintHeadKey(claim.EnvironmentID), ModRevision: expectedHeadRevision},
 			{Key: removalrecord.EnvironmentLockKey(claim.EnvironmentID)},
 		},
-		mutations: []Mutation{{
-			Type: MutationPut, Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID), Value: descriptorValue,
+		mutations: []etcdstore.Mutation{{
+			Type: etcdstore.MutationPut, Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID), Value: descriptorValue,
 		}},
 	}
 	publication.values = append(publication.values, descriptorValue)
@@ -136,8 +137,8 @@ func prepareRouteHeadPublication(
 				return routeHeadPublication{}, encodeErr
 			}
 			key := environmentBlueprintChunkKeyFor(claim.EnvironmentID, claim.RevisionID, family, index)
-			publication.conditions = append(publication.conditions, Condition{Key: key})
-			publication.mutations = append(publication.mutations, Mutation{Type: MutationPut, Key: key, Value: value})
+			publication.conditions = append(publication.conditions, etcdstore.Condition{Key: key})
+			publication.mutations = append(publication.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
 			publication.values = append(publication.values, value)
 		}
 	}
@@ -148,8 +149,8 @@ func prepareRouteHeadPublication(
 		return routeHeadPublication{}, err
 	}
 	publication.values = append(publication.values, rootValue)
-	publication.mutations = append(publication.mutations, Mutation{
-		Type: MutationPut, Key: environmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID), Value: rootValue,
+	publication.mutations = append(publication.mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: environmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID), Value: rootValue,
 	})
 	if publishHead {
 		reference, referenceErr := encodeTaskReference(task.ID)
@@ -158,8 +159,8 @@ func prepareRouteHeadPublication(
 			return routeHeadPublication{}, referenceErr
 		}
 		publication.values = append(publication.values, reference)
-		publication.mutations = append(publication.mutations, Mutation{
-			Type: MutationPut, Key: environmentBlueprintHeadKey(claim.EnvironmentID), Value: reference,
+		publication.mutations = append(publication.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(claim.EnvironmentID), Value: reference,
 		})
 	}
 	_ = store
@@ -172,7 +173,7 @@ func prepareRouteHeadPromotion(
 	intent RouteRemovalIntent,
 	revision int64,
 ) (routeHeadPublication, error) {
-	lock, err := store.GetMany(ctx, GetManyRequest{
+	lock, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{removalrecord.EnvironmentLockKey(intent.EnvironmentID)}, Revision: revision,
 	})
 	if err != nil {
@@ -205,7 +206,7 @@ func prepareRouteHeadCandidate(
 	)
 	rootKey := environmentBlueprintRootKey(intent.EnvironmentID, candidate.RevisionID)
 	headKey := environmentBlueprintHeadKey(intent.EnvironmentID)
-	state, err := store.GetMany(ctx, GetManyRequest{
+	state, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{descriptorKey, rootKey, headKey}, Revision: revision,
 	})
 	if err != nil {
@@ -269,15 +270,15 @@ func prepareRouteHeadCandidate(
 		return routeHeadPublication{}, err
 	}
 	return routeHeadPublication{
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: descriptorKey, ModRevision: state.Values[0].ModRevision},
 			{Key: rootKey, ModRevision: state.Values[1].ModRevision},
 			{Key: headKey, ModRevision: state.Values[2].ModRevision},
 			{Key: removalrecord.EnvironmentLockKey(intent.EnvironmentID)},
 		},
-		mutations: []Mutation{
-			{Type: MutationPut, Key: descriptorKey, Value: descriptorValue},
-			{Type: MutationPut, Key: headKey, Value: reference},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: descriptorKey, Value: descriptorValue},
+			{Type: etcdstore.MutationPut, Key: headKey, Value: reference},
 		},
 		values: [][]byte{descriptorValue, reference},
 	}, nil
@@ -296,7 +297,7 @@ func validateCompletedRouteHeadReplay(
 	}
 	candidateRevisionID := task.ID
 	if task.RetryOf != "" {
-		read, err := store.GetMany(ctx, GetManyRequest{
+		read, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{routeRemovalIntentKey(task.RetryOf)}, Revision: revision,
 		})
 		if err != nil {
@@ -323,7 +324,7 @@ func validateCompletedRouteHeadReplay(
 		componentTaskActiveEnvironmentKey(environmentID),
 		routeObservationKey(task.Target),
 	}
-	state, err := store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	state, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return err
 	}
@@ -379,8 +380,8 @@ func clearRouteHeadPublication(publication routeHeadPublication) {
 	}
 }
 
-func classifyRouteHeadConflict(conditions []Condition) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+func classifyRouteHeadConflict(conditions []etcdstore.Condition) idempotencyPlanClassifier {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "Route desired head compare evidence is incomplete")
 		}

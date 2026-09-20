@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 
 	ref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -16,7 +17,7 @@ func (adapter *scriptSourceReferenceStore) GetMany(
 	keys []string,
 	revision int64,
 ) (*ref.GetManyResult, error) {
-	read, err := adapter.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil || read == nil {
 		return nil, err
 	}
@@ -38,7 +39,7 @@ func (adapter *scriptSourceReferenceStore) Range(
 	prefix string,
 	limit int64,
 ) (*ref.RangeResult, error) {
-	read, err := adapter.store.Range(ctx, RangeRequest{Prefix: prefix, Limit: limit})
+	read, err := adapter.store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: limit})
 	if err != nil || read == nil {
 		return nil, err
 	}
@@ -99,19 +100,19 @@ func (adapter *scriptSourceReferenceStore) AdjustScriptPrimary(
 	return encodeEnvelope("script", stored)
 }
 
-func convertScriptSourceConditions(input []ref.Condition) []Condition {
-	result := make([]Condition, len(input))
+func convertScriptSourceConditions(input []ref.Condition) []etcdstore.Condition {
+	result := make([]etcdstore.Condition, len(input))
 	for index, condition := range input {
-		result[index] = Condition{Key: condition.Key, ModRevision: condition.ModRevision, Prefix: condition.Prefix}
+		result[index] = etcdstore.Condition{Key: condition.Key, ModRevision: condition.ModRevision, Prefix: condition.Prefix}
 	}
 	return result
 }
 
-func convertScriptSourceMutations(input []ref.Mutation) []Mutation {
-	result := make([]Mutation, len(input))
+func convertScriptSourceMutations(input []ref.Mutation) []etcdstore.Mutation {
+	result := make([]etcdstore.Mutation, len(input))
 	for index, mutation := range input {
-		result[index] = Mutation{
-			Type:   MutationType(mutation.Type),
+		result[index] = etcdstore.Mutation{
+			Type:   etcdstore.MutationType(mutation.Type),
 			Key:    mutation.Key,
 			Value:  append([]byte(nil), mutation.Value...),
 			Prefix: mutation.Prefix,

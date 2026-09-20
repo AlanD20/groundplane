@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -13,13 +14,13 @@ import (
 // cleanup cannot invalidate the staged set between this read and publication.
 func (repository *HierarchyRepository) volumeRemovalEvidenceConditions(
 	ctx context.Context, runtime removal.Runtime, sourceRevisionID string, readRevision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	keys := []string{
 		removal.EvidenceManifestKey(runtime.OperationID),
 		removal.EvidenceCursorKey(runtime.OperationID),
 		removal.EvidenceSealKey(runtime.OperationID),
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: readRevision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
 		return nil, err
 	}
@@ -30,12 +31,12 @@ func (repository *HierarchyRepository) volumeRemovalEvidenceConditions(
 	if read.ReadRevision != readRevision || len(read.Values) != len(keys) {
 		return nil, volumeRemovalEvidenceConflict()
 	}
-	conditions := make([]Condition, len(keys))
+	conditions := make([]etcdstore.Condition, len(keys))
 	for index, value := range read.Values {
 		if value == nil || value.Key != keys[index] || value.ModRevision <= 0 || value.ModRevision > readRevision {
 			return nil, volumeRemovalEvidenceConflict()
 		}
-		conditions[index] = Condition{Key: keys[index], ModRevision: value.ModRevision}
+		conditions[index] = etcdstore.Condition{Key: keys[index], ModRevision: value.ModRevision}
 	}
 	manifest, err := removal.DecodeEvidenceManifest(read.Values[0].Value)
 	if err != nil {

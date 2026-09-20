@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -62,7 +63,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		)
 	}
 
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			scriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
 			scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.Slug),
@@ -109,7 +110,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	}
 	defer clear(activeValue)
 
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -140,20 +141,20 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		{Key: scriptSetActiveKey(current.Record.EnvironmentID), ModRevision: active.Revision},
 	}
 	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
-			Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetScript), scriptID),
+			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetScript), scriptID),
 			Value: tombstoneValue,
 		},
-		{Type: MutationPut, Key: scriptSetActiveKey(current.Record.EnvironmentID), Value: activeValue},
+		{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(current.Record.EnvironmentID), Value: activeValue},
 	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
@@ -184,7 +185,7 @@ func classifyScriptDeletionStartConflict(
 	current Versioned[ScriptRecord],
 	operationID string,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		expected := 15
 		if project.Record.TenantID != "" {
 			expected++

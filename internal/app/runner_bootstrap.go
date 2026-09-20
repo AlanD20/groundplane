@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
@@ -9,7 +10,7 @@ import (
 )
 
 func bootstrapRunnerNetworkPool(
-	ctx context.Context, store etcd.Store,
+	ctx context.Context, store etcdstore.Store,
 	controllerConfig config.ControllerConfig,
 ) error {
 	pools, err := controllerConfig.AllocationPools()

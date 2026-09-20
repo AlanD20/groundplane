@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"regexp"
 	"slices"
 	"strings"
@@ -67,8 +68,8 @@ func validHierarchyDeletionRawStableID(value string) bool {
 	return hierarchyDeletionRawStableIDPattern.MatchString(value)
 }
 
-func enforceHierarchyDeletionTransaction(conditions []Condition, mutations []Mutation) error {
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
+func enforceHierarchyDeletionTransaction(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
+	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion transaction exceeds its operation limit")
 	}
 	size := 0
@@ -247,7 +248,7 @@ func decodeHierarchyDeletionAction(value []byte) (HierarchyDeletionAction, error
 	return action, nil
 }
 
-func hierarchyDeletionTransactionSize(conditions []Condition, mutations []Mutation) int {
+func hierarchyDeletionTransactionSize(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) int {
 	total := 0
 	for _, condition := range conditions {
 		total += len(condition.Key) + 24
@@ -258,9 +259,9 @@ func hierarchyDeletionTransactionSize(conditions []Condition, mutations []Mutati
 	return total
 }
 
-func validateHierarchyDeletionTransaction(conditions []Condition, mutations []Mutation, operationLimit int) error {
+func validateHierarchyDeletionTransaction(conditions []etcdstore.Condition, mutations []etcdstore.Mutation, operationLimit int) error {
 	if operationLimit <= 0 || len(conditions)+len(mutations) > operationLimit ||
-		len(conditions)+len(mutations) > maximumTransactionOperations {
+		len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion transaction exceeds its operation limit")
 	}
 	if hierarchyDeletionTransactionSize(conditions, mutations) > hierarchyDeletionTransactionBytes {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"time"
 
@@ -63,7 +64,7 @@ func prepareRecoverySecretPins(
 	}
 	read, err := store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{runtimeConfigurationHeadKey(task.Owner.EnvironmentID)}},
+		etcdstore.GetManyRequest{Keys: []string{runtimeConfigurationHeadKey(task.Owner.EnvironmentID)}},
 	)
 	if err != nil {
 		return TaskRecord{}, tasksecretpins.Prepared{}, err
@@ -181,7 +182,7 @@ func collectRecoverySecretPins(
 func finishRecoverySecretPreparation(ctx context.Context, store hierarchyStore, task TaskRecord, cause error) error {
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	read, err := store.GetMany(cleanup, GetManyRequest{Keys: []string{taskKey(task.ID)}})
+	read, err := store.GetMany(cleanup, etcdstore.GetManyRequest{Keys: []string{taskKey(task.ID)}})
 	if err == nil && (read == nil || len(read.Values) != 1) {
 		err = errs.New(errs.KindInternal, "Secret pin cleanup Task read is incomplete")
 	}
@@ -220,13 +221,13 @@ func recoverySecretPinActivation(prepared tasksecretpins.Prepared) (taskMaterial
 }
 
 func bindRecoverySecretPinPublication(
-	change taskMaterializationProjectionChange, conditions []Condition, mutations []Mutation,
-	classify func(int64, []*KeyValue) error,
-) ([]Condition, []Mutation, func(int64, []*KeyValue) error) {
+	change taskMaterializationProjectionChange, conditions []etcdstore.Condition, mutations []etcdstore.Mutation,
+	classify func(int64, []*etcdstore.KeyValue) error,
+) ([]etcdstore.Condition, []etcdstore.Mutation, func(int64, []*etcdstore.KeyValue) error) {
 	base := len(conditions)
 	conditions = append(conditions, change.conditions...)
 	mutations = append(mutations, change.mutations...)
-	return conditions, mutations, func(revision int64, values []*KeyValue) error {
+	return conditions, mutations, func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != base+len(change.conditions) {
 			return errs.New(errs.KindInternal, "recovery Secret publication compare evidence is incomplete")
 		}
@@ -245,7 +246,7 @@ func bindRecoverySecretPinPublication(
 func (repository *TaskRepository) recoverySecretPinClaimConditions(
 	ctx context.Context,
 	task TaskRecord,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	if task.Configuration == nil || task.Configuration.SecretPins == nil {
 		return nil, nil
 	}
@@ -256,7 +257,7 @@ func (repository *TaskRepository) recoverySecretPinClaimConditions(
 	if root.AttemptID() != task.ID {
 		return nil, errs.New(errs.KindStateConflict, "Task recovery Secret authority belongs to another attempt")
 	}
-	return []Condition{{Key: tasksecretpins.RootKey(task.OperationID), ModRevision: root.Revision()}}, nil
+	return []etcdstore.Condition{{Key: tasksecretpins.RootKey(task.OperationID), ModRevision: root.Revision()}}, nil
 }
 
 func (repository *TaskRepository) loadTaskSecretPinRoot(

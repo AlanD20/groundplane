@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"reflect"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -9,8 +10,8 @@ import (
 
 type preparedComponentTaskPublication struct {
 	preparation ComponentTaskPreparation
-	conditions  []Condition
-	mutations   []Mutation
+	conditions  []etcdstore.Condition
+	mutations   []etcdstore.Mutation
 	values      [][]byte
 	secrets     []componentTaskSecretReference
 }
@@ -24,7 +25,7 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 ) (preparedComponentTaskPublication, error) {
 	publication := preparedComponentTaskPublication{
 		preparation: cloneComponentTaskPreparation(preparation),
-		conditions: []Condition{{
+		conditions: []etcdstore.Condition{{
 			Key: componentTaskActiveEnvironmentKey(environment.Record.ID),
 		}},
 	}
@@ -52,25 +53,25 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 		return preparedComponentTaskPublication{}, err
 	}
 	publication.secrets = secretReferences
-	publication.conditions = append(publication.conditions, Condition{
+	publication.conditions = append(publication.conditions, etcdstore.Condition{
 		Key: componentTaskIntentKey(task.ID),
 	})
-	appliedProjectionCondition := Condition{Key: environmentComposeProjectionKey(environment.Record.ID)}
+	appliedProjectionCondition := etcdstore.Condition{Key: environmentComposeProjectionKey(environment.Record.ID)}
 	if preparation.appliedProjectionPresent {
 		appliedProjectionCondition.ModRevision = preparation.appliedProjectionRevision
 	}
 	publication.conditions = append(publication.conditions, appliedProjectionCondition)
-	publication.conditions = append(publication.conditions, Condition{
+	publication.conditions = append(publication.conditions, etcdstore.Condition{
 		Key: environmentBlueprintHeadKey(environment.Record.ID), ModRevision: preparation.desiredProjectionRevision,
 	})
 	for _, candidate := range preparation.Intent.Candidates {
-		publication.conditions = append(publication.conditions, Condition{
+		publication.conditions = append(publication.conditions, etcdstore.Condition{
 			Key:         componentKey(candidate.Current.Desired.ID),
 			ModRevision: candidate.CurrentRevision,
 		})
 	}
 	for _, address := range preparation.addresses {
-		publication.conditions = append(publication.conditions, Condition{
+		publication.conditions = append(publication.conditions, etcdstore.Condition{
 			Key:         componentAddressRegistryKey(address.Zone.Record.Desired.ID),
 			ModRevision: address.Current.Revision,
 		})
@@ -82,9 +83,9 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 	}
 	publication.values = append(publication.values, intentValue)
 	publication.mutations = append(publication.mutations,
-		Mutation{Type: MutationPut, Key: componentTaskIntentKey(task.ID), Value: intentValue},
-		Mutation{
-			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentTaskIntentKey(task.ID), Value: intentValue},
+		etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 		},
 	)
 	publication.mutations = append(publication.mutations, secretMutations...)
@@ -98,8 +99,8 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 			return preparedComponentTaskPublication{}, encodeErr
 		}
 		publication.values = append(publication.values, value)
-		publication.mutations = append(publication.mutations, Mutation{
-			Type: MutationPut, Key: componentAddressRegistryKey(address.Zone.Record.Desired.ID), Value: value,
+		publication.mutations = append(publication.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: componentAddressRegistryKey(address.Zone.Record.Desired.ID), Value: value,
 		})
 	}
 	return publication, nil
@@ -136,11 +137,11 @@ func componentTaskPreparationIsZero(preparation ComponentTaskPreparation) bool {
 }
 
 func composeEnvironmentBlueprintComponentPublication(
-	existing []Condition,
+	existing []etcdstore.Condition,
 	base idempotencyPlanClassifier,
 	publication preparedComponentTaskPublication,
-) ([]Condition, idempotencyPlanClassifier, error) {
-	conditions := append([]Condition(nil), existing...)
+) ([]etcdstore.Condition, idempotencyPlanClassifier, error) {
+	conditions := append([]etcdstore.Condition(nil), existing...)
 	indices := make(map[string]int, len(existing)+len(publication.conditions))
 	for index, condition := range conditions {
 		indices[condition.Key] = index
@@ -159,7 +160,7 @@ func composeEnvironmentBlueprintComponentPublication(
 		}
 		publicationIndices[index] = position
 	}
-	classify := func(revision int64, values []*KeyValue) error {
+	classify := func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "Blueprint Component compare evidence is incomplete")
 		}
@@ -168,7 +169,7 @@ func composeEnvironmentBlueprintComponentPublication(
 		}
 		// Both owners classify the same authoritative read at a shared key;
 		// deduplication must not shift the Component's positional evidence.
-		componentValues := make([]*KeyValue, len(publicationIndices))
+		componentValues := make([]*etcdstore.KeyValue, len(publicationIndices))
 		for index, position := range publicationIndices {
 			componentValues[index] = values[position]
 		}
@@ -177,7 +178,7 @@ func composeEnvironmentBlueprintComponentPublication(
 	return conditions, classify, nil
 }
 
-func (publication preparedComponentTaskPublication) classify(values []*KeyValue) error {
+func (publication preparedComponentTaskPublication) classify(values []*etcdstore.KeyValue) error {
 	if len(values) != len(publication.conditions) {
 		return errs.New(errs.KindInternal, "Blueprint Component compare evidence is incomplete")
 	}

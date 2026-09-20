@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -75,8 +76,8 @@ func (repository *ComponentRepository) EnsureHostResolverBaseline(
 	defer clear(encoded)
 	result, err := repository.store.Transact(
 		ctx,
-		[]Condition{{Key: hostResolverBaselineKey}},
-		[]Mutation{{Type: MutationPut, Key: hostResolverBaselineKey, Value: encoded}},
+		[]etcdstore.Condition{{Key: hostResolverBaselineKey}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hostResolverBaselineKey, Value: encoded}},
 	)
 	if err != nil {
 		return Versioned[HostResolverBaselineRecord]{}, err

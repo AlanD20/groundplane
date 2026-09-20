@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -81,8 +82,8 @@ func (report scriptClosingReport) validate(current TaskAssignment) error {
 
 func (repository *TaskRepository) readScriptClosingReport(
 	ctx context.Context, current TaskAssignment,
-) (scriptClosingReport, *KeyValue, error) {
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+) (scriptClosingReport, *etcdstore.KeyValue, error) {
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{scriptClosingReportKey(current.Task.Record)}, Revision: current.Task.ReadRevision,
 	})
 	if err != nil {
@@ -110,28 +111,28 @@ func (repository *TaskRepository) readScriptClosingReport(
 func (repository *TaskRepository) prepareScriptClosingReport(
 	ctx context.Context, current TaskAssignment, status TaskStatus, result TaskResultRecord,
 	observedAt time.Time, starting bool,
-) (scriptClosingReport, Condition, Mutation, error) {
+) (scriptClosingReport, etcdstore.Condition, etcdstore.Mutation, error) {
 	report, value, err := repository.readScriptClosingReport(ctx, current)
 	if err != nil {
-		return scriptClosingReport{}, Condition{}, Mutation{}, err
+		return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, err
 	}
 	key := scriptClosingReportKey(current.Task.Record)
 	if !starting {
 		if value == nil || !report.matches(status, result) {
-			return scriptClosingReport{}, Condition{}, Mutation{}, errs.New(
+			return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, errs.New(
 				errs.KindStateConflict, "Blueprint closing report changed",
 			)
 		}
-		return report, Condition{
-				Key:         key,
-				ModRevision: value.ModRevision,
-			}, Mutation{
-				Type: MutationDelete,
-				Key:  key,
-			}, nil
+		return report, etcdstore.Condition{
+			Key:         key,
+			ModRevision: value.ModRevision,
+		}, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete,
+			Key:  key,
+		}, nil
 	}
 	if value != nil {
-		return scriptClosingReport{}, Condition{}, Mutation{}, corruptTaskAssignment()
+		return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, corruptTaskAssignment()
 	}
 	task, assignment := current.Task.Record, current.Assignment.Record
 	report = scriptClosingReport{
@@ -143,10 +144,10 @@ func (repository *TaskRepository) prepareScriptClosingReport(
 		Status: status, Result: result, ObservedAt: observedAt,
 	}
 	if err := report.validate(current); err != nil {
-		return scriptClosingReport{}, Condition{}, Mutation{}, err
+		return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, err
 	}
 	encoded, err := encodeEnvelope(scriptClosingReportEnvelope(task), report)
-	return report, Condition{Key: key}, Mutation{Type: MutationPut, Key: key, Value: encoded}, err
+	return report, etcdstore.Condition{Key: key}, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded}, err
 }
 
 func (repository *TaskRepository) resumeScriptClosingReport(

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -28,15 +29,15 @@ type AttachCreateScope struct {
 }
 
 type AttachRepository struct {
-	store Store
+	store etcdstore.Store
 }
 
 type attachRemovalStore interface {
-	Range(context.Context, RangeRequest) (*RangeResult, error)
-	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
+	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 }
 
-func NewAttachRepository(store Store) (*AttachRepository, error) {
+func NewAttachRepository(store etcdstore.Store) (*AttachRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach repository store is required")
 	}
@@ -102,7 +103,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if attachCreateWithTaskOperationCount(record, facts != nil) > maximumTransactionOperations {
+	if attachCreateWithTaskOperationCount(record, facts != nil) > etcdstore.MaximumOperations {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach consumer and grant combination exceeds the atomic transaction limit",
@@ -166,7 +167,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		return IdempotencyTransactionResult{}, err
 	}
 
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -197,28 +198,28 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		},
 	}
 	conditions = append(conditions, desiredHeadConditions...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
-		{Type: MutationPut, Key: attachKey(record.ID), Value: recordValue},
-		{Type: MutationPut, Key: attachNameKey(record.EnvironmentID, record.Name), Value: []byte(record.ID)},
-		{Type: MutationPut, Key: attachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},
-		{Type: MutationPut, Key: attachBackingServiceKey(record.BackingServiceID, record.ID), Value: []byte(record.ID)},
-		{Type: MutationPut, Key: attachBackingProjectKey(record.BackingProjectID, record.ID), Value: []byte(record.ID)},
-		{Type: MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
-		{Type: MutationPut, Key: planReferenceKey, Value: planReferenceValue},
-		{Type: MutationPut, Key: environmentKey(scope.Environment.Record.ID), Value: environmentValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: attachKey(record.ID), Value: recordValue},
+		{Type: etcdstore.MutationPut, Key: attachNameKey(record.EnvironmentID, record.Name), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: attachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: attachBackingServiceKey(record.BackingServiceID, record.ID), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: attachBackingProjectKey(record.BackingProjectID, record.ID), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
+		{Type: etcdstore.MutationPut, Key: planReferenceKey, Value: planReferenceValue},
+		{Type: etcdstore.MutationPut, Key: environmentKey(scope.Environment.Record.ID), Value: environmentValue},
 	}
 	for _, service := range scope.Services {
 		serviceID := service.Record.Desired.ID
 		conditions = append(conditions,
-			Condition{Key: attachServiceKey(serviceID, record.ID)},
-			Condition{Key: deletionTombstoneKey("service", serviceID)},
+			etcdstore.Condition{Key: attachServiceKey(serviceID, record.ID)},
+			etcdstore.Condition{Key: deletionTombstoneKey("service", serviceID)},
 		)
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: attachServiceKey(serviceID, record.ID), Value: []byte(record.ID),
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: attachServiceKey(serviceID, record.ID), Value: []byte(record.ID),
 		})
 	}
 	grantValues := make([][]byte, 0, len(scope.Grants))
@@ -235,13 +236,13 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		}
 		grantValues = append(grantValues, grantValue)
 		conditions = append(conditions,
-			Condition{Key: attachKey(grantID), ModRevision: grant.Revision},
-			Condition{Key: attachGrantedByKey(grantID, record.ID)},
-			Condition{Key: deletionTombstoneKey("attach", grantID)},
+			etcdstore.Condition{Key: attachKey(grantID), ModRevision: grant.Revision},
+			etcdstore.Condition{Key: attachGrantedByKey(grantID, record.ID)},
+			etcdstore.Condition{Key: deletionTombstoneKey("attach", grantID)},
 		)
 		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: attachGrantedByKey(grantID, record.ID), Value: []byte(record.ID)},
-			Mutation{Type: MutationPut, Key: attachKey(grantID), Value: grantValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachGrantedByKey(grantID, record.ID), Value: []byte(record.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachKey(grantID), Value: grantValue},
 		)
 	}
 	var credentialOwnerValue []byte
@@ -253,18 +254,18 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		}
 		defer clear(credentialOwnerValue)
 		conditions = append(conditions,
-			Condition{Key: attachKey(owner.Record.ID), ModRevision: owner.Revision},
-			Condition{Key: attachCredentialByKey(owner.Record.ID, record.ID)},
-			Condition{Key: deletionTombstoneKey("attach", owner.Record.ID)},
+			etcdstore.Condition{Key: attachKey(owner.Record.ID), ModRevision: owner.Revision},
+			etcdstore.Condition{Key: attachCredentialByKey(owner.Record.ID, record.ID)},
+			etcdstore.Condition{Key: deletionTombstoneKey("attach", owner.Record.ID)},
 		)
 		mutations = append(
 			mutations,
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   attachCredentialByKey(owner.Record.ID, record.ID),
 				Value: []byte(record.ID),
 			},
-			Mutation{Type: MutationPut, Key: attachKey(owner.Record.ID), Value: credentialOwnerValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachKey(owner.Record.ID), Value: credentialOwnerValue},
 		)
 	}
 	if len(record.GrantAttachIDs) != 0 {
@@ -275,9 +276,9 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 			return IdempotencyTransactionResult{}, encodeErr
 		}
 		defer clear(dependentGrantValue)
-		conditions = append(conditions, Condition{Key: attachDependentGrantKey(record.ID)})
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: attachDependentGrantKey(record.ID), Value: dependentGrantValue,
+		conditions = append(conditions, etcdstore.Condition{Key: attachDependentGrantKey(record.ID)})
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: attachDependentGrantKey(record.ID), Value: dependentGrantValue,
 		})
 	}
 	var factValue []byte
@@ -287,7 +288,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clear(factValue)
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: attachFactsKey(record.ID), Value: factValue})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachFactsKey(record.ID), Value: factValue})
 	}
 	initiation, err := newEnvironmentTaskInitiation(
 		versionedTenant,
@@ -409,7 +410,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if attachDetachWithTaskOperationCount(detaching) > maximumTransactionOperations {
+	if attachDetachWithTaskOperationCount(detaching) > etcdstore.MaximumOperations {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach detach combination exceeds the atomic transaction limit",
@@ -422,7 +423,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	dependents, err := repository.store.Range(ctx, RangeRequest{
+	dependents, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: attachGrantedByPrefix(current.Record.ID), Limit: 1, Revision: revision,
 	})
 	if err != nil {
@@ -440,7 +441,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			"Attach is referenced by another Attach grant",
 		)
 	}
-	credentialDependents, err := repository.store.Range(ctx, RangeRequest{
+	credentialDependents, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: attachCredentialByPrefix(current.Record.ID), Limit: 1, Revision: revision,
 	})
 	if err != nil {
@@ -459,10 +460,10 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		)
 	}
 	defer clearRangeValues(credentialDependents.Values)
-	var credentialReferenceCondition *Condition
+	var credentialReferenceCondition *etcdstore.Condition
 	if !current.Record.OwnsCredential() {
 		key := attachCredentialByKey(current.Record.CredentialAttachID, current.Record.ID)
-		read, readErr := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+		read, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 		if readErr != nil {
 			return IdempotencyTransactionResult{}, readErr
 		}
@@ -471,7 +472,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			return IdempotencyTransactionResult{}, corruptAttachRecord()
 		}
 		defer clearKeyValues(read.Values)
-		condition := Condition{Key: key, ModRevision: read.Values[0].ModRevision}
+		condition := etcdstore.Condition{Key: key, ModRevision: read.Values[0].ModRevision}
 		credentialReferenceCondition = &condition
 	}
 
@@ -533,7 +534,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -561,34 +562,34 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		},
 	}
 	conditions = append(conditions, desiredHeadConditions...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
-		{Type: MutationPut, Key: attachKey(detaching.ID), Value: attachValue},
-		{Type: MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
-		{Type: MutationPut, Key: planReferenceKey, Value: planReferenceValue},
-		{Type: MutationPut, Key: environmentKey(scope.Environment.Record.ID), Value: environmentValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: attachKey(detaching.ID), Value: attachValue},
+		{Type: etcdstore.MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
+		{Type: etcdstore.MutationPut, Key: planReferenceKey, Value: planReferenceValue},
+		{Type: etcdstore.MutationPut, Key: environmentKey(scope.Environment.Record.ID), Value: environmentValue},
 	}
 	for _, service := range scope.Services {
 		serviceID := service.Record.Desired.ID
 		conditions = append(conditions,
-			Condition{Key: deletionTombstoneKey("service", serviceID)},
+			etcdstore.Condition{Key: deletionTombstoneKey("service", serviceID)},
 		)
 	}
 	for _, grant := range scope.Grants {
 		conditions = append(conditions,
-			Condition{Key: attachKey(grant.Record.ID), ModRevision: grant.Revision},
-			Condition{Key: deletionTombstoneKey("attach", grant.Record.ID)},
+			etcdstore.Condition{Key: attachKey(grant.Record.ID), ModRevision: grant.Revision},
+			etcdstore.Condition{Key: deletionTombstoneKey("attach", grant.Record.ID)},
 		)
 	}
 	if !current.Record.OwnsCredential() {
 		owner := *scope.CredentialOwner
 		conditions = append(conditions,
-			Condition{Key: attachKey(owner.Record.ID), ModRevision: owner.Revision},
+			etcdstore.Condition{Key: attachKey(owner.Record.ID), ModRevision: owner.Revision},
 			*credentialReferenceCondition,
-			Condition{Key: deletionTombstoneKey("attach", owner.Record.ID)},
+			etcdstore.Condition{Key: deletionTombstoneKey("attach", owner.Record.ID)},
 		)
 	}
 	initiation := TaskInitiation{}
@@ -602,7 +603,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	} else {
 		initiation = *provided
 		conditions = append(conditions, initiation.fences...)
-		if attachDetachWithTaskOperationCount(current.Record)+len(initiation.fences) > maximumTransactionOperations {
+		if attachDetachWithTaskOperationCount(current.Record)+len(initiation.fences) > etcdstore.MaximumOperations {
 			return IdempotencyTransactionResult{}, errs.New(
 				errs.KindValidationFailed,
 				"attach detach initiation exceeds the atomic transaction limit",
@@ -675,7 +676,7 @@ func (repository *AttachRepository) ResolveAttach(
 	if ids.Validate(ids.KindAttach, id) != nil {
 		return Versioned[AttachRecord]{}, corruptAttachRecord()
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{attachKey(id)}, Revision: index.ReadRevision,
 	})
 	if err != nil {
@@ -728,7 +729,7 @@ func (repository *AttachRepository) GetAttachFacts(
 	if revision == 0 {
 		revision = current.Revision
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{attachFactsKey(current.Record.ID)}, Revision: revision,
 	})
 	if err != nil {
@@ -762,7 +763,7 @@ func (repository *AttachRepository) ReplaceLifecycle(
 	if !validAttachLifecycleReplacement(current.Record, replacement) {
 		return Versioned[AttachRecord]{}, errs.New(errs.KindStateConflict, "Attach lifecycle replacement is invalid")
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
 		{Key: deletionTombstoneKey("attach", current.Record.ID)},
 	}
@@ -787,7 +788,7 @@ func (repository *AttachRepository) ReplaceLifecycle(
 	result, err := repository.store.Transact(
 		ctx,
 		conditions,
-		[]Mutation{{Type: MutationPut, Key: attachKey(current.Record.ID), Value: value}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: attachKey(current.Record.ID), Value: value}},
 	)
 	if err != nil {
 		return Versioned[AttachRecord]{}, err
@@ -860,7 +861,7 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	secondary, err := repository.store.GetMany(ctx, GetManyRequest{
+	secondary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			attachNameKey(current.Record.EnvironmentID, current.Record.Name),
 			attachOwnerKey(current.Record.EnvironmentID, current.Record.ID),
@@ -880,7 +881,7 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 			"Attach owner index is missing or mismatched",
 		)
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
 		{
 			Key:         attachNameKey(current.Record.EnvironmentID, current.Record.Name),
@@ -897,30 +898,30 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 		{Key: deletionTombstoneKey("project", project.Record.ID)},
 	}
 	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
 	}
 	renaming := replacement.Name != current.Record.Name
 	newNameIndex := -1
-	mutations := []Mutation(nil)
+	mutations := []etcdstore.Mutation(nil)
 	if renaming {
 		newNameIndex = len(conditions)
-		conditions = append(conditions, Condition{Key: attachNameKey(current.Record.EnvironmentID, replacement.Name)})
+		conditions = append(conditions, etcdstore.Condition{Key: attachNameKey(current.Record.EnvironmentID, replacement.Name)})
 		value, encodeErr := encodeAttachRecord(replacement)
 		if encodeErr != nil {
 			return IdempotencyTransactionResult{}, encodeErr
 		}
 		defer clear(value)
-		mutations = []Mutation{
-			{Type: MutationPut, Key: attachKey(current.Record.ID), Value: value},
-			{Type: MutationDelete, Key: attachNameKey(current.Record.EnvironmentID, current.Record.Name)},
+		mutations = []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: attachKey(current.Record.ID), Value: value},
+			{Type: etcdstore.MutationDelete, Key: attachNameKey(current.Record.EnvironmentID, current.Record.Name)},
 			{
-				Type:  MutationPut,
+				Type:  etcdstore.MutationPut,
 				Key:   attachNameKey(current.Record.EnvironmentID, replacement.Name),
 				Value: []byte(current.Record.ID),
 			},
 		}
 	}
-	originalClassify := func(_ int64, values []*KeyValue) error {
+	originalClassify := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "Attach rename compare evidence is incomplete")
 		}
@@ -949,7 +950,7 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 	}
 	defer binding.clear()
 	defer clearMutationValues(binding.mutations)
-	classify := func(revision int64, values []*KeyValue) error {
+	classify := func(revision int64, values []*etcdstore.KeyValue) error {
 		return binding.classify(revision, values, originalClassify)
 	}
 	plan, err := newIdempotencyMutationPlan(binding.conditions, binding.mutations, classify)
@@ -1001,7 +1002,7 @@ func prepareAttachRemoval(
 	store attachRemovalStore,
 	current Versioned[AttachRecord],
 	revision int64,
-) ([]Condition, []Mutation, [][]byte, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, [][]byte, error) {
 	if err := validateAttachVersion(current); err != nil {
 		return nil, nil, nil, err
 	}
@@ -1014,7 +1015,7 @@ func prepareAttachRemoval(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	dependents, err := store.Range(ctx, RangeRequest{
+	dependents, err := store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: attachGrantedByPrefix(current.Record.ID), Limit: 1, Revision: revision,
 	})
 	if err != nil {
@@ -1029,7 +1030,7 @@ func prepareAttachRemoval(
 	if dependents != nil {
 		defer clearRangeValues(dependents.Values)
 	}
-	credentialDependents, err := store.Range(ctx, RangeRequest{
+	credentialDependents, err := store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: attachCredentialByPrefix(current.Record.ID), Limit: 1, Revision: revision,
 	})
 	if err != nil {
@@ -1042,7 +1043,7 @@ func prepareAttachRemoval(
 		return nil, nil, nil, errs.New(errs.KindResourceInUse, "Attach credential is used by another Service")
 	}
 	defer clearRangeValues(credentialDependents.Values)
-	dependentGrants, err := store.Range(ctx, RangeRequest{
+	dependentGrants, err := store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: attachDependentGrantPrefix(current.Record.ID),
 		Limit:  2, Revision: revision,
 	})
@@ -1064,31 +1065,31 @@ func prepareAttachRemoval(
 		return nil, nil, nil, corruptAttachRecord()
 	}
 
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
 		{Key: deletionTombstoneKey("attach", current.Record.ID)},
 		exclusionCondition,
 		{Key: attachGrantedByPrefix(current.Record.ID), Prefix: true},
 		{Key: attachCredentialByPrefix(current.Record.ID), Prefix: true},
 	}
-	mutations := []Mutation{
-		{Type: MutationDelete, Key: attachKey(current.Record.ID)},
-		{Type: MutationDelete, Key: attachNameKey(current.Record.EnvironmentID, current.Record.Name)},
-		{Type: MutationDelete, Key: attachOwnerKey(current.Record.EnvironmentID, current.Record.ID)},
-		{Type: MutationDelete, Key: attachBackingServiceKey(current.Record.BackingServiceID, current.Record.ID)},
-		{Type: MutationDelete, Key: attachBackingProjectKey(current.Record.BackingProjectID, current.Record.ID)},
-		{Type: MutationDelete, Key: attachFactsKey(current.Record.ID)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationDelete, Key: attachKey(current.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: attachNameKey(current.Record.EnvironmentID, current.Record.Name)},
+		{Type: etcdstore.MutationDelete, Key: attachOwnerKey(current.Record.EnvironmentID, current.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: attachBackingServiceKey(current.Record.BackingServiceID, current.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: attachBackingProjectKey(current.Record.BackingProjectID, current.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: attachFactsKey(current.Record.ID)},
 	}
-	mutations = append(mutations, Mutation{
-		Type: MutationDelete, Key: attachServiceKey(current.Record.ServiceID, current.Record.ID),
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationDelete, Key: attachServiceKey(current.Record.ServiceID, current.Record.ID),
 	})
 	if len(current.Record.GrantAttachIDs) != 0 {
 		dependent := dependentGrants.Values[0]
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: attachDependentGrantKey(current.Record.ID), ModRevision: dependent.ModRevision,
 		})
-		mutations = append(mutations, Mutation{
-			Type: MutationDelete, Key: attachDependentGrantKey(current.Record.ID),
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete, Key: attachDependentGrantKey(current.Record.ID),
 		})
 	}
 	values := make([][]byte, 0, len(current.Record.GrantAttachIDs)+1)
@@ -1097,7 +1098,7 @@ func prepareAttachRemoval(
 			attachKey(current.Record.CredentialAttachID),
 			attachCredentialByKey(current.Record.CredentialAttachID, current.Record.ID),
 		}
-		result, readErr := store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+		result, readErr := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 		if readErr != nil {
 			return nil, nil, values, readErr
 		}
@@ -1116,12 +1117,12 @@ func prepareAttachRemoval(
 		}
 		values = append(values, ownerValue)
 		conditions = append(conditions,
-			Condition{Key: attachKey(owner.ID), ModRevision: result.Values[0].ModRevision},
-			Condition{Key: keys[1], ModRevision: result.Values[1].ModRevision},
+			etcdstore.Condition{Key: attachKey(owner.ID), ModRevision: result.Values[0].ModRevision},
+			etcdstore.Condition{Key: keys[1], ModRevision: result.Values[1].ModRevision},
 		)
 		mutations = append(mutations,
-			Mutation{Type: MutationDelete, Key: keys[1]},
-			Mutation{Type: MutationPut, Key: attachKey(owner.ID), Value: ownerValue},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[1]},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachKey(owner.ID), Value: ownerValue},
 		)
 		clearKeyValues(result.Values)
 	}
@@ -1132,7 +1133,7 @@ func prepareAttachRemoval(
 	for _, grantID := range current.Record.GrantAttachIDs {
 		keys = append(keys, attachKey(grantID), attachGrantedByKey(grantID, current.Record.ID))
 	}
-	result, err := store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -1155,12 +1156,12 @@ func prepareAttachRemoval(
 		}
 		values = append(values, targetValue)
 		conditions = append(conditions,
-			Condition{Key: attachKey(grantID), ModRevision: target.ModRevision},
-			Condition{Key: attachGrantedByKey(grantID, current.Record.ID), ModRevision: reverse.ModRevision},
+			etcdstore.Condition{Key: attachKey(grantID), ModRevision: target.ModRevision},
+			etcdstore.Condition{Key: attachGrantedByKey(grantID, current.Record.ID), ModRevision: reverse.ModRevision},
 		)
 		mutations = append(mutations,
-			Mutation{Type: MutationDelete, Key: attachGrantedByKey(grantID, current.Record.ID)},
-			Mutation{Type: MutationPut, Key: attachKey(grantID), Value: targetValue},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: attachGrantedByKey(grantID, current.Record.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachKey(grantID), Value: targetValue},
 		)
 	}
 	return conditions, mutations, values, nil
@@ -1169,31 +1170,31 @@ func prepareAttachRemoval(
 func requireAttachBackupSourceExclusionAbsent(
 	ctx context.Context,
 	store interface {
-		GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
+		GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 	},
 	attachID string,
 	revision int64,
-) (Condition, error) {
+) (etcdstore.Condition, error) {
 	key, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, attachID)
 	if err != nil {
-		return Condition{}, err
+		return etcdstore.Condition{}, err
 	}
-	result, err := store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
-		return Condition{}, err
+		return etcdstore.Condition{}, err
 	}
 	if result == nil || result.ReadRevision != revision || len(result.Values) != 1 {
-		return Condition{}, errs.New(errs.KindInternal, "attach backup source exclusion read is incomplete")
+		return etcdstore.Condition{}, errs.New(errs.KindInternal, "attach backup source exclusion read is incomplete")
 	}
 	if result.Values[0] != nil {
 		if evidenceErr := classifyAttachBackupSourceExclusionEvidence(result.Values[0], attachID); evidenceErr != nil {
-			return Condition{}, evidenceErr
+			return etcdstore.Condition{}, evidenceErr
 		}
 	}
-	return Condition{Key: key}, nil
+	return etcdstore.Condition{Key: key}, nil
 }
 
-func classifyAttachBackupSourceExclusionEvidence(evidence *KeyValue, attachID string) error {
+func classifyAttachBackupSourceExclusionEvidence(evidence *etcdstore.KeyValue, attachID string) error {
 	if evidence == nil {
 		return nil
 	}
@@ -1523,14 +1524,14 @@ func validateAttachVersion(current Versioned[AttachRecord]) error {
 	return validateAttachRecord(current.Record)
 }
 
-func classifyAttachCreateConflict(reads []*KeyValue) error {
+func classifyAttachCreateConflict(reads []*etcdstore.KeyValue) error {
 	if len(reads) > 1 && reads[1] != nil {
 		return errs.New(errs.KindNameConflict, "Attach name already exists")
 	}
 	return errs.New(errs.KindStateConflict, "Attach hierarchy changed concurrently")
 }
 
-func classifyAttachTaskCreateConflict(_ int64, reads []*KeyValue) error {
+func classifyAttachTaskCreateConflict(_ int64, reads []*etcdstore.KeyValue) error {
 	if len(reads) < 22 {
 		return errs.New(errs.KindInternal, "Attach Task conflict evidence is incomplete")
 	}
@@ -1545,7 +1546,7 @@ func classifyAttachTaskCreateConflict(_ int64, reads []*KeyValue) error {
 	return classifyAttachCreateConflict(reads[4:])
 }
 
-func classifyAttachDetachTaskConflict(_ int64, reads []*KeyValue) error {
+func classifyAttachDetachTaskConflict(_ int64, reads []*etcdstore.KeyValue) error {
 	if len(reads) < 6 {
 		return errs.New(errs.KindInternal, "Attach detach Task conflict evidence is incomplete")
 	}
@@ -1683,7 +1684,7 @@ func attachDependentGrantKey(attachID string) string {
 	return attachDependentGrantPrefix(attachID) + "grants"
 }
 
-func readAttachDependentGrantIndex(result *RangeResult, attachID string) ([]string, error) {
+func readAttachDependentGrantIndex(result *etcdstore.RangeResult, attachID string) ([]string, error) {
 	if result == nil || result.More || len(result.Values) > 1 {
 		return nil, corruptAttachRecord()
 	}
@@ -1698,7 +1699,7 @@ func readAttachDependentGrantIndex(result *RangeResult, attachID string) ([]stri
 }
 
 func validateAttachDependentGrantRange(
-	result *RangeResult, attachID string, grantAttachIDs []string,
+	result *etcdstore.RangeResult, attachID string, grantAttachIDs []string,
 ) error {
 	stored, err := readAttachDependentGrantIndex(result, attachID)
 	if err != nil || !slices.Equal(stored, grantAttachIDs) {

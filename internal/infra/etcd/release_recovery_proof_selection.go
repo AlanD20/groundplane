@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -170,10 +171,10 @@ const (
 // branch to immutable publication inputs, never to a current Service projection.
 func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 	ctx context.Context, task TaskRecord, assignment TaskAssignmentRecord, revision int64,
-) (*agentpb.CandidateReleaseProcedure, []releaseRecoveryProofExpectation, []Condition, error) {
+) (*agentpb.CandidateReleaseProcedure, []releaseRecoveryProofExpectation, []etcdstore.Condition, error) {
 	publication := task.Params[TaskReleasePublicationParam]
 	keys := []string{releasePublicationKey(publication), releaseManifestStagingKey(publication)}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -189,11 +190,11 @@ func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 		validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
 		return nil, nil, nil, corruptReleaseRecord()
 	}
-	conditions := []Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision},
+	conditions := []etcdstore.Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: read.Values[1].ModRevision}}
 	var native []BlueprintNativePredecessor
 	if taskHasBlueprintCandidateAppliedAuthority(task) {
-		var sourceConditions []Condition
+		var sourceConditions []etcdstore.Condition
 		native, sourceConditions, err = repository.blueprintNativePredecessorsAtRevision(
 			ctx,
 			task,
@@ -245,11 +246,11 @@ func (repository *TaskRepository) ordinaryRecoveryProofKindAtRevision(
 	assignment TaskAssignmentRecord,
 	member ReleaseStagedMemberRef,
 	revision int64,
-) (releaseRecoveryProofExpectation, []Condition, error) {
+) (releaseRecoveryProofExpectation, []etcdstore.Condition, error) {
 	publication := task.Params[TaskReleasePublicationParam]
 	keys := []string{releaseIntentStagingKey(publication, member.ReleaseID),
 		releaseRenderInputStagingKey(publication, member.ReleaseID), releaseOperationKey(task.OperationID)}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return releaseRecoveryProofExpectation{}, nil, err
 	}
@@ -302,7 +303,7 @@ func (repository *TaskRepository) ordinaryRecoveryProofKindAtRevision(
 	if len(render.PriorRuntime.RetainedPriorArtifact) != 0 {
 		expectation.kind, expectation.priorTopologyArtifactID = releaseRecoveryProofCaptured, ""
 	}
-	return expectation, []Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision},
+	return expectation, []etcdstore.Condition{{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
 		{Key: keys[2], ModRevision: read.Values[2].ModRevision}}, nil
 }

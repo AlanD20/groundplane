@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -25,7 +26,7 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 	for batch := 0; batch < 32; batch++ {
 		task := current.Record
 		keys := []string{taskAssignmentIndexKey(task.ID), releaseFenceSetKey(task.Owner.EnvironmentID)}
-		read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: current.ReadRevision})
+		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: current.ReadRevision})
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
@@ -53,8 +54,8 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 			"",
 			*task.FinishedAt,
 			current.ReadRevision,
-			Condition{Key: taskKey(task.ID), ModRevision: current.Revision},
-			Condition{Key: keys[0]},
+			etcdstore.Condition{Key: taskKey(task.ID), ModRevision: current.Revision},
+			etcdstore.Condition{Key: keys[0]},
 		)
 		if err != nil {
 			return Versioned[TaskRecord]{}, err

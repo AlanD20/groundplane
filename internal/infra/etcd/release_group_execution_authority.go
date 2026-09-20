@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -9,12 +10,12 @@ import (
 )
 
 type ReleaseGroupExecutionAuthority struct {
-	store       Store
+	store       etcdstore.Store
 	checkpoints *ReleaseCheckpointAuthority
 }
 
 func NewReleaseGroupExecutionAuthority(
-	store Store,
+	store etcdstore.Store,
 	checkpoints *ReleaseCheckpointAuthority,
 ) (*ReleaseGroupExecutionAuthority, error) {
 	if store == nil || checkpoints == nil || checkpoints.store == nil {
@@ -115,8 +116,8 @@ func (authority *ReleaseGroupExecutionAuthority) advanceProgress(
 		return domain.GroupProgress{}, err
 	}
 	defer clear(headValue)
-	prepared.mutations = append(prepared.mutations, Mutation{
-		Type: MutationPut, Key: releaseOperationKey(input.OperationID), Value: headValue,
+	prepared.mutations = append(prepared.mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: releaseOperationKey(input.OperationID), Value: headValue,
 	})
 	result, err := authority.store.Transact(ctx, prepared.conditions, prepared.mutations)
 	if err != nil {

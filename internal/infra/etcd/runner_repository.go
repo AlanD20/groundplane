@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"sort"
 	"strings"
@@ -27,7 +28,7 @@ type RunnerRepository struct {
 	store hierarchyStore
 }
 
-func NewRunnerRepository(store Store) (*RunnerRepository, error) {
+func NewRunnerRepository(store etcdstore.Store) (*RunnerRepository, error) {
 	return newRunnerRepository(store)
 }
 
@@ -67,8 +68,8 @@ func (repository *RunnerRepository) EnsureRunnerNetworkPool(
 	}
 	defer clear(value)
 	transaction, err := repository.store.Transact(ctx,
-		[]Condition{{Key: systemPoolRegistryKey}},
-		[]Mutation{{Type: MutationPut, Key: systemPoolRegistryKey, Value: value}},
+		[]etcdstore.Condition{{Key: systemPoolRegistryKey}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: systemPoolRegistryKey, Value: value}},
 	)
 	if err != nil {
 		return err
@@ -158,7 +159,7 @@ func (repository *RunnerRepository) ResolveRunner(
 	if ids.Validate(ids.KindRunner, id) != nil {
 		return Versioned[RunnerRecord]{}, errs.New(errs.KindInternal, "runner slug index is corrupt")
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{runnerKey(id), runnerLifecycleKey(id)}, Revision: index.ReadRevision,
 	})
 	if err != nil {
@@ -261,7 +262,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 	if renaming {
 		secondaryKeys = append(secondaryKeys, runnerTenantSlugKey(current.Record.Desired.TenantID, slug))
 	}
-	secondary, err := repository.store.GetMany(ctx, GetManyRequest{Keys: secondaryKeys, Revision: current.ReadRevision})
+	secondary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: secondaryKeys, Revision: current.ReadRevision})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -282,7 +283,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: runnerKey(runnerID), ModRevision: current.Revision},
 		{Key: runnerLifecycleKey(runnerID), ModRevision: current.Record.LifecycleRevision},
 		{
@@ -291,23 +292,23 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 		},
 		{Key: deletionTombstoneKey(string(DeletionTargetRunner), runnerID)},
 	}
-	mutations := []Mutation{{Type: MutationPut, Key: runnerKey(runnerID), Value: value}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerKey(runnerID), Value: value}}
 	if renaming {
-		conditions = append(conditions, Condition{Key: runnerTenantSlugKey(current.Record.Desired.TenantID, slug)})
+		conditions = append(conditions, etcdstore.Condition{Key: runnerTenantSlugKey(current.Record.Desired.TenantID, slug)})
 		mutations = append(
 			mutations,
-			Mutation{
-				Type: MutationDelete,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
 				Key:  runnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
 			},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   runnerTenantSlugKey(current.Record.Desired.TenantID, slug),
 				Value: []byte(runnerID),
 			},
 		)
 	}
-	plan, err := newIdempotencyMutationPlan(conditions, mutations, func(_ int64, values []*KeyValue) error {
+	plan, err := newIdempotencyMutationPlan(conditions, mutations, func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "runner slug mutation compare evidence is incomplete")
 		}
@@ -403,21 +404,21 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 	}
 	defer values.clear()
 	layout := newRunnerCreateEvidence(desired, parents, allocationState, task)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: values.task},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: values.reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: values.reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: values.reference},
-		{Type: MutationPut, Key: runnerKey(desired.ID), Value: values.runner},
-		{Type: MutationPut, Key: runnerLifecycleKey(desired.ID), Value: values.lifecycle},
-		{Type: MutationPut, Key: runnerTenantSlugKey(desired.TenantID, desired.Slug), Value: []byte(desired.ID)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: values.task},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: values.reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: values.reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: values.reference},
+		{Type: etcdstore.MutationPut, Key: runnerKey(desired.ID), Value: values.runner},
+		{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(desired.ID), Value: values.lifecycle},
+		{Type: etcdstore.MutationPut, Key: runnerTenantSlugKey(desired.TenantID, desired.Slug), Value: []byte(desired.ID)},
 		{
-			Type: MutationPut, Key: runnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID),
+			Type: etcdstore.MutationPut, Key: runnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID),
 			Value: []byte(desired.ID),
 		},
-		{Type: MutationPut, Key: runnerTenantQuotaKey(desired.TenantID), Value: values.quota},
-		{Type: MutationPut, Key: runnerHostSlotKey(allocationState.host.slot), Value: values.host},
-		{Type: MutationPut, Key: systemPoolRegistryKey, Value: values.system},
+		{Type: etcdstore.MutationPut, Key: runnerTenantQuotaKey(desired.TenantID), Value: values.quota},
+		{Type: etcdstore.MutationPut, Key: runnerHostSlotKey(allocationState.host.slot), Value: values.host},
+		{Type: etcdstore.MutationPut, Key: systemPoolRegistryKey, Value: values.system},
 	}
 	initiation, err := newRunnerTaskInitiation(desired, parents, TaskActorOperator)
 	if err != nil {
@@ -439,9 +440,9 @@ func newRunnerTaskInitiation(
 	if err != nil {
 		return TaskInitiation{}, err
 	}
-	fences := []Condition{{Key: tenantKey(desired.TenantID), ModRevision: parents.tenant.Revision}}
+	fences := []etcdstore.Condition{{Key: tenantKey(desired.TenantID), ModRevision: parents.tenant.Revision}}
 	if desired.OwnerKind == RunnerOwnerProject {
-		fences = append(fences, Condition{Key: projectKey(desired.OwnerID), ModRevision: parents.project.Revision})
+		fences = append(fences, etcdstore.Condition{Key: projectKey(desired.OwnerID), ModRevision: parents.project.Revision})
 	}
 	return newTaskInitiation(owner, actor, fences...)
 }
@@ -507,7 +508,7 @@ func (values *runnerCreateValues) clear() {
 }
 
 type runnerCreateEvidence struct {
-	conditions      []Condition
+	conditions      []etcdstore.Condition
 	task            int
 	operation       int
 	active          int
@@ -540,28 +541,28 @@ func newRunnerCreateEvidence(
 		project: -1, projectDeletion: -1, desired: desired, parents: parents,
 		allocation: allocation, operationID: task.OperationID,
 	}
-	add := func(condition Condition) int {
+	add := func(condition etcdstore.Condition) int {
 		index := len(evidence.conditions)
 		evidence.conditions = append(evidence.conditions, condition)
 		return index
 	}
-	evidence.task = add(Condition{Key: taskKey(task.ID)})
-	evidence.operation = add(Condition{Key: taskOperationIndexKey(task.OperationID, task.ID)})
-	evidence.active = add(Condition{Key: taskActiveOperationKey(task.OperationID)})
-	evidence.queue = add(Condition{Key: taskQueueKey(task.Executor, task.ID)})
-	evidence.runner = add(Condition{Key: runnerKey(desired.ID)})
-	evidence.lifecycle = add(Condition{Key: runnerLifecycleKey(desired.ID)})
-	evidence.slug = add(Condition{Key: runnerTenantSlugKey(desired.TenantID, desired.Slug)})
-	evidence.owner = add(Condition{Key: runnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)})
-	evidence.quota = add(Condition{Key: runnerTenantQuotaKey(desired.TenantID), ModRevision: allocation.quota.Revision})
-	evidence.system = add(Condition{Key: systemPoolRegistryKey, ModRevision: allocation.system.Revision})
-	evidence.tenant = add(Condition{Key: tenantKey(desired.TenantID), ModRevision: parents.tenant.Revision})
-	evidence.runnerDeletion = add(Condition{Key: deletionTombstoneKey(string(DeletionTargetRunner), desired.ID)})
-	evidence.tenantDeletion = add(Condition{Key: deletionTombstoneKey(string(DeletionTargetTenant), desired.TenantID)})
+	evidence.task = add(etcdstore.Condition{Key: taskKey(task.ID)})
+	evidence.operation = add(etcdstore.Condition{Key: taskOperationIndexKey(task.OperationID, task.ID)})
+	evidence.active = add(etcdstore.Condition{Key: taskActiveOperationKey(task.OperationID)})
+	evidence.queue = add(etcdstore.Condition{Key: taskQueueKey(task.Executor, task.ID)})
+	evidence.runner = add(etcdstore.Condition{Key: runnerKey(desired.ID)})
+	evidence.lifecycle = add(etcdstore.Condition{Key: runnerLifecycleKey(desired.ID)})
+	evidence.slug = add(etcdstore.Condition{Key: runnerTenantSlugKey(desired.TenantID, desired.Slug)})
+	evidence.owner = add(etcdstore.Condition{Key: runnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)})
+	evidence.quota = add(etcdstore.Condition{Key: runnerTenantQuotaKey(desired.TenantID), ModRevision: allocation.quota.Revision})
+	evidence.system = add(etcdstore.Condition{Key: systemPoolRegistryKey, ModRevision: allocation.system.Revision})
+	evidence.tenant = add(etcdstore.Condition{Key: tenantKey(desired.TenantID), ModRevision: parents.tenant.Revision})
+	evidence.runnerDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetRunner), desired.ID)})
+	evidence.tenantDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetTenant), desired.TenantID)})
 	if desired.OwnerKind == RunnerOwnerProject {
-		evidence.project = add(Condition{Key: projectKey(desired.OwnerID), ModRevision: parents.project.Revision})
+		evidence.project = add(etcdstore.Condition{Key: projectKey(desired.OwnerID), ModRevision: parents.project.Revision})
 		evidence.projectDeletion = add(
-			Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), desired.OwnerID)},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), desired.OwnerID)},
 		)
 	}
 	evidence.host = add(allocation.host.condition)
@@ -569,7 +570,7 @@ func newRunnerCreateEvidence(
 }
 
 func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(evidence.conditions) {
 			return errs.New(errs.KindInternal, "runner creation compare evidence is incomplete")
 		}
@@ -743,7 +744,7 @@ func (repository *RunnerRepository) GetRunner(ctx context.Context, id string) (V
 	if err := validateID(ids.KindRunner, id); err != nil {
 		return Versioned[RunnerRecord]{}, err
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{runnerKey(id), runnerLifecycleKey(id)},
 	})
 	if err != nil {
@@ -767,7 +768,7 @@ func (repository *RunnerRepository) GetRunner(ctx context.Context, id string) (V
 	}, nil
 }
 
-func decodeRunnerAggregate(desiredValue *KeyValue, lifecycleValue *KeyValue) (RunnerRecord, error) {
+func decodeRunnerAggregate(desiredValue *etcdstore.KeyValue, lifecycleValue *etcdstore.KeyValue) (RunnerRecord, error) {
 	if desiredValue == nil || lifecycleValue == nil || desiredValue.ModRevision <= 0 ||
 		lifecycleValue.ModRevision <= 0 {
 		return RunnerRecord{}, errs.New(errs.KindInternal, "runner desired/lifecycle pair is incomplete")
@@ -835,7 +836,7 @@ func (repository *RunnerRepository) listTenantRunners(
 	if err != nil {
 		return Page[RunnerRecord]{}, err
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{runnerTenantQuotaKey(tenantID)}, Revision: revision,
 	})
 	if err != nil {
@@ -870,7 +871,7 @@ func (repository *RunnerRepository) listTenantRunners(
 	}
 	page := Page[RunnerRecord]{Items: []Versioned[RunnerRecord]{}, Revision: read.ReadRevision}
 	if len(keys) != 0 {
-		records, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: read.ReadRevision})
+		records, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: read.ReadRevision})
 		if err != nil {
 			return Page[RunnerRecord]{}, err
 		}
@@ -912,7 +913,7 @@ func (repository *RunnerRepository) hydrateRunnerPage(
 	for index := range page.Items {
 		keys[index] = runnerLifecycleKey(page.Items[index].Record.Desired.ID)
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: page.Revision})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: page.Revision})
 	if err != nil {
 		return Page[RunnerRecord]{}, err
 	}
@@ -952,7 +953,7 @@ func (repository *RunnerRepository) PutRunnerObservation(
 	if err != nil {
 		return Versioned[RunnerObservationRecord]{}, err
 	}
-	observation, err := repository.store.GetMany(ctx, GetManyRequest{
+	observation, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{runnerObservationKey(record.RunnerID)},
 	})
 	if err != nil {
@@ -967,7 +968,7 @@ func (repository *RunnerRepository) PutRunnerObservation(
 		return Versioned[RunnerObservationRecord]{}, err
 	}
 	defer clear(value)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: runnerObservationKey(record.RunnerID), ModRevision: expectedRevision},
 		{Key: runnerKey(record.RunnerID), ModRevision: current.Revision},
 		{Key: runnerLifecycleKey(record.RunnerID), ModRevision: current.Record.LifecycleRevision},
@@ -977,12 +978,12 @@ func (repository *RunnerRepository) PutRunnerObservation(
 	}
 	if current.Record.Desired.OwnerKind == RunnerOwnerProject {
 		conditions = append(conditions,
-			Condition{Key: projectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
-			Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
+			etcdstore.Condition{Key: projectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
 		)
 	}
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{{
-		Type: MutationPut, Key: runnerObservationKey(record.RunnerID), Value: value,
+	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{
+		Type: etcdstore.MutationPut, Key: runnerObservationKey(record.RunnerID), Value: value,
 	}})
 	if err != nil {
 		return Versioned[RunnerObservationRecord]{}, err
@@ -1068,7 +1069,7 @@ type runnerAllocationState struct {
 type runnerHostSlotState struct {
 	slot      uint32
 	record    RunnerHostSlotRecord
-	condition Condition
+	condition etcdstore.Condition
 }
 
 const (
@@ -1089,7 +1090,7 @@ func (repository *RunnerRepository) getRunnerAllocationState(
 	for slot := uint32(0); slot < slotCount; slot++ {
 		keys = append(keys, runnerHostSlotKey(slot))
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: keys,
 	})
 	if err != nil {
@@ -1154,11 +1155,11 @@ func (repository *RunnerRepository) getRunnerAllocationState(
 	}
 	state.host.slot = uint32(selected)
 	state.host.record = RunnerHostSlotRecord{Slot: uint32(selected), RunnerID: runnerID}
-	state.host.condition = Condition{Key: runnerHostSlotKey(uint32(selected))}
+	state.host.condition = etcdstore.Condition{Key: runnerHostSlotKey(uint32(selected))}
 	return state, nil
 }
 
-func revisionChanged(value *KeyValue, expected int64) bool {
+func revisionChanged(value *etcdstore.KeyValue, expected int64) bool {
 	return (expected == 0 && value != nil) ||
 		(expected > 0 && (value == nil || value.ModRevision != expected))
 }

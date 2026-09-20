@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -16,8 +17,8 @@ const scriptBlueprintStageBatchScripts = 7
 // Environment desired-state transaction.
 type BlueprintScriptPublication struct {
 	environmentID string
-	conditions    []Condition
-	mutations     []Mutation
+	conditions    []etcdstore.Condition
+	mutations     []etcdstore.Mutation
 }
 
 func (publication BlueprintScriptPublication) validate(
@@ -34,7 +35,7 @@ func (publication BlueprintScriptPublication) validate(
 	return nil
 }
 
-func (publication BlueprintScriptPublication) classify(values []*KeyValue) error {
+func (publication BlueprintScriptPublication) classify(values []*etcdstore.KeyValue) error {
 	if len(values) != 1 || conditionMatchesRead(publication.conditions[0], values[0]) {
 		return errs.New(errs.KindInternal, "Blueprint Script compare evidence is invalid")
 	}
@@ -183,8 +184,8 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 	}
 	return BlueprintScriptPublication{
 		environmentID: environmentID,
-		conditions:    []Condition{{Key: scriptSetActiveKey(environmentID), ModRevision: active.Revision}},
-		mutations:     []Mutation{{Type: MutationPut, Key: scriptSetActiveKey(environmentID), Value: nextValue}},
+		conditions:    []etcdstore.Condition{{Key: scriptSetActiveKey(environmentID), ModRevision: active.Revision}},
+		mutations:     []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(environmentID), Value: nextValue}},
 	}, nil
 }
 
@@ -231,7 +232,7 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			deletionTombstoneKey("script", record.Desired.ID),
 		)
 	}
-	lookups, err := repository.store.GetMany(ctx, GetManyRequest{Keys: lookupKeys, Revision: active.ReadRevision})
+	lookups, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: lookupKeys, Revision: active.ReadRevision})
 	if err != nil {
 		return false, err
 	}
@@ -240,18 +241,18 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 	}
 	defer clearKeyValues(lookups.Values)
 
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: scriptSetActiveKey(active.Record.EnvironmentID), ModRevision: active.Revision},
 		{Key: deletionTombstoneKey("environment", active.Record.EnvironmentID)},
 	}
-	mutations := make([]Mutation, 0, len(records)*5)
+	mutations := make([]etcdstore.Mutation, 0, len(records)*5)
 	for index, record := range records {
 		locatorValue := lookups.Values[index*3]
 		environmentLocatorValue := lookups.Values[index*3+1]
 		if lookups.Values[index*3+2] != nil {
 			return false, errs.New(errs.KindResourceInUse, "Script deletion is in progress")
 		}
-		locatorCondition := Condition{Key: scriptLocatorKey(record.Desired.ID)}
+		locatorCondition := etcdstore.Condition{Key: scriptLocatorKey(record.Desired.ID)}
 		if locatorValue != nil {
 			locator, decodeErr := decodeScriptLocator(locatorValue.Value)
 			if decodeErr != nil || locator.ScriptID != record.Desired.ID ||
@@ -262,7 +263,7 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 		} else if _, existed := current[record.Desired.ID]; existed {
 			return false, errs.New(errs.KindInternal, "active Script locator is missing")
 		}
-		environmentLocatorCondition := Condition{
+		environmentLocatorCondition := etcdstore.Condition{
 			Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
 		}
 		if environmentLocatorValue != nil {
@@ -282,8 +283,8 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 		slugKey := scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug)
 		conditions = append(conditions,
 			locatorCondition, environmentLocatorCondition,
-			Condition{Key: deletionTombstoneKey("script", record.Desired.ID)},
-			Condition{Key: primaryKey}, Condition{Key: bodyKey}, Condition{Key: ownerKey}, Condition{Key: slugKey},
+			etcdstore.Condition{Key: deletionTombstoneKey("script", record.Desired.ID)},
+			etcdstore.Condition{Key: primaryKey}, etcdstore.Condition{Key: bodyKey}, etcdstore.Condition{Key: ownerKey}, etcdstore.Condition{Key: slugKey},
 		)
 		primary, encodeErr := encodeScriptRecord(record)
 		if encodeErr != nil {
@@ -303,10 +304,10 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			return false, encodeErr
 		}
 		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: primaryKey, Value: primary},
-			Mutation{Type: MutationPut, Key: bodyKey, Value: bodyValue},
-			Mutation{Type: MutationPut, Key: ownerKey, Value: []byte(record.Desired.ID)},
-			Mutation{Type: MutationPut, Key: slugKey, Value: []byte(record.Desired.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: primaryKey, Value: primary},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: bodyKey, Value: bodyValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: ownerKey, Value: []byte(record.Desired.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: slugKey, Value: []byte(record.Desired.ID)},
 		)
 		if _, existed := current[record.Desired.ID]; !existed {
 			locator, locatorErr := encodeScriptLocator(
@@ -318,17 +319,17 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			}
 			mutations = append(
 				mutations,
-				Mutation{Type: MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locator},
+				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locator},
 			)
-			mutations = append(mutations, Mutation{
-				Type: MutationPut, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
+			mutations = append(mutations, etcdstore.Mutation{
+				Type: etcdstore.MutationPut, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
 				Value: []byte(record.Desired.ID),
 			})
 		}
 	}
 	defer clearMutationValues(mutations)
-	if len(records)*2 > 16 || len(conditions)+len(mutations) > maximumTransactionOperations ||
-		scriptStageEncodedBytes(conditions, mutations) > maximumTransactionBytes {
+	if len(records)*2 > 16 || len(conditions)+len(mutations) > etcdstore.MaximumOperations ||
+		scriptStageEncodedBytes(conditions, mutations) > etcdstore.MaximumBytes {
 		return false, nil
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
@@ -350,17 +351,17 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 func (repository *ScriptRepository) blueprintScriptBatchMatches(
 	ctx context.Context,
 	active Versioned[ScriptSetGenerationRecord],
-	mutations []Mutation,
+	mutations []etcdstore.Mutation,
 ) bool {
 	keys := make([]string, 1, len(mutations)+1)
 	keys[0] = scriptSetActiveKey(active.Record.EnvironmentID)
 	for _, mutation := range mutations {
-		if mutation.Type != MutationPut || mutation.Prefix {
+		if mutation.Type != etcdstore.MutationPut || mutation.Prefix {
 			return false
 		}
 		keys = append(keys, mutation.Key)
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil || read == nil || len(read.Values) != len(keys) || read.Values[0] == nil ||
 		read.Values[0].ModRevision != active.Revision {
 		return false
@@ -373,7 +374,7 @@ func (repository *ScriptRepository) blueprintScriptBatchMatches(
 	return true
 }
 
-func scriptStageEncodedBytes(conditions []Condition, mutations []Mutation) int {
+func scriptStageEncodedBytes(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) int {
 	size := 128
 	for _, condition := range conditions {
 		size += len(condition.Key) + 64

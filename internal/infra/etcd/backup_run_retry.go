@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -96,7 +97,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 	taskID string,
 ) (backupRunRetrySource, error) {
 	keys := []string{taskKey(taskID), backupRunKey(taskID), backupTerminalReceiptKey(taskID)}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return backupRunRetrySource{}, err
 	}
@@ -212,7 +213,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRetryConfigReferences(
 	source BackupRunSourceAttemptRecord,
 	retrySource BackupRunRecord,
 	fixedRevision int64,
-) ([]Condition, []Mutation, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	var prior *BackupRunSourceAttemptRecord
 	for index := range retrySource.Sources {
 		if retrySource.Sources[index].SourceID == source.SourceID {
@@ -263,21 +264,21 @@ func (repository *BackupRuntimeRepository) prepareBackupRetryConfigReferences(
 			"backup retry config snapshot changed",
 		)
 	}
-	conditions := make([]Condition, len(keys))
+	conditions := make([]etcdstore.Condition, len(keys))
 	for index, key := range keys {
-		conditions[index] = Condition{Key: key}
+		conditions[index] = etcdstore.Condition{Key: key}
 		if read.Values[index] != nil {
 			conditions[index].ModRevision = read.Values[index].ModRevision
 		}
 	}
-	return conditions, []Mutation{
+	return conditions, []etcdstore.Mutation{
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   keys[3],
 			Value: []byte(snapshotID),
 		},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   keys[4],
 			Value: []byte(run.TaskID),
 		},

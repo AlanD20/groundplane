@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"strconv"
 	"time"
@@ -58,7 +59,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		releasePublicationKey(publicationID), releaseOperationKey(task.OperationID),
 		releaseFenceSetKey(task.Owner.EnvironmentID), environmentMutationEpochKey(task.Owner.EnvironmentID),
 	}
-	base, err := repository.store.GetMany(ctx, GetManyRequest{Keys: baseKeys, Revision: readRevision})
+	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: readRevision})
 	if err != nil {
 		return false, err
 	}
@@ -99,7 +100,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	for index, member := range head.Members {
 		terminalKeys[index] = releaseTerminalKey(member.ReleaseID)
 	}
-	terminalRead, err := repository.store.GetMany(ctx, GetManyRequest{Keys: terminalKeys, Revision: readRevision})
+	terminalRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: terminalKeys, Revision: readRevision})
 	if err != nil {
 		return false, err
 	}
@@ -157,20 +158,20 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			serviceruntimerecord.Key(member.ServiceID),
 		)
 	}
-	details, err := repository.store.GetMany(ctx, GetManyRequest{Keys: detailKeys, Revision: readRevision})
+	details, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: detailKeys, Revision: readRevision})
 	if err != nil {
 		return false, err
 	}
 	if details == nil || len(details.Values) != len(detailKeys) {
 		return false, corruptReleaseRecord()
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: baseKeys[0], ModRevision: base.Values[0].ModRevision},
 		{Key: baseKeys[1], ModRevision: base.Values[1].ModRevision},
 		{Key: baseKeys[2], ModRevision: base.Values[2].ModRevision},
 		{Key: baseKeys[3], ModRevision: base.Values[3].ModRevision},
 	}
-	mutations := make([]Mutation, 0, len(pending)*4)
+	mutations := make([]etcdstore.Mutation, 0, len(pending)*4)
 	defer func() { clearMutations(mutations) }()
 	for offset, index := range pending {
 		values := details.Values[offset*6 : offset*6+6]
@@ -298,10 +299,10 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		}
 		priorConditions, priorMutations := len(conditions), len(mutations)
 		conditions = append(conditions,
-			Condition{Key: keys[0], ModRevision: values[0].ModRevision},
-			Condition{Key: keys[1], ModRevision: values[1].ModRevision},
-			Condition{Key: keys[2], ModRevision: keyValueRevision(values[2])},
-			Condition{Key: keys[3]}, Condition{Key: keys[4]},
+			etcdstore.Condition{Key: keys[0], ModRevision: values[0].ModRevision},
+			etcdstore.Condition{Key: keys[1], ModRevision: values[1].ModRevision},
+			etcdstore.Condition{Key: keys[2], ModRevision: keyValueRevision(values[2])},
+			etcdstore.Condition{Key: keys[3]}, etcdstore.Condition{Key: keys[4]},
 		)
 		mutations = append(mutations, memberMutations...)
 		if serving && !recovery && state == domain.StateCompleted {
@@ -316,8 +317,8 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			if err != nil {
 				return false, err
 			}
-			conditions = append(conditions, Condition{Key: keys[5], ModRevision: keyValueRevision(values[5])})
-			mutations = append(mutations, Mutation{Type: MutationPut, Key: keys[5], Value: runtimeValue})
+			conditions = append(conditions, etcdstore.Condition{Key: keys[5], ModRevision: keyValueRevision(values[5])})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[5], Value: runtimeValue})
 		}
 		budget, err := repository.store.MeasureTransaction(
 			ctx,
@@ -336,7 +337,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			break
 		}
 	}
-	if len(conditions)+len(proofConditions)+len(mutations) > maximumTransactionOperations {
+	if len(conditions)+len(proofConditions)+len(mutations) > etcdstore.MaximumOperations {
 		return false, errs.New(errs.KindInternal, "release terminal batch exceeds the transaction ceiling")
 	}
 	transaction, err := repository.store.Transact(ctx, append(conditions, proofConditions...), mutations)
@@ -355,8 +356,8 @@ func (repository *TaskRepository) closeReleaseOperation(
 	task TaskRecord,
 	head ReleaseOperationHead,
 	fence ReleaseFenceSet,
-	base *GetManyResult,
-	terminals *GetManyResult,
+	base *etcdstore.GetManyResult,
+	terminals *etcdstore.GetManyResult,
 	terminalStatus TaskStatus,
 	result TaskResultRecord,
 	terminalAt time.Time,
@@ -394,21 +395,21 @@ func (repository *TaskRepository) closeReleaseOperation(
 	defer clear(headValue)
 	epochValue := slices.Clone(base.Values[3].Value)
 	defer clear(epochValue)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: base.Values[0].Key, ModRevision: base.Values[0].ModRevision},
 		{Key: base.Values[1].Key, ModRevision: base.Values[1].ModRevision},
 		{Key: base.Values[2].Key, ModRevision: base.Values[2].ModRevision},
 		{Key: base.Values[3].Key, ModRevision: base.Values[3].ModRevision},
 	}
 	for _, value := range terminals.Values {
-		conditions = append(conditions, Condition{Key: value.Key, ModRevision: value.ModRevision})
+		conditions = append(conditions, etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision})
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: releaseOperationKey(task.OperationID), Value: headValue},
-		{Type: MutationPut, Key: environmentMutationEpochKey(task.Owner.EnvironmentID), Value: epochValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: releaseOperationKey(task.OperationID), Value: headValue},
+		{Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(task.Owner.EnvironmentID), Value: epochValue},
 	}
 	if state != domain.StateRecoveryRequired {
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: releaseFenceSetKey(task.Owner.EnvironmentID)})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseFenceSetKey(task.Owner.EnvironmentID)})
 	} else if fence.OperationID != task.OperationID {
 		return false, corruptReleaseRecord()
 	}
@@ -434,7 +435,7 @@ func (repository *TaskRepository) validateReleaseTerminalMembers(
 	for index, member := range head.Members {
 		keys[index] = releaseTerminalKey(member.ReleaseID)
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return err
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/netip"
 	"path"
 	"regexp"
@@ -218,7 +219,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRe
 	if err := validateEnvironment(prepared.environment.Record); err != nil {
 		return preparedEnvironmentBlueprintPoolChange{}, err
 	}
-	registries, err := repository.store.GetMany(ctx, GetManyRequest{
+	registries, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentPoolRegistryKey}, Revision: revision,
 	})
 	if err != nil {
@@ -268,7 +269,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRe
 }
 
 func classifyEnvironmentBlueprintBaseConflict(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	fileCount int,
 	expectedHeadRevision int64,
 	operationID string,
@@ -318,7 +319,7 @@ func (repository *HierarchyRepository) loadEnvironmentBlueprintMutationFence(
 	environment Versioned[EnvironmentRecord],
 ) (environmentMutationFenceEvidence, error) {
 	keys := []string{environmentKey(environment.Record.ID), projectKey(project.Record.ID)}
-	anchor, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	anchor, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return environmentMutationFenceEvidence{}, err
 	}
@@ -392,7 +393,7 @@ func (repository *HierarchyRepository) getEnvironmentBlueprintZoneRegistryAtRevi
 	environmentID string,
 	readRevision int64,
 ) (Versioned[zonePoolRegistry], error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{zonePoolRegistryKey(environmentID)}, Revision: readRevision,
 	})
 	if err != nil {

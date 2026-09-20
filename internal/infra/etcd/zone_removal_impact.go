@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"strings"
 
@@ -28,9 +29,9 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 	}
 	prefix := attachBackingProjectPrefix(backingProjectID)
 	start := ""
-	indexes := make([]KeyValue, 0)
+	indexes := make([]etcdstore.KeyValue, 0)
 	for {
-		page, err := repository.store.Range(ctx, RangeRequest{
+		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: prefix, StartExclusive: start, Limit: backingZoneImpactPageSize, Revision: revision,
 		})
 		if err != nil {
@@ -62,7 +63,7 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 		keys[index] = attachKey(attachID)
 		idsByIndex[index] = attachID
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}

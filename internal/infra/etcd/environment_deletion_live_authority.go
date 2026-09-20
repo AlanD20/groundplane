@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,7 +17,7 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 	projectedKeys ...string,
 ) error {
 	directKeys := append(environmentDeletionLiveAuthorityKeys(environmentID), projectedKeys...)
-	direct, err := store.GetMany(ctx, GetManyRequest{
+	direct, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: directKeys, Revision: revision,
 	})
 	if err != nil {
@@ -40,7 +41,7 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 	if err != nil {
 		return err
 	}
-	activeScripts, err := store.Range(ctx, RangeRequest{
+	activeScripts, err := store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: scriptSetOwnerPrefix(environmentID, active.Record.GenerationID), Limit: 1, Revision: revision,
 	})
 	if err != nil {
@@ -53,7 +54,7 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 		return errs.New(errs.KindStateConflict, "environment retained durable Scripts")
 	}
 	for _, prefix := range environmentDeletionLiveAuthorityPrefixes(environmentID, operationID) {
-		page, err := store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 1, Revision: revision})
+		page, err := store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: 1, Revision: revision})
 		if err != nil {
 			return err
 		}
@@ -74,16 +75,16 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 
 func environmentDeletionLiveAuthorityConditions(
 	environmentID string, operationID string, projectedKeys ...string,
-) []Condition {
+) []etcdstore.Condition {
 	keys := append(environmentDeletionLiveAuthorityKeys(environmentID), projectedKeys...)
-	conditions := make([]Condition, 0, len(keys)+18)
+	conditions := make([]etcdstore.Condition, 0, len(keys)+18)
 	for _, key := range keys {
-		conditions = append(conditions, Condition{Key: key})
+		conditions = append(conditions, etcdstore.Condition{Key: key})
 	}
 	for _, prefix := range environmentDeletionLiveAuthorityPrefixes(environmentID, operationID) {
-		conditions = append(conditions, Condition{Key: prefix, Prefix: true})
+		conditions = append(conditions, etcdstore.Condition{Key: prefix, Prefix: true})
 	}
-	conditions = append(conditions, Condition{Key: scriptEnvironmentLocatorPrefixFor(environmentID), Prefix: true})
+	conditions = append(conditions, etcdstore.Condition{Key: scriptEnvironmentLocatorPrefixFor(environmentID), Prefix: true})
 	return conditions
 }
 

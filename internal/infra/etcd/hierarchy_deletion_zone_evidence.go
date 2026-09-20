@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -66,7 +67,7 @@ func hierarchyDeletionZoneEvidenceAtRevision(
 	start := ""
 	var matched *hierarchyDeletionZoneEvidence
 	for {
-		page, err := store.Range(ctx, RangeRequest{
+		page, err := store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: environmentDesiredHeadScanPrefix, StartExclusive: start,
 			Limit: 200, Revision: snapshotRevision,
 		})

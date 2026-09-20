@@ -2,6 +2,7 @@ package volumeremoval
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
@@ -12,9 +13,9 @@ import (
 )
 
 type store interface {
-	Get(context.Context, string) (*etcd.GetResult, error)
-	GetMany(context.Context, etcd.GetManyRequest) (*etcd.GetManyResult, error)
-	Transact(context.Context, []etcd.Condition, []etcd.Mutation) (etcd.TransactionResult, error)
+	Get(context.Context, string) (*etcdstore.GetResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
 type EnvironmentVolumeRemovalRuntimeRepository struct {
@@ -22,7 +23,7 @@ type EnvironmentVolumeRemovalRuntimeRepository struct {
 }
 
 func NewEnvironmentVolumeRemovalRuntimeRepository(
-	backend etcd.Store,
+	backend etcdstore.Store,
 ) (*EnvironmentVolumeRemovalRuntimeRepository, error) {
 	return newEnvironmentVolumeRemovalRuntimeRepository(backend)
 }
@@ -79,16 +80,16 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) Create(
 	defer clear(runtimeValue)
 	defer clear(attemptValue)
 	defer clear(progressValue)
-	conditions := []etcd.Condition{
+	conditions := []etcdstore.Condition{
 		{Key: removalrecord.RuntimeKey(runtime.OperationID)},
 		{Key: removalrecord.AttemptKey(runtime.OperationID, 1)},
 		{Key: removalrecord.ProgressKey(runtime.OperationID)},
 		{Key: removalrecord.PendingPathKey(runtime.OperationID)},
 	}
-	mutations := []etcd.Mutation{
-		{Type: etcd.MutationPut, Key: conditions[0].Key, Value: runtimeValue},
-		{Type: etcd.MutationPut, Key: conditions[1].Key, Value: attemptValue},
-		{Type: etcd.MutationPut, Key: conditions[2].Key, Value: progressValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: conditions[0].Key, Value: runtimeValue},
+		{Type: etcdstore.MutationPut, Key: conditions[1].Key, Value: attemptValue},
+		{Type: etcdstore.MutationPut, Key: conditions[2].Key, Value: progressValue},
 	}
 	if err := validateEnvironmentVolumeRemovalTransaction(repository.store, conditions, mutations, 48); err != nil {
 		return EnvironmentVolumeRemovalResumeState{}, err
@@ -140,7 +141,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) Resume(
 		removalrecord.ProgressKey(operationID),
 		removalrecord.PendingPathKey(operationID),
 	}
-	state, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: keys})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return EnvironmentVolumeRemovalResumeState{}, err
 	}
@@ -160,7 +161,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) Resume(
 	if err != nil || progress.OperationID != operationID {
 		return EnvironmentVolumeRemovalResumeState{}, removalrecord.Corrupt()
 	}
-	attemptRead, err := repository.store.GetMany(ctx, etcd.GetManyRequest{
+	attemptRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{removalrecord.AttemptKey(operationID, runtime.AttemptOrdinal)},
 		Revision: state.ReadRevision,
 	})
@@ -255,7 +256,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) advanceCheckpoint(
 		return etcd.Versioned[removalrecord.Runtime]{}, err
 	}
 	defer clear(value)
-	conditions := []etcd.Condition{{
+	conditions := []etcdstore.Condition{{
 		Key:         removalrecord.RuntimeKey(updated.OperationID),
 		ModRevision: state.Runtime.Revision,
 	}}
@@ -268,8 +269,8 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) advanceCheckpoint(
 		}
 		conditions = append(conditions, fence...)
 	}
-	mutations := []etcd.Mutation{{
-		Type: etcd.MutationPut, Key: removalrecord.RuntimeKey(updated.OperationID), Value: value,
+	mutations := []etcdstore.Mutation{{
+		Type: etcdstore.MutationPut, Key: removalrecord.RuntimeKey(updated.OperationID), Value: value,
 	}}
 	if err := validateEnvironmentVolumeRemovalTransaction(repository.store, conditions, mutations, 32); err != nil {
 		return etcd.Versioned[removalrecord.Runtime]{}, err
@@ -338,14 +339,14 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 		return etcd.Versioned[removalrecord.PendingPath]{}, false, err
 	}
 	defer clear(value)
-	conditions := []etcd.Condition{
+	conditions := []etcdstore.Condition{
 		{Key: removalrecord.RuntimeKey(assignment.OperationID), ModRevision: state.Runtime.Revision},
 		{Key: removalrecord.ProgressKey(assignment.OperationID), ModRevision: state.Progress.Revision},
 		{Key: removalrecord.PendingPathKey(assignment.OperationID)},
 	}
 	conditions = append(conditions, fence...)
-	mutations := []etcd.Mutation{{
-		Type: etcd.MutationPut, Key: removalrecord.PendingPathKey(assignment.OperationID), Value: value,
+	mutations := []etcdstore.Mutation{{
+		Type: etcdstore.MutationPut, Key: removalrecord.PendingPathKey(assignment.OperationID), Value: value,
 	}}
 	if err := validateEnvironmentVolumeRemovalTransaction(repository.store, conditions, mutations, 32); err != nil {
 		return etcd.Versioned[removalrecord.PendingPath]{}, false, err
@@ -442,7 +443,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 	}
 	defer clear(progressValue)
 	defer clear(completionValue)
-	conditions := []etcd.Condition{
+	conditions := []etcdstore.Condition{
 		{Key: removalrecord.RuntimeKey(completion.OperationID), ModRevision: state.Runtime.Revision},
 		{Key: removalrecord.ProgressKey(completion.OperationID), ModRevision: state.Progress.Revision},
 		{Key: removalrecord.PendingPathKey(completion.OperationID), ModRevision: state.Pending.Revision},
@@ -460,18 +461,18 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 		return etcd.Versioned[removalrecord.Progress]{}, false, err
 	}
 	conditions = append(conditions, recovery...)
-	mutations := []etcd.Mutation{
+	mutations := []etcdstore.Mutation{
 		{
-			Type:  etcd.MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   removalrecord.ProgressKey(completion.OperationID),
 			Value: progressValue,
 		},
 		{
-			Type:  etcd.MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   removalrecord.CompletionKey(completion.OperationID, completion.RequestOrdinal),
 			Value: completionValue,
 		},
-		{Type: etcd.MutationDelete, Key: removalrecord.PendingPathKey(completion.OperationID)},
+		{Type: etcdstore.MutationDelete, Key: removalrecord.PendingPathKey(completion.OperationID)},
 	}
 	if completion.DirectoryAbsent {
 		if state.Runtime.Record.Checkpoint != removalrecord.ConsumersDetached {
@@ -488,8 +489,8 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 			return etcd.Versioned[removalrecord.Progress]{}, false, encodeErr
 		}
 		defer clear(runtimeValue)
-		mutations = append(mutations, etcd.Mutation{
-			Type: etcd.MutationPut, Key: removalrecord.RuntimeKey(completion.OperationID), Value: runtimeValue,
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: removalrecord.RuntimeKey(completion.OperationID), Value: runtimeValue,
 		})
 	}
 	if err := validateEnvironmentVolumeRemovalTransaction(repository.store, conditions, mutations, 32); err != nil {
@@ -509,7 +510,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 
 func (repository *EnvironmentVolumeRemovalRuntimeRepository) pendingRecoveryFence(
 	ctx context.Context, state EnvironmentVolumeRemovalResumeState, assignment EnvironmentVolumeRemovalAssignment,
-) ([]etcd.Condition, error) {
+) ([]etcdstore.Condition, error) {
 	pending := state.Pending.Record
 	if pending.TaskID == assignment.TaskID && pending.AssignmentID == assignment.AssignmentID &&
 		pending.AgentID == assignment.AgentID && pending.AgentGeneration == assignment.AgentGeneration {
@@ -518,7 +519,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) pendingRecoveryFenc
 	key := etcd.CapabilityTaskKey(pending.TaskID)
 	read, err := repository.store.GetMany(
 		ctx,
-		etcd.GetManyRequest{Keys: []string{key}, Revision: state.Runtime.ReadRevision},
+		etcdstore.GetManyRequest{Keys: []string{key}, Revision: state.Runtime.ReadRevision},
 	)
 	if err != nil {
 		return nil, err
@@ -534,7 +535,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) pendingRecoveryFenc
 	) != nil {
 		return nil, errs.New(errs.KindStateConflict, "volume removal pending attempt changed")
 	}
-	return []etcd.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}, nil
+	return []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}, nil
 }
 
 func (repository *EnvironmentVolumeRemovalRuntimeRepository) replayPathCompletion(
@@ -542,7 +543,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) replayPathCompletio
 	state EnvironmentVolumeRemovalResumeState,
 	completion removalrecord.Completion,
 ) (etcd.Versioned[removalrecord.Progress], bool, error) {
-	read, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		removalrecord.CompletionKey(completion.OperationID, completion.RequestOrdinal),
 		removalrecord.ProgressKey(completion.OperationID),
 	}})

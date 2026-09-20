@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sync"
 	"time"
 
@@ -41,8 +42,8 @@ func (prepared *PreparedBackupKeyRotation) Clear() {
 }
 
 type backupKeyRotationPublicationPlan struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	record     BackupKeyRotationRecord
 }
 
@@ -99,7 +100,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 			"backup key rotation material is invalid",
 		)
 	}
-	anchor, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	anchor, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		environmentKey(input.EnvironmentID), backupKeyKey(input.EnvironmentID), backupKeyValueKey(input.EnvironmentID),
 	}})
 	if err != nil {
@@ -133,7 +134,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	if err != nil {
 		return PreparedBackupKeyRotation{}, err
 	}
-	projectRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	projectRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{projectKey(environment.ProjectID)}, Revision: anchor.ReadRevision,
 	})
 	if err != nil || projectRead == nil || len(projectRead.Values) != 1 || projectRead.Values[0] == nil {
@@ -177,16 +178,16 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		clear(record.NextEncryptedIdentity)
 		return PreparedBackupKeyRotation{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: backupKeyRotationKey(input.TaskID)}, {Key: indexKey},
 		{Key: backupKeyKey(input.EnvironmentID), ModRevision: anchor.Values[1].ModRevision},
 		{Key: backupKeyValueKey(input.EnvironmentID), ModRevision: anchor.Values[2].ModRevision},
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: backupKeyRotationKey(input.TaskID), Value: rotationValue},
-		{Type: MutationPut, Key: indexKey, Value: []byte(input.TaskID)},
-		{Type: MutationPut, Key: environmentOperationLockKey(input.EnvironmentID), Value: lockValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: backupKeyRotationKey(input.TaskID), Value: rotationValue},
+		{Type: etcdstore.MutationPut, Key: indexKey, Value: []byte(input.TaskID)},
+		{Type: etcdstore.MutationPut, Key: environmentOperationLockKey(input.EnvironmentID), Value: lockValue},
 	}
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {
@@ -285,23 +286,23 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	taskConditions := []Condition{
+	taskConditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)}, {Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskQueueKey(task.Executor, task.ID)},
 	}
 	conditions := append(taskConditions, plan.conditions...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 	}
 	for _, mutation := range plan.mutations {
 		copyOf := mutation
 		copyOf.Value = append([]byte(nil), mutation.Value...)
 		mutations = append(mutations, copyOf)
 	}
-	classify := func(_ int64, values []*KeyValue) error {
+	classify := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "backup key rotation publication evidence is incomplete")
 		}
@@ -351,8 +352,8 @@ func (repository *BackupPolicyRepository) ApplyBackupKeyRotation(ctx context.Con
 }
 
 type backupKeyRotationTaskChange struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 }
 
 func (change *backupKeyRotationTaskChange) clear() {
@@ -388,7 +389,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		backupKeyValueKey(task.Target),
 		environmentOperationLockKey(task.Target),
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: readRevision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
 		return backupKeyRotationTaskChange{}, err
 	}
@@ -441,13 +442,13 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 	if err != nil {
 		return backupKeyRotationTaskChange{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: backupKeyRotationKey(task.ID), ModRevision: read.Values[0].ModRevision},
 		{Key: backupKeyKey(task.Target), ModRevision: read.Values[1].ModRevision},
 		{Key: backupKeyValueKey(task.Target), ModRevision: read.Values[2].ModRevision},
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
-	mutations := make([]Mutation, 0, 5)
+	mutations := make([]etcdstore.Mutation, 0, 5)
 	if status == TaskStatusCompleted {
 		nextRecord := BackupKeyRecord{
 			EnvironmentID: task.Target,
@@ -483,14 +484,14 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		}
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationPut, Key: backupKeyKey(task.Target), Value: recordValue},
-			Mutation{Type: MutationPut, Key: backupKeyValueKey(task.Target), Value: valueValue},
-			Mutation{Type: MutationPut, Key: backupKeyRotationKey(task.ID), Value: rotationValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupKeyKey(task.Target), Value: recordValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupKeyValueKey(task.Target), Value: valueValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupKeyRotationKey(task.ID), Value: rotationValue},
 		)
 	}
 	mutations = append(
 		mutations,
-		Mutation{Type: MutationDelete, Key: environmentOperationLockKey(task.Target)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentOperationLockKey(task.Target)},
 	)
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {
@@ -516,7 +517,7 @@ func (repository *TaskRepository) validateBackupKeyRotationTaskAcknowledgementRe
 		backupKeyValueKey(task.Target),
 		environmentOperationLockKey(task.Target),
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: readRevision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
 		return err
 	}
@@ -587,7 +588,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	retry.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		backupKeyRotationKey(source.Record.ID),
 		backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, source.Record.ID),
 		backupKeyRotationKey(retry.ID),
@@ -671,7 +672,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(retry.ID)}, {Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
 		{Key: taskActiveOperationKey(retry.OperationID)}, {Key: taskQueueKey(retry.Executor, retry.ID)},
 		{Key: backupKeyRotationKey(source.Record.ID), ModRevision: read.Values[0].ModRevision},
@@ -687,19 +688,19 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		{Key: backupKeyValueKey(source.Record.Owner.EnvironmentID), ModRevision: read.Values[5].ModRevision},
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(retry.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
-		{Type: MutationDelete, Key: backupKeyRotationKey(source.Record.ID)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(retry.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
+		{Type: etcdstore.MutationDelete, Key: backupKeyRotationKey(source.Record.ID)},
 		{
-			Type: MutationDelete,
+			Type: etcdstore.MutationDelete,
 			Key:  backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, source.Record.ID),
 		},
-		{Type: MutationPut, Key: backupKeyRotationKey(retry.ID), Value: rotationValue},
-		{Type: MutationPut, Key: newIndex, Value: []byte(retry.ID)},
-		{Type: MutationPut, Key: environmentOperationLockKey(source.Record.Owner.EnvironmentID), Value: lockValue},
+		{Type: etcdstore.MutationPut, Key: backupKeyRotationKey(retry.ID), Value: rotationValue},
+		{Type: etcdstore.MutationPut, Key: newIndex, Value: []byte(retry.ID)},
+		{Type: etcdstore.MutationPut, Key: environmentOperationLockKey(source.Record.Owner.EnvironmentID), Value: lockValue},
 	}
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {
@@ -707,7 +708,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	mutations = append(mutations, epoch)
-	classify := func(_ int64, values []*KeyValue) error {
+	classify := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "backup key rotation retry evidence is incomplete")
 		}

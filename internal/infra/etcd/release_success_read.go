@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 )
@@ -12,7 +13,7 @@ func (ledger *ReleaseLedger) verifySuccessfulRelease(
 	intent domain.Intent,
 	revision int64,
 ) error {
-	read, err := ledger.store.GetMany(ctx, GetManyRequest{
+	read, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{releaseTerminalKey(intent.ID)},
 		Revision: revision,
 	})

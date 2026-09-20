@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -12,8 +13,8 @@ import (
 // Rationale: Backup domain terminal state and its assigned Task must share one
 // transaction, so this persistence-private plan cannot commit independently.
 type backupTaskTerminalPlan struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	record     TaskRecord
 }
 
@@ -87,7 +88,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 		taskActiveOperationKey(task.OperationID), markerKey, taskQueueKey(task.Executor, task.ID),
 		retentionKey, taskRetentionKey, taskTimeoutIndexKey(task.ID, assignment.Deadline),
 	}
-	anchor, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	anchor, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
@@ -150,22 +151,22 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 		clear(markerValue)
 		return backupTaskTerminalPlan{}, errs.Wrap(errs.KindInternal, err)
 	}
-	conditions := make([]Condition, len(keys))
+	conditions := make([]etcdstore.Condition, len(keys))
 	for index, key := range keys {
-		conditions[index] = Condition{Key: key}
+		conditions[index] = etcdstore.Condition{Key: key}
 		if anchor.Values[index] != nil {
 			conditions[index].ModRevision = anchor.Values[index].ModRevision
 		}
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: keys[0], Value: terminalValue},
-		{Type: MutationDelete, Key: keys[1]},
-		{Type: MutationDelete, Key: keys[2]},
-		{Type: MutationDelete, Key: keys[3]},
-		{Type: MutationPut, Key: keys[4], Value: markerValue},
-		{Type: MutationPut, Key: keys[6], Value: retentionValue},
-		{Type: MutationPut, Key: keys[7], Value: append([]byte(nil), taskRetentionValue...)},
-		{Type: MutationDelete, Key: keys[8]},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: keys[0], Value: terminalValue},
+		{Type: etcdstore.MutationDelete, Key: keys[1]},
+		{Type: etcdstore.MutationDelete, Key: keys[2]},
+		{Type: etcdstore.MutationDelete, Key: keys[3]},
+		{Type: etcdstore.MutationPut, Key: keys[4], Value: markerValue},
+		{Type: etcdstore.MutationPut, Key: keys[6], Value: retentionValue},
+		{Type: etcdstore.MutationPut, Key: keys[7], Value: append([]byte(nil), taskRetentionValue...)},
+		{Type: etcdstore.MutationDelete, Key: keys[8]},
 	}
 	return backupTaskTerminalPlan{conditions: conditions, mutations: mutations, record: terminal}, nil
 }

@@ -1,4 +1,4 @@
-package app
+package runtime
 
 import (
 	"context"
@@ -16,7 +16,7 @@ type localAgentSessionsAdapter struct {
 	registry *agentchannel.Registry
 }
 
-func newLocalAgentSessionsAdapter(registry *agentchannel.Registry) (*localAgentSessionsAdapter, error) {
+func NewSessions(registry *agentchannel.Registry) (*localAgentSessionsAdapter, error) {
 	if registry == nil {
 		return nil, errs.New(errs.KindInternal, "local agent session registry is required")
 	}
@@ -97,7 +97,7 @@ type localAgentContainerAdapter struct {
 	lifecycle agentContainerLifecycle
 }
 
-func newLocalAgentContainerAdapter(lifecycle agentContainerLifecycle) (*localAgentContainerAdapter, error) {
+func NewContainer(lifecycle agentContainerLifecycle) (*localAgentContainerAdapter, error) {
 	if lifecycle == nil {
 		return nil, errs.New(errs.KindInternal, "local agent container lifecycle is required")
 	}

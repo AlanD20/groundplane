@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -16,13 +17,13 @@ func cleanupEnvironmentDeletionScriptLocators(
 	ctx context.Context,
 	store hierarchyStore,
 	environmentID string,
-	authority Condition,
+	authority etcdstore.Condition,
 ) error {
 	if authority.Key == "" || authority.ModRevision <= 0 || authority.Prefix {
 		return errs.New(errs.KindInternal, "Script locator cleanup authority is invalid")
 	}
 	for {
-		page, err := store.Range(ctx, RangeRequest{
+		page, err := store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: scriptEnvironmentLocatorPrefixFor(environmentID), Limit: scriptLocatorCleanupBatchSize,
 		})
 		if err != nil {
@@ -48,7 +49,7 @@ func cleanupEnvironmentDeletionScriptLocators(
 			globalKeys[index] = scriptLocatorKey(id)
 			activeKeys[index] = scriptSetScriptKey(environmentID, active.Record.GenerationID, id)
 		}
-		reads, err := store.GetMany(ctx, GetManyRequest{
+		reads, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: append(globalKeys, activeKeys...), Revision: page.ReadRevision,
 		})
 		if err != nil {
@@ -57,11 +58,11 @@ func cleanupEnvironmentDeletionScriptLocators(
 		if reads == nil || len(reads.Values) != len(globalKeys)+len(activeKeys) {
 			return errs.New(errs.KindInternal, "Script locator cleanup evidence is incomplete")
 		}
-		conditions := []Condition{
+		conditions := []etcdstore.Condition{
 			authority,
 			{Key: scriptSetActiveKey(environmentID), ModRevision: active.Revision},
 		}
-		mutations := make([]Mutation, 0, len(page.Values)*2)
+		mutations := make([]etcdstore.Mutation, 0, len(page.Values)*2)
 		for index, environmentLocator := range page.Values {
 			if reads.Values[len(globalKeys)+index] != nil {
 				return errs.New(errs.KindStateConflict, "Environment retained durable Scripts")
@@ -76,12 +77,12 @@ func cleanupEnvironmentDeletionScriptLocators(
 				return errs.New(errs.KindStateConflict, "Script global locator ownership changed")
 			}
 			conditions = append(conditions,
-				Condition{Key: environmentLocator.Key, ModRevision: environmentLocator.ModRevision},
-				Condition{Key: global.Key, ModRevision: global.ModRevision},
+				etcdstore.Condition{Key: environmentLocator.Key, ModRevision: environmentLocator.ModRevision},
+				etcdstore.Condition{Key: global.Key, ModRevision: global.ModRevision},
 			)
 			mutations = append(mutations,
-				Mutation{Type: MutationDelete, Key: environmentLocator.Key},
-				Mutation{Type: MutationDelete, Key: global.Key},
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentLocator.Key},
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: global.Key},
 			)
 		}
 		result, err := store.Transact(ctx, conditions, mutations)
@@ -114,6 +115,6 @@ func cleanupTaskEnvironmentDeletionScriptLocators(
 		return errs.New(errs.KindStateConflict, "Environment deletion tombstone ownership changed")
 	}
 	return cleanupEnvironmentDeletionScriptLocators(
-		ctx, store, environmentID, Condition{Key: key, ModRevision: read.Entry.ModRevision},
+		ctx, store, environmentID, etcdstore.Condition{Key: key, ModRevision: read.Entry.ModRevision},
 	)
 }

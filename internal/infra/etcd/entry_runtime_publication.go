@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"strconv"
 
@@ -112,13 +113,13 @@ func validateEntryRuntimePublication(task TaskRecord, fence environmentMutationF
 	return errs.New(errs.KindInternal, "Entry runtime publication has no Environment epoch fence")
 }
 
-func entryRuntimeSourceConditions(task TaskRecord) []Condition {
+func entryRuntimeSourceConditions(task TaskRecord) []etcdstore.Condition {
 	if task.EntryRuntime == nil {
 		return nil
 	}
-	conditions := make([]Condition, len(task.EntryRuntime.Updates))
+	conditions := make([]etcdstore.Condition, len(task.EntryRuntime.Updates))
 	for index, update := range task.EntryRuntime.Updates {
-		conditions[index] = Condition{
+		conditions[index] = etcdstore.Condition{
 			Key:         serviceruntimerecord.Key(update.ServiceID),
 			ModRevision: update.PreviousRevision,
 		}
@@ -127,12 +128,12 @@ func entryRuntimeSourceConditions(task TaskRecord) []Condition {
 }
 
 func bindEntryRuntimePublication(
-	task TaskRecord, conditions []Condition, classify func(int64, []*KeyValue) error,
-) ([]Condition, func(int64, []*KeyValue) error) {
+	task TaskRecord, conditions []etcdstore.Condition, classify func(int64, []*etcdstore.KeyValue) error,
+) ([]etcdstore.Condition, func(int64, []*etcdstore.KeyValue) error) {
 	sourceConditions := entryRuntimeSourceConditions(task)
 	base := len(conditions)
 	conditions = append(conditions, sourceConditions...)
-	return conditions, func(revision int64, values []*KeyValue) error {
+	return conditions, func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != base+len(sourceConditions) {
 			return errs.New(errs.KindInternal, "Entry runtime publication evidence is incomplete")
 		}
@@ -151,7 +152,7 @@ func bindEntryRuntimePublication(
 
 func (repository *TaskRepository) entryRuntimeClaimConditions(
 	ctx context.Context, task TaskRecord, revision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	conditions := entryRuntimeSourceConditions(task)
 	if len(conditions) == 0 {
 		return nil, nil
@@ -160,7 +161,7 @@ func (repository *TaskRepository) entryRuntimeClaimConditions(
 	for index := range conditions {
 		keys[index] = conditions[index].Key
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +219,7 @@ func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 	for index := range conditions {
 		keys[index] = conditions[index].Key
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return taskMaterializationProjectionChange{}, err
 	}
@@ -280,7 +281,7 @@ func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 			clearTaskMaterializationProjectionChange(change)
 			return taskMaterializationProjectionChange{}, encodeErr
 		}
-		change.mutations = append(change.mutations, Mutation{Type: MutationPut, Key: keys[index], Value: encoded})
+		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[index], Value: encoded})
 	}
 	return change, nil
 }

@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -23,7 +24,7 @@ func connectorSecretReferences(record ConnectorRecord) []string {
 	return references
 }
 
-func validateConnectorSecretIndex(key string, value *KeyValue) error {
+func validateConnectorSecretIndex(key string, value *etcdstore.KeyValue) error {
 	if value == nil {
 		return nil
 	}
@@ -33,20 +34,20 @@ func validateConnectorSecretIndex(key string, value *KeyValue) error {
 	return nil
 }
 
-func connectorSecretIndexCondition(key string, value *KeyValue) Condition {
+func connectorSecretIndexCondition(key string, value *etcdstore.KeyValue) etcdstore.Condition {
 	if value == nil {
-		return Condition{Key: key}
+		return etcdstore.Condition{Key: key}
 	}
-	return Condition{Key: key, ModRevision: value.ModRevision}
+	return etcdstore.Condition{Key: key, ModRevision: value.ModRevision}
 }
 
 func selectConnectorCredentialSecret(
 	reference string,
 	projectID string,
 	scope core.SecretScope,
-	index *KeyValue,
-	values []*KeyValue,
-) (bool, []Condition, int, error) {
+	index *etcdstore.KeyValue,
+	values []*etcdstore.KeyValue,
+) (bool, []etcdstore.Condition, int, error) {
 	if index == nil {
 		return false, nil, 0, nil
 	}
@@ -60,7 +61,7 @@ func selectConnectorCredentialSecret(
 		(scope == core.SecretScopePlatform && record.Secret.ProjectID != "") {
 		return false, nil, 0, corruptSecretRecord()
 	}
-	conditions := []Condition{{Key: values[0].Key, ModRevision: values[0].ModRevision}}
+	conditions := []etcdstore.Condition{{Key: values[0].Key, ModRevision: values[0].ModRevision}}
 	if values[1] != nil {
 		if values[1].Key != deletionTombstoneKey(string(DeletionTargetSecret), record.Secret.ID) {
 			return false, nil, 0, errs.New(
@@ -71,10 +72,10 @@ func selectConnectorCredentialSecret(
 		if err := validateSecretDeletionFence(values[1], record.Secret.ID); err != nil {
 			return false, nil, 0, err
 		}
-		conditions = append(conditions, Condition{Key: values[1].Key, ModRevision: values[1].ModRevision})
+		conditions = append(conditions, etcdstore.Condition{Key: values[1].Key, ModRevision: values[1].ModRevision})
 		return false, conditions, 3, nil
 	}
-	conditions = append(conditions, Condition{
+	conditions = append(conditions, etcdstore.Condition{
 		Key: deletionTombstoneKey(string(DeletionTargetSecret), record.Secret.ID),
 	})
 	value, err := decodeSecretEncryptedValue(values[2].Value)
@@ -91,6 +92,6 @@ func selectConnectorCredentialSecret(
 			"Connector credential secret_ref must name an env_var Secret",
 		)
 	}
-	conditions = append(conditions, Condition{Key: values[2].Key, ModRevision: values[2].ModRevision})
+	conditions = append(conditions, etcdstore.Condition{Key: values[2].Key, ModRevision: values[2].ModRevision})
 	return true, conditions, 3, nil
 }

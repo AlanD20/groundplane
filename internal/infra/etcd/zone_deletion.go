@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -152,7 +153,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	defer clear(intentValue)
 
 	tombstoneKey := deletionTombstoneKey(string(DeletionTargetZone), zone.Record.Desired.ID)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -176,18 +177,18 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	}
 	if ordinary {
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
-		{Type: MutationPut, Key: zoneRemovalIntentKey(intent.OperationID), Value: intentValue},
-		{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(task.ID)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
+		{Type: etcdstore.MutationPut, Key: zoneRemovalIntentKey(intent.OperationID), Value: intentValue},
+		{Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(task.ID)},
 	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
@@ -250,7 +251,7 @@ func classifyZoneDeletionStartConflict(
 	projectionRevision int64,
 	hasTenantFence bool,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		expectedValues := 18
 		if hasTenantFence {
 			expectedValues++
@@ -378,7 +379,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 			"Zone gained a Component address reservation",
 		)
 	}
-	parentResult, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	parentResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(parentTaskID), zoneRemovalIntentKey(intent.OperationID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		environmentBlueprintHeadKey(intent.EnvironmentID), environmentComposeProjectionKey(intent.EnvironmentID),
@@ -460,7 +461,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -488,18 +489,18 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   deletionTombstoneKey(string(DeletionTargetZone), zone.Record.Desired.ID),
 			Value: tombstoneValue,
 		},
-		{Type: MutationPut, Key: zoneRemovalIntentKey(intent.OperationID), Value: intentValue},
-		{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(task.ID)},
+		{Type: etcdstore.MutationPut, Key: zoneRemovalIntentKey(intent.OperationID), Value: intentValue},
+		{Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(task.ID)},
 	}
 	initiation, err := newInheritedTaskInitiation(Versioned[TaskRecord]{
 		Record: parent, Revision: parentResult.Values[0].ModRevision, ReadRevision: parentResult.ReadRevision,
@@ -512,7 +513,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		initiation,
 		conditions,
 		mutations,
-		func(_ int64, values []*KeyValue) error {
+		func(_ int64, values []*etcdstore.KeyValue) error {
 			if len(values) != len(conditions) {
 				return errs.New(errs.KindInternal, "backing Zone handoff compare evidence is incomplete")
 			}

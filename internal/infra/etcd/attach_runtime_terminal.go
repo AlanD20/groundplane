@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -25,7 +26,7 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 	prepared := *input.RuntimePreparation
 	change.conditions = append(
 		change.conditions,
-		Condition{Key: attachTaskRenderInputKey(terminal.PlanID), ModRevision: inputRevision},
+		etcdstore.Condition{Key: attachTaskRenderInputKey(terminal.PlanID), ModRevision: inputRevision},
 	)
 	if err := repository.applyBackingHookTerminal(
 		ctx, terminal, assignment, input, revision, &change,
@@ -50,7 +51,7 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 	}
 	update := prepared.Updates[0]
 	key := serviceruntimerecord.Key(update.Runtime.ServiceID)
-	snapshot, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+	snapshot, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		clearAttachTaskChange(change)
 		return attachTaskChange{}, err
@@ -98,8 +99,8 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 		clearAttachTaskChange(change)
 		return attachTaskChange{}, err
 	}
-	change.conditions = append(change.conditions, Condition{Key: key, ModRevision: update.PreviousRevision})
-	change.mutations = append(change.mutations, Mutation{Type: MutationPut, Key: key, Value: value})
+	change.conditions = append(change.conditions, etcdstore.Condition{Key: key, ModRevision: update.PreviousRevision})
+	change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
 	change.values = append(change.values, value)
 	return change, nil
 }
@@ -109,7 +110,7 @@ func (repository *TaskRepository) readAttachRuntimePreparation(
 ) (AttachTaskRenderInput, int64, error) {
 	snapshot, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{attachTaskRenderInputKey(task.PlanID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{attachTaskRenderInputKey(task.PlanID)}, Revision: revision},
 	)
 	if err != nil {
 		return AttachTaskRenderInput{}, 0, err
@@ -133,15 +134,15 @@ func (repository *TaskRepository) readAttachRuntimePreparation(
 
 func (repository *TaskRepository) attachRuntimeClaimConditions(
 	ctx context.Context, task TaskRecord, revision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	input, inputRevision, err := repository.readAttachRuntimePreparation(ctx, task, revision)
 	if err != nil {
 		return nil, err
 	}
-	conditions := []Condition{{Key: attachTaskRenderInputKey(task.PlanID), ModRevision: inputRevision}}
+	conditions := []etcdstore.Condition{{Key: attachTaskRenderInputKey(task.PlanID), ModRevision: inputRevision}}
 	for _, update := range input.RuntimePreparation.Updates {
 		key := serviceruntimerecord.Key(update.Runtime.ServiceID)
-		snapshot, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+		snapshot, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +152,7 @@ func (repository *TaskRepository) attachRuntimeClaimConditions(
 			return nil, errs.New(errs.KindStateConflict, "Attach acknowledged runtime changed before execution")
 		}
 		clearKeyValues(snapshot.Values)
-		conditions = append(conditions, Condition{Key: key, ModRevision: update.PreviousRevision})
+		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: update.PreviousRevision})
 	}
 	return conditions, nil
 }

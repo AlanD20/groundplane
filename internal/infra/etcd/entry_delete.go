@@ -1,6 +1,9 @@
 package etcd
 
-import "context"
+import (
+	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+)
 
 func (repository *EntryRepository) DeleteEntry(
 	ctx context.Context,
@@ -50,18 +53,18 @@ func (repository *EntryRepository) DeleteEntry(
 	baseCount := len(conditions)
 	conditions = append(conditions, scriptConditions...)
 	classified := classifyEntryScriptAbsenceConflict([]string{current.Record.Entry.ID}, baseCount,
-		func(_ int64, values []*KeyValue) error {
+		func(_ int64, values []*etcdstore.KeyValue) error {
 			return classifyEntryDeleteConflict(values, current, ownerRevision, fence)
 		})
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationDelete, Key: entryRecordKey(current.Record.Entry.ID)},
-		{Type: MutationDelete, Key: entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID)},
+	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationDelete, Key: entryRecordKey(current.Record.Entry.ID)},
+		{Type: etcdstore.MutationDelete, Key: entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID)},
 		{
-			Type: MutationDelete, Key: entryPlainValueGenerationPrefix + current.Record.Entry.ID + "/",
+			Type: etcdstore.MutationDelete, Key: entryPlainValueGenerationPrefix + current.Record.Entry.ID + "/",
 			Prefix: true,
 		},
 		{
-			Type: MutationDelete, Key: entrySecretValueGenerationPrefix + current.Record.Entry.ID + "/",
+			Type: etcdstore.MutationDelete, Key: entrySecretValueGenerationPrefix + current.Record.Entry.ID + "/",
 			Prefix: true,
 		},
 		epochMutation,

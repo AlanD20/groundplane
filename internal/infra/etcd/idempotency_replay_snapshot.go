@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -76,7 +77,7 @@ func (repository *IdempotencyRepository) readEvidenceAtRevision(
 	if err != nil {
 		return nil, err
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +153,7 @@ func (repository *IdempotencyRepository) ResolveReplayLocatorAtRevision(
 	if err != nil || locator.Method != method || locator.Route != route || locator.Key != key {
 		return IdempotencyLocator{}, 0, false, corruptIdempotencyMarker()
 	}
-	markers, err := repository.store.GetMany(ctx, GetManyRequest{
+	markers, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{reference.MarkerKey}, Revision: result.ReadRevision,
 	})
 	if err != nil {
@@ -196,7 +197,7 @@ func (repository *IdempotencyRepository) ResolveReplayLocatorAtSnapshot(
 	if err != nil {
 		return IdempotencyLocator{}, false, err
 	}
-	targets, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{targetKey}, Revision: revision})
+	targets, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{targetKey}, Revision: revision})
 	if err != nil {
 		return IdempotencyLocator{}, false, err
 	}
@@ -221,7 +222,7 @@ func (repository *IdempotencyRepository) ResolveReplayLocatorAtSnapshot(
 	if err != nil || locator.Method != method || locator.Route != route || locator.Key != key {
 		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
 	}
-	markers, err := repository.store.GetMany(ctx, GetManyRequest{
+	markers, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{reference.MarkerKey}, Revision: revision,
 	})
 	if err != nil {

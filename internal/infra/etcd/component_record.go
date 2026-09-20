@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/netip"
 	"reflect"
 
@@ -137,8 +138,8 @@ func componentDesiredRecord(component core.Component) (ComponentDesiredRecord, e
 
 func componentKey(id string) string { return componentPrefix + id }
 
-func componentWriteFenceMutation(authorityID string) Mutation {
-	return Mutation{Type: MutationPut, Key: componentWriteFenceKey, Value: []byte(authorityID)}
+func componentWriteFenceMutation(authorityID string) etcdstore.Mutation {
+	return etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentWriteFenceKey, Value: []byte(authorityID)}
 }
 
 func componentEnvironmentOwnerPrefix(environmentID string) string {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -117,26 +118,26 @@ func resolveScriptAttachNetworks(
 	return result, nil
 }
 
-func scriptAttachSourceConditions(sources ScriptAttachSources) []Condition {
-	byKey := make(map[string]Condition)
+func scriptAttachSourceConditions(sources ScriptAttachSources) []etcdstore.Condition {
+	byKey := make(map[string]etcdstore.Condition)
 	for _, attach := range sources.Attaches {
 		key := attachKey(attach.Record.ID)
-		byKey[key] = Condition{Key: key, ModRevision: attach.Revision}
+		byKey[key] = etcdstore.Condition{Key: key, ModRevision: attach.Revision}
 	}
 	for _, head := range sources.Heads {
 		key := environmentBlueprintHeadKey(head.Record.EnvironmentID)
-		byKey[key] = Condition{Key: key, ModRevision: head.Revision}
+		byKey[key] = etcdstore.Condition{Key: key, ModRevision: head.Revision}
 		for _, network := range sources.Networks {
 			if network.Record.EnvironmentID != head.Record.EnvironmentID {
 				continue
 			}
 			root := environmentBlueprintRootKey(head.Record.EnvironmentID, head.Record.RevisionID)
-			byKey[root] = Condition{Key: root, ModRevision: network.Revision}
+			byKey[root] = etcdstore.Condition{Key: root, ModRevision: network.Revision}
 			deleted := deletionTombstoneKey(string(DeletionTargetZone), network.Record.Desired.ID)
-			byKey[deleted] = Condition{Key: deleted}
+			byKey[deleted] = etcdstore.Condition{Key: deleted}
 		}
 	}
-	result := make([]Condition, 0, len(byKey))
+	result := make([]etcdstore.Condition, 0, len(byKey))
 	for _, condition := range byKey {
 		result = append(result, condition)
 	}

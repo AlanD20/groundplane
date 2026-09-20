@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -15,16 +16,16 @@ type ReleaseGroupPreparedMutation struct {
 	groupID       string
 	groupRevision int64
 	taskType      TaskType
-	conditions    []Condition
-	mutations     []Mutation
+	conditions    []etcdstore.Condition
+	mutations     []etcdstore.Mutation
 }
 
 // ReleaseGroupBlueprintPreparedMutation is an opaque, immutable Release Group
 // projection fragment for Environment desired-revision publication.
 type ReleaseGroupBlueprintPreparedMutation struct {
 	environmentID string
-	conditions    []Condition
-	mutations     []Mutation
+	conditions    []etcdstore.Condition
+	mutations     []etcdstore.Mutation
 }
 
 func (prepared ReleaseGroupBlueprintPreparedMutation) isZero() bool {
@@ -36,8 +37,8 @@ func newReleaseGroupPreparedMutation(
 	groupID string,
 	groupRevision int64,
 	taskType TaskType,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 ) ReleaseGroupPreparedMutation {
 	return ReleaseGroupPreparedMutation{
 		environmentID: environmentID,
@@ -51,8 +52,8 @@ func newReleaseGroupPreparedMutation(
 
 func newReleaseGroupBlueprintPreparedMutation(
 	environmentID string,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 ) ReleaseGroupBlueprintPreparedMutation {
 	return ReleaseGroupBlueprintPreparedMutation{
 		environmentID: environmentID,
@@ -94,7 +95,7 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 	plan, err := newIdempotencyMutationPlan(
 		cloneReleaseGroupConditions(prepared.conditions),
 		cloneReleaseGroupMutations(prepared.mutations),
-		func(_ int64, _ []*KeyValue) error {
+		func(_ int64, _ []*etcdstore.KeyValue) error {
 			return errs.New(errs.KindStateConflict, "release group mutation evidence changed")
 		},
 	)
@@ -160,17 +161,17 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	defer clear(reference)
 	conditions := cloneReleaseGroupConditions(prepared.conditions)
 	conditions = append(conditions,
-		Condition{Key: taskKey(task.ID)},
-		Condition{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		Condition{Key: taskActiveOperationKey(task.OperationID)},
-		Condition{Key: taskQueueKey(task.Executor, task.ID)},
+		etcdstore.Condition{Key: taskKey(task.ID)},
+		etcdstore.Condition{Key: taskOperationIndexKey(task.OperationID, task.ID)},
+		etcdstore.Condition{Key: taskActiveOperationKey(task.OperationID)},
+		etcdstore.Condition{Key: taskQueueKey(task.Executor, task.ID)},
 	)
 	mutations := cloneReleaseGroupMutations(prepared.mutations)
 	mutations = append(mutations,
-		Mutation{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		Mutation{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		Mutation{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		Mutation{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 	)
 	if prepared.taskType == TaskRemove {
 		tombstone := DeletionTombstoneRecord{
@@ -183,8 +184,8 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clear(value)
-		mutations = append(mutations, Mutation{
-			Type:  MutationPut,
+		mutations = append(mutations, etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
 			Key:   deletionTombstoneKey(string(DeletionTargetReleaseGroup), prepared.groupID),
 			Value: value,
 		})
@@ -199,7 +200,7 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		task, initiation, conditions, mutations,
-		func(_ int64, _ []*KeyValue) error {
+		func(_ int64, _ []*etcdstore.KeyValue) error {
 			return errs.New(errs.KindStateConflict, "release group mutation evidence changed")
 		},
 	)
@@ -276,12 +277,12 @@ func validateReleaseGroupBlueprintPreparedMutation(
 	return nil
 }
 
-func cloneReleaseGroupConditions(conditions []Condition) []Condition {
-	return append([]Condition(nil), conditions...)
+func cloneReleaseGroupConditions(conditions []etcdstore.Condition) []etcdstore.Condition {
+	return append([]etcdstore.Condition(nil), conditions...)
 }
 
-func cloneReleaseGroupMutations(mutations []Mutation) []Mutation {
-	cloned := make([]Mutation, len(mutations))
+func cloneReleaseGroupMutations(mutations []etcdstore.Mutation) []etcdstore.Mutation {
+	cloned := make([]etcdstore.Mutation, len(mutations))
 	for index := range mutations {
 		cloned[index] = mutations[index]
 		cloned[index].Value = append([]byte(nil), mutations[index].Value...)

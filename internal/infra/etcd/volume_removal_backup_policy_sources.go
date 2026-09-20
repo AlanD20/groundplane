@@ -1,6 +1,9 @@
 package etcd
 
-import "context"
+import (
+	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+)
 
 func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 	ctx context.Context,
@@ -13,7 +16,7 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 		for index, sourceID := range policy.SourceIDs {
 			keys[index] = backupSourceKey(sourceID)
 		}
-		read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 		if err != nil {
 			return err
 		}
@@ -30,7 +33,7 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 				return corruptBackupRuntimeRecord()
 			}
 			state.sources = append(state.sources, source)
-			state.conditions = append(state.conditions, Condition{Key: keys[index], ModRevision: value.ModRevision})
+			state.conditions = append(state.conditions, etcdstore.Condition{Key: keys[index], ModRevision: value.ModRevision})
 		}
 	}
 	keys := make([]string, 0, len(state.sources)*2+1)
@@ -51,7 +54,7 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 	if len(keys) == 0 {
 		return nil
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return err
 	}
@@ -60,7 +63,7 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 	}
 	defer clearKeyValues(read.Values)
 	for index, value := range read.Values {
-		condition := Condition{Key: keys[index]}
+		condition := etcdstore.Condition{Key: keys[index]}
 		if values[index] == "" {
 			if value != nil {
 				return corruptBackupRuntimeRecord()

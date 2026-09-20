@@ -3,6 +3,7 @@ package volumeremoval
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 
@@ -12,10 +13,10 @@ import (
 )
 
 type evidenceStore interface {
-	GetMany(context.Context, etcd.GetManyRequest) (*etcd.GetManyResult, error)
-	Range(context.Context, etcd.RangeRequest) (*etcd.RangeResult, error)
-	Transact(context.Context, []etcd.Condition, []etcd.Mutation) (etcd.TransactionResult, error)
-	VolumeRemovalEvidenceTransactionSize([]etcd.Condition, []etcd.Mutation) (int, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
+	VolumeRemovalEvidenceTransactionSize([]etcdstore.Condition, []etcdstore.Mutation) (int, error)
 }
 
 // EvidenceRepository owns only bounded private staging. A completed cursor is
@@ -53,7 +54,7 @@ func (repository *EvidenceRepository) Manifest(
 		return removal.EvidenceManifest{}, false, evidenceConflict()
 	}
 	key := removal.EvidenceManifestKey(operationID)
-	read, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: []string{key}})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}})
 	if err != nil {
 		return removal.EvidenceManifest{}, false, err
 	}
@@ -102,10 +103,10 @@ func (repository *EvidenceRepository) Begin(
 		return EvidenceState{}, err
 	}
 	defer clear(cursorValue)
-	conditions := []etcd.Condition{{Key: removal.EvidenceRoot(manifest.OperationID), Prefix: true}}
-	mutations := []etcd.Mutation{
-		{Type: etcd.MutationPut, Key: removal.EvidenceManifestKey(manifest.OperationID), Value: manifestValue},
-		{Type: etcd.MutationPut, Key: removal.EvidenceCursorKey(manifest.OperationID), Value: cursorValue},
+	conditions := []etcdstore.Condition{{Key: removal.EvidenceRoot(manifest.OperationID), Prefix: true}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: removal.EvidenceManifestKey(manifest.OperationID), Value: manifestValue},
+		{Type: etcdstore.MutationPut, Key: removal.EvidenceCursorKey(manifest.OperationID), Value: cursorValue},
 	}
 	size, err := repository.store.VolumeRemovalEvidenceTransactionSize(conditions, mutations)
 	if err != nil {
@@ -184,7 +185,7 @@ func (repository *EvidenceRepository) Stage(
 		}
 		keys[index] = removal.EvidenceRowKey(manifest.OperationID, row.Ordinal)
 	}
-	read, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: keys, Revision: state.Cursor.ReadRevision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: state.Cursor.ReadRevision})
 	if err != nil {
 		return EvidenceStageResult{}, err
 	}
@@ -212,11 +213,11 @@ func (repository *EvidenceRepository) Stage(
 	if first != state.Cursor.Record.NextOrdinal || len(rows) != int(min(uint64(removal.EvidenceBatchRows), remaining)) {
 		return EvidenceStageResult{}, evidenceConflict()
 	}
-	conditions := []etcd.Condition{
+	conditions := []etcdstore.Condition{
 		{Key: removal.EvidenceManifestKey(manifest.OperationID), ModRevision: state.Manifest.Revision},
 		{Key: removal.EvidenceCursorKey(manifest.OperationID), ModRevision: state.Cursor.Revision},
 	}
-	mutations := make([]etcd.Mutation, 0, len(rows))
+	mutations := make([]etcdstore.Mutation, 0, len(rows))
 	progress := make([]removal.EvidenceCursor, len(rows))
 	putCounts := make([]int, len(rows))
 	cursor := state.Cursor.Record
@@ -226,9 +227,9 @@ func (repository *EvidenceRepository) Stage(
 			return EvidenceStageResult{}, err
 		}
 		progress[index] = cursor
-		condition := etcd.Condition{Key: keys[index]}
+		condition := etcdstore.Condition{Key: keys[index]}
 		if read.Values[index] == nil {
-			mutations = append(mutations, etcd.Mutation{Type: etcd.MutationPut, Key: keys[index], Value: values[index]})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[index], Value: values[index]})
 		} else {
 			condition.ModRevision = read.Values[index].ModRevision
 		}
@@ -240,11 +241,11 @@ func (repository *EvidenceRepository) Stage(
 		if err != nil {
 			return EvidenceStageResult{}, err
 		}
-		writes := append([]etcd.Mutation(nil), mutations[:putCounts[count-1]]...)
+		writes := append([]etcdstore.Mutation(nil), mutations[:putCounts[count-1]]...)
 		writes = append(
 			writes,
-			etcd.Mutation{
-				Type:  etcd.MutationPut,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   removal.EvidenceCursorKey(manifest.OperationID),
 				Value: cursorValue,
 			},
@@ -290,7 +291,7 @@ func (repository *EvidenceRepository) read(
 	}
 	defer clear(value)
 	keys := []string{removal.EvidenceManifestKey(manifest.OperationID), removal.EvidenceCursorKey(manifest.OperationID)}
-	read, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: keys})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return EvidenceState{}, false, err
 	}

@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 	"time"
 
@@ -42,18 +43,18 @@ type BackupRecoveryPointPage struct {
 }
 
 type backupPruneTransactionPlan struct {
-	conditions   []Condition
-	mutations    []Mutation
+	conditions   []etcdstore.Condition
+	mutations    []etcdstore.Mutation
 	authority    *backupTaskPublicationAuthority
 	readRevision int64
 }
 
 func (plan backupPruneTransactionPlan) composeTransaction(
-	conditions []Condition,
-	mutations []Mutation,
-) ([]Condition, []Mutation, error) {
-	composedConditions := append(append([]Condition(nil), conditions...), plan.conditions...)
-	composedMutations := make([]Mutation, 0, len(mutations)+len(plan.mutations))
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
+	composedConditions := append(append([]etcdstore.Condition(nil), conditions...), plan.conditions...)
+	composedMutations := make([]etcdstore.Mutation, 0, len(mutations)+len(plan.mutations))
 	for _, mutation := range mutations {
 		copyOfMutation := mutation
 		copyOfMutation.Value = append([]byte(nil), mutation.Value...)
@@ -147,8 +148,8 @@ func (plan backupPruneTransactionPlan) taskRetryIdempotencyPlan(
 	if err != nil {
 		return nil, err
 	}
-	conditions := append([]Condition(nil), plan.conditions...)
-	conditions = append(conditions, Condition{
+	conditions := append([]etcdstore.Condition(nil), plan.conditions...)
+	conditions = append(conditions, etcdstore.Condition{
 		Key: taskKey(source.Record.ID), ModRevision: source.Revision,
 	})
 	return prepareBackupTaskIdempotencyPlan(
@@ -219,7 +220,7 @@ func (repository *BackupRuntimeRepository) GetBackupOrphan(
 	if err != nil {
 		return Versioned[BackupOrphanRecord]{}, false, corruptBackupRuntimeRecord()
 	}
-	authority, err := repository.store.GetMany(ctx, GetManyRequest{
+	authority, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{primaryKey, membershipKey, connectorMembershipKey},
 		Revision: initial.ReadRevision,
 	})
@@ -296,19 +297,19 @@ func (repository *BackupRuntimeRepository) CreateBackupOrphan(
 	if err != nil {
 		return Versioned[BackupRunRecord]{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: backupOrphanKey(orphan.Point.ID)},
 		{Key: connectorIndex},
 		{Key: environmentIndex},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: backupOrphanKey(orphan.Point.ID), Value: value},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: backupOrphanKey(orphan.Point.ID), Value: value},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   connectorIndex,
 			Value: []byte(orphan.Point.ID),
 		},
-		{Type: MutationPut, Key: environmentIndex, Value: []byte(orphan.Point.ID)},
+		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(orphan.Point.ID)},
 	}
 	return repository.replaceBackupRun(
 		ctx,
@@ -377,15 +378,15 @@ func (repository *BackupRuntimeRepository) TransitionReconciledBackupOrphan(
 	if err := validateBackupOrphanCompanionEvidence(anchor.Values, current.Record); err != nil {
 		return Versioned[BackupOrphanRecord]{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: keys[0], ModRevision: current.Revision},
 		{Key: keys[1], ModRevision: current.Revision},
 		{Key: keys[2], ModRevision: current.Revision},
 	}
-	result, err := repository.transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: keys[0], Value: value},
-		{Type: MutationPut, Key: keys[1], Value: []byte(next.Point.ID)},
-		{Type: MutationPut, Key: keys[2], Value: []byte(next.Point.ID)},
+	result, err := repository.transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: keys[0], Value: value},
+		{Type: etcdstore.MutationPut, Key: keys[1], Value: []byte(next.Point.ID)},
+		{Type: etcdstore.MutationPut, Key: keys[2], Value: []byte(next.Point.ID)},
 	})
 	if err != nil {
 		return Versioned[BackupOrphanRecord]{}, err
@@ -439,14 +440,14 @@ func (repository *BackupRuntimeRepository) DeleteReconciledBackupOrphan(
 	if err := validateBackupOrphanCompanionEvidence(anchor.Values, current.Record); err != nil {
 		return err
 	}
-	result, err := repository.transact(ctx, []Condition{
+	result, err := repository.transact(ctx, []etcdstore.Condition{
 		{Key: keys[0], ModRevision: current.Revision},
 		{Key: keys[1], ModRevision: current.Revision},
 		{Key: keys[2], ModRevision: current.Revision},
-	}, []Mutation{
-		{Type: MutationDelete, Key: keys[0]},
-		{Type: MutationDelete, Key: keys[1]},
-		{Type: MutationDelete, Key: keys[2]},
+	}, []etcdstore.Mutation{
+		{Type: etcdstore.MutationDelete, Key: keys[0]},
+		{Type: etcdstore.MutationDelete, Key: keys[1]},
+		{Type: etcdstore.MutationDelete, Key: keys[2]},
 	})
 	if err != nil {
 		return err
@@ -556,23 +557,23 @@ func (repository *BackupRuntimeRepository) AdoptReconciledBackupOrphan(
 			)
 		}
 	}
-	conditions := make([]Condition, 0, len(keys))
+	conditions := make([]etcdstore.Condition, 0, len(keys))
 	for position, key := range keys {
-		condition := Condition{Key: key}
+		condition := etcdstore.Condition{Key: key}
 		if position < 3 {
 			condition.ModRevision = current.Revision
 		}
 		conditions = append(conditions, condition)
 	}
-	result, err := repository.transact(ctx, conditions, []Mutation{
-		{Type: MutationDelete, Key: keys[0]},
-		{Type: MutationDelete, Key: keys[1]},
-		{Type: MutationDelete, Key: keys[2]},
-		{Type: MutationPut, Key: keys[3], Value: pointValue},
-		{Type: MutationPut, Key: keys[4], Value: []byte(point.ID)},
-		{Type: MutationPut, Key: keys[5], Value: []byte(point.ID)},
-		{Type: MutationPut, Key: keys[6], Value: []byte(point.ID)},
-		{Type: MutationPut, Key: keys[7], Value: sweepValue},
+	result, err := repository.transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationDelete, Key: keys[0]},
+		{Type: etcdstore.MutationDelete, Key: keys[1]},
+		{Type: etcdstore.MutationDelete, Key: keys[2]},
+		{Type: etcdstore.MutationPut, Key: keys[3], Value: pointValue},
+		{Type: etcdstore.MutationPut, Key: keys[4], Value: []byte(point.ID)},
+		{Type: etcdstore.MutationPut, Key: keys[5], Value: []byte(point.ID)},
+		{Type: etcdstore.MutationPut, Key: keys[6], Value: []byte(point.ID)},
+		{Type: etcdstore.MutationPut, Key: keys[7], Value: sweepValue},
 	})
 	if err != nil {
 		return Versioned[BackupRecoveryPointRecord]{}, err
@@ -590,7 +591,7 @@ func (repository *BackupRuntimeRepository) AdoptReconciledBackupOrphan(
 }
 
 func validateReconciledBackupPointReplay(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	point BackupRecoveryPointRecord,
 	sweep BackupRetentionSweepRecord,
 ) error {
@@ -720,7 +721,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 	if err != nil {
 		return Versioned[BackupOrphanRecord]{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: backupRunKey(run.Record.TaskID), ModRevision: run.Revision},
 		{Key: backupOrphanKey(next.Point.ID), ModRevision: current.Revision},
 		{Key: connectorIndex, ModRevision: current.Revision},
@@ -733,10 +734,10 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 		return Versioned[BackupOrphanRecord]{}, err
 	}
 	defer clear(epoch.Value)
-	result, err := repository.transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: backupOrphanKey(next.Point.ID), Value: value},
-		{Type: MutationPut, Key: connectorIndex, Value: []byte(next.Point.ID)},
-		{Type: MutationPut, Key: environmentIndex, Value: []byte(next.Point.ID)},
+	result, err := repository.transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: backupOrphanKey(next.Point.ID), Value: value},
+		{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(next.Point.ID)},
+		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(next.Point.ID)},
 		epoch,
 	})
 	if err != nil {
@@ -819,9 +820,9 @@ func (repository *BackupRuntimeRepository) advanceBackupRunAfterRetention(
 		ctx,
 		currentRun,
 		nextRun,
-		[]Condition{{Key: key, ModRevision: sweep.Revision}},
+		[]etcdstore.Condition{{Key: key, ModRevision: sweep.Revision}},
 		nil,
-		func(values []*KeyValue) error {
+		func(values []*etcdstore.KeyValue) error {
 			if len(values) != 1 || values[0] == nil || values[0].ModRevision != sweep.Revision {
 				return errs.New(errs.KindStateConflict, "backup retention authority changed")
 			}
@@ -910,7 +911,7 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 	if err != nil {
 		return Versioned[BackupRecoveryPointRecord]{}, Versioned[BackupRunRecord]{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{
 			Key:         connectorRecordKey(point.ConnectorID),
 			ModRevision: currentRun.Record.ConnectorRevision,
@@ -925,27 +926,27 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 		{Key: connectorIndex},
 		{Key: backupRetentionKey(point.SourceID, point.ID)},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: backupRecoveryPointKey(point.ID), Value: pointValue},
-		{Type: MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
-		{Type: MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
-		{Type: MutationPut, Key: connectorIndex, Value: []byte(point.ID)},
-		{Type: MutationPut, Key: backupRetentionKey(point.SourceID, point.ID), Value: sweepValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: backupRecoveryPointKey(point.ID), Value: pointValue},
+		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
+		{Type: etcdstore.MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
+		{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(point.ID)},
+		{Type: etcdstore.MutationPut, Key: backupRetentionKey(point.SourceID, point.ID), Value: sweepValue},
 	}
 	if orphan != nil {
 		conditions = append(conditions,
-			Condition{Key: backupOrphanKey(point.ID), ModRevision: orphan.Revision},
-			Condition{Key: orphanConnectorIndex, ModRevision: orphan.Revision},
-			Condition{Key: orphanEnvironmentIndex, ModRevision: orphan.Revision},
+			etcdstore.Condition{Key: backupOrphanKey(point.ID), ModRevision: orphan.Revision},
+			etcdstore.Condition{Key: orphanConnectorIndex, ModRevision: orphan.Revision},
+			etcdstore.Condition{Key: orphanEnvironmentIndex, ModRevision: orphan.Revision},
 		)
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationDelete, Key: backupOrphanKey(point.ID)},
-			Mutation{Type: MutationDelete, Key: orphanConnectorIndex},
-			Mutation{Type: MutationDelete, Key: orphanEnvironmentIndex},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: backupOrphanKey(point.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: orphanConnectorIndex},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: orphanEnvironmentIndex},
 		)
 	}
-	validateCompanions := func(values []*KeyValue) error {
+	validateCompanions := func(values []*etcdstore.KeyValue) error {
 		if err := validateBackupConnectorSnapshotEvidence(
 			values[:2],
 			currentRun.Record,
@@ -1017,7 +1018,7 @@ func (repository *BackupRuntimeRepository) GetBackupRecoveryPoint(
 	if err != nil {
 		return Versioned[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
 	}
-	authority, err := repository.store.GetMany(ctx, GetManyRequest{
+	authority, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			backupRecoveryPointKey(recoveryPointID),
 			backupRecoveryPointPruneKey(recoveryPointID),
@@ -1175,7 +1176,7 @@ func (repository *BackupRuntimeRepository) ListBackupRunsByEnvironment(
 	if err := validateBackupRuntimeListRequest(prefix, request); err != nil {
 		return BackupRuntimePage[BackupRunRecord]{}, err
 	}
-	index, err := repository.store.Range(ctx, RangeRequest{
+	index, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: request.StartExclusive,
 		Limit: int64(request.Limit), Revision: request.Revision,
 	})
@@ -1205,7 +1206,7 @@ func (repository *BackupRuntimeRepository) readBackupRunMembershipPage(
 	ctx context.Context,
 	environmentID string,
 	keys []string,
-	index *RangeResult,
+	index *etcdstore.RangeResult,
 ) (BackupRuntimePage[BackupRunRecord], error) {
 	page := BackupRuntimePage[BackupRunRecord]{Revision: index.ReadRevision}
 	if len(keys) == 0 {
@@ -1213,7 +1214,7 @@ func (repository *BackupRuntimeRepository) readBackupRunMembershipPage(
 	}
 	primaries, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: keys, Revision: index.ReadRevision},
+		etcdstore.GetManyRequest{Keys: keys, Revision: index.ReadRevision},
 	)
 	if err != nil {
 		return BackupRuntimePage[BackupRunRecord]{}, err
@@ -1258,7 +1259,7 @@ func (repository *BackupRuntimeRepository) ListBackupOrphansByEnvironment(
 	if err := validateBackupRuntimeListRequest(prefix, request); err != nil {
 		return BackupRuntimePage[BackupOrphanRecord]{}, err
 	}
-	index, err := repository.store.Range(ctx, RangeRequest{
+	index, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: request.StartExclusive,
 		Limit: int64(request.Limit), Revision: request.Revision,
 	})
@@ -1292,7 +1293,7 @@ func (repository *BackupRuntimeRepository) ListBackupOrphansByEnvironment(
 	}
 	primaries, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: keys, Revision: index.ReadRevision},
+		etcdstore.GetManyRequest{Keys: keys, Revision: index.ReadRevision},
 	)
 	if err != nil {
 		return BackupRuntimePage[BackupOrphanRecord]{}, err
@@ -1329,7 +1330,7 @@ func (repository *BackupRuntimeRepository) ListBackupOrphansByEnvironment(
 		records[position] = record
 		connectorKeys[position] = connectorKey
 	}
-	connectors, err := repository.store.GetMany(ctx, GetManyRequest{
+	connectors, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: connectorKeys, Revision: index.ReadRevision,
 	})
 	if err != nil {
@@ -1411,7 +1412,7 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 	if err := validateBackupRuntimeListRequest(prefix, request); err != nil {
 		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
 	}
-	index, err := repository.store.Range(ctx, RangeRequest{
+	index, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: request.StartExclusive,
 		Limit: int64(request.Limit), Revision: request.Revision,
 	})
@@ -1536,14 +1537,14 @@ func (repository *BackupRuntimeRepository) readBackupRecoveryPointPageChunks(
 	ctx context.Context,
 	keys []string,
 	revision int64,
-) (*GetManyResult, error) {
+) (*etcdstore.GetManyResult, error) {
 	if len(keys) == 0 || revision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "recovery point page chunk input is invalid")
 	}
-	combined := &GetManyResult{ReadRevision: revision, Values: make([]*KeyValue, 0, len(keys))}
-	for start := 0; start < len(keys); start += maximumTransactionOperations {
-		end := min(start+maximumTransactionOperations, len(keys))
-		chunk, err := repository.store.GetMany(ctx, GetManyRequest{
+	combined := &etcdstore.GetManyResult{ReadRevision: revision, Values: make([]*etcdstore.KeyValue, 0, len(keys))}
+	for start := 0; start < len(keys); start += etcdstore.MaximumOperations {
+		end := min(start+etcdstore.MaximumOperations, len(keys))
+		chunk, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: keys[start:end], Revision: revision,
 		})
 		if err != nil {
@@ -1646,7 +1647,7 @@ func (repository *BackupRuntimeRepository) ListBackupRetentionSweepsBySource(
 	if err := validateBackupRuntimeListRequest(prefix, request); err != nil {
 		return BackupRuntimePage[BackupRetentionSweepRecord]{}, err
 	}
-	result, err := repository.store.Range(ctx, RangeRequest{
+	result, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: request.StartExclusive,
 		Limit: int64(request.Limit), Revision: request.Revision,
 	})
@@ -1740,7 +1741,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 	if selectionRevision <= 0 || selectionRevision > anchor.ReadRevision {
 		return Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
 	}
-	index, err := repository.store.Range(ctx, RangeRequest{
+	index, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: startExclusive, Limit: maximumBackupPruneBatch,
 		Revision: selectionRevision,
 	})
@@ -1843,12 +1844,12 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 	if next.PruneOperationID == "" {
 		next.PruneOperationID = ids.New(ids.KindOperation)
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: backupRunKey(run.Record.TaskID), ModRevision: run.Revision},
 		{Key: sweepKey, ModRevision: current.Revision},
 	}
 	created := make([]BackupRecoveryPointPruneRecord, 0, len(index.Values))
-	mutations := make([]Mutation, 0, len(index.Values)+2)
+	mutations := make([]etcdstore.Mutation, 0, len(index.Values)+2)
 	for position, pointID := range pointIDs {
 		pointValue := authority.Values[position*2]
 		pruneValue := authority.Values[position*2+1]
@@ -1858,10 +1859,10 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		point := points[position]
 		conditions = append(
 			conditions,
-			Condition{Key: companionKeys[position*3], ModRevision: pointValue.ModRevision},
-			Condition{Key: companionKeys[position*3+1], ModRevision: pointValue.ModRevision},
-			Condition{Key: companionKeys[position*3+2], ModRevision: pointValue.ModRevision},
-			Condition{Key: backupRecoveryPointKey(pointID), ModRevision: pointValue.ModRevision},
+			etcdstore.Condition{Key: companionKeys[position*3], ModRevision: pointValue.ModRevision},
+			etcdstore.Condition{Key: companionKeys[position*3+1], ModRevision: pointValue.ModRevision},
+			etcdstore.Condition{Key: companionKeys[position*3+2], ModRevision: pointValue.ModRevision},
+			etcdstore.Condition{Key: backupRecoveryPointKey(pointID), ModRevision: pointValue.ModRevision},
 		)
 		if pruneValue != nil {
 			prune, pruneErr := decodeBackupRecoveryPointPruneRecord(pruneValue.Value)
@@ -1869,13 +1870,13 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 				prune.State == BackupPruneVerifiedAbsent {
 				return Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
 			}
-			conditions = append(conditions, Condition{
+			conditions = append(conditions, etcdstore.Condition{
 				Key: backupRecoveryPointPruneKey(pointID), ModRevision: pruneValue.ModRevision,
 			})
 			next.Cursor = pointID
 			continue
 		}
-		conditions = append(conditions, Condition{Key: backupRecoveryPointPruneKey(pointID)})
+		conditions = append(conditions, etcdstore.Condition{Key: backupRecoveryPointPruneKey(pointID)})
 		if next.RetainedCount < next.Keep {
 			next.RetainedCount++
 			next.Cursor = pointID
@@ -1891,8 +1892,8 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 			clearBackupRuntimeMutations(mutations)
 			return Versioned[BackupRetentionSweepRecord]{}, nil, encodeErr
 		}
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: backupRecoveryPointPruneKey(pointID), Value: encoded,
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: backupRecoveryPointPruneKey(pointID), Value: encoded,
 		})
 		created = append(created, prune)
 		next.Cursor = pointID
@@ -1906,7 +1907,7 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		return Versioned[BackupRetentionSweepRecord]{}, nil, err
 	}
 	mutations = append(
-		[]Mutation{{Type: MutationPut, Key: sweepKey, Value: nextValue}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: sweepKey, Value: nextValue}},
 		mutations...)
 	evidence, err := repository.loadOwnedEvidence(ctx, run.Record, anchor.ReadRevision)
 	if err != nil {
@@ -2079,26 +2080,26 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		clear(lockValue)
 		return backupPruneTransactionPlan{}, err
 	}
-	conditions := []Condition{{Key: dispatchKey}}
-	mutations := make([]Mutation, 0, len(pending)+3)
+	conditions := []etcdstore.Condition{{Key: dispatchKey}}
+	mutations := make([]etcdstore.Mutation, 0, len(pending)+3)
 	for index := range pending {
 		start := 1 + index*5
 		for offset := range 5 {
-			conditions = append(conditions, Condition{
+			conditions = append(conditions, etcdstore.Condition{
 				Key: keys[start+offset], ModRevision: anchor.Values[start+offset].ModRevision,
 			})
 		}
-		mutations = append(mutations, Mutation{
-			Type:  MutationPut,
+		mutations = append(mutations, etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
 			Key:   keys[start],
 			Value: append([]byte(nil), assignedValues[index]...),
 		})
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
 	mutations = append(mutations,
-		Mutation{Type: MutationPut, Key: dispatchKey, Value: dispatchValue},
-		Mutation{
-			Type:  MutationPut,
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: dispatchKey, Value: dispatchValue},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
 			Key:   environmentOperationLockKey(dispatch.EnvironmentID),
 			Value: lockValue,
 		},
@@ -2131,7 +2132,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 	ctx context.Context,
 	pending []Versioned[BackupRecoveryPointPruneRecord],
-	authorityValues []*KeyValue,
+	authorityValues []*etcdstore.KeyValue,
 	readRevision int64,
 ) ([]backupPruneExecutionEvidence, error) {
 	evidence := make([]backupPruneExecutionEvidence, len(pending))
@@ -2298,17 +2299,17 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 	if err != nil {
 		return Versioned[BackupRecoveryPointPruneRecord]{}, err
 	}
-	conditions := []Condition{{Key: keys[0], ModRevision: dispatch.Revision}}
+	conditions := []etcdstore.Condition{{Key: keys[0], ModRevision: dispatch.Revision}}
 	for index := 1; index < len(keys); index++ {
 		conditions = append(
 			conditions,
-			Condition{Key: keys[index], ModRevision: anchor.Values[index].ModRevision},
+			etcdstore.Condition{Key: keys[index], ModRevision: anchor.Values[index].ModRevision},
 		)
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
-	mutations := []Mutation{{Type: MutationPut, Key: keys[1], Value: value}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: keys[1], Value: value}}
 	for _, key := range keys[2:] {
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	}
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {
@@ -2418,19 +2419,19 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 	if err != nil {
 		return backupPruneTransactionPlan{}, err
 	}
-	conditions := make([]Condition, 0, len(keys)+len(fence.conditions))
+	conditions := make([]etcdstore.Condition, 0, len(keys)+len(fence.conditions))
 	for index, key := range keys {
-		condition := Condition{Key: key}
+		condition := etcdstore.Condition{Key: key}
 		if anchor.Values[index] != nil {
 			condition.ModRevision = anchor.Values[index].ModRevision
 		}
 		conditions = append(conditions, condition)
 	}
-	mutations := make([]Mutation, 0, len(prunes)+3)
+	mutations := make([]etcdstore.Mutation, 0, len(prunes)+3)
 	for index, prune := range prunes {
 		key := keys[1+index*5]
 		if prune.Record.State == BackupPruneVerifiedAbsent {
-			mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 			continue
 		}
 		pending := prune.Record
@@ -2442,13 +2443,13 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 			clearBackupRuntimeMutations(mutations)
 			return backupPruneTransactionPlan{}, encodeErr
 		}
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: value})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
 	mutations = append(
 		mutations,
-		Mutation{Type: MutationDelete, Key: keys[0]},
-		Mutation{Type: MutationDelete, Key: environmentOperationLockKey(dispatch.Record.EnvironmentID)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[0]},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentOperationLockKey(dispatch.Record.EnvironmentID)},
 	)
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {
@@ -2533,19 +2534,19 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 	if err != nil {
 		return backupPruneTransactionPlan{}, err
 	}
-	conditions := []Condition{{Key: keys[0], ModRevision: dispatch.Revision}}
-	mutations := []Mutation{{Type: MutationDelete, Key: keys[0]}}
+	conditions := []etcdstore.Condition{{Key: keys[0], ModRevision: dispatch.Revision}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: keys[0]}}
 	for index, prune := range prunes {
 		start := 1 + index*5
-		conditions = append(conditions, Condition{Key: keys[start], ModRevision: prune.Revision})
+		conditions = append(conditions, etcdstore.Condition{Key: keys[start], ModRevision: prune.Revision})
 		for offset := 1; offset < 5; offset++ {
-			conditions = append(conditions, Condition{Key: keys[start+offset]})
+			conditions = append(conditions, etcdstore.Condition{Key: keys[start+offset]})
 		}
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: keys[start]})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[start]})
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
-	mutations = append(mutations, Mutation{
-		Type: MutationDelete, Key: environmentOperationLockKey(dispatch.Record.EnvironmentID),
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationDelete, Key: environmentOperationLockKey(dispatch.Record.EnvironmentID),
 	})
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {
@@ -2582,7 +2583,7 @@ func backupPruneAuthorityKeys(point BackupRecoveryPointSnapshot) ([]string, erro
 }
 
 func validatePendingBackupPruneAuthority(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	version Versioned[BackupRecoveryPointPruneRecord],
 ) error {
 	if len(values) != 5 {
@@ -2628,7 +2629,7 @@ func validatePendingBackupPruneAuthority(
 }
 
 func validateCompletedBackupRetentionSweep(
-	value *KeyValue,
+	value *etcdstore.KeyValue,
 	point BackupRecoveryPointSnapshot,
 	pointRevision int64,
 ) error {
@@ -2644,7 +2645,7 @@ func validateCompletedBackupRetentionSweep(
 }
 
 func validateExactBackupPruneDispatchValue(
-	value *KeyValue,
+	value *etcdstore.KeyValue,
 	expected Versioned[BackupRecoveryPointPruneDispatchRecord],
 ) error {
 	if value == nil || value.ModRevision != expected.Revision {
@@ -2698,7 +2699,7 @@ func backupPruneDispatchPointOrdinal(
 	return 0, false
 }
 
-func allBackupRuntimeValuesAbsent(values []*KeyValue) bool {
+func allBackupRuntimeValuesAbsent(values []*etcdstore.KeyValue) bool {
 	for _, value := range values {
 		if value != nil {
 			return false
@@ -2819,7 +2820,7 @@ func backupOrphanMatchesRunSource(
 		backupPointMatchesRunSource(orphan.Point, run, ordinal)
 }
 
-func validateBackupOrphanCompanionEvidence(values []*KeyValue, expected BackupOrphanRecord) error {
+func validateBackupOrphanCompanionEvidence(values []*etcdstore.KeyValue, expected BackupOrphanRecord) error {
 	expectedVersion := int64(1)
 	if expected.State == BackupOrphanDelete {
 		expectedVersion = 2
@@ -2841,7 +2842,7 @@ func validateBackupOrphanCompanionEvidence(values []*KeyValue, expected BackupOr
 	return nil
 }
 
-func validateBackupConnectorSnapshotEvidence(values []*KeyValue, run BackupRunRecord) error {
+func validateBackupConnectorSnapshotEvidence(values []*etcdstore.KeyValue, run BackupRunRecord) error {
 	if len(values) != 2 || values[0] == nil || values[0].ModRevision != run.ConnectorRevision {
 		return errs.New(errs.KindStateConflict, "backup connector snapshot changed")
 	}
@@ -2904,7 +2905,7 @@ func changedBackupSourceOrdinal(current BackupRunRecord, next BackupRunRecord) (
 	return uint32(changed), true
 }
 
-func clearRangeValues(values []KeyValue) {
+func clearRangeValues(values []etcdstore.KeyValue) {
 	for index := range values {
 		clear(values[index].Value)
 		values[index].Value = nil

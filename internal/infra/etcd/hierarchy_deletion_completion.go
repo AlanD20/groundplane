@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -58,7 +59,7 @@ func (repository *HierarchyDeletionRepository) ConsumeAgentTerminal(
 			"hierarchy deletion progress evidence changed",
 		)
 	}
-	receiptSnapshot, err := repository.store.GetMany(ctx, GetManyRequest{
+	receiptSnapshot, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{receiptKey}, Revision: proof.ReceiptRevision,
 	})
 	if err != nil {
@@ -183,7 +184,7 @@ func (repository *HierarchyDeletionRepository) completeAgentAction(
 		nextFence,
 		action.Ordinal,
 		completionValue,
-		[]Condition{
+		[]etcdstore.Condition{
 			{Key: receiptKey, ModRevision: receiptRevision},
 			{Key: progressKey, ModRevision: progressRevision},
 		},
@@ -213,11 +214,11 @@ func (repository *HierarchyDeletionRepository) releaseFailedAgentAction(
 	}
 	defer clear(fenceValue)
 	transaction, err := repository.store.Transact(ctx,
-		[]Condition{
+		[]etcdstore.Condition{
 			{Key: fenceKey, ModRevision: current.FenceRevision},
 			{Key: receiptKey, ModRevision: receiptRevision},
 		},
-		[]Mutation{{Type: MutationPut, Key: fenceKey, Value: fenceValue}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue}},
 	)
 	if err != nil {
 		return HierarchyDeletionOperation{}, err
@@ -243,8 +244,8 @@ func (repository *HierarchyDeletionRepository) commitHierarchyDeletionCompletion
 	nextFence HierarchyDeletionCleanupFence,
 	ordinal int64,
 	completionValue []byte,
-	extraConditions []Condition,
-	extraMutations []Mutation,
+	extraConditions []etcdstore.Condition,
+	extraMutations []etcdstore.Mutation,
 ) (HierarchyDeletionOperation, error) {
 	tombstoneKey := HierarchyDeletionTombstoneKey(string(current.Tombstone.TargetKind), current.Tombstone.TargetID)
 	fenceKey, _ := HierarchyDeletionCleanupFenceKey(current.Tombstone.OperationID)
@@ -259,16 +260,16 @@ func (repository *HierarchyDeletionRepository) commitHierarchyDeletionCompletion
 		return HierarchyDeletionOperation{}, err
 	}
 	defer clear(fenceValue)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: tombstoneKey, ModRevision: current.TombstoneRevision},
 		{Key: fenceKey, ModRevision: current.FenceRevision},
 		{Key: completionKey},
 	}
 	conditions = append(conditions, extraConditions...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: completionKey, Value: completionValue},
-		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
-		{Type: MutationPut, Key: fenceKey, Value: fenceValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: completionKey, Value: completionValue},
+		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
+		{Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue},
 	}
 	mutations = append(mutations, extraMutations...)
 	if err := enforceHierarchyDeletionTransaction(conditions, mutations); err != nil {

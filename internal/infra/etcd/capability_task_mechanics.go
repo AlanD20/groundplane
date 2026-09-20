@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/volumeidentity"
@@ -55,7 +56,7 @@ func CapabilityTaskTimeoutIndexKey(taskID string, deadline time.Time) string {
 	return taskTimeoutIndexKey(taskID, deadline)
 }
 
-func (s *store) TransactionSize(conditions []Condition, mutations []Mutation) (int, error) {
+func (s *store) TransactionSize(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) (int, error) {
 	return s.transactionSize(conditions, mutations)
 }
 

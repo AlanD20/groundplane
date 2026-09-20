@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -54,7 +55,7 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	if renaming {
 		secondaryKeys = append(secondaryKeys, projectSlugKey(replacement))
 	}
-	secondary, err := repository.store.GetMany(ctx, GetManyRequest{
+	secondary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: secondaryKeys, Revision: current.ReadRevision,
 	})
 	if err != nil {
@@ -87,19 +88,19 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: projectKey(current.Record.ID), ModRevision: current.Revision},
 		{Key: projectSlugKey(current.Record), ModRevision: secondary.Values[0].ModRevision},
 		{Key: projectOwnerKey(current.Record), ModRevision: secondary.Values[1].ModRevision},
 		{Key: deletionTombstoneKey("project", current.Record.ID)},
 		{Key: deletionTombstoneKey("tenant", current.Record.TenantID)},
 	}
-	mutations := []Mutation{{Type: MutationPut, Key: projectKey(current.Record.ID), Value: value}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: projectKey(current.Record.ID), Value: value}}
 	if renaming {
-		conditions = append(conditions, Condition{Key: projectSlugKey(replacement)})
+		conditions = append(conditions, etcdstore.Condition{Key: projectSlugKey(replacement)})
 		mutations = append(mutations,
-			Mutation{Type: MutationDelete, Key: projectSlugKey(current.Record)},
-			Mutation{Type: MutationPut, Key: projectSlugKey(replacement), Value: []byte(current.Record.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: projectSlugKey(current.Record)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: projectSlugKey(replacement), Value: []byte(current.Record.ID)},
 		)
 	}
 	plan, err := newIdempotencyMutationPlan(
@@ -122,7 +123,7 @@ func classifyProjectMutationConflict(
 	replacement ProjectRecord,
 	renaming bool,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		expected := 5
 		if renaming {
 			expected++

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -160,11 +161,11 @@ func decodeRunnerDeletionTombstone(value []byte) (DeletionTombstoneRecord, error
 }
 
 type runnerAllocationEvidence struct {
-	owner  *KeyValue
-	slug   *KeyValue
-	quota  *KeyValue
-	host   *KeyValue
-	system *KeyValue
+	owner  *etcdstore.KeyValue
+	slug   *etcdstore.KeyValue
+	quota  *etcdstore.KeyValue
+	host   *etcdstore.KeyValue
+	system *etcdstore.KeyValue
 }
 
 func (repository *RunnerRepository) readRunnerAllocationEvidence(
@@ -172,7 +173,7 @@ func (repository *RunnerRepository) readRunnerAllocationEvidence(
 	record RunnerRecord,
 	revision int64,
 ) (runnerAllocationEvidence, error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
 			runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
@@ -289,7 +290,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	runtimeEvidence, err := repository.store.GetMany(ctx, GetManyRequest{
+	runtimeEvidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{runnerRuntimeOwnershipKey(current.Record.Desired.ID)}, Revision: current.ReadRevision,
 	})
 	if err != nil {
@@ -355,7 +356,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -389,23 +390,23 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	}
 	if current.Record.Desired.OwnerKind == RunnerOwnerProject {
 		conditions = append(conditions,
-			Condition{Key: projectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
-			Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
+			etcdstore.Condition{Key: projectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
 		)
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
-			Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID),
+			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID),
 			Value: tombstoneValue,
 		},
-		{Type: MutationPut, Key: runnerRemovalIntentKey(current.Record.Desired.ID), Value: intentValue},
-		{Type: MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: lifecycleValue},
+		{Type: etcdstore.MutationPut, Key: runnerRemovalIntentKey(current.Record.Desired.ID), Value: intentValue},
+		{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: lifecycleValue},
 	}
-	classifier := func(_ int64, values []*KeyValue) error {
+	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "runner removal compare evidence is incomplete")
 		}
@@ -461,8 +462,8 @@ func validateRunnerDeletionTask(
 
 type runnerTaskChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -488,7 +489,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 	terminalStatus TaskStatus,
 	revision int64,
 ) (runnerTaskChange, error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			runnerKey(task.Target), runnerLifecycleKey(task.Target),
 			deletionTombstoneKey(string(DeletionTargetRunner), task.Target),
@@ -540,7 +541,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		clear(value)
 		return runnerTaskChange{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: runnerKey(task.Target), ModRevision: result.Values[0].ModRevision},
 		{Key: runnerLifecycleKey(task.Target), ModRevision: result.Values[1].ModRevision},
 		{Key: deletionTombstoneKey(string(DeletionTargetRunner), task.Target)},
@@ -557,12 +558,12 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		{Key: runnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 		{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 	}
-	mutations := []Mutation{{Type: MutationPut, Key: runnerLifecycleKey(task.Target), Value: value}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(task.Target), Value: value}}
 	if proofValue != nil {
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: runnerRuntimeOwnershipKey(task.Target), ModRevision: result.Values[3].ModRevision,
 		})
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: runnerReadinessProofKey(task.ID)})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerReadinessProofKey(task.ID)})
 	}
 	return runnerTaskChange{
 		applies:    true,
@@ -578,7 +579,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 	terminalStatus TaskStatus,
 	revision int64,
 ) (runnerTaskChange, error) {
-	base, err := repository.store.GetMany(ctx, GetManyRequest{
+	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			runnerKey(task.Target),
 			runnerLifecycleKey(task.Target),
@@ -617,7 +618,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 	}
 	change := runnerTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: runnerKey(task.Target), ModRevision: base.Values[0].ModRevision},
 			{Key: runnerLifecycleKey(task.Target), ModRevision: base.Values[1].ModRevision},
 			{
@@ -639,9 +640,9 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 			{Key: runnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 			{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 		},
-		mutations: []Mutation{
-			{Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetRunner), task.Target)},
-			{Type: MutationDelete, Key: runnerRemovalIntentKey(task.Target)},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetRunner), task.Target)},
+			{Type: etcdstore.MutationDelete, Key: runnerRemovalIntentKey(task.Target)},
 		},
 	}
 	if terminalStatus != TaskStatusCompleted {
@@ -678,17 +679,17 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 	change.values = append(change.values, quotaValue, systemValue)
 	change.mutations = append(
 		change.mutations,
-		Mutation{
-			Type: MutationDelete,
+		etcdstore.Mutation{
+			Type: etcdstore.MutationDelete,
 			Key:  runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, task.Target),
 		},
-		Mutation{Type: MutationDelete, Key: runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
-		Mutation{Type: MutationPut, Key: runnerTenantQuotaKey(record.Desired.TenantID), Value: quotaValue},
-		Mutation{Type: MutationDelete, Key: runnerHostSlotKey(record.Allocation.Slot)},
-		Mutation{Type: MutationPut, Key: systemPoolRegistryKey, Value: systemValue},
-		Mutation{Type: MutationDelete, Key: runnerObservationKey(task.Target)},
-		Mutation{Type: MutationDelete, Key: runnerLifecycleKey(task.Target)},
-		Mutation{Type: MutationDelete, Key: runnerKey(task.Target)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: runnerTenantQuotaKey(record.Desired.TenantID), Value: quotaValue},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerHostSlotKey(record.Allocation.Slot)},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: systemPoolRegistryKey, Value: systemValue},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerObservationKey(task.Target)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerLifecycleKey(task.Target)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerKey(task.Target)},
 	)
 	return change, nil
 }
@@ -715,7 +716,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		retryEvidenceErr != nil || sourceEvidence != retryEvidence || !runnerStringMapsEqual(source.Params, retry.Params) {
 		return runnerTaskChange{}, errs.New(errs.KindInternal, "runner removal retry changed its durable target")
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			runnerKey(source.Target),
 			runnerLifecycleKey(source.Target),
@@ -770,7 +771,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 			deletionTombstoneKey(string(DeletionTargetProject), record.Desired.OwnerID),
 		)
 	}
-	parents, err := repository.store.GetMany(ctx, GetManyRequest{Keys: parentKeys, Revision: revision})
+	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: parentKeys, Revision: revision})
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
@@ -824,7 +825,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	}
 	change := runnerTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: runnerKey(source.Target), ModRevision: result.Values[0].ModRevision},
 			{Key: runnerLifecycleKey(source.Target), ModRevision: result.Values[1].ModRevision},
 			{Key: runnerRuntimeOwnershipKey(source.Target), ModRevision: keyValueRevision(result.Values[4])},
@@ -844,20 +845,20 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 			{Key: tenantKey(record.Desired.TenantID), ModRevision: parents.Values[0].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetTenant), record.Desired.TenantID)},
 		},
-		mutations: []Mutation{
+		mutations: []etcdstore.Mutation{
 			{
-				Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetRunner), source.Target),
+				Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetRunner), source.Target),
 				Value: tombstoneValue,
 			},
-			{Type: MutationPut, Key: runnerRemovalIntentKey(source.Target), Value: intentValue},
-			{Type: MutationPut, Key: runnerLifecycleKey(source.Target), Value: lifecycleValue},
+			{Type: etcdstore.MutationPut, Key: runnerRemovalIntentKey(source.Target), Value: intentValue},
+			{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(source.Target), Value: lifecycleValue},
 		},
 		values: [][]byte{tombstoneValue, intentValue, lifecycleValue},
 	}
 	if record.Desired.OwnerKind == RunnerOwnerProject {
 		change.conditions = append(change.conditions,
-			Condition{Key: projectKey(record.Desired.OwnerID), ModRevision: parents.Values[2].ModRevision},
-			Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), record.Desired.OwnerID)},
+			etcdstore.Condition{Key: projectKey(record.Desired.OwnerID), ModRevision: parents.Values[2].ModRevision},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), record.Desired.OwnerID)},
 		)
 	}
 	return change, nil
@@ -915,7 +916,7 @@ func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 	terminalStatus TaskStatus,
 	revision int64,
 ) error {
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			runnerKey(task.Target),
 			runnerLifecycleKey(task.Target),
@@ -955,7 +956,7 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 	if err != nil {
 		return err
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			runnerKey(task.Target),
 			runnerLifecycleKey(task.Target),
@@ -1009,7 +1010,7 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 	if err != nil || record.Desired.ID != task.Target || !evidence.matchesRecord(record) {
 		return errs.New(errs.KindStateConflict, "failed runner removal retained corrupt target state")
 	}
-	slug, err := repository.store.GetMany(ctx, GetManyRequest{
+	slug, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
 		Revision: revision,
 	})

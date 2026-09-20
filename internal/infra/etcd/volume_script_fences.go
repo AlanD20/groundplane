@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -10,15 +11,15 @@ func volumeScriptSource(volumeID string) ScriptSourceIdentity {
 	return ScriptSourceIdentity{Kind: ScriptSourceVolume, VolumeID: volumeID}
 }
 
-func volumeScriptAbsenceConditions(volumeID string) []Condition {
+func volumeScriptAbsenceConditions(volumeID string) []etcdstore.Condition {
 	source := volumeScriptSource(volumeID)
-	return []Condition{
+	return []etcdstore.Condition{
 		{Key: scriptSourceCountKey(source)},
 		{Key: scriptSourceForwardReferencePrefix + scriptSourceSuffix(source) + "/", Prefix: true},
 	}
 }
 
-func classifyVolumeScriptReferences(volumeID string, values []*KeyValue) error {
+func classifyVolumeScriptReferences(volumeID string, values []*etcdstore.KeyValue) error {
 	if len(values) != 2 || (values[0] == nil) != (values[1] == nil) {
 		return errs.New(errs.KindInternal, "Volume Script reference absence proof is inconsistent")
 	}
@@ -45,9 +46,9 @@ func prepareVolumeScriptAbsence(
 	store hierarchyStore,
 	volumeID string,
 	revision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	conditions := volumeScriptAbsenceConditions(volumeID)
-	count, err := store.GetMany(ctx, GetManyRequest{Keys: []string{conditions[0].Key}, Revision: revision})
+	count, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{conditions[0].Key}, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +56,7 @@ func prepareVolumeScriptAbsence(
 		(revision > 0 && count.ReadRevision != revision) {
 		return nil, errs.New(errs.KindInternal, "Volume Script count evidence is incomplete")
 	}
-	members, err := store.Range(ctx, RangeRequest{Prefix: conditions[1].Key, Limit: 1, Revision: count.ReadRevision})
+	members, err := store.Range(ctx, etcdstore.RangeRequest{Prefix: conditions[1].Key, Limit: 1, Revision: count.ReadRevision})
 	if err != nil {
 		return nil, err
 	}
@@ -63,11 +64,11 @@ func prepareVolumeScriptAbsence(
 		(members.More && len(members.Values) == 0) {
 		return nil, errs.New(errs.KindInternal, "Volume Script membership evidence is incomplete")
 	}
-	var first *KeyValue
+	var first *etcdstore.KeyValue
 	if len(members.Values) == 1 {
 		first = &members.Values[0]
 	}
-	if err := classifyVolumeScriptReferences(volumeID, []*KeyValue{count.Values[0], first}); err != nil {
+	if err := classifyVolumeScriptReferences(volumeID, []*etcdstore.KeyValue{count.Values[0], first}); err != nil {
 		return nil, err
 	}
 	return conditions, nil

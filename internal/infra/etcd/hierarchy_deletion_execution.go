@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -57,8 +58,8 @@ func (repository *HierarchyDeletionRepository) ReadyAction(
 		return nil, HierarchyDeletionOperation{}, err
 	}
 	defer clear(fenceValue)
-	conditions := []Condition{{Key: fenceKey, ModRevision: current.FenceRevision}}
-	mutations := []Mutation{{Type: MutationPut, Key: fenceKey, Value: fenceValue}}
+	conditions := []etcdstore.Condition{{Key: fenceKey, ModRevision: current.FenceRevision}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue}}
 	var nextTombstone HierarchyDeletionTombstone
 	if action.ProcedureKind == HierarchyDeletionProcedureAgent {
 		nextTombstone = current.Tombstone
@@ -69,8 +70,8 @@ func (repository *HierarchyDeletionRepository) ReadyAction(
 			return nil, HierarchyDeletionOperation{}, encodeErr
 		}
 		defer clear(tombstoneValue)
-		conditions = append(conditions, Condition{Key: tombstoneKey, ModRevision: current.TombstoneRevision})
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue})
+		conditions = append(conditions, etcdstore.Condition{Key: tombstoneKey, ModRevision: current.TombstoneRevision})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue})
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
@@ -101,7 +102,7 @@ func (repository *HierarchyDeletionRepository) actionAtRevision(
 	if err != nil {
 		return HierarchyDeletionAction{}, err
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{key}, Revision: operation.TombstoneRevision,
 	})
 	if err != nil {

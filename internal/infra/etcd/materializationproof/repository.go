@@ -3,6 +3,7 @@ package materializationproof
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -18,8 +19,8 @@ const (
 )
 
 type store interface {
-	GetMany(context.Context, base.GetManyRequest) (*base.GetManyResult, error)
-	Transact(context.Context, []base.Condition, []base.Mutation) (base.TransactionResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
 type Repository struct{ store store }
@@ -30,7 +31,7 @@ type Versioned struct {
 	ReadRevision int64
 }
 
-func NewRepository(backend base.Store) (*Repository, error) { return newRepository(backend) }
+func NewRepository(backend etcdstore.Store) (*Repository, error) { return newRepository(backend) }
 
 func newRepository(backend store) (*Repository, error) {
 	if backend == nil {
@@ -58,7 +59,7 @@ func (repository *Repository) Publish(ctx context.Context, proof coreproof.Proof
 	}
 	defer clear(encoded)
 	keys := publicationKeys(canonical)
-	read, err := repository.store.GetMany(ctx, base.GetManyRequest{Keys: keys})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return Versioned{}, err
 	}
@@ -83,8 +84,8 @@ func (repository *Repository) Publish(ctx context.Context, proof coreproof.Proof
 	if err != nil {
 		return Versioned{}, err
 	}
-	result, err := repository.store.Transact(ctx, conditions, []base.Mutation{{
-		Type: base.MutationPut, Key: keys[0], Value: encoded,
+	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{
+		Type: etcdstore.MutationPut, Key: keys[0], Value: encoded,
 	}})
 	if err != nil {
 		return Versioned{}, err
@@ -96,7 +97,7 @@ func (repository *Repository) Publish(ctx context.Context, proof coreproof.Proof
 	if len(result.FailureReads) != 5 {
 		return Versioned{}, corruptProof()
 	}
-	replayValues := []*base.KeyValue{
+	replayValues := []*etcdstore.KeyValue{
 		result.FailureReads[0], result.FailureReads[3], result.FailureReads[4],
 		result.FailureReads[1], result.FailureReads[2],
 	}
@@ -124,7 +125,7 @@ func exactReplay(
 	proof coreproof.Proof,
 	encoded []byte,
 	keys []string,
-	values []*base.KeyValue,
+	values []*etcdstore.KeyValue,
 	readRevision int64,
 ) (Versioned, bool, error) {
 	if len(keys) != 5 || len(values) != 5 {
@@ -154,8 +155,8 @@ func exactReplay(
 func publicationConditions(
 	proof coreproof.Proof,
 	keys []string,
-	values []*base.KeyValue,
-) ([]base.Condition, error) {
+	values []*etcdstore.KeyValue,
+) ([]etcdstore.Condition, error) {
 	if values[3] == nil || values[4] == nil || values[3].Key != keys[3] || values[4].Key != keys[4] ||
 		values[3].ModRevision <= 0 || values[4].ModRevision <= 0 {
 		return nil, authorityConflict()
@@ -171,7 +172,7 @@ func publicationConditions(
 	if err := validateSemanticAuthority(proof, projection, task); err != nil {
 		return nil, err
 	}
-	return []base.Condition{
+	return []etcdstore.Condition{
 		{Key: keys[0]},
 		{Key: keys[3], ModRevision: values[3].ModRevision},
 		{Key: keys[4], ModRevision: values[4].ModRevision},
@@ -335,7 +336,7 @@ func (repository *Repository) LoadExact(
 		return Versioned{}, false, errs.New(errs.KindValidationFailed, "materialization proof lookup is invalid")
 	}
 	key := proofKey(environmentID, renderGeneration)
-	result, err := repository.store.GetMany(ctx, base.GetManyRequest{Keys: []string{key}, Revision: revision})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return Versioned{}, false, err
 	}
@@ -380,7 +381,7 @@ func validateContext(ctx context.Context) error {
 	return ctx.Err()
 }
 
-func clearKeyValues(values []*base.KeyValue) {
+func clearKeyValues(values []*etcdstore.KeyValue) {
 	for _, value := range values {
 		if value != nil {
 			clear(value.Value)

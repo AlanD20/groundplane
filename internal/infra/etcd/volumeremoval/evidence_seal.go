@@ -3,6 +3,7 @@ package volumeremoval
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
@@ -47,13 +48,13 @@ func (repository *EvidenceRepository) Seal(
 		return EvidenceSealResult{}, err
 	}
 	defer clear(value)
-	conditions := []etcd.Condition{
+	conditions := []etcdstore.Condition{
 		{Key: removal.EvidenceManifestKey(manifest.OperationID), ModRevision: state.Manifest.Revision},
 		{Key: removal.EvidenceCursorKey(manifest.OperationID), ModRevision: state.Cursor.Revision},
 		{Key: removal.EvidenceSealKey(manifest.OperationID)},
 	}
-	mutations := []etcd.Mutation{
-		{Type: etcd.MutationPut, Key: removal.EvidenceSealKey(manifest.OperationID), Value: value},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: removal.EvidenceSealKey(manifest.OperationID), Value: value},
 	}
 	size, err := repository.store.VolumeRemovalEvidenceTransactionSize(conditions, mutations)
 	if err != nil {
@@ -101,7 +102,7 @@ func (repository *EvidenceRepository) verifyEvidenceRows(
 	}
 	var seal etcd.Versioned[removal.EvidenceSeal]
 	seenManifest, seenCursor := false, false
-	request := etcd.RangeRequest{
+	request := etcdstore.RangeRequest{
 		Prefix:   removal.EvidenceRoot(manifest.OperationID),
 		Limit:    removal.EvidenceBatchRows,
 		Revision: state.Cursor.ReadRevision,

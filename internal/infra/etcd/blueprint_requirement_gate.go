@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -152,7 +153,7 @@ func (repository *HierarchyRepository) GetBlueprintRequirementGateAtRevision(
 		return Versioned[BlueprintRequirementGate]{}, false,
 			errs.New(errs.KindValidationFailed, "Blueprint requirement gate read is invalid")
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{blueprintRequirementGateKey(taskID)}, Revision: revision,
 	})
 	if err != nil {
@@ -175,8 +176,8 @@ func (repository *HierarchyRepository) GetBlueprintRequirementGateAtRevision(
 }
 
 type preparedBlueprintRequirementGatePublication struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 }
 
 func prepareBlueprintRequirementGatePublication(
@@ -223,12 +224,12 @@ func prepareBlueprintRequirementGatePublication(
 		return preparedBlueprintRequirementGatePublication{}, err
 	}
 	prepared := preparedBlueprintRequirementGatePublication{
-		conditions: make([]Condition, 0, len(gate.DAG.Requirements)+1),
-		mutations:  []Mutation{{Type: MutationPut, Key: blueprintRequirementGateKey(task.ID), Value: value}},
+		conditions: make([]etcdstore.Condition, 0, len(gate.DAG.Requirements)+1),
+		mutations:  []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: blueprintRequirementGateKey(task.ID), Value: value}},
 	}
-	prepared.conditions = append(prepared.conditions, Condition{Key: blueprintRequirementGateKey(task.ID)})
+	prepared.conditions = append(prepared.conditions, etcdstore.Condition{Key: blueprintRequirementGateKey(task.ID)})
 	for _, requirement := range gate.DAG.Requirements {
-		prepared.conditions = append(prepared.conditions, Condition{
+		prepared.conditions = append(prepared.conditions, etcdstore.Condition{
 			Key: attachKey(requirement.TargetID), ModRevision: requirement.TargetRevision,
 		})
 	}
@@ -241,7 +242,7 @@ func (prepared preparedBlueprintRequirementGatePublication) clear() {
 	}
 }
 
-func (prepared preparedBlueprintRequirementGatePublication) classify(values []*KeyValue) error {
+func (prepared preparedBlueprintRequirementGatePublication) classify(values []*etcdstore.KeyValue) error {
 	if len(values) != len(prepared.conditions) {
 		return errs.New(errs.KindInternal, "Blueprint requirement gate compare evidence is incomplete")
 	}
@@ -261,7 +262,7 @@ func (prepared preparedBlueprintRequirementGatePublication) classify(values []*K
 }
 
 type blueprintRequirementGateClaimEvidence struct {
-	conditions   []Condition
+	conditions   []etcdstore.Condition
 	gateRevision int64
 }
 
@@ -275,7 +276,7 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 		return blueprintRequirementGateClaimEvidence{}, false, true, nil
 	}
 	gateKey := blueprintRequirementGateKey(task.ID)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{gateKey}, Revision: revision,
 	})
 	if err != nil {
@@ -300,11 +301,11 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 		return blueprintRequirementGateClaimEvidence{}, true, false, corruptBlueprintRequirementGate()
 	}
 	evidence := blueprintRequirementGateClaimEvidence{
-		conditions:   []Condition{{Key: gateKey, ModRevision: read.Values[0].ModRevision}},
+		conditions:   []etcdstore.Condition{{Key: gateKey, ModRevision: read.Values[0].ModRevision}},
 		gateRevision: read.Values[0].ModRevision,
 	}
 	for _, requirement := range gate.DAG.Requirements {
-		attachRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+		attachRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{attachKey(requirement.TargetID)}, Revision: revision,
 		})
 		if readErr != nil {
@@ -322,7 +323,7 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 		if decodeErr != nil || attach.ID != requirement.TargetID || attach.TaskID != requirement.TargetTaskID {
 			return blueprintRequirementGateClaimEvidence{}, true, false, corruptBlueprintRequirementGate()
 		}
-		evidence.conditions = append(evidence.conditions, Condition{
+		evidence.conditions = append(evidence.conditions, etcdstore.Condition{
 			Key: attachKey(attach.ID), ModRevision: attachValue.ModRevision,
 		})
 		switch requirement.Condition {
@@ -332,7 +333,7 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 				return blueprintRequirementGateClaimEvidence{}, true, false, nil
 			}
 		case core.RequirementCompletedSuccessfully:
-			taskRead, taskErr := repository.store.GetMany(ctx, GetManyRequest{
+			taskRead, taskErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 				Keys: []string{taskKey(attach.TaskID)}, Revision: revision,
 			})
 			if taskErr != nil {
@@ -352,7 +353,7 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 			if producer.Status != TaskStatusCompleted {
 				return blueprintRequirementGateClaimEvidence{}, true, false, nil
 			}
-			evidence.conditions = append(evidence.conditions, Condition{
+			evidence.conditions = append(evidence.conditions, etcdstore.Condition{
 				Key: taskKey(producer.ID), ModRevision: taskRead.Values[0].ModRevision,
 			})
 		default:
@@ -367,7 +368,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 	task TaskRecord,
 	fence environmentMutationFenceEvidence,
 	readRevision int64,
-) ([]Condition, []Mutation, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if task.Status != TaskStatusCompleted || task.Type != TaskAttach ||
 		ids.Validate(ids.KindAttach, task.Target) != nil ||
 		task.Params[TaskMutationEnvironmentParam] != fence.environmentID {
@@ -385,7 +386,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 	}
 
 	headKey := environmentBlueprintHeadKey(fence.environmentID)
-	headRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	headRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{headKey}, Revision: readRevision,
 	})
 	if err != nil {
@@ -402,7 +403,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 		return nil, nil, nil
 	}
 	gateKey := blueprintRequirementGateKey(candidateTaskID)
-	candidateRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	candidateRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskKey(candidateTaskID), gateKey}, Revision: readRevision,
 	})
 	if err != nil {
@@ -429,9 +430,9 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 	}
 	for _, requirement := range gate.DAG.Requirements {
 		if requirement.TargetID == task.Target && requirement.TargetTaskID == task.ID {
-			return []Condition{{Key: gateKey, ModRevision: candidateRead.Values[1].ModRevision}},
-				[]Mutation{{
-					Type: MutationPut, Key: gateKey,
+			return []etcdstore.Condition{{Key: gateKey, ModRevision: candidateRead.Values[1].ModRevision}},
+				[]etcdstore.Mutation{{
+					Type: etcdstore.MutationPut, Key: gateKey,
 					Value: slices.Clone(candidateRead.Values[1].Value),
 				}}, nil
 		}
@@ -445,7 +446,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGateRetry(
 	retry TaskRecord,
 	revision int64,
 ) (releaseTaskRetryChange, error) {
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{blueprintRequirementGateKey(source.ID)}, Revision: revision,
 	})
 	if err != nil {
@@ -480,12 +481,12 @@ func (repository *TaskRepository) prepareBlueprintRequirementGateRetry(
 	}
 	return releaseTaskRetryChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: blueprintRequirementGateKey(source.ID), ModRevision: read.Values[0].ModRevision},
 			{Key: blueprintRequirementGateKey(retry.ID)},
 		},
-		mutations: []Mutation{{
-			Type: MutationPut, Key: blueprintRequirementGateKey(retry.ID), Value: value,
+		mutations: []etcdstore.Mutation{{
+			Type: etcdstore.MutationPut, Key: blueprintRequirementGateKey(retry.ID), Value: value,
 		}},
 	}, nil
 }

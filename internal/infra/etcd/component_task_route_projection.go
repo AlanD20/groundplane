@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -107,8 +108,8 @@ func cloneComponentTaskRouteProjection(source *ComponentTaskRouteProjection) *Co
 }
 
 type componentTaskRouteObservationChange struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -204,7 +205,7 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 			return componentTaskRouteObservationChange{}, encodeErr
 		}
 		key := routeObservationKey(candidate.Desired.ID)
-		read, readErr := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+		read, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 		if readErr != nil {
 			clear(encoded)
 			return componentTaskRouteObservationChange{}, readErr
@@ -216,7 +217,7 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 				"Component Route observation read is incomplete",
 			)
 		}
-		condition := Condition{Key: key}
+		condition := etcdstore.Condition{Key: key}
 		if read.Values[0] != nil {
 			prior, decodeErr := decodeRouteObservation(read.Values[0].Value)
 			if decodeErr != nil || prior.EnvironmentID != intent.EnvironmentID ||
@@ -228,7 +229,7 @@ func (repository *TaskRepository) prepareComponentTaskRouteObservationStatus(
 		}
 		change.conditions = append(change.conditions, condition)
 		change.values = append(change.values, encoded)
-		change.mutations = append(change.mutations, Mutation{Type: MutationPut, Key: key, Value: encoded})
+		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded})
 	}
 	return change, nil
 }

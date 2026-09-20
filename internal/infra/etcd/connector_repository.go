@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -17,7 +18,7 @@ type ConnectorRepository struct {
 	store hierarchyStore
 }
 
-func NewConnectorRepository(store Store) (*ConnectorRepository, error) {
+func NewConnectorRepository(store etcdstore.Store) (*ConnectorRepository, error) {
 	return newConnectorRepository(store)
 }
 
@@ -82,20 +83,20 @@ func (repository *ConnectorRepository) CreateConnector(
 	defer clear(epochMutation.Value)
 	conditions := append(connectorCreateConditions(record), fence.transactionConditions()...)
 	conditions = append(conditions, secretFence.conditions...)
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: connectorRecordKey(record.Connector.ID), Value: primaryValue},
+	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: connectorRecordKey(record.Connector.ID), Value: primaryValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   connectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
 			Value: []byte(record.Connector.ID),
 		},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   connectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
 			Value: []byte(record.Connector.ID),
 		},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   connectorCredentialValueKey(record.Connector.ID),
 			Value: credentialValue,
 		},
@@ -164,20 +165,20 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 		clear(primaryValue)
 		return IdempotencyTransactionResult{}, err
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: connectorRecordKey(record.Connector.ID), Value: primaryValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: connectorRecordKey(record.Connector.ID), Value: primaryValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   connectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
 			Value: []byte(record.Connector.ID),
 		},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   connectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
 			Value: []byte(record.Connector.ID),
 		},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   connectorCredentialValueKey(record.Connector.ID),
 			Value: credentialValue,
 		},
@@ -212,7 +213,7 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 	plan, err := newIdempotencyMutationPlan(
 		conditions,
 		mutations,
-		func(_ int64, values []*KeyValue) error {
+		func(_ int64, values []*etcdstore.KeyValue) error {
 			return classifyConnectorCreateConflict(values, fence, len(secretFence.conditions))
 		},
 	)
@@ -254,7 +255,7 @@ func (repository *ConnectorRepository) GetConnectorCredentials(
 	if err := validateConnectorVersion(current); err != nil {
 		return ConnectorEncryptedCredentials{}, err
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{connectorCredentialValueKey(current.Record.Connector.ID)},
 		Revision: current.ReadRevision,
 	})
@@ -313,9 +314,9 @@ func connectorNameKey(environmentID string, name string) string {
 
 func connectorCreateConditions(
 	record ConnectorRecord,
-) []Condition {
+) []etcdstore.Condition {
 	connector := record.Connector
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: connectorRecordKey(connector.ID)},
 		{Key: connectorNameKey(connector.EnvironmentID, connector.Name)},
 		{Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
@@ -326,13 +327,13 @@ func connectorCreateConditions(
 }
 
 type connectorSecretReferenceFence struct {
-	conditions []Condition
+	conditions []etcdstore.Condition
 }
 
 type connectorSecretCandidate struct {
 	reference     string
-	projectIndex  *KeyValue
-	platformIndex *KeyValue
+	projectIndex  *etcdstore.KeyValue
+	platformIndex *etcdstore.KeyValue
 }
 
 func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
@@ -351,7 +352,7 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 			secretKeyIndexKey(core.SecretScopePlatform, "", reference),
 		)
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: indexKeys})
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: indexKeys})
 	if err != nil {
 		return connectorSecretReferenceFence{}, err
 	}
@@ -376,7 +377,7 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 		candidates[index] = connectorSecretCandidate{
 			reference: reference, projectIndex: projectIndex, platformIndex: platformIndex,
 		}
-		for _, selected := range []*KeyValue{projectIndex, platformIndex} {
+		for _, selected := range []*etcdstore.KeyValue{projectIndex, platformIndex} {
 			if selected == nil {
 				continue
 			}
@@ -394,7 +395,7 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 			"Connector credential Secret was not found in scope",
 		)
 	}
-	values, err := repository.store.GetMany(ctx, GetManyRequest{
+	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: candidateKeys, Revision: indexes.ReadRevision,
 	})
 	if err != nil {
@@ -407,7 +408,7 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 		)
 	}
 	defer clearKeyValues(values.Values)
-	fence := connectorSecretReferenceFence{conditions: make([]Condition, 0, len(candidateKeys)+len(indexKeys))}
+	fence := connectorSecretReferenceFence{conditions: make([]etcdstore.Condition, 0, len(candidateKeys)+len(indexKeys))}
 	offset := 0
 	for _, candidate := range candidates {
 		projectIndexKey := secretKeyIndexKey(core.SecretScopeProject, projectID, candidate.reference)
@@ -471,13 +472,13 @@ func (repository *ConnectorRepository) loadConnectorMutationFence(
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
 	domainKeys []string,
-) (environmentMutationFenceEvidence, *GetManyResult, error) {
+) (environmentMutationFenceEvidence, *etcdstore.GetManyResult, error) {
 	keys := append([]string(nil), domainKeys...)
 	environmentIndex := len(keys)
 	keys = append(keys, environmentKey(environment.Record.ID))
 	projectIndex := len(keys)
 	keys = append(keys, projectKey(project.Record.ID))
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return environmentMutationFenceEvidence{}, nil, err
 	}
@@ -580,7 +581,7 @@ func validateConnectorVersion(current Versioned[ConnectorRecord]) error {
 }
 
 func classifyConnectorCreateConflict(
-	reads []*KeyValue,
+	reads []*etcdstore.KeyValue,
 	fence environmentMutationFenceEvidence,
 	secretConditionCount int,
 ) error {

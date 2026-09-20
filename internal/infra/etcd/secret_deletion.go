@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -53,7 +54,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		)
 	}
 
-	dependencies, err := repository.store.GetMany(ctx, GetManyRequest{
+	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			secretOwnerKey(current.Record.Secret),
 			secretScopedKey(current.Record.Secret),
@@ -108,7 +109,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	}
 	defer clear(reference)
 
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -128,16 +129,16 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	if owner.Project != nil {
 		conditions = append(
 			conditions,
-			Condition{
+			etcdstore.Condition{
 				Key:         projectKey(owner.Project.Record.ID),
 				ModRevision: owner.Project.Revision,
 			},
-			Condition{
+			etcdstore.Condition{
 				Key: deletionTombstoneKey(string(DeletionTargetProject), owner.Project.Record.ID),
 			},
 		)
 		if owner.Project.Record.TenantID != "" {
-			conditions = append(conditions, Condition{
+			conditions = append(conditions, etcdstore.Condition{
 				Key: deletionTombstoneKey(
 					string(DeletionTargetTenant),
 					owner.Project.Record.TenantID,
@@ -145,21 +146,21 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 			})
 		}
 	}
-	conditions = append(conditions, Condition{
+	conditions = append(conditions, etcdstore.Condition{
 		Key: componentSecretReferencePrefix(secretID), Prefix: true,
 	})
 	conditions = append(conditions, secretScriptAbsenceConditions(secretID)...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   taskOperationIndexKey(task.OperationID, task.ID),
 			Value: reference,
 		},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
 		{
-			Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetSecret), secretID),
+			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetSecret), secretID),
 			Value: tombstoneValue,
 		},
 	}
@@ -205,7 +206,7 @@ func classifySecretDeletionStartConflict(
 	current Versioned[SecretRecord],
 	operationID string,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		guardCount := len(secretScriptAbsenceConditions(current.Record.Secret.ID))
 		expected := 10 + guardCount
 		if owner.Project != nil {

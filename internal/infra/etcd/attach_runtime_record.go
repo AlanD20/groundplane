@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -54,7 +55,7 @@ func (repository *AttachRepository) PrepareAttachRuntime(
 	if len(selected) == 1 {
 		result, readErr := repository.store.GetMany(
 			ctx,
-			GetManyRequest{Keys: []string{serviceruntimerecord.Key(selected[0])}},
+			etcdstore.GetManyRequest{Keys: []string{serviceruntimerecord.Key(selected[0])}},
 		)
 		if readErr != nil {
 			return empty, readErr
@@ -137,10 +138,10 @@ func validateAttachRuntimePreparation(input AttachTaskRenderInput, task TaskReco
 	return nil
 }
 
-func attachRuntimeSourceConditions(input AttachTaskRenderInput) []Condition {
-	conditions := make([]Condition, len(input.RuntimePreparation.Updates))
+func attachRuntimeSourceConditions(input AttachTaskRenderInput) []etcdstore.Condition {
+	conditions := make([]etcdstore.Condition, len(input.RuntimePreparation.Updates))
 	for index, update := range input.RuntimePreparation.Updates {
-		conditions[index] = Condition{
+		conditions[index] = etcdstore.Condition{
 			Key:         serviceruntimerecord.Key(update.Runtime.ServiceID),
 			ModRevision: update.PreviousRevision,
 		}

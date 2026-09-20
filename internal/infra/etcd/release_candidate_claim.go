@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"sort"
 	"time"
@@ -75,7 +76,7 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	ctx context.Context,
 	task TaskRecord,
 	revision int64,
-) (ReleaseRestorationAuthority, string, []Condition, error) {
+) (ReleaseRestorationAuthority, string, []etcdstore.Condition, error) {
 	if task.Type == TaskUpdate || task.Params[TaskReleasePublicationParam] == "" {
 		return ReleaseRestorationAuthority{}, "", nil, corruptTaskAssignment()
 	}
@@ -84,7 +85,7 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
 		environmentComposeProjectionKey(task.Owner.EnvironmentID),
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return ReleaseRestorationAuthority{}, "", nil, err
 	}
@@ -168,7 +169,7 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	if err != nil {
 		return ReleaseRestorationAuthority{}, "", nil, err
 	}
-	return authority, digest, append(sourceConditions, []Condition{
+	return authority, digest, append(sourceConditions, []etcdstore.Condition{
 		{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
 		{Key: keys[2], ModRevision: projectionRevision},
@@ -194,14 +195,14 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 	task TaskRecord,
 	writer taskMaterializationWriterRecord,
 	revision int64,
-) (ReleaseRestorationAuthority, string, []Condition, error) {
+) (ReleaseRestorationAuthority, string, []etcdstore.Condition, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
 	keys := []string{
 		releasePublicationKey(publicationID),
 		releaseManifestStagingKey(publicationID),
 		environmentComposeProjectionKey(task.Owner.EnvironmentID),
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return ReleaseRestorationAuthority{}, "", nil, err
 	}
@@ -265,7 +266,7 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 	if read.Values[2] != nil {
 		projectionRevision = read.Values[2].ModRevision
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
 		{Key: keys[2], ModRevision: projectionRevision},
@@ -330,7 +331,7 @@ func (repository *TaskRepository) candidateReleaseDescriptorAtRevision(
 	revision int64,
 ) (executionplan.CandidateReleaseDescriptor, *agentpb.CandidateReleaseProcedure, error) {
 	publicationID := task.Params[TaskReleasePublicationParam]
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
 	}, Revision: revision})
 	if err != nil {

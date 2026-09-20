@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"time"
 
@@ -251,8 +252,8 @@ func (repository *TaskRepository) createReleaseRecoveryRecord(
 	key := releaseRecoveryKey(record.TaskID)
 	result, err := repository.store.Transact(
 		ctx,
-		[]Condition{{Key: key}},
-		[]Mutation{{Type: MutationPut, Key: key, Value: value}},
+		[]etcdstore.Condition{{Key: key}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: value}},
 	)
 	if err != nil {
 		return Versioned[releaseRecoveryRecord]{}, err
@@ -343,7 +344,7 @@ func (repository *TaskRepository) releaseRecoveryDirectiveAtRevision(
 		!validSHA256(assignment.ReleaseRecoveryRecordSHA256) {
 		return nil, corruptTaskAssignment()
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{releaseRecoveryKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {

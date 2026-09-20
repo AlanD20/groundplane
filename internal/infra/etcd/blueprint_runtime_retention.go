@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"strconv"
 
@@ -18,7 +19,7 @@ type blueprintRuntimeRetention struct {
 	sourceReadRevision int64
 	sourceSHA          [32]byte
 	mixedSHA           [32]byte
-	conditions         []Condition
+	conditions         []etcdstore.Condition
 	hasNative          bool
 }
 
@@ -85,7 +86,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 		)
 	}
 	conditions = append(
-		[]Condition{{Key: environmentComposeProjectionKey(environmentID), ModRevision: captured.Revision}},
+		[]etcdstore.Condition{{Key: environmentComposeProjectionKey(environmentID), ModRevision: captured.Revision}},
 		conditions...)
 	if !publication.IsZero() {
 		if err := publication.validate(environmentID, task); err != nil {
@@ -129,7 +130,7 @@ func (ledger *ReleaseLedger) blueprintRuntimePlanningConditions(
 	environmentID string,
 	readRevision int64,
 	captured []ReleasePlanningService,
-) ([]Condition, bool, error) {
+) ([]etcdstore.Condition, bool, error) {
 	scope, err := ledger.LoadPlanningScopeAtRevision(ctx, environmentID, readRevision)
 	if err != nil {
 		return nil, false, err
@@ -148,14 +149,14 @@ func (ledger *ReleaseLedger) blueprintRuntimePlanningConditions(
 	if err != nil {
 		return nil, false, err
 	}
-	conditions := make([]Condition, len(captured))
+	conditions := make([]etcdstore.Condition, len(captured))
 	hasNative := false
 	for index, source := range captured {
 		if actual[index].ProjectionRevision != source.ProjectionRevision ||
 			actual[index].Projection != source.Projection {
 			return nil, false, errs.New(errs.KindStateConflict, "Blueprint retained Release source changed")
 		}
-		conditions[index] = Condition{
+		conditions[index] = etcdstore.Condition{
 			Key:         releaseProjectionKey(serviceIDs[index]),
 			ModRevision: source.ProjectionRevision,
 		}

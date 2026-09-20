@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -106,20 +107,20 @@ type ScriptStagedSourceRequirement struct {
 	value         []byte
 }
 
-func (requirement ScriptStagedSourceRequirement) Matches(mutation Mutation) bool {
-	return mutation.Type == MutationPut && !mutation.Prefix && mutation.Key == requirement.SourceKey &&
+func (requirement ScriptStagedSourceRequirement) Matches(mutation etcdstore.Mutation) bool {
+	return mutation.Type == etcdstore.MutationPut && !mutation.Prefix && mutation.Key == requirement.SourceKey &&
 		bytes.Equal(mutation.Value, requirement.value)
 }
 
 type ScriptSourcePublicationFragment struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	staged     []ScriptStagedSourceRequirement
 }
 
 type ScriptSourceReleaseFragment struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 }
 
 func (fragment *ScriptSourceReleaseFragment) Clear() {
@@ -141,7 +142,7 @@ func (fragment ScriptSourcePublicationFragment) StagedRequirements() []ScriptSta
 
 func (fragment ScriptSourcePublicationFragment) ValidateStagedMutations(
 	stage EnvironmentBlueprintStageClaim,
-	mutations []Mutation,
+	mutations []etcdstore.Mutation,
 ) error {
 	matched := make([]bool, len(fragment.staged))
 	for _, requirement := range fragment.staged {
@@ -204,7 +205,7 @@ func newScriptSourceReferenceAuthority(store hierarchyStore) (*ScriptSourceRefer
 // NewScriptSourceReferenceAuthority constructs the Controller-composed source
 // authority. The concrete type remains the only writer of prepared source
 // memberships and active roots.
-func NewScriptSourceReferenceAuthority(store Store) (*ScriptSourceReferenceAuthority, error) {
+func NewScriptSourceReferenceAuthority(store etcdstore.Store) (*ScriptSourceReferenceAuthority, error) {
 	return newScriptSourceReferenceAuthority(store)
 }
 
@@ -309,14 +310,14 @@ func (authority *ScriptSourceReferenceAuthority) PrepareRetryAvailable(
 func (authority *ScriptSourceReferenceAuthority) ReleaseNext(
 	ctx context.Context,
 	operationID string,
-	guards []Condition,
+	guards []etcdstore.Condition,
 ) (bool, bool, error) {
 	processed, drained, err := authority.repository.ReleaseNext(ctx, operationID, scriptSourceReleaseGuards(guards))
 	return processed, drained, mapScriptSourceReferenceError(err)
 }
 
 func (authority *ScriptSourceReferenceAuthority) ReleaseRetryExpiryNext(
-	ctx context.Context, operationID string, guards []Condition,
+	ctx context.Context, operationID string, guards []etcdstore.Condition,
 ) (bool, bool, error) {
 	processed, drained, err := authority.repository.ReleaseRetryExpiryNext(
 		ctx,
@@ -326,7 +327,7 @@ func (authority *ScriptSourceReferenceAuthority) ReleaseRetryExpiryNext(
 	return processed, drained, mapScriptSourceReferenceError(err)
 }
 
-func scriptSourceReleaseGuards(guards []Condition) []ref.Condition {
+func scriptSourceReleaseGuards(guards []etcdstore.Condition) []ref.Condition {
 	converted := make([]ref.Condition, len(guards))
 	for index, guard := range guards {
 		converted[index] = ref.Condition{
@@ -469,7 +470,7 @@ func (authority *ScriptSourceReferenceAuthority) validateMembers(
 		if readRecords {
 			predecessorRevision, exists := stagedPredecessors[staged.SourceKey]
 			if !exists {
-				read, readErr := authority.store.GetMany(ctx, GetManyRequest{
+				read, readErr := authority.store.GetMany(ctx, etcdstore.GetManyRequest{
 					Keys: []string{staged.SourceKey}, Revision: staged.Stage.FixedReadRevision,
 				})
 				if readErr != nil {
@@ -540,7 +541,7 @@ func scriptCandidateSourceStageFromReference(stage ref.StageIdentity) ScriptCand
 }
 
 func (authority *ScriptSourceReferenceAuthority) validateExistingSource(ctx context.Context, member ref.Member) error {
-	read, err := authority.store.GetMany(ctx, GetManyRequest{
+	read, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{member.SourceKey}, Revision: member.Reference.SourceModRevision,
 	})
 	if err != nil {
@@ -556,7 +557,7 @@ func (authority *ScriptSourceReferenceAuthority) validateExistingSource(ctx cont
 	if member.Reference.Source.Kind != ScriptSourceSecretValue {
 		return nil
 	}
-	metadata, err := authority.store.GetMany(ctx, GetManyRequest{
+	metadata, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{secretRecordKey(member.Reference.Source.SecretID)}, Revision: member.Reference.SourceModRevision,
 	})
 	if err != nil {

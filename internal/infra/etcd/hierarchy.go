@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -43,11 +44,11 @@ type ProjectFilter struct {
 }
 
 type hierarchyStore interface {
-	Get(context.Context, string) (*GetResult, error)
-	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
-	Range(context.Context, RangeRequest) (*RangeResult, error)
-	MeasureTransaction(context.Context, []Condition, []Mutation) (TransactionBudget, error)
-	Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
+	Get(context.Context, string) (*etcdstore.GetResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+	MeasureTransaction(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionBudget, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
 // HierarchyRepository owns durable Tenant, Project, and Environment persistence.
@@ -63,7 +64,7 @@ type EnvironmentBlueprintRepository struct {
 	transactions environmentBlueprintTransactionStore
 }
 
-func NewHierarchyRepository(store Store) (*HierarchyRepository, error) {
+func NewHierarchyRepository(store etcdstore.Store) (*HierarchyRepository, error) {
 	return newHierarchyRepository(store)
 }
 
@@ -119,11 +120,11 @@ func (repository *HierarchyRepository) CreateTenant(
 	slug := tenantSlugKey(record.Slug)
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetTenant), record.ID)
 	result, err := repository.store.Transact(ctx,
-		[]Condition{{Key: primary}, {Key: slug}, {Key: coordinationKey}},
-		[]Mutation{
-			{Type: MutationPut, Key: primary, Value: value},
-			{Type: MutationPut, Key: slug, Value: []byte(record.ID)},
-			{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
+		[]etcdstore.Condition{{Key: primary}, {Key: slug}, {Key: coordinationKey}},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: primary, Value: value},
+			{Type: etcdstore.MutationPut, Key: slug, Value: []byte(record.ID)},
+			{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
 		},
 	)
 	if err != nil {
@@ -169,11 +170,11 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 	defer clear(coordinationValue)
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetTenant), record.ID)
 	plan, err := newIdempotencyMutationPlan(
-		[]Condition{{Key: tenantKey(record.ID)}, {Key: tenantSlugKey(record.Slug)}, {Key: coordinationKey}},
-		[]Mutation{
-			{Type: MutationPut, Key: tenantKey(record.ID), Value: value},
-			{Type: MutationPut, Key: tenantSlugKey(record.Slug), Value: []byte(record.ID)},
-			{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
+		[]etcdstore.Condition{{Key: tenantKey(record.ID)}, {Key: tenantSlugKey(record.Slug)}, {Key: coordinationKey}},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: tenantKey(record.ID), Value: value},
+			{Type: etcdstore.MutationPut, Key: tenantSlugKey(record.Slug), Value: []byte(record.ID)},
+			{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
 		},
 		classifyTenantCreateConflict(record.Slug),
 	)
@@ -188,7 +189,7 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 }
 
 func classifyTenantCreateConflict(slug string) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != 3 {
 			return errs.New(errs.KindInternal, "Tenant creation compare evidence is incomplete")
 		}
@@ -237,7 +238,7 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	tombstoneKey := deletionTombstoneKey("tenant", record.TenantID)
-	ownerState, err := repository.store.GetMany(ctx, GetManyRequest{
+	ownerState, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{tombstoneKey}, Revision: owner.ReadRevision,
 	})
 	if err != nil {
@@ -261,7 +262,7 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 	defer clear(coordinationValue)
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), record.ID)
 	plan, err := newIdempotencyMutationPlan(
-		[]Condition{
+		[]etcdstore.Condition{
 			{Key: projectKey(record.ID)},
 			{Key: projectSlugKey(record)},
 			{Key: projectOwnerKey(record)},
@@ -269,11 +270,11 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 			{Key: tombstoneKey},
 			{Key: coordinationKey},
 		},
-		[]Mutation{
-			{Type: MutationPut, Key: projectKey(record.ID), Value: value},
-			{Type: MutationPut, Key: projectSlugKey(record), Value: []byte(record.ID)},
-			{Type: MutationPut, Key: projectOwnerKey(record), Value: []byte(record.ID)},
-			{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: projectKey(record.ID), Value: value},
+			{Type: etcdstore.MutationPut, Key: projectSlugKey(record), Value: []byte(record.ID)},
+			{Type: etcdstore.MutationPut, Key: projectOwnerKey(record), Value: []byte(record.ID)},
+			{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
 		},
 		classifyProjectCreateConflict(record, owner.Revision),
 	)
@@ -288,7 +289,7 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 }
 
 func classifyProjectCreateConflict(record ProjectRecord, ownerRevision int64) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != 6 {
 			return errs.New(errs.KindInternal, "Project creation compare evidence is incomplete")
 		}
@@ -354,7 +355,7 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 	if renaming {
 		secondaryKeys = append(secondaryKeys, tenantSlugKey(replacement.Slug))
 	}
-	secondary, err := repository.store.GetMany(ctx, GetManyRequest{
+	secondary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: secondaryKeys, Revision: current.ReadRevision,
 	})
 	if err != nil {
@@ -375,18 +376,18 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: tenantKey(current.Record.ID), ModRevision: current.Revision},
 		{Key: tenantSlugKey(current.Record.Slug), ModRevision: secondary.Values[0].ModRevision},
 		{Key: deletionTombstoneKey("tenant", current.Record.ID)},
 	}
-	mutations := []Mutation{{Type: MutationPut, Key: tenantKey(current.Record.ID), Value: value}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: tenantKey(current.Record.ID), Value: value}}
 	if renaming {
-		conditions = append(conditions, Condition{Key: tenantSlugKey(replacement.Slug)})
+		conditions = append(conditions, etcdstore.Condition{Key: tenantSlugKey(replacement.Slug)})
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationDelete, Key: tenantSlugKey(current.Record.Slug)},
-			Mutation{Type: MutationPut, Key: tenantSlugKey(replacement.Slug), Value: []byte(current.Record.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: tenantSlugKey(current.Record.Slug)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: tenantSlugKey(replacement.Slug), Value: []byte(current.Record.ID)},
 		)
 	}
 	plan, err := newIdempotencyMutationPlan(
@@ -409,7 +410,7 @@ func classifyTenantMutationConflict(
 	replacement TenantRecord,
 	renaming bool,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		expected := 3
 		if renaming {
 			expected++
@@ -446,7 +447,7 @@ func (repository *HierarchyRepository) CreateProject(
 	if err := validateProject(record); err != nil {
 		return Versioned[ProjectRecord]{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: projectKey(record.ID)},
 		{Key: projectSlugKey(record)},
 		{Key: projectOwnerKey(record)},
@@ -456,7 +457,7 @@ func (repository *HierarchyRepository) CreateProject(
 		if err != nil {
 			return Versioned[ProjectRecord]{}, err
 		}
-		conditions = append(conditions, Condition{Key: tenantKey(record.TenantID), ModRevision: owner.Revision})
+		conditions = append(conditions, etcdstore.Condition{Key: tenantKey(record.TenantID), ModRevision: owner.Revision})
 	}
 	value, err := encodeEnvelope("project", record)
 	if err != nil {
@@ -468,12 +469,12 @@ func (repository *HierarchyRepository) CreateProject(
 		return Versioned[ProjectRecord]{}, err
 	}
 	coordinationKey := HierarchyCoordinationKey(string(coordinationTarget), record.ID)
-	conditions = append(conditions, Condition{Key: coordinationKey})
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: projectKey(record.ID), Value: value},
-		{Type: MutationPut, Key: projectSlugKey(record), Value: []byte(record.ID)},
-		{Type: MutationPut, Key: projectOwnerKey(record), Value: []byte(record.ID)},
-		{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
+	conditions = append(conditions, etcdstore.Condition{Key: coordinationKey})
+	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: projectKey(record.ID), Value: value},
+		{Type: etcdstore.MutationPut, Key: projectSlugKey(record), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: projectOwnerKey(record), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
 	})
 	if err != nil {
 		return Versioned[ProjectRecord]{}, err
@@ -532,7 +533,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), record.ID)
 	scriptSetKey := scriptSetActiveKey(record.ID)
 	result, err := repository.store.Transact(ctx,
-		[]Condition{
+		[]etcdstore.Condition{
 			{Key: primary},
 			{Key: label},
 			{Key: ownerIndex},
@@ -541,13 +542,13 @@ func (repository *HierarchyRepository) CreateEnvironment(
 			{Key: coordinationKey},
 			{Key: scriptSetKey},
 		},
-		[]Mutation{
-			{Type: MutationPut, Key: primary, Value: value},
-			{Type: MutationPut, Key: label, Value: []byte(record.ID)},
-			{Type: MutationPut, Key: ownerIndex, Value: []byte(record.ID)},
-			{Type: MutationPut, Key: epochKey, Value: epochValue},
-			{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
-			{Type: MutationPut, Key: scriptSetKey, Value: scriptSetValue},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: primary, Value: value},
+			{Type: etcdstore.MutationPut, Key: label, Value: []byte(record.ID)},
+			{Type: etcdstore.MutationPut, Key: ownerIndex, Value: []byte(record.ID)},
+			{Type: etcdstore.MutationPut, Key: epochKey, Value: epochValue},
+			{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
+			{Type: etcdstore.MutationPut, Key: scriptSetKey, Value: scriptSetValue},
 		},
 	)
 	if err != nil {

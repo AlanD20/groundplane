@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -10,7 +11,7 @@ import (
 )
 
 func initializeTaskMaterializationResolver(
-	store etcd.Store,
+	store etcdstore.Store,
 	blueprints *etcd.HierarchyRepository,
 	values *etcd.EntryValueGenerationRepository,
 	secrets *etcd.SecretRepository,

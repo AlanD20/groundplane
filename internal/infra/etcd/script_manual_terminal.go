@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -14,9 +15,9 @@ import (
 func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	ctx context.Context,
 	task TaskRecord,
-	taskValue *KeyValue,
+	taskValue *etcdstore.KeyValue,
 	assignment TaskAssignmentRecord,
-	assignmentValue, assignmentIndexValue *KeyValue,
+	assignmentValue, assignmentIndexValue *etcdstore.KeyValue,
 	status TaskStatus,
 	terminalAt *time.Time,
 	revision int64,
@@ -27,7 +28,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	if err != nil {
 		return scriptTerminalSourceRelease{}, false, err
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			scriptSourceRootKey(task.OperationID),
 			taskActiveOperationKey(task.OperationID),
@@ -89,8 +90,8 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	}
 	defer clear(reportMutation.Value)
 	*terminalAt = report.ObservedAt
-	executionCondition := Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision}
-	guards := []Condition{
+	executionCondition := etcdstore.Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision}
+	guards := []etcdstore.Condition{
 		{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 		{
 			Key:         taskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
@@ -130,7 +131,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		}
 		defer clear(encoded)
 		mutations := append(cloneBlueprintCandidateMutations(release.mutations), reportMutation,
-			Mutation{Type: MutationPut, Key: executionValue.Key, Value: encoded})
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: executionValue.Key, Value: encoded})
 		defer clearMutationValues(mutations)
 		transaction, err := repository.store.Transact(ctx, append(guards, release.conditions...), mutations)
 		if err != nil {
@@ -162,7 +163,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	}
 	defer final.Clear()
 	return scriptTerminalSourceRelease{
-		conditions: append(append([]Condition(nil), final.conditions...), executionCondition, reportCondition),
+		conditions: append(append([]etcdstore.Condition(nil), final.conditions...), executionCondition, reportCondition),
 		mutations:  append(cloneBlueprintCandidateMutations(final.mutations), reportMutation),
 	}, false, nil
 }

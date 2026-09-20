@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,8 +23,8 @@ func (ledger *ReleaseLedger) blueprintRuntimeSourceConditions(
 	environmentID string,
 	revision int64,
 	sources []BlueprintRetainedRuntimeSource,
-) ([]Condition, error) {
-	var conditions []Condition
+) ([]etcdstore.Condition, error) {
+	var conditions []etcdstore.Condition
 	for _, source := range sources {
 		if source.Planning.Projection.ServingReleaseID == "" {
 			if source.Release != nil || source.Intent != nil {
@@ -84,11 +85,11 @@ func (ledger *ReleaseLedger) blueprintRuntimeSourceConditions(
 		}
 		conditions = append(
 			conditions,
-			Condition{
+			etcdstore.Condition{
 				Key:         releaseIntentStagingKey("", authority.ServingReleaseID),
 				ModRevision: authority.IntentRevision,
 			},
-			Condition{
+			etcdstore.Condition{
 				Key:         releaseRenderInputStagingKey("", authority.ServingReleaseID),
 				ModRevision: authority.RenderRevision,
 			},
@@ -123,7 +124,7 @@ func (ledger *ReleaseLedger) blueprintRuntimeSourceConditions(
 		}
 		conditions = append(
 			conditions,
-			Condition{
+			etcdstore.Condition{
 				Key:         releaseRenderInputStagingKey("", authority.PriorServingReleaseID),
 				ModRevision: authority.RetainedPriorRenderRevision,
 			},

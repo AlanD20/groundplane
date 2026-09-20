@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -14,7 +15,7 @@ type RouteRepository struct {
 	store hierarchyStore
 }
 
-func NewRouteRepository(store Store) (*RouteRepository, error) {
+func NewRouteRepository(store etcdstore.Store) (*RouteRepository, error) {
 	return newRouteRepository(store)
 }
 
@@ -55,7 +56,7 @@ func (repository *RouteRepository) prepareRouteCreation(
 	project Versioned[ProjectRecord],
 	target Versioned[ServiceRecord],
 	record RouteRecord,
-) ([]Condition, []Mutation, idempotencyPlanClassifier, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	if err := validateRouteHierarchy(ctx, environment, project, target, record); err != nil {
 		return nil, nil, nil, err
 	}
@@ -64,18 +65,18 @@ func (repository *RouteRepository) prepareRouteCreation(
 		return nil, nil, nil, err
 	}
 	conditions := routeWriteConditions(environment, project, target, record, nil, 0, 0)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: routeKey(record.Desired.ID), Value: value},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: routeKey(record.Desired.ID), Value: value},
 		{
-			Type: MutationPut, Key: routeOwnerKey(record.EnvironmentID, record.Desired.ID),
+			Type: etcdstore.MutationPut, Key: routeOwnerKey(record.EnvironmentID, record.Desired.ID),
 			Value: []byte(record.Desired.ID),
 		},
 		{
-			Type: MutationPut, Key: routeMatchKey(record.EnvironmentID, record.Desired.Host, record.Desired.Path),
+			Type: etcdstore.MutationPut, Key: routeMatchKey(record.EnvironmentID, record.Desired.Host, record.Desired.Path),
 			Value: []byte(record.Desired.ID),
 		},
 	}
-	classify := func(_ int64, values []*KeyValue) error {
+	classify := func(_ int64, values []*etcdstore.KeyValue) error {
 		return classifyRouteWriteConflict(values, environment, project, target, record, 0)
 	}
 	return conditions, mutations, classify, nil
@@ -108,7 +109,7 @@ func (repository *RouteRepository) SnapshotRevision(ctx context.Context) (int64,
 	if err := validateContext(ctx); err != nil {
 		return 0, err
 	}
-	result, err := repository.store.Range(ctx, RangeRequest{Prefix: routePrefix, Limit: 1})
+	result, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: routePrefix, Limit: 1})
 	if err != nil {
 		return 0, err
 	}
@@ -153,7 +154,7 @@ func (repository *RouteRepository) prepareRouteReplacement(
 	target Versioned[ServiceRecord],
 	current Versioned[RouteRecord],
 	desired core.Route,
-) (RouteRecord, []Condition, []Mutation, idempotencyPlanClassifier, error) {
+) (RouteRecord, []etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	replacement, err := ReplaceRouteDesired(current.Record, desired)
 	if err != nil {
 		return RouteRecord{}, nil, nil, nil, err
@@ -164,7 +165,7 @@ func (repository *RouteRepository) prepareRouteReplacement(
 	if err := validateRouteVersion(current); err != nil {
 		return RouteRecord{}, nil, nil, nil, err
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			routeOwnerKey(current.Record.EnvironmentID, current.Record.Desired.ID),
 			routeMatchKey(current.Record.EnvironmentID, current.Record.Desired.Host, current.Record.Desired.Path),
@@ -187,8 +188,8 @@ func (repository *RouteRepository) prepareRouteReplacement(
 		environment, project, target, current.Record, &current,
 		indexes.Values[0].ModRevision, indexes.Values[1].ModRevision,
 	)
-	mutations := []Mutation{{Type: MutationPut, Key: routeKey(replacement.Desired.ID), Value: value}}
-	classify := func(_ int64, values []*KeyValue) error {
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: routeKey(replacement.Desired.ID), Value: value}}
+	classify := func(_ int64, values []*etcdstore.KeyValue) error {
 		return classifyRouteWriteConflict(values, environment, project, target, current.Record, current.Revision)
 	}
 	return replacement, conditions, mutations, classify, nil
@@ -202,16 +203,16 @@ func routeWriteConditions(
 	current *Versioned[RouteRecord],
 	ownerRevision int64,
 	matchRevision int64,
-) []Condition {
-	routeCondition := Condition{Key: routeKey(record.Desired.ID)}
-	ownerCondition := Condition{Key: routeOwnerKey(record.EnvironmentID, record.Desired.ID)}
-	matchCondition := Condition{Key: routeMatchKey(record.EnvironmentID, record.Desired.Host, record.Desired.Path)}
+) []etcdstore.Condition {
+	routeCondition := etcdstore.Condition{Key: routeKey(record.Desired.ID)}
+	ownerCondition := etcdstore.Condition{Key: routeOwnerKey(record.EnvironmentID, record.Desired.ID)}
+	matchCondition := etcdstore.Condition{Key: routeMatchKey(record.EnvironmentID, record.Desired.Host, record.Desired.Path)}
 	if current != nil {
 		routeCondition.ModRevision = current.Revision
 		ownerCondition.ModRevision = ownerRevision
 		matchCondition.ModRevision = matchRevision
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		routeCondition,
 		ownerCondition,
 		matchCondition,
@@ -224,7 +225,7 @@ func routeWriteConditions(
 		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
 	}
 	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
 	}
 	return conditions
 }
@@ -271,7 +272,7 @@ func validateRouteVersion(current Versioned[RouteRecord]) error {
 }
 
 func classifyRouteWriteConflict(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
 	target Versioned[ServiceRecord],

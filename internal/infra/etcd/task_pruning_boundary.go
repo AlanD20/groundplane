@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	ref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -12,7 +13,7 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	ctx context.Context,
 	task TaskRecord,
 	taskRevision int64,
-	retentionEntry KeyValue,
+	retentionEntry etcdstore.KeyValue,
 	readRevision int64,
 	now time.Time,
 ) (bool, error) {
@@ -35,15 +36,15 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 	return changed || !ready, nil
 }
 
-func taskSourcePruneConditions(task TaskRecord) []Condition {
+func taskSourcePruneConditions(task TaskRecord) []etcdstore.Condition {
 	pins := recoverySecretPinPruneConditions(task)
 	if task.Configuration != nil && task.Configuration.BackingHookInputs != nil {
-		pins = append(pins, Condition{Key: backingHookTaskInputKey(task.OperationID)})
+		pins = append(pins, etcdstore.Condition{Key: backingHookTaskInputKey(task.OperationID)})
 	}
 	if task.Type != TaskScript {
 		return pins
 	}
-	return append(pins, []Condition{
+	return append(pins, []etcdstore.Condition{
 		{Key: scriptSourceRootKey(task.OperationID)},
 		{Key: ref.ReversePrefix(task.OperationID), Prefix: true},
 	}...)

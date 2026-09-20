@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/infra/runtimeconfiguration"
 )
@@ -17,7 +18,7 @@ func NewRuntimeConfigurationRepository(store hierarchyStore) (*runtimeconfigurat
 func (adapter runtimeConfigurationStore) GetMany(
 	ctx context.Context, keys []string, revision int64,
 ) (*runtimeconfiguration.GetManyResult, error) {
-	read, err := adapter.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil || read == nil {
 		return nil, err
 	}
@@ -39,14 +40,14 @@ func (adapter runtimeConfigurationStore) Transact(
 	conditions []runtimeconfiguration.Condition,
 	mutations []runtimeconfiguration.Mutation,
 ) (runtimeconfiguration.TxnResult, error) {
-	compares := make([]Condition, len(conditions))
+	compares := make([]etcdstore.Condition, len(conditions))
 	for index, condition := range conditions {
-		compares[index] = Condition{Key: condition.Key, ModRevision: condition.ModRevision}
+		compares[index] = etcdstore.Condition{Key: condition.Key, ModRevision: condition.ModRevision}
 	}
-	writes := make([]Mutation, len(mutations))
+	writes := make([]etcdstore.Mutation, len(mutations))
 	for index, mutation := range mutations {
-		writes[index] = Mutation{
-			Type:  MutationType(mutation.Type),
+		writes[index] = etcdstore.Mutation{
+			Type:  etcdstore.MutationType(mutation.Type),
 			Key:   mutation.Key,
 			Value: mutation.Value,
 		}

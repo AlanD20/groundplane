@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,7 +23,7 @@ func (ledger *ReleaseLedger) GetPlanningAppliedProjection(
 	}
 	read, err := ledger.store.GetMany(
 		ctx,
-		GetManyRequest{
+		etcdstore.GetManyRequest{
 			Keys:     []string{environmentComposeProjectionKey(scope.Environment.Record.ID)},
 			Revision: scope.ReadRevision,
 		},

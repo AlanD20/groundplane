@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"strings"
 	"unicode/utf8"
@@ -384,7 +385,7 @@ func resolveRecord[T any](
 	if ids.Validate(idKind, id) != nil {
 		return Versioned[T]{}, errs.New(errs.KindInternal, "slug index contains an invalid stable id")
 	}
-	result, err := store.GetMany(ctx, GetManyRequest{Keys: []string{primaryKey(id)}, Revision: index.ReadRevision})
+	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{primaryKey(id)}, Revision: index.ReadRevision})
 	if err != nil {
 		return Versioned[T]{}, err
 	}
@@ -429,7 +430,7 @@ func renameRecord[T any](
 		newSlugOffset = len(secondaryKeys)
 		secondaryKeys = append(secondaryKeys, newSlugKey)
 	}
-	secondary, err := store.GetMany(ctx, GetManyRequest{Keys: secondaryKeys, Revision: current.ReadRevision})
+	secondary, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: secondaryKeys, Revision: current.ReadRevision})
 	if err != nil {
 		return Versioned[T]{}, err
 	}
@@ -459,19 +460,19 @@ func renameRecord[T any](
 	if err != nil {
 		return Versioned[T]{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: primaryKey, ModRevision: current.Revision},
 		{Key: oldSlugKey, ModRevision: secondary.Values[0].ModRevision},
 	}
 	for index, key := range membershipKeys {
-		conditions = append(conditions, Condition{Key: key, ModRevision: secondary.Values[index+1].ModRevision})
+		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: secondary.Values[index+1].ModRevision})
 	}
-	conditions = append(conditions, Condition{Key: tombstoneKey})
-	mutations := []Mutation{{Type: MutationPut, Key: primaryKey, Value: value}}
-	conditions = append(conditions, Condition{Key: newSlugKey})
+	conditions = append(conditions, etcdstore.Condition{Key: tombstoneKey})
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: primaryKey, Value: value}}
+	conditions = append(conditions, etcdstore.Condition{Key: newSlugKey})
 	mutations = append(mutations,
-		Mutation{Type: MutationDelete, Key: oldSlugKey},
-		Mutation{Type: MutationPut, Key: newSlugKey, Value: []byte(id)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: oldSlugKey},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: newSlugKey, Value: []byte(id)},
 	)
 	if err := validateContext(ctx); err != nil {
 		return Versioned[T]{}, err
@@ -509,7 +510,7 @@ func diagnoseRename(
 	keys = append(keys, tombstoneKey)
 	newSlugOffset := len(keys)
 	keys = append(keys, newSlugKey)
-	current, err := store.GetMany(ctx, GetManyRequest{Keys: keys})
+	current, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return err
 	}
@@ -670,7 +671,7 @@ func listPrimaryPage[T any](
 	if err != nil {
 		return Page[T]{}, err
 	}
-	rangeResult, err := store.Range(ctx, RangeRequest{
+	rangeResult, err := store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: start, Limit: int64(limit), Revision: revision,
 	})
 	if err != nil {
@@ -727,10 +728,10 @@ func listFilteredPrimaryPage[T any](
 		return Page[T]{}, err
 	}
 	items := make([]Versioned[T], 0, limit)
-	continuations := make([]KeyValue, 0, limit)
+	continuations := make([]etcdstore.KeyValue, 0, limit)
 	readRevision := revision
 	for {
-		rangeResult, err := store.Range(ctx, RangeRequest{
+		rangeResult, err := store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: prefix, StartExclusive: start, Limit: int64(MaximumPageLimit), Revision: readRevision,
 		})
 		if err != nil {
@@ -756,7 +757,7 @@ func listFilteredPrimaryPage[T any](
 				continue
 			}
 			if len(items) == limit {
-				next, err := nextPageCursor(&RangeResult{
+				next, err := nextPageCursor(&etcdstore.RangeResult{
 					Values: continuations, More: true, ReadRevision: readRevision,
 				}, query, idKind, prefix)
 				if err != nil {
@@ -828,7 +829,7 @@ func listIndexPageAtRevision[T any](
 	} else if anchorRevision > 0 && revision != anchorRevision {
 		return Page[T]{}, errs.New(errs.KindStateConflict, "list cursor Script-set generation changed")
 	}
-	rangeResult, err := store.Range(ctx, RangeRequest{
+	rangeResult, err := store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: start, Limit: int64(limit), Revision: revision,
 	})
 	if err != nil {
@@ -890,15 +891,15 @@ func getManyBatchedAtRevision(
 	store hierarchyStore,
 	keys []string,
 	revision int64,
-) (*GetManyResult, error) {
+) (*etcdstore.GetManyResult, error) {
 	if len(keys) == 0 || revision <= 0 {
 		return nil, errs.New(errs.KindInternal, "fixed-revision batched read is invalid")
 	}
-	values := make([]*KeyValue, 0, len(keys))
+	values := make([]*etcdstore.KeyValue, 0, len(keys))
 	responseRevision := int64(0)
-	for start := 0; start < len(keys); start += maximumTransactionOperations {
-		end := min(start+maximumTransactionOperations, len(keys))
-		batch, err := store.GetMany(ctx, GetManyRequest{Keys: keys[start:end], Revision: revision})
+	for start := 0; start < len(keys); start += etcdstore.MaximumOperations {
+		end := min(start+etcdstore.MaximumOperations, len(keys))
+		batch, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys[start:end], Revision: revision})
 		if err != nil {
 			if batch != nil {
 				clearKeyValues(batch.Values)
@@ -916,18 +917,18 @@ func getManyBatchedAtRevision(
 		values = append(values, batch.Values...)
 		responseRevision = max(responseRevision, batch.ResponseRevision)
 	}
-	return &GetManyResult{
+	return &etcdstore.GetManyResult{
 		Values: values, ReadRevision: revision, ResponseRevision: responseRevision,
 	}, nil
 }
 
-func clearRangeKeyValues(values []KeyValue) {
+func clearRangeKeyValues(values []etcdstore.KeyValue) {
 	for index := range values {
 		clear(values[index].Value)
 	}
 }
 
-func nextPageCursor(result *RangeResult, query string, kind ids.Kind, prefix string) (string, error) {
+func nextPageCursor(result *etcdstore.RangeResult, query string, kind ids.Kind, prefix string) (string, error) {
 	if !result.More {
 		return "", nil
 	}

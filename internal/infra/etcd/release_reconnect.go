@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -59,14 +60,14 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 				transitioned, processed, transitionErr := repository.transitionReleaseAcknowledgementToRecovery(
 					ctx,
 					task,
-					&KeyValue{Key: taskKey(task.ID), Value: taskBytes, ModRevision: current.Task.Revision},
+					&etcdstore.KeyValue{Key: taskKey(task.ID), Value: taskBytes, ModRevision: current.Task.Revision},
 					assignment,
-					&KeyValue{
+					&etcdstore.KeyValue{
 						Key:         taskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
 						Value:       assignmentBytes,
 						ModRevision: current.Assignment.Revision,
 					},
-					&KeyValue{
+					&etcdstore.KeyValue{
 						Key:         taskAssignmentIndexKey(task.ID),
 						Value:       assignmentBytes,
 						ModRevision: current.Assignment.Revision,
@@ -117,9 +118,9 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 }
 
 type releaseRecoveryAcknowledgement struct {
-	conditions []Condition
+	conditions []etcdstore.Condition
 	record     releaseRecoveryRecord
-	value      *KeyValue
+	value      *etcdstore.KeyValue
 	final      bool
 	status     TaskStatus
 	result     TaskResultRecord

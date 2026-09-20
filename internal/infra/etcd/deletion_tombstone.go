@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 	"unicode/utf8"
 
@@ -160,7 +161,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if project.ReadRevision > readRevision {
 		readRevision = project.ReadRevision
 	}
-	evidence, err := repository.store.GetMany(ctx, GetManyRequest{
+	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			environmentKey(environment.Record.ID),
 			projectKey(project.Record.ID),
@@ -296,7 +297,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	defer clear(reference)
 
 	tombstoneKey := deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -328,23 +329,23 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		},
 		{Key: environmentOperationLockKey(environment.Record.ID)},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   taskOperationIndexKey(task.OperationID, task.ID),
 			Value: reference,
 		},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   environmentOperationLockKey(environment.Record.ID),
 			Value: lockValue,
 		},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   environmentMutationEpochKey(environment.Record.ID),
 			Value: epochValue,
 		},
@@ -362,7 +363,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	cleanupSnapshot, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	cleanupSnapshot, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		environmentMutationEpochKey(environment.Record.ID),
 	}})
 	if err != nil {
@@ -406,9 +407,9 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
-	conditions = append(conditions, Condition{Key: environmentDeletionIntentKey(task.OperationID)})
-	mutations = append(mutations, Mutation{
-		Type: MutationPut, Key: environmentDeletionIntentKey(task.OperationID), Value: intentValue,
+	conditions = append(conditions, etcdstore.Condition{Key: environmentDeletionIntentKey(task.OperationID)})
+	mutations = append(mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: environmentDeletionIntentKey(task.OperationID), Value: intentValue,
 	})
 
 	plan, err := newTaskIdempotencyMutationPlan(
@@ -441,7 +442,7 @@ func classifyEnvironmentDeletionStartConflict(
 	expectedBlueprintRevision int64,
 	expectedEpochRevision int64,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != 15 {
 			return errs.New(
 				errs.KindInternal,
@@ -524,7 +525,7 @@ func classifyEnvironmentDeletionStartConflict(
 }
 
 func decodeEnvironmentDeletionEpoch(
-	value *KeyValue,
+	value *etcdstore.KeyValue,
 	environmentID string,
 ) (EnvironmentMutationEpochRecord, error) {
 	if value == nil {
@@ -544,7 +545,7 @@ func decodeEnvironmentDeletionEpoch(
 }
 
 func decodeEnvironmentOperationLock(
-	value *KeyValue,
+	value *etcdstore.KeyValue,
 	environmentID string,
 ) (BackupOperationLockRecord, error) {
 	if value == nil {
@@ -564,7 +565,7 @@ func decodeEnvironmentOperationLock(
 }
 
 func decodeOwnedEnvironmentDeletionLock(
-	value *KeyValue,
+	value *etcdstore.KeyValue,
 	task TaskRecord,
 ) (BackupOperationLockRecord, error) {
 	record, err := decodeEnvironmentOperationLock(value, task.Target)
@@ -668,7 +669,7 @@ func validDeletionCheckpointKind(value string) bool {
 	}
 }
 
-func keyValueRevision(value *KeyValue) int64 {
+func keyValueRevision(value *etcdstore.KeyValue) int64 {
 	if value == nil {
 		return 0
 	}

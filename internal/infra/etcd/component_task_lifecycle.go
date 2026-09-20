@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"reflect"
 	"sort"
 	"time"
@@ -13,8 +14,8 @@ import (
 
 type componentTaskChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -31,7 +32,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	retry TaskRecord,
 	revision int64,
 ) (componentTaskChange, error) {
-	intentResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	intentResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{componentTaskIntentKey(source.ID)}, Revision: revision,
 	})
 	if err != nil {
@@ -130,7 +131,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	for _, zoneID := range zones {
 		keys = append(keys, deletionTombstoneKey("zone", zoneID))
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return componentTaskChange{}, err
 	}
@@ -184,7 +185,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 
 	change := componentTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: componentTaskIntentKey(source.ID), ModRevision: intentValue.ModRevision},
 			{Key: componentTaskIntentKey(retry.ID)},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
@@ -217,7 +218,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 				"active Component no longer matches retry base",
 			)
 		}
-		change.conditions = append(change.conditions, Condition{
+		change.conditions = append(change.conditions, etcdstore.Condition{
 			Key: componentKey(active.Desired.ID), ModRevision: value.ModRevision,
 		})
 	}
@@ -245,8 +246,8 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		}
 		zoneRecords[zoneID] = zone
 		registries[zoneID] = registry
-		change.conditions = append(change.conditions, Condition{Key: deletionTombstoneKey("zone", zoneID)})
-		registryCondition := Condition{Key: componentAddressRegistryKey(zoneID)}
+		change.conditions = append(change.conditions, etcdstore.Condition{Key: deletionTombstoneKey("zone", zoneID)})
+		registryCondition := etcdstore.Condition{Key: componentAddressRegistryKey(zoneID)}
 		if registryValue != nil {
 			registryCondition.ModRevision = registryValue.ModRevision
 		}
@@ -287,8 +288,8 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			return componentTaskChange{}, encodeErr
 		}
 		change.values = append(change.values, value)
-		change.mutations = append(change.mutations, Mutation{
-			Type: MutationPut, Key: componentAddressRegistryKey(zoneID), Value: value,
+		change.mutations = append(change.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: componentAddressRegistryKey(zoneID), Value: value,
 		})
 	}
 	intentBytes, err := encodeComponentTaskIntent(retryIntent)
@@ -298,12 +299,12 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	}
 	change.values = append(change.values, intentBytes)
 	change.mutations = append(change.mutations,
-		Mutation{Type: MutationPut, Key: componentTaskIntentKey(retry.ID), Value: intentBytes},
-		Mutation{
-			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentTaskIntentKey(retry.ID), Value: intentBytes},
+		etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
 		},
 	)
-	environmentState, err := repository.store.GetMany(ctx, GetManyRequest{
+	environmentState, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentKey(intent.EnvironmentID)}, Revision: revision,
 	})
 	if err != nil {
@@ -336,7 +337,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	}
 	change.conditions = append(
 		change.conditions,
-		Condition{Key: environmentKey(intent.EnvironmentID), ModRevision: environmentState.Values[0].ModRevision},
+		etcdstore.Condition{Key: environmentKey(intent.EnvironmentID), ModRevision: environmentState.Values[0].ModRevision},
 	)
 	change.conditions = append(change.conditions, secretConditions...)
 	change.mutations = append(change.mutations, secretMutations...)
@@ -413,7 +414,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	terminalAt time.Time,
 	revision int64,
 ) (componentTaskChange, error) {
-	intentResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	intentResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{componentTaskIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
@@ -477,7 +478,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	for _, zoneID := range zones {
 		keys = append(keys, deletionTombstoneKey("zone", zoneID))
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return componentTaskChange{}, err
 	}
@@ -493,14 +494,14 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 
 	change := componentTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: componentTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[0].ModRevision},
 			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
 		},
 	}
 	if componentTaskAcknowledgementRequiresBlueprintRootCondition(task, terminalStatus, intent.EnvironmentID) {
-		change.conditions = append(change.conditions, Condition{
+		change.conditions = append(change.conditions, etcdstore.Condition{
 			Key: environmentBlueprintRootKey(
 				intent.EnvironmentID,
 				desiredRevisionID,
@@ -525,14 +526,14 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 				"active Component no longer matches candidate base",
 			)
 		}
-		change.conditions = append(change.conditions, Condition{
+		change.conditions = append(change.conditions, etcdstore.Condition{
 			Key: componentKey(active.Desired.ID), ModRevision: value.ModRevision,
 		})
 	}
 
 	zoneRecords := make(map[string]ZoneRecord, len(zones))
 	registries := make(map[string]componentAddressRegistry, len(zones))
-	registryValues := make(map[string]*KeyValue, len(zones))
+	registryValues := make(map[string]*etcdstore.KeyValue, len(zones))
 	registryOffset := 3 + len(intent.Candidates)
 	tombstoneOffset := registryOffset + len(zones)
 	for index, zoneID := range zones {
@@ -555,8 +556,8 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		zoneRecords[zoneID] = zone
 		registries[zoneID] = registry
 		registryValues[zoneID] = registryValue
-		change.conditions = append(change.conditions, Condition{Key: deletionTombstoneKey("zone", zoneID)})
-		registryCondition := Condition{Key: componentAddressRegistryKey(zoneID)}
+		change.conditions = append(change.conditions, etcdstore.Condition{Key: deletionTombstoneKey("zone", zoneID)})
+		registryCondition := etcdstore.Condition{Key: componentAddressRegistryKey(zoneID)}
 		if registryValue != nil {
 			registryCondition.ModRevision = registryValue.ModRevision
 		}
@@ -612,8 +613,8 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 				return componentTaskChange{}, encodeErr
 			}
 			change.values = append(change.values, value)
-			change.mutations = append(change.mutations, Mutation{
-				Type: MutationPut, Key: componentKey(candidate.Candidate.Desired.ID), Value: value,
+			change.mutations = append(change.mutations, etcdstore.Mutation{
+				Type: etcdstore.MutationPut, Key: componentKey(candidate.Candidate.Desired.ID), Value: value,
 			})
 		}
 		change.mutations = append(change.mutations, componentWriteFenceMutation(task.ID))
@@ -646,8 +647,8 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 			return componentTaskChange{}, encodeErr
 		}
 		change.values = append(change.values, value)
-		change.mutations = append(change.mutations, Mutation{
-			Type: MutationPut, Key: componentAddressRegistryKey(zoneID), Value: value,
+		change.mutations = append(change.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: componentAddressRegistryKey(zoneID), Value: value,
 		})
 	}
 	terminalIntent, err := terminalComponentTaskIntent(intent, terminalStatus, terminalAt)
@@ -662,8 +663,8 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	}
 	change.values = append(change.values, intentBytes)
 	change.mutations = append(change.mutations,
-		Mutation{Type: MutationPut, Key: componentTaskIntentKey(task.ID), Value: intentBytes},
-		Mutation{Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentTaskIntentKey(task.ID), Value: intentBytes},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 	)
 	return change, nil
 }
@@ -683,7 +684,7 @@ func (repository *TaskRepository) validateComponentTaskAcknowledgementReplay(
 	terminalStatus TaskStatus,
 	revision int64,
 ) error {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			componentTaskIntentKey(task.ID),
 			componentTaskActiveEnvironmentKey(task.Target),
@@ -800,6 +801,6 @@ func clearComponentTaskChange(change componentTaskChange) {
 	}
 }
 
-func componentTaskActiveValueMatches(value *KeyValue, taskID string) bool {
+func componentTaskActiveValueMatches(value *etcdstore.KeyValue, taskID string) bool {
 	return value != nil && bytes.Equal(value.Value, []byte(taskID))
 }

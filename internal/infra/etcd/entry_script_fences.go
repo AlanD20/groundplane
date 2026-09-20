@@ -2,21 +2,22 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Entry removal deletes all immutable generations, not just the current one.
 // Prefix absence proves that neither accounting family retains any generation.
-func entryScriptAbsenceConditions(entryID string) []Condition {
+func entryScriptAbsenceConditions(entryID string) []etcdstore.Condition {
 	suffix := "entry-value/" + entryID + "/"
-	return []Condition{
+	return []etcdstore.Condition{
 		{Key: scriptSourceCountPrefix + suffix, Prefix: true},
 		{Key: scriptSourceForwardReferencePrefix + suffix, Prefix: true},
 	}
 }
 
-func classifyEntryScriptReferences(entryID string, values []*KeyValue) error {
+func classifyEntryScriptReferences(entryID string, values []*etcdstore.KeyValue) error {
 	if len(values) != 2 || (values[0] == nil) != (values[1] == nil) {
 		return errs.New(errs.KindInternal, "Entry Script reference absence proof is inconsistent")
 	}
@@ -37,11 +38,11 @@ func classifyEntryScriptReferences(entryID string, values []*KeyValue) error {
 
 func prepareEntryScriptAbsence(
 	ctx context.Context, store hierarchyStore, entryID string, readRevision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	conditions := entryScriptAbsenceConditions(entryID)
-	values := make([]*KeyValue, 2)
+	values := make([]*etcdstore.KeyValue, 2)
 	for index, condition := range conditions {
-		result, err := store.Range(ctx, RangeRequest{Prefix: condition.Key, Limit: 1, Revision: readRevision})
+		result, err := store.Range(ctx, etcdstore.RangeRequest{Prefix: condition.Key, Limit: 1, Revision: readRevision})
 		if err != nil {
 			return nil, err
 		}
@@ -64,7 +65,7 @@ func prepareEntryScriptAbsence(
 func classifyEntryScriptAbsenceConflict(
 	entryIDs []string, baseCount int, base idempotencyPlanClassifier,
 ) idempotencyPlanClassifier {
-	return func(revision int64, values []*KeyValue) error {
+	return func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != baseCount+2*len(entryIDs) {
 			return errs.New(errs.KindInternal, "Entry Script compare evidence is incomplete")
 		}

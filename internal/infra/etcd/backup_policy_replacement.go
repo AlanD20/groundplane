@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
 
@@ -20,18 +21,18 @@ type backupPolicyInitialKey struct {
 // durable target revision that was validated by the application.
 type backupPolicySourceEvidence struct {
 	Source           Versioned[BackupSourceRecord]
-	EnvironmentIndex *KeyValue
-	IdentityIndex    *KeyValue
+	EnvironmentIndex *etcdstore.KeyValue
+	IdentityIndex    *etcdstore.KeyValue
 	Attach           *Versioned[AttachRecord]
 	Volume           *backupVolumeProjectionEvidence
-	TargetOwnerIndex *KeyValue
+	TargetOwnerIndex *etcdstore.KeyValue
 }
 
 // backupPolicyConnectorReferenceEvidence proves either the exact existing
 // reverse reference or its absence before the replacement transaction.
 type backupPolicyConnectorReferenceEvidence struct {
 	ConnectorID string
-	Entry       *KeyValue
+	Entry       *etcdstore.KeyValue
 }
 
 // backupPolicyReplacementCandidate contains the fully resolved, prevalidated
@@ -48,7 +49,7 @@ type backupPolicyReplacementCandidate struct {
 	Replacement         BackupPolicyRecord
 	Sources             []backupPolicySourceEvidence
 	Connector           *Versioned[ConnectorRecord]
-	ConnectorOwnerIndex *KeyValue
+	ConnectorOwnerIndex *etcdstore.KeyValue
 	ConnectorReferences []backupPolicyConnectorReferenceEvidence
 	ExistingKey         *VersionedBackupKey
 	InitialKey          *backupPolicyInitialKey
@@ -87,8 +88,8 @@ type backupPolicyReplacementCompare struct {
 }
 
 type backupPolicyReplacementPlan struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	evidence   []backupPolicyReplacementCompare
 }
 
@@ -98,7 +99,7 @@ func (plan *backupPolicyReplacementPlan) compare(
 	key string,
 	revision int64,
 ) {
-	plan.conditions = append(plan.conditions, Condition{Key: key, ModRevision: revision})
+	plan.conditions = append(plan.conditions, etcdstore.Condition{Key: key, ModRevision: revision})
 	plan.evidence = append(plan.evidence, backupPolicyReplacementCompare{
 		Kind: kind, ID: id, ExpectedRevision: revision,
 	})
@@ -120,7 +121,7 @@ func (repository *BackupPolicyRepository) replaceBackupPolicyProtected(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clearMutationValues(plan.mutations)
-	if backupPolicyReplacementOperationCount(plan, marker) > maximumTransactionOperations {
+	if backupPolicyReplacementOperationCount(plan, marker) > etcdstore.MaximumOperations {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"backup policy replacement exceeds the atomic transaction limit",
@@ -129,7 +130,7 @@ func (repository *BackupPolicyRepository) replaceBackupPolicyProtected(
 	mutationPlan, err := newIdempotencyMutationPlan(
 		plan.conditions,
 		plan.mutations,
-		func(_ int64, values []*KeyValue) error {
+		func(_ int64, values []*etcdstore.KeyValue) error {
 			return classifyBackupPolicyReplacementConflict(values, plan.evidence)
 		},
 	)
@@ -405,7 +406,7 @@ func validatebackupPolicySourceEvidence(
 	return nil
 }
 
-func validBackupPolicyIndex(entry *KeyValue, key string, value string) bool {
+func validBackupPolicyIndex(entry *etcdstore.KeyValue, key string, value string) bool {
 	return entry != nil && entry.Key == key && entry.ModRevision > 0 && string(entry.Value) == value
 }
 
@@ -502,13 +503,13 @@ func prepareBackupPolicyReplacement(
 		return backupPolicyReplacementPlan{}, err
 	}
 	plan := backupPolicyReplacementPlan{
-		conditions: make([]Condition, 0, 18+len(candidate.Sources)*3),
-		mutations: []Mutation{
+		conditions: make([]etcdstore.Condition, 0, 18+len(candidate.Sources)*3),
+		mutations: []etcdstore.Mutation{
 			{
-				Type: MutationPut, Key: backupPolicyKey(candidate.Replacement.EnvironmentID), Value: policyValue,
+				Type: etcdstore.MutationPut, Key: backupPolicyKey(candidate.Replacement.EnvironmentID), Value: policyValue,
 			},
 			{
-				Type: MutationPut, Key: environmentCoordinationKey(candidate.Replacement.EnvironmentID),
+				Type: etcdstore.MutationPut, Key: environmentCoordinationKey(candidate.Replacement.EnvironmentID),
 				Value: coordinationValue,
 			},
 		},
@@ -662,14 +663,14 @@ func prepareBackupPolicyReplacement(
 		newConnectorID = candidate.Replacement.ConnectorID
 	}
 	if oldConnectorID != "" && oldConnectorID != newConnectorID {
-		plan.mutations = append(plan.mutations, Mutation{
-			Type: MutationDelete,
+		plan.mutations = append(plan.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete,
 			Key:  backupPolicyConnectorReferenceKey(oldConnectorID, candidate.Replacement.EnvironmentID),
 		})
 	}
 	if newConnectorID != "" && newConnectorID != oldConnectorID {
-		plan.mutations = append(plan.mutations, Mutation{
-			Type:  MutationPut,
+		plan.mutations = append(plan.mutations, etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
 			Key:   backupPolicyConnectorReferenceKey(newConnectorID, candidate.Replacement.EnvironmentID),
 			Value: []byte(candidate.Replacement.EnvironmentID),
 		})
@@ -712,9 +713,9 @@ func prepareBackupPolicyReplacement(
 		}
 		plan.mutations = append(
 			plan.mutations,
-			Mutation{Type: MutationPut, Key: backupKeyKey(candidate.Replacement.EnvironmentID), Value: recordValue},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupKeyKey(candidate.Replacement.EnvironmentID), Value: recordValue},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   backupKeyValueKey(candidate.Replacement.EnvironmentID),
 				Value: encryptedValue,
 			},
@@ -738,7 +739,7 @@ func backupPolicyReplacementOperationCount(
 }
 
 func classifyBackupPolicyReplacementConflict(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	evidence []backupPolicyReplacementCompare,
 ) error {
 	if len(values) != len(evidence) {

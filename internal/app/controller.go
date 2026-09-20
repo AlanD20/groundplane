@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	taskdispatch "github.com/AlanD20/groundplane/internal/controller/controllertask/dispatch"
+	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
 	"log/slog"
 	"os"
 	"time"
@@ -581,7 +582,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Blueprint candidate-release service: %w", err)
 	}
-	staleTasks, err := newStaleAgentTaskMaintenance(agents, agentRuntime.registry, tasks)
+	staleTasks, err := agentruntime.NewStaleTaskMaintenance(agents, agentRuntime.registry, tasks)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize stale Agent task maintenance: %w", err)

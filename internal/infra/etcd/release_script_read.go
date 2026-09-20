@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,7 +24,7 @@ func (ledger *ReleaseLedger) GetReleaseRenderInputAt(
 			"Script Release render input request is invalid",
 		)
 	}
-	read, err := ledger.store.GetMany(ctx, GetManyRequest{
+	read, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{releaseRenderInputStagingKey("", releaseID)}, Revision: revision,
 	})
 	if err != nil {

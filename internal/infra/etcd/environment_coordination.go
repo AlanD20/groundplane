@@ -3,6 +3,7 @@ package etcd
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupschedule"
@@ -93,13 +94,13 @@ func decodeEnvironmentCoordinationRecord(value []byte) (EnvironmentCoordinationR
 	return record, nil
 }
 
-func (evidence environmentCoordinationEvidence) rewriteMutation() (Mutation, error) {
+func (evidence environmentCoordinationEvidence) rewriteMutation() (etcdstore.Mutation, error) {
 	decoded, err := decodeEnvironmentCoordinationRecord(evidence.Value)
 	if err != nil || !equalEnvironmentCoordinationRecord(decoded, evidence.Record) {
-		return Mutation{}, corruptEnvironmentCoordination()
+		return etcdstore.Mutation{}, corruptEnvironmentCoordination()
 	}
-	return Mutation{
-		Type:  MutationPut,
+	return etcdstore.Mutation{
+		Type:  etcdstore.MutationPut,
 		Key:   environmentCoordinationKey(evidence.Record.EnvironmentID),
 		Value: append([]byte(nil), evidence.Value...),
 	}, nil

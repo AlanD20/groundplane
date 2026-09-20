@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -134,7 +135,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(epochMutation.Value)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -146,8 +147,8 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	}
 	if projection != nil {
 		conditions = append(conditions,
-			Condition{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: projection.Revision},
-			Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
+			etcdstore.Condition{Key: environmentComposeProjectionKey(environment.Record.ID), ModRevision: projection.Revision},
+			etcdstore.Condition{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
 		)
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
@@ -162,18 +163,18 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	}
 	baseCount := len(conditions)
 	conditions = append(conditions, scriptConditions...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
-		{Type: MutationPut, Key: entryRemovalIntentKey(task.ID), Value: intentValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
+		{Type: etcdstore.MutationPut, Key: entryRemovalIntentKey(task.ID), Value: intentValue},
 		epochMutation,
 	}
 	if projection != nil {
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 		})
 	}
 	taskTenant, err := loadEntryTaskInitiationTenantAtRevision(
@@ -237,7 +238,7 @@ func classifyEntryDeletionStartConflict(
 	ownerRevision int64, operationID string,
 	fence environmentMutationFenceEvidence,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		domainCount := 8
 		if projection != nil {
 			domainCount += 2
@@ -305,7 +306,7 @@ func loadEntryTaskInitiationTenantAtRevision(
 	if project.Record.Kind != ProjectKindTenant || ids.Validate(ids.KindTenant, project.Record.TenantID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "task initiation project ancestry is invalid")
 	}
-	result, err := store.GetMany(ctx, GetManyRequest{
+	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{tenantKey(project.Record.TenantID)}, Revision: readRevision,
 	})
 	if err != nil {

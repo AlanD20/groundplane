@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -130,7 +131,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), record.ID)
 	scriptSetKey := scriptSetActiveKey(record.ID)
 
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -149,34 +150,34 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	}
 	for _, component := range components {
 		conditions = append(conditions,
-			Condition{Key: componentKey(component.Desired.ID)},
-			Condition{Key: componentEnvironmentOwnerKey(record.ID, component.Desired.ID)},
-			Condition{Key: componentEnvironmentKindKey(record.ID, component.Desired.Kind)},
+			etcdstore.Condition{Key: componentKey(component.Desired.ID)},
+			etcdstore.Condition{Key: componentEnvironmentOwnerKey(record.ID, component.Desired.ID)},
+			etcdstore.Condition{Key: componentEnvironmentKindKey(record.ID, component.Desired.Kind)},
 		)
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: environmentKey(record.ID), Value: environmentValue},
-		{Type: MutationPut, Key: environmentNameKey(record.ProjectID, record.Name), Value: []byte(record.ID)},
-		{Type: MutationPut, Key: environmentOwnerKey(record.ProjectID, record.ID), Value: []byte(record.ID)},
-		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
-		{Type: MutationPut, Key: environmentMutationEpochKey(record.ID), Value: epochValue},
-		{Type: MutationPut, Key: coordinationKey, Value: coordinationValue},
-		{Type: MutationPut, Key: scriptSetKey, Value: scriptSetValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: environmentKey(record.ID), Value: environmentValue},
+		{Type: etcdstore.MutationPut, Key: environmentNameKey(record.ProjectID, record.Name), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: environmentOwnerKey(record.ProjectID, record.ID), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
+		{Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(record.ID), Value: epochValue},
+		{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
+		{Type: etcdstore.MutationPut, Key: scriptSetKey, Value: scriptSetValue},
 	}
 	for index, component := range components {
 		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: componentKey(component.Desired.ID), Value: componentValues[index]},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentKey(component.Desired.ID), Value: componentValues[index]},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   componentEnvironmentOwnerKey(record.ID, component.Desired.ID),
 				Value: []byte(component.Desired.ID),
 			},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   componentEnvironmentKindKey(record.ID, component.Desired.Kind),
 				Value: []byte(component.Desired.ID),
 			},
@@ -254,7 +255,7 @@ func classifyEnvironmentCreateConflict(
 	components []ComponentRecord,
 	operationID string,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != 14+(3*len(components)) {
 			return errs.New(errs.KindInternal, "Environment creation compare evidence is incomplete")
 		}

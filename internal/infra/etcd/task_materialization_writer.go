@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -25,8 +26,8 @@ type taskMaterializationAppliedPredecessor struct {
 
 type taskMaterializationProjectionChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 }
 
 type taskMaterializationWriterJSON struct {
@@ -42,7 +43,7 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 	record TaskRecord,
 	environmentID string,
 	readRevision int64,
-) (taskMaterializationWriterRecord, []Condition, error) {
+) (taskMaterializationWriterRecord, []etcdstore.Condition, error) {
 	entryRuntimeConditions, err := repository.entryRuntimeClaimConditions(ctx, record, readRevision)
 	if err != nil {
 		return taskMaterializationWriterRecord{}, nil, err
@@ -97,14 +98,14 @@ func (repository *TaskRepository) readTaskMaterializationAppliedPredecessor(
 	environmentID string,
 	candidateGeneration int32,
 	readRevision int64,
-) (taskMaterializationAppliedPredecessor, Condition, error) {
+) (taskMaterializationAppliedPredecessor, etcdstore.Condition, error) {
 	key := environmentComposeProjectionKey(environmentID)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: readRevision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: readRevision})
 	if err != nil {
-		return taskMaterializationAppliedPredecessor{}, Condition{}, err
+		return taskMaterializationAppliedPredecessor{}, etcdstore.Condition{}, err
 	}
 	if read == nil || read.ReadRevision != readRevision || len(read.Values) != 1 {
-		return taskMaterializationAppliedPredecessor{}, Condition{}, errs.New(
+		return taskMaterializationAppliedPredecessor{}, etcdstore.Condition{}, errs.New(
 			errs.KindInternal,
 			"task applied predecessor read is incomplete",
 		)
@@ -113,13 +114,13 @@ func (repository *TaskRepository) readTaskMaterializationAppliedPredecessor(
 		read.Values[0], environmentID, candidateGeneration,
 	)
 	if err != nil {
-		return taskMaterializationAppliedPredecessor{}, Condition{}, err
+		return taskMaterializationAppliedPredecessor{}, etcdstore.Condition{}, err
 	}
-	return predecessor, Condition{Key: key, ModRevision: keyValueRevision(read.Values[0])}, nil
+	return predecessor, etcdstore.Condition{Key: key, ModRevision: keyValueRevision(read.Values[0])}, nil
 }
 
 func taskMaterializationAppliedPredecessorFromValue(
-	value *KeyValue,
+	value *etcdstore.KeyValue,
 	environmentID string,
 	candidateGeneration int32,
 ) (taskMaterializationAppliedPredecessor, error) {
@@ -265,7 +266,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 
 	rootKey := environmentBlueprintRootKey(environmentID, revisionID)
 	projectionKey := environmentComposeProjectionKey(environmentID)
-	state, err := repository.store.GetMany(ctx, GetManyRequest{
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{rootKey, projectionKey}, Revision: readRevision,
 	})
 	if err != nil {
@@ -363,7 +364,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 			}
 		}
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: rootKey, ModRevision: state.Values[0].ModRevision},
 		{Key: projectionKey, ModRevision: projectionRevisionCondition},
 	}
@@ -384,7 +385,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	return taskMaterializationProjectionChange{
 		applies:    true,
 		conditions: conditions,
-		mutations:  []Mutation{{Type: MutationPut, Key: projectionKey, Value: projectionValue}},
+		mutations:  []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: projectionKey, Value: projectionValue}},
 	}, nil
 }
 

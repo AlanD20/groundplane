@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -20,11 +21,11 @@ type ordinaryEnvironmentMutationContext struct {
 
 type ordinaryEnvironmentMutationBinding struct {
 	context                *ordinaryEnvironmentMutationContext
-	conditions             []Condition
-	mutations              []Mutation
+	conditions             []etcdstore.Condition
+	mutations              []etcdstore.Mutation
 	originalConditionCount int
 	fenceIndexes           []int
-	preparedReads          []*KeyValue
+	preparedReads          []*etcdstore.KeyValue
 }
 
 func loadOrdinaryEnvironmentMutationContext(
@@ -131,8 +132,8 @@ func (mutationContext *ordinaryEnvironmentMutationContext) versionHierarchy(
 func (mutationContext *ordinaryEnvironmentMutationContext) bind(
 	ctx context.Context,
 	store hierarchyStore,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	advanceEpoch bool,
 ) (*ordinaryEnvironmentMutationBinding, error) {
 	binding, err := mutationContext.prepareBinding(ctx, store, conditions, mutations, advanceEpoch)
@@ -149,15 +150,15 @@ func (mutationContext *ordinaryEnvironmentMutationContext) bind(
 func (mutationContext *ordinaryEnvironmentMutationContext) prepareBinding(
 	ctx context.Context,
 	store hierarchyStore,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	advanceEpoch bool,
 ) (*ordinaryEnvironmentMutationBinding, error) {
 	if mutationContext == nil || mutationContext.readRevision <= 0 {
 		return nil, errs.New(errs.KindInternal, "environment mutation context is invalid")
 	}
 	originalConditionCount := len(conditions)
-	conditions = append([]Condition(nil), conditions...)
+	conditions = append([]etcdstore.Condition(nil), conditions...)
 	fenceConditions := mutationContext.fence.transactionConditions()
 	fenceIndexes := make([]int, len(fenceConditions))
 	conditionIndexes := make(map[string]int, len(conditions)+len(fenceConditions))
@@ -180,10 +181,10 @@ func (mutationContext *ordinaryEnvironmentMutationContext) prepareBinding(
 		conditionIndexes[condition.Key] = len(conditions)
 		conditions = append(conditions, condition)
 	}
-	mutations = append([]Mutation(nil), mutations...)
+	mutations = append([]etcdstore.Mutation(nil), mutations...)
 	filteredMutations := mutations[:0]
 	for _, mutation := range mutations {
-		if mutation.Type == MutationPut && mutation.Key == environmentKey(mutationContext.environmentID) {
+		if mutation.Type == etcdstore.MutationPut && mutation.Key == environmentKey(mutationContext.environmentID) {
 			continue
 		}
 		filteredMutations = append(filteredMutations, mutation)
@@ -200,7 +201,7 @@ func (mutationContext *ordinaryEnvironmentMutationContext) prepareBinding(
 	for index, condition := range conditions {
 		keys[index] = condition.Key
 	}
-	prepared, err := store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: mutationContext.readRevision})
+	prepared, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: mutationContext.readRevision})
 	if err != nil {
 		clearMutationValues(mutations)
 		return nil, err
@@ -226,7 +227,7 @@ func (binding *ordinaryEnvironmentMutationBinding) clear() {
 	binding.preparedReads = nil
 }
 
-func conditionMatchesRead(condition Condition, value *KeyValue) bool {
+func conditionMatchesRead(condition etcdstore.Condition, value *etcdstore.KeyValue) bool {
 	if condition.Prefix {
 		return false
 	}
@@ -238,7 +239,7 @@ func conditionMatchesRead(condition Condition, value *KeyValue) bool {
 
 func (binding *ordinaryEnvironmentMutationBinding) classify(
 	revision int64,
-	reads []*KeyValue,
+	reads []*etcdstore.KeyValue,
 	fallback idempotencyPlanClassifier,
 ) error {
 	if binding == nil || binding.context == nil || fallback == nil ||
@@ -250,7 +251,7 @@ func (binding *ordinaryEnvironmentMutationBinding) classify(
 			return fallback(revision, reads[:binding.originalConditionCount])
 		}
 	}
-	fenceReads := make([]*KeyValue, len(binding.fenceIndexes))
+	fenceReads := make([]*etcdstore.KeyValue, len(binding.fenceIndexes))
 	for index, conditionIndex := range binding.fenceIndexes {
 		fenceReads[index] = reads[conditionIndex]
 	}
@@ -308,7 +309,7 @@ func existingIdempotencyTransaction(
 	}, true, nil
 }
 
-func NewServiceRepository(store Store) (*ServiceRepository, error) {
+func NewServiceRepository(store etcdstore.Store) (*ServiceRepository, error) {
 	return newServiceRepository(store)
 }
 
@@ -329,7 +330,7 @@ type ServiceMutationReferences struct {
 func serviceMutationReferenceConditions(
 	record ServiceRecord,
 	references ServiceMutationReferences,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	wantZones := make(map[string]struct{}, len(record.Desired.Zones))
 	for _, name := range record.Desired.Zones {
 		wantZones[name] = struct{}{}
@@ -337,7 +338,7 @@ func serviceMutationReferenceConditions(
 	if len(wantZones) != len(references.Zones) || len(record.Desired.DependsOn) != len(references.Dependencies) {
 		return nil, errs.New(errs.KindValidationFailed, "Service mutation references are incomplete")
 	}
-	conditions := make([]Condition, 0, len(references.Zones)+2*len(references.Dependencies))
+	conditions := make([]etcdstore.Condition, 0, len(references.Zones)+2*len(references.Dependencies))
 	for _, zone := range references.Zones {
 		if err := validateZoneRecord(zone.Record); err != nil || zone.Revision <= 0 ||
 			zone.ReadRevision < zone.Revision || zone.Record.EnvironmentID != record.EnvironmentID {
@@ -347,7 +348,7 @@ func serviceMutationReferenceConditions(
 			return nil, errs.New(errs.KindValidationFailed, "Service Zone reference is not desired")
 		}
 		delete(wantZones, zone.Record.Desired.Name)
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("zone", zone.Record.Desired.ID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("zone", zone.Record.Desired.ID)})
 	}
 	wantDependencies := make(map[string]struct{}, len(record.Desired.DependsOn))
 	for name := range record.Desired.DependsOn {
@@ -367,7 +368,7 @@ func serviceMutationReferenceConditions(
 		delete(wantDependencies, dependency.Record.Desired.Name)
 		conditions = append(conditions,
 			serviceDesiredCondition(dependency),
-			Condition{Key: deletionTombstoneKey("service", dependency.Record.Desired.ID)},
+			etcdstore.Condition{Key: deletionTombstoneKey("service", dependency.Record.Desired.ID)},
 		)
 	}
 	if len(wantZones) != 0 || len(wantDependencies) != 0 {
@@ -376,7 +377,7 @@ func serviceMutationReferenceConditions(
 	return conditions, nil
 }
 
-func classifyServiceMutationReferenceConflict(values []*KeyValue, references ServiceMutationReferences) error {
+func classifyServiceMutationReferenceConflict(values []*etcdstore.KeyValue, references ServiceMutationReferences) error {
 	if len(values) != len(references.Zones)+2*len(references.Dependencies) {
 		return errs.New(errs.KindInternal, "Service reference compare evidence is incomplete")
 	}
@@ -447,7 +448,7 @@ func validateServiceVersion(current Versioned[ServiceRecord]) error {
 }
 
 func classifyServiceWriteConflict(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
 	record ServiceRecord,

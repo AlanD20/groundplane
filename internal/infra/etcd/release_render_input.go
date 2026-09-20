@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -248,7 +249,7 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 			publicationID,
 		), releasePublicationKey(publicationID), releaseOperationKey(task.OperationID),
 	}
-	loaded, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	loaded, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return ReleaseTaskRenderInput{}, err
 	}
@@ -275,7 +276,7 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 		memberKeys = append(memberKeys, releaseIntentStagingKey(publicationID, member.ReleaseID),
 			releaseRenderInputStagingKey(publicationID, member.ReleaseID))
 	}
-	members, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: memberKeys, Revision: loaded.ReadRevision})
+	members, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: memberKeys, Revision: loaded.ReadRevision})
 	if err != nil {
 		return ReleaseTaskRenderInput{}, err
 	}

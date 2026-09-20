@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -33,7 +34,7 @@ func (repository *TaskRepository) validateTaskRetentionReplay(
 		return errs.New(errs.KindInternal, "terminal Task retention replay is invalid")
 	}
 	key := taskRetentionIndexKey(task.ID, *task.RetainUntil)
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/netip"
 	"sort"
 	"strings"
@@ -80,17 +81,17 @@ func (repository *ComponentRepository) GetHostResolutionProjection(
 
 type hostResolutionProjectionPublication struct {
 	record     HostResolutionProjectionRecord
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
 func prepareHostResolutionProjectionPublication(
-	current *KeyValue,
+	current *etcdstore.KeyValue,
 	inputRevision int64,
 	routes []HostResolutionRouteRecord,
 ) (hostResolutionProjectionPublication, error) {
-	condition := Condition{Key: hostResolutionProjectionKey}
+	condition := etcdstore.Condition{Key: hostResolutionProjectionKey}
 	if current != nil {
 		stored, err := decodeHostResolutionProjectionRecord(current.Value)
 		if err != nil {
@@ -113,8 +114,8 @@ func prepareHostResolutionProjectionPublication(
 		return hostResolutionProjectionPublication{}, err
 	}
 	return hostResolutionProjectionPublication{
-		record: record, conditions: []Condition{condition},
-		mutations: []Mutation{{Type: MutationPut, Key: hostResolutionProjectionKey, Value: value}},
+		record: record, conditions: []etcdstore.Condition{condition},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hostResolutionProjectionKey, Value: value}},
 		values:    [][]byte{value},
 	}, nil
 }

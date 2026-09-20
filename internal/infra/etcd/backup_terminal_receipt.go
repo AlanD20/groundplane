@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"time"
 
@@ -86,8 +87,8 @@ type BackupTerminalReceiptRecord struct {
 }
 
 type backupTerminalReceiptPlan struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	record     BackupTerminalReceiptRecord
 }
 
@@ -442,7 +443,7 @@ func prepareBackupTerminalReceiptPlan(
 	// writer. A second receipt compare would spend the closed prune transaction's
 	// final operation without strengthening that fence.
 	return backupTerminalReceiptPlan{
-		mutations: []Mutation{{Type: MutationPut, Key: key, Value: value}},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: value}},
 		record:    receipt,
 	}, nil
 }
@@ -451,7 +452,7 @@ func composeBackupRunTerminalTransaction(
 	taskPlan backupTaskTerminalPlan,
 	runPlan backupRunPublicationPlan,
 	receiptPlan backupTerminalReceiptPlan,
-) ([]Condition, []Mutation, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	return composeBackupTerminalTransaction(
 		taskPlan.conditions, taskPlan.mutations,
 		runPlan.conditions, runPlan.mutations,
@@ -463,7 +464,7 @@ func composeBackupPruneTerminalTransaction(
 	taskPlan backupTaskTerminalPlan,
 	prunePlan backupPruneTransactionPlan,
 	receiptPlan backupTerminalReceiptPlan,
-) ([]Condition, []Mutation, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	return composeBackupTerminalTransaction(
 		taskPlan.conditions, taskPlan.mutations,
 		prunePlan.conditions, prunePlan.mutations,
@@ -472,21 +473,21 @@ func composeBackupPruneTerminalTransaction(
 }
 
 func composeBackupTerminalTransaction(
-	taskConditions []Condition,
-	taskMutations []Mutation,
-	domainConditions []Condition,
-	domainMutations []Mutation,
+	taskConditions []etcdstore.Condition,
+	taskMutations []etcdstore.Mutation,
+	domainConditions []etcdstore.Condition,
+	domainMutations []etcdstore.Mutation,
 	receiptPlan backupTerminalReceiptPlan,
-) ([]Condition, []Mutation, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	boundReceipt, err := bindBackupTerminalReceiptEpoch(receiptPlan, domainConditions)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer boundReceipt.clear()
-	conditions := append(append([]Condition(nil), taskConditions...), domainConditions...)
+	conditions := append(append([]etcdstore.Condition(nil), taskConditions...), domainConditions...)
 	conditions = append(conditions, boundReceipt.conditions...)
-	mutations := make([]Mutation, 0, len(taskMutations)+len(domainMutations)+len(boundReceipt.mutations))
-	for _, plan := range [][]Mutation{taskMutations, domainMutations, boundReceipt.mutations} {
+	mutations := make([]etcdstore.Mutation, 0, len(taskMutations)+len(domainMutations)+len(boundReceipt.mutations))
+	for _, plan := range [][]etcdstore.Mutation{taskMutations, domainMutations, boundReceipt.mutations} {
 		for _, mutation := range plan {
 			copyOfMutation := mutation
 			copyOfMutation.Value = append([]byte(nil), mutation.Value...)
@@ -502,7 +503,7 @@ func composeBackupTerminalTransaction(
 
 func bindBackupTerminalReceiptEpoch(
 	plan backupTerminalReceiptPlan,
-	domainConditions []Condition,
+	domainConditions []etcdstore.Condition,
 ) (backupTerminalReceiptPlan, error) {
 	wantKey := environmentMutationEpochKey(plan.record.Task.Owner.EnvironmentID)
 	var revision int64
@@ -536,8 +537,8 @@ func bindBackupTerminalReceiptEpoch(
 		return backupTerminalReceiptPlan{}, err
 	}
 	return backupTerminalReceiptPlan{
-		mutations: []Mutation{{
-			Type: MutationPut, Key: backupTerminalReceiptKey(record.Task.TaskID), Value: value,
+		mutations: []etcdstore.Mutation{{
+			Type: etcdstore.MutationPut, Key: backupTerminalReceiptKey(record.Task.TaskID), Value: value,
 		}},
 		record: record,
 	}, nil
@@ -552,7 +553,7 @@ func (repository *TaskRepository) validateBackupTerminalReceiptReplay(
 		return errs.New(errs.KindInternal, "terminal backup Task is invalid")
 	}
 	keys := []string{taskKey(task.Record.ID), backupTerminalReceiptKey(task.Record.ID)}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return err
 	}
@@ -657,7 +658,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		}
 		keys = append(keys, pointKeys...)
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return err
 	}
@@ -809,7 +810,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 			successorLock.OperationID != prune.OperationID || successorLock.TaskID != prune.TaskID {
 			return errs.New(errs.KindStateConflict, "terminal backup prune successor ownership changed")
 		}
-		dispatchRead, err := repository.store.GetMany(ctx, GetManyRequest{
+		dispatchRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys:     []string{backupRecoveryPointPruneDispatchKey(prune.TaskID)},
 			Revision: read.ReadRevision,
 		})
@@ -875,7 +876,7 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 	readRevision int64,
 	terminalRevision int64,
 	receipt BackupTerminalReceiptRecord,
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 ) (bool, *BackupOperationLockRecord, bool, error) {
 	if len(values) < 5 {
 		return false, nil, false, errs.New(errs.KindInternal, "backup terminal owner snapshot is incomplete")
@@ -942,7 +943,7 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 		tombstone.TargetRevision != environmentValue.ModRevision || tombstone.TaskID != lock.TaskID {
 		return false, nil, false, errs.New(errs.KindStateConflict, "terminal backup deletion authority changed")
 	}
-	intentRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentDeletionIntentKey(lock.OperationID)}, Revision: readRevision,
 	})
 	if err != nil {
@@ -976,7 +977,7 @@ type backupTerminalReceiptPruneCompanion struct {
 func prepareBackupTerminalReceiptPruneCompanion(
 	task TaskRecord,
 	taskRevision int64,
-	value *KeyValue,
+	value *etcdstore.KeyValue,
 ) (backupTerminalReceiptPruneCompanion, error) {
 	if task.Type != TaskBackup && task.Type != TaskBackupPrune {
 		return backupTerminalReceiptPruneCompanion{}, errs.New(
@@ -996,24 +997,24 @@ func prepareBackupTerminalReceiptPruneCompanion(
 }
 
 func (companion backupTerminalReceiptPruneCompanion) appendStartCondition(
-	conditions []Condition,
-) []Condition {
+	conditions []etcdstore.Condition,
+) []etcdstore.Condition {
 	if companion.revision <= 0 {
 		return conditions
 	}
-	return append(conditions, Condition{Key: companion.key, ModRevision: companion.revision})
+	return append(conditions, etcdstore.Condition{Key: companion.key, ModRevision: companion.revision})
 }
 
 func appendBackupTerminalReceiptPruneFinalization(
 	intent taskPruneIntent,
-	conditions []Condition,
-	mutations []Mutation,
-) ([]Condition, []Mutation) {
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) ([]etcdstore.Condition, []etcdstore.Mutation) {
 	if intent.BackupTerminalReceiptRevision <= 0 {
 		return conditions, mutations
 	}
 	key := backupTerminalReceiptKey(intent.TaskID)
-	conditions = append(conditions, Condition{Key: key, ModRevision: intent.BackupTerminalReceiptRevision})
-	mutations = append(mutations, Mutation{Type: MutationDelete, Key: key})
+	conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: intent.BackupTerminalReceiptRevision})
+	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	return conditions, mutations
 }

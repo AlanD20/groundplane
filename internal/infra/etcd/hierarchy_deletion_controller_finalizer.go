@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -10,8 +11,8 @@ import (
 
 type hierarchyDeletionControllerEffects struct {
 	fixedInputDigest string
-	conditions       []Condition
-	mutations        []Mutation
+	conditions       []etcdstore.Condition
+	mutations        []etcdstore.Mutation
 	values           [][]byte
 }
 
@@ -158,8 +159,8 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRouteFina
 	if result == nil || result.ReadRevision <= 0 {
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
-	conditions := []Condition{{Key: routeObservationKey(action.TargetID)}}
-	mutations := []Mutation{}
+	conditions := []etcdstore.Condition{{Key: routeObservationKey(action.TargetID)}}
+	mutations := []etcdstore.Mutation{}
 	digest := hierarchyDeletionBytesDigest([]byte(action.TargetID))
 	if result.Entry != nil {
 		if result.Entry.Key != routeObservationKey(action.TargetID) {
@@ -172,7 +173,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRouteFina
 		}
 		conditions[0].ModRevision = result.Entry.ModRevision
 		digest = hierarchyDeletionBytesDigest(result.Entry.Value)
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: routeObservationKey(action.TargetID)})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routeObservationKey(action.TargetID)})
 		clear(result.Entry.Value)
 	}
 	return hierarchyDeletionControllerEffects{
@@ -220,7 +221,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 	defer clear(zoneValue)
 	zone := ZoneRecord{EnvironmentID: evidence.EnvironmentID, Desired: evidence.Desired}
 	poolKey, addressesKey := zonePoolRegistryKey(evidence.EnvironmentID), componentAddressRegistryKey(action.TargetID)
-	values, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		poolKey, addressesKey,
 		deletionTombstoneKey(string(DeletionTargetZone), evidence.ZoneID),
 		componentTaskActiveEnvironmentKey(evidence.EnvironmentID),
@@ -260,16 +261,16 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 	}
 	effects := hierarchyDeletionControllerEffects{
 		fixedInputDigest: hierarchyDeletionBytesDigest(zoneValue),
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: poolKey, ModRevision: values.Values[0].ModRevision},
 			{Key: addressesKey, ModRevision: keyValueRevision(values.Values[1])},
 			{Key: deletionTombstoneKey(string(DeletionTargetZone), evidence.ZoneID)},
 			{Key: componentTaskActiveEnvironmentKey(evidence.EnvironmentID)},
 		},
-		mutations: []Mutation{{Type: MutationDelete, Key: addressesKey}},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: addressesKey}},
 	}
 	if len(nextPool.Reservations) == 0 {
-		effects.mutations = append(effects.mutations, Mutation{Type: MutationDelete, Key: poolKey})
+		effects.mutations = append(effects.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: poolKey})
 		return effects, nil
 	}
 	poolValue, err := encodeEnvelope("zone_pool_registry", nextPool)
@@ -277,7 +278,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	effects.values = append(effects.values, poolValue)
-	effects.mutations = append(effects.mutations, Mutation{Type: MutationPut, Key: poolKey, Value: poolValue})
+	effects.mutations = append(effects.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: poolKey, Value: poolValue})
 	return effects, nil
 }
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionTenantFinalizer(
@@ -311,18 +312,18 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionTenantFin
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
 	defer clear(slug.Entry.Value)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: primary.Key, ModRevision: primary.ModRevision},
 		{Key: slugKey, ModRevision: slug.Entry.ModRevision},
 	}
 	for _, prefix := range prefixes {
-		conditions = append(conditions, Condition{Key: prefix, Prefix: true})
+		conditions = append(conditions, etcdstore.Condition{Key: prefix, Prefix: true})
 	}
 	return hierarchyDeletionControllerEffects{
 		fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value), conditions: conditions,
-		mutations: []Mutation{
-			{Type: MutationDelete, Key: slugKey},
-			{Type: MutationDelete, Key: tenantKey(record.ID)},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationDelete, Key: slugKey},
+			{Type: etcdstore.MutationDelete, Key: tenantKey(record.ID)},
 		},
 	}, nil
 }
@@ -357,7 +358,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	defer clear(value)
-	primary := KeyValue{
+	primary := etcdstore.KeyValue{
 		Key:   scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
 		Value: value, ModRevision: storage.Script.Revision,
 	}
@@ -376,23 +377,23 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 	effects.values = append(effects.values, activeValue)
 	effects.conditions = append(
 		effects.conditions,
-		Condition{Key: scriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
-		Condition{Key: scriptLocatorKey(action.TargetID), ModRevision: storage.Locator.Revision},
-		Condition{
+		etcdstore.Condition{Key: scriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
+		etcdstore.Condition{Key: scriptLocatorKey(action.TargetID), ModRevision: storage.Locator.Revision},
+		etcdstore.Condition{
 			Key:         scriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID),
 			ModRevision: storage.EnvironmentLocator.Revision,
 		},
 	)
 	effects.mutations = append(
 		effects.mutations,
-		Mutation{
-			Type:   MutationDelete,
+		etcdstore.Mutation{
+			Type:   etcdstore.MutationDelete,
 			Key:    scriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
 			Prefix: true,
 		},
-		Mutation{Type: MutationDelete, Key: scriptLocatorKey(action.TargetID)},
-		Mutation{Type: MutationDelete, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID)},
-		Mutation{Type: MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptLocatorKey(action.TargetID)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID)},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
 	)
 	return effects, nil
 }
@@ -426,7 +427,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionConnector
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	for _, prefix := range prefixes {
-		effects.conditions = append(effects.conditions, Condition{Key: prefix, Prefix: true})
+		effects.conditions = append(effects.conditions, etcdstore.Condition{Key: prefix, Prefix: true})
 	}
 	return effects, nil
 }
@@ -435,7 +436,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 	ctx context.Context,
 	action HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		environmentKey(action.TargetID), environmentPoolRegistryKey,
 	}})
 	if err != nil {
@@ -480,7 +481,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	mutation := Mutation{Type: MutationDelete, Key: environmentPoolRegistryKey}
+	mutation := etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentPoolRegistryKey}
 	values := [][]byte(nil)
 	if len(next.Reservations) != 0 {
 		value, encodeErr := encodeEnvelope("environment_pool_registry", next)
@@ -488,15 +489,15 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 			return hierarchyDeletionControllerEffects{}, encodeErr
 		}
 		values = append(values, value)
-		mutation = Mutation{Type: MutationPut, Key: environmentPoolRegistryKey, Value: value}
+		mutation = etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: value}
 	}
 	return hierarchyDeletionControllerEffects{
 		fixedInputDigest: fixedInputDigest,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: environmentKey(environment.ID), ModRevision: result.Values[0].ModRevision},
 			{Key: environmentPoolRegistryKey, ModRevision: result.Values[1].ModRevision},
 		},
-		mutations: []Mutation{mutation}, values: values,
+		mutations: []etcdstore.Mutation{mutation}, values: values,
 	}, nil
 }
 
@@ -504,7 +505,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 	ctx context.Context,
 	action HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
-	base, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		runnerKey(action.TargetID), runnerLifecycleKey(action.TargetID),
 		runnerObservationKey(action.TargetID), runnerRuntimeOwnershipKey(action.TargetID),
 	}})
@@ -556,7 +557,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 		clear(quotaValue)
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: runnerKey(action.TargetID), ModRevision: base.Values[0].ModRevision},
 		{Key: runnerLifecycleKey(action.TargetID), ModRevision: base.Values[1].ModRevision},
 		{Key: runnerObservationKey(action.TargetID), ModRevision: keyValueRevision(base.Values[2])},
@@ -573,15 +574,15 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 		{Key: runnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 		{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
 	}
-	mutations := []Mutation{
-		{Type: MutationDelete, Key: runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID)},
-		{Type: MutationDelete, Key: runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
-		{Type: MutationPut, Key: runnerTenantQuotaKey(record.Desired.TenantID), Value: quotaValue},
-		{Type: MutationDelete, Key: runnerHostSlotKey(record.Allocation.Slot)},
-		{Type: MutationPut, Key: systemPoolRegistryKey, Value: systemValue},
-		{Type: MutationDelete, Key: runnerObservationKey(action.TargetID)},
-		{Type: MutationDelete, Key: runnerLifecycleKey(action.TargetID)},
-		{Type: MutationDelete, Key: runnerKey(action.TargetID)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationDelete, Key: runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID)},
+		{Type: etcdstore.MutationDelete, Key: runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
+		{Type: etcdstore.MutationPut, Key: runnerTenantQuotaKey(record.Desired.TenantID), Value: quotaValue},
+		{Type: etcdstore.MutationDelete, Key: runnerHostSlotKey(record.Allocation.Slot)},
+		{Type: etcdstore.MutationPut, Key: systemPoolRegistryKey, Value: systemValue},
+		{Type: etcdstore.MutationDelete, Key: runnerObservationKey(action.TargetID)},
+		{Type: etcdstore.MutationDelete, Key: runnerLifecycleKey(action.TargetID)},
+		{Type: etcdstore.MutationDelete, Key: runnerKey(action.TargetID)},
 	}
 	return hierarchyDeletionControllerEffects{
 		fixedInputDigest: hierarchyDeletionBytesDigest(base.Values[0].Value), conditions: conditions,
@@ -611,7 +612,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionProjectFi
 	}
 	indexes, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{projectSlugKey(record), projectOwnerKey(record)}},
+		etcdstore.GetManyRequest{Keys: []string{projectSlugKey(record), projectOwnerKey(record)}},
 	)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
@@ -624,20 +625,20 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionProjectFi
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
 	defer clearKeyValues(indexes.Values)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: primary.Key, ModRevision: primary.ModRevision},
 		{Key: indexes.Values[0].Key, ModRevision: indexes.Values[0].ModRevision},
 		{Key: indexes.Values[1].Key, ModRevision: indexes.Values[1].ModRevision},
 	}
 	for _, prefix := range prefixes {
-		conditions = append(conditions, Condition{Key: prefix, Prefix: true})
+		conditions = append(conditions, etcdstore.Condition{Key: prefix, Prefix: true})
 	}
 	return hierarchyDeletionControllerEffects{
 		fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value), conditions: conditions,
-		mutations: []Mutation{
-			{Type: MutationDelete, Key: projectSlugKey(record)},
-			{Type: MutationDelete, Key: projectOwnerKey(record)},
-			{Type: MutationDelete, Key: projectKey(record.ID)},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationDelete, Key: projectSlugKey(record)},
+			{Type: etcdstore.MutationDelete, Key: projectOwnerKey(record)},
+			{Type: etcdstore.MutationDelete, Key: projectKey(record.ID)},
 		},
 	}, nil
 }

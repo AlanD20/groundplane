@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -89,7 +90,7 @@ func (repository *ComponentRepository) HasPlatformComponentBootstrapProvenance(
 	if current.Revision <= 0 || current.ReadRevision < current.Revision {
 		return false, errs.New(errs.KindValidationFailed, "platform Component version metadata is invalid")
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{platformComponentBootstrapKey(current.Record.Desired.ID)}, Revision: current.ReadRevision,
 	})
 	if err != nil {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ipam"
@@ -90,7 +91,7 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 		environmentPoolRegistryKey,
 		zonePoolRegistryKey(current.Record.ID),
 	}
-	registries, err := repository.store.GetMany(ctx, GetManyRequest{
+	registries, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: registryKeys, Revision: current.ReadRevision,
 	})
 	if err != nil {
@@ -188,18 +189,18 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 	}
 	defer clear(epochMutation.Value)
 
-	conditions := append([]Condition(nil), fenceConditions...)
+	conditions := append([]etcdstore.Condition(nil), fenceConditions...)
 	conditions = append(conditions,
-		Condition{Key: environmentPoolRegistryKey, ModRevision: registries.Values[0].ModRevision},
-		Condition{Key: zonePoolRegistryKey(current.Record.ID), ModRevision: zoneRevision},
+		etcdstore.Condition{Key: environmentPoolRegistryKey, ModRevision: registries.Values[0].ModRevision},
+		etcdstore.Condition{Key: zonePoolRegistryKey(current.Record.ID), ModRevision: zoneRevision},
 	)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: environmentKey(current.Record.ID), Value: environmentValue},
-		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: globalValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: environmentKey(current.Record.ID), Value: environmentValue},
+		{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: globalValue},
 		epochMutation,
 	}
 	fenceCount := len(fenceConditions)
-	classify := func(_ int64, values []*KeyValue) error {
+	classify := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != fenceCount+2 {
 			return errs.New(
 				errs.KindInternal,

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -63,15 +64,15 @@ type secretEntryValueGenerationData struct {
 }
 
 type entryValueGenerationStore interface {
-	Get(context.Context, string) (*GetResult, error)
-	Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
+	Get(context.Context, string) (*etcdstore.GetResult, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
 type EntryValueGenerationRepository struct {
 	store entryValueGenerationStore
 }
 
-func NewEntryValueGenerationRepository(store Store) (*EntryValueGenerationRepository, error) {
+func NewEntryValueGenerationRepository(store etcdstore.Store) (*EntryValueGenerationRepository, error) {
 	return newEntryValueGenerationRepository(store)
 }
 
@@ -102,8 +103,8 @@ func (repository *EntryValueGenerationRepository) CreatePlain(
 	key := plainEntryValueGenerationKey(record.EntryID, record.GenerationID)
 	result, err := repository.store.Transact(
 		ctx,
-		[]Condition{{Key: key, ModRevision: 0}},
-		[]Mutation{{Type: MutationPut, Key: key, Value: encoded}},
+		[]etcdstore.Condition{{Key: key, ModRevision: 0}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: encoded}},
 	)
 	if err != nil {
 		return err
@@ -140,8 +141,8 @@ func (repository *EntryValueGenerationRepository) CreateSecret(
 	key := secretEntryValueGenerationKey(record.EntryID, record.GenerationID)
 	result, err := repository.store.Transact(
 		ctx,
-		[]Condition{{Key: key, ModRevision: 0}},
-		[]Mutation{{Type: MutationPut, Key: key, Value: encoded}},
+		[]etcdstore.Condition{{Key: key, ModRevision: 0}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: encoded}},
 	)
 	if err != nil {
 		return err

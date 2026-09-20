@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -64,7 +65,7 @@ func (repository *IdempotencyRepository) collectExpired(
 	if err != nil {
 		return nil, scan, err
 	}
-	page, err := repository.store.Range(ctx, RangeRequest{
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: idempotencyRetentionPrefix, StartExclusive: scan.After,
 		Limit: maximumPruneMarkers,
 	})
@@ -77,7 +78,7 @@ func (repository *IdempotencyRepository) collectExpired(
 	scan.ReadRevision, scan.More = page.ReadRevision, page.More
 	defer clearKeyValueSlice(page.Values)
 	markerKeys := make([]string, 0, len(page.Values))
-	retentionEntries := make([]KeyValue, 0, len(page.Values))
+	retentionEntries := make([]etcdstore.KeyValue, 0, len(page.Values))
 	for _, entry := range page.Values {
 		if entry.ModRevision <= 0 {
 			return nil, scan, corruptIdempotencyMarker()
@@ -98,7 +99,7 @@ func (repository *IdempotencyRepository) collectExpired(
 	if len(markerKeys) == 0 {
 		return nil, scan, nil
 	}
-	markers, err := repository.store.GetMany(ctx, GetManyRequest{
+	markers, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: markerKeys, Revision: page.ReadRevision,
 	})
 	if err != nil {
@@ -159,7 +160,7 @@ func (repository *IdempotencyRepository) collectExpired(
 		targetIndexes = append(targetIndexes, index)
 	}
 	if len(targetKeys) != 0 {
-		targets, err := repository.store.GetMany(ctx, GetManyRequest{Keys: targetKeys, Revision: page.ReadRevision})
+		targets, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: targetKeys, Revision: page.ReadRevision})
 		if err != nil {
 			clearPruneCandidates(candidates)
 			return nil, scan, err
@@ -186,7 +187,7 @@ func (repository *IdempotencyRepository) collectExpired(
 	return candidates, scan, nil
 }
 
-func clearKeyValueSlice(values []KeyValue) {
+func clearKeyValueSlice(values []etcdstore.KeyValue) {
 	for index := range values {
 		clear(values[index].Value)
 		values[index].Value = nil
@@ -214,7 +215,7 @@ func (repository *IdempotencyRepository) pruneExpired(
 
 func (repository *IdempotencyRepository) pruneExpiredWithFences(
 	ctx context.Context, now time.Time, candidates []idempotencyPruneCandidate,
-	extraConditions []Condition, extraMutations []Mutation,
+	extraConditions []etcdstore.Condition, extraMutations []etcdstore.Mutation,
 ) (int64, error) {
 	if ctx == nil {
 		return 0, errs.New(errs.KindInternal, "idempotency context is required")
@@ -228,8 +229,8 @@ func (repository *IdempotencyRepository) pruneExpiredWithFences(
 	if len(candidates) == 0 && len(extraMutations) == 0 || len(candidates) > maximumPruneMarkers {
 		return 0, errs.New(errs.KindValidationFailed, "idempotency prune batch must contain 1 through 16 markers")
 	}
-	conditions := append([]Condition(nil), extraConditions...)
-	mutations := append([]Mutation(nil), extraMutations...)
+	conditions := append([]etcdstore.Condition(nil), extraConditions...)
+	mutations := append([]etcdstore.Mutation(nil), extraMutations...)
 	seenMarkers := make(map[string]struct{}, len(candidates))
 	for _, candidate := range candidates {
 		if candidate.Marker.modRevision <= 0 || candidate.RetentionModRevision <= 0 ||
@@ -256,12 +257,12 @@ func (repository *IdempotencyRepository) pruneExpiredWithFences(
 			return 0, err
 		}
 		conditions = append(conditions,
-			Condition{Key: markerKey, ModRevision: candidate.Marker.modRevision},
-			Condition{Key: candidate.RetentionKey, ModRevision: candidate.RetentionModRevision},
+			etcdstore.Condition{Key: markerKey, ModRevision: candidate.Marker.modRevision},
+			etcdstore.Condition{Key: candidate.RetentionKey, ModRevision: candidate.RetentionModRevision},
 		)
 		mutations = append(mutations,
-			Mutation{Type: MutationDelete, Key: markerKey},
-			Mutation{Type: MutationDelete, Key: candidate.RetentionKey},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: markerKey},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: candidate.RetentionKey},
 		)
 		if candidate.Marker.marker.ReplayTarget != nil {
 			targetKey, targetErr := idempotencyReplayTargetKey(
@@ -275,16 +276,16 @@ func (repository *IdempotencyRepository) pruneExpiredWithFences(
 				decodeReplayTargetReference(candidate.ReplayTargetValue, markerKey) != nil {
 				return 0, corruptIdempotencyMarker()
 			}
-			conditions = append(conditions, Condition{
+			conditions = append(conditions, etcdstore.Condition{
 				Key: candidate.ReplayTargetKey, ModRevision: candidate.ReplayTargetModRevision,
 			})
-			mutations = append(mutations, Mutation{Type: MutationDelete, Key: candidate.ReplayTargetKey})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: candidate.ReplayTargetKey})
 		} else if candidate.ReplayTargetKey != "" || candidate.ReplayTargetModRevision != 0 ||
 			len(candidate.ReplayTargetValue) != 0 {
 			return 0, corruptIdempotencyMarker()
 		}
 	}
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
+	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return 0, errs.New(errs.KindInternal, "idempotency prune transaction exceeds its operation budget")
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
@@ -324,7 +325,7 @@ func (repository *IdempotencyRepository) loadPruneScan(ctx context.Context) (ide
 func (repository *IdempotencyRepository) pruneRetainedBatch(
 	ctx context.Context, now time.Time, candidates []idempotencyPruneCandidate, scan idempotencyPruneScan,
 ) (int, error) {
-	guards := make([][]Condition, len(candidates))
+	guards := make([][]etcdstore.Condition, len(candidates))
 	retained := make([]bool, len(candidates))
 	cursorMode := scan.After != ""
 	for index, candidate := range candidates {
@@ -335,12 +336,12 @@ func (repository *IdempotencyRepository) pruneRetainedBatch(
 		}
 		cursorMode = cursorMode || retained[index] || len(guards[index]) != 0
 	}
-	budget := maximumTransactionOperations
+	budget := etcdstore.MaximumOperations
 	if cursorMode {
 		budget -= 2 // The cursor's compare and put/delete share the pruning commit.
 	}
 	selected := make([]idempotencyPruneCandidate, 0, len(candidates))
-	conditions := []Condition{}
+	conditions := []etcdstore.Condition{}
 	last, truncated := "", false
 	for index, candidate := range candidates {
 		if retained[index] {
@@ -366,22 +367,22 @@ func (repository *IdempotencyRepository) pruneRetainedBatch(
 		}
 		last = candidate.RetentionKey
 	}
-	mutations := []Mutation{}
+	mutations := []etcdstore.Mutation{}
 	if cursorMode {
 		after := last
 		if !truncated && !scan.More {
 			after = ""
 		}
 		if after != scan.After {
-			conditions = append(conditions, Condition{Key: idempotencyPruneCursorKey, ModRevision: scan.CursorRevision})
-			mutation := Mutation{Type: MutationDelete, Key: idempotencyPruneCursorKey}
+			conditions = append(conditions, etcdstore.Condition{Key: idempotencyPruneCursorKey, ModRevision: scan.CursorRevision})
+			mutation := etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: idempotencyPruneCursorKey}
 			if after != "" {
 				value, err := encodeEnvelope("idempotency_prune_cursor", idempotencyPruneCursor{After: after})
 				if err != nil {
 					return 0, err
 				}
 				defer clear(value)
-				mutation.Type, mutation.Value = MutationPut, value
+				mutation.Type, mutation.Value = etcdstore.MutationPut, value
 			}
 			mutations = append(mutations, mutation)
 		}
@@ -397,14 +398,14 @@ func (repository *IdempotencyRepository) pruneRetainedBatch(
 
 func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 	ctx context.Context, candidate idempotencyPruneCandidate, revision int64,
-) ([]Condition, bool, error) {
+) ([]etcdstore.Condition, bool, error) {
 	marker := candidate.Marker.marker
 	if marker.Kind != IdempotencyMarkerTask {
 		return nil, false, nil
 	}
 	taskRead, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{taskKey(marker.TaskID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{taskKey(marker.TaskID)}, Revision: revision},
 	)
 	if err != nil {
 		return nil, false, err
@@ -422,7 +423,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 		return nil, false, nil
 	}
 	root := removalrecord.Root(task.OperationID)
-	operation, err := repository.store.Range(ctx, RangeRequest{Prefix: root, Limit: 1, Revision: revision})
+	operation, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: root, Limit: 1, Revision: revision})
 	if err != nil {
 		return nil, false, err
 	}
@@ -438,7 +439,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 		return nil, rootPending, err
 	}
 	keys := []string{removalrecord.OwnerKey(task.Target), removalrecord.EnvironmentLockKey(task.Owner.EnvironmentID)}
-	owners, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	owners, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, false, err
 	}
@@ -446,7 +447,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 		return nil, false, corruptIdempotencyMarker()
 	}
 	defer clearKeyValues(owners.Values)
-	fences := []Condition{
+	fences := []etcdstore.Condition{
 		{Key: taskKey(task.ID), ModRevision: taskRead.Values[0].ModRevision},
 		{Key: root, Prefix: true},
 	}
@@ -463,14 +464,14 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 				return nil, true, nil
 			}
 		}
-		fences = append(fences, Condition{Key: keys[index], ModRevision: keyValueRevision(value)})
+		fences = append(fences, etcdstore.Condition{Key: keys[index], ModRevision: keyValueRevision(value)})
 	}
 	return fences, false, nil
 }
 
 func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 	ctx context.Context, task TaskRecord, revision int64,
-) ([]Condition, bool, error) {
+) ([]etcdstore.Condition, bool, error) {
 	originID := task.Params[removalrecord.OriginTaskParam]
 	if originID == task.ID {
 		return nil, false, nil // The candidate's own terminal marker is the root.
@@ -478,7 +479,7 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 	if validateStableID(ids.KindTask, originID) != nil {
 		return nil, false, corruptIdempotencyMarker()
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{taskKey(originID)}, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{taskKey(originID)}, Revision: revision})
 	if err != nil {
 		return nil, false, err
 	}
@@ -486,7 +487,7 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 		return nil, false, corruptIdempotencyMarker()
 	}
 	defer clearKeyValues(read.Values)
-	fences := []Condition{{Key: taskKey(originID), ModRevision: keyValueRevision(read.Values[0])}}
+	fences := []etcdstore.Condition{{Key: taskKey(originID), ModRevision: keyValueRevision(read.Values[0])}}
 	if read.Values[0] == nil {
 		return fences, false, nil // Marker-first GC already removed the original Task.
 	}
@@ -499,7 +500,7 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 	if err != nil {
 		return nil, false, err
 	}
-	markerRead, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+	markerRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return nil, false, err
 	}
@@ -518,5 +519,5 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 			return nil, true, nil
 		}
 	}
-	return append(fences, Condition{Key: key, ModRevision: keyValueRevision(markerRead.Values[0])}), false, nil
+	return append(fences, etcdstore.Condition{Key: key, ModRevision: keyValueRevision(markerRead.Values[0])}), false, nil
 }

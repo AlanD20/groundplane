@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 )
 
@@ -88,14 +89,14 @@ func ValidateDesiredRevisionClaim(claim EnvironmentBlueprintStageClaim) error {
 
 func ValidateDesiredRevisionTransaction(
 	store interface {
-		Get(context.Context, string) (*GetResult, error)
-		GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
-		Range(context.Context, RangeRequest) (*RangeResult, error)
-		MeasureTransaction(context.Context, []Condition, []Mutation) (TransactionBudget, error)
-		Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
+		Get(context.Context, string) (*etcdstore.GetResult, error)
+		GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+		Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+		MeasureTransaction(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionBudget, error)
+		Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 	},
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	maximumOperations int,
 	maximumBytes int,
 ) error {
@@ -118,7 +119,7 @@ func DesiredRevisionChunkKeys(descriptor EnvironmentBlueprintStageDescriptor) []
 	return environmentBlueprintChunkKeys(descriptor)
 }
 
-func VerifyDesiredRevisionChunks(descriptor EnvironmentBlueprintStageDescriptor, values []*KeyValue) error {
+func VerifyDesiredRevisionChunks(descriptor EnvironmentBlueprintStageDescriptor, values []*etcdstore.KeyValue) error {
 	return verifyEnvironmentBlueprintChunks(descriptor, values)
 }
 

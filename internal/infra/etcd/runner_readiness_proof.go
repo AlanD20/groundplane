@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -42,7 +43,7 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 		taskKey(taskID),
 		runnerReadinessProofKey(taskID),
 	}
-	initial, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	initial, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return Versioned[RunnerReadinessProofRecord]{}, err
 	}
@@ -72,7 +73,7 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 		runnerRuntimeOwnershipKey(task.Target),
 		deletionTombstoneKey(string(DeletionTargetRunner), task.Target),
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: stateKeys, Revision: initial.ReadRevision,
 	})
 	if err != nil {
@@ -114,7 +115,7 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 		return Versioned[RunnerReadinessProofRecord]{}, err
 	}
 	defer clear(proofValue)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: keys[0], ModRevision: initial.Values[0].ModRevision},
 		{Key: stateKeys[0], ModRevision: state.Values[0].ModRevision},
 		{Key: stateKeys[1], ModRevision: state.Values[1].ModRevision},
@@ -122,8 +123,8 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 		{Key: stateKeys[3]},
 		{Key: keys[1]},
 	}
-	transaction, err := repository.store.Transact(ctx, conditions, []Mutation{{
-		Type: MutationPut, Key: keys[1], Value: proofValue,
+	transaction, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{
+		Type: etcdstore.MutationPut, Key: keys[1], Value: proofValue,
 	}})
 	if err != nil {
 		return Versioned[RunnerReadinessProofRecord]{}, err
@@ -194,7 +195,7 @@ func runnerReadinessProofMatches(
 	proof RunnerReadinessProofRecord,
 	task TaskRecord,
 	runner RunnerRecord,
-	ownership *KeyValue,
+	ownership *etcdstore.KeyValue,
 ) bool {
 	return ownership != nil && proof.RunnerID == runner.Desired.ID && proof.TaskID == task.ID &&
 		proof.RuntimeEpoch == runner.RuntimeEpoch && proof.ContainerID == runner.ContainerID &&

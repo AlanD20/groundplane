@@ -1,4 +1,4 @@
-package app
+package runtime
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type controllerKey interface {
+type ControllerKey interface {
 	Wrap(plaintext []byte) ([]byte, error)
 	Unwrap(ciphertext []byte) ([]byte, error)
 }
@@ -18,10 +18,10 @@ type controllerKey interface {
 // credentialCipher adapts the application-owned Controller key to the narrow
 // sealing and opening ports used by runtime infrastructure.
 type credentialCipher struct {
-	key controllerKey
+	key ControllerKey
 }
 
-func newCredentialCipher(key controllerKey) (*credentialCipher, error) {
+func NewCredentialCipher(key ControllerKey) (*credentialCipher, error) {
 	if key == nil {
 		return nil, errs.New(errs.KindInternal, "agent runtime controller key is required")
 	}
@@ -69,7 +69,7 @@ type localAgentRuntimeAdapter struct {
 	volumeRoot string
 }
 
-func newLocalAgentRuntimeAdapter(
+func NewCredentials(
 	runtime credentialRuntime,
 	logConfig config.LogConfig,
 	volumeRoot string,

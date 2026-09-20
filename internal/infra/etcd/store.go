@@ -6,6 +6,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"strings"
 
@@ -17,137 +18,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-// EventType distinguishes a put from a delete in a Watch stream.
-type EventType int
-
-const (
-	EventPut EventType = iota
-	EventDelete
-)
-
-type Event struct {
-	Key         string
-	Value       []byte
-	Type        EventType
-	ModRevision int64
-}
-
-// KeyValue is one logical key read at a known modification revision.
-type KeyValue struct {
-	Key         string
-	Value       []byte
-	Version     int64
-	ModRevision int64
-}
-
-// GetResult preserves the revision of an exact read even when Entry is nil.
-// This lets a repository follow an absent key without a read-to-watch gap.
-type GetResult struct {
-	Entry        *KeyValue
-	ReadRevision int64
-}
-
-// RangeRequest describes a bounded prefix read. StartExclusive, when set,
-// must be a logical key within Prefix. Revision zero reads the current view;
-// a positive revision reads that historical MVCC view.
-type RangeRequest struct {
-	Prefix         string
-	StartExclusive string
-	Limit          int64
-	Revision       int64
-	Descending     bool
-}
-
-// RangeResult is a deterministic key-ascending range page. ReadRevision is
-// the MVCC view that produced Values; ResponseRevision is etcd's latest store
-// revision when it served the request.
-type RangeResult struct {
-	Values           []KeyValue
-	ReadRevision     int64
-	ResponseRevision int64
-	More             bool
-}
-
-// GetManyRequest reads exact logical keys at one MVCC view. Values in the
-// result retain this key order and use nil for a missing key.
-type GetManyRequest struct {
-	Keys     []string
-	Revision int64
-}
-
-// GetManyResult preserves both the requested MVCC view and etcd's latest
-// response revision. Values has exactly one entry for each requested key.
-type GetManyResult struct {
-	Values           []*KeyValue
-	ReadRevision     int64
-	ResponseRevision int64
-}
-
-// Condition requires Key's current modification revision to equal
-// ModRevision. A zero ModRevision means that the key must not exist. Prefix
-// is valid only with zero and requires the complete prefix to remain empty.
-type Condition struct {
-	Key         string
-	ModRevision int64
-	Prefix      bool
-}
-
-// MutationType distinguishes the two writes supported inside a transaction.
-type MutationType uint8
-
-const (
-	MutationPut MutationType = iota + 1
-	MutationDelete
-)
-
-// Mutation is one atomic write. Value is used only by MutationPut.
-type Mutation struct {
-	Type   MutationType
-	Key    string
-	Value  []byte
-	Prefix bool
-}
-
-// TransactionResult reports whether all conditions matched and the etcd
-// revision at which the transaction was evaluated. Failed conditions perform
-// no mutations and are not errors.
-type TransactionResult struct {
-	Succeeded    bool
-	Revision     int64
-	FailureReads []*KeyValue
-}
-
-// WatchStream separates ordinary key events from terminal watch failures.
-// Consumers must observe Errors and restart from a durable revision once that
-// resume contract is defined by the repository layer.
-type WatchStream struct {
-	Events <-chan Event
-	Errors <-chan error
-}
-
-// Store is the persistence interface used by the Controller and Agent. A
-// missing exact key returns a GetResult with a nil Entry and its read revision;
-// deleting a missing key is idempotent. Range and Watch return logical keys
-// with the configured storage prefix removed.
-type Store interface {
-	Health(ctx context.Context) error
-	Get(ctx context.Context, key string) (*GetResult, error)
-	GetMany(ctx context.Context, request GetManyRequest) (*GetManyResult, error)
-	Put(ctx context.Context, key string, value []byte) (int64, error)
-	Delete(ctx context.Context, key string) (int64, error)
-	Range(ctx context.Context, request RangeRequest) (*RangeResult, error)
-	MeasureTransaction(ctx context.Context, conditions []Condition, mutations []Mutation) (TransactionBudget, error)
-	Transact(ctx context.Context, conditions []Condition, mutations []Mutation) (TransactionResult, error)
-	// Watch starts at startRevision when it is positive. A zero revision uses
-	// etcd's current-watch semantics. After Range, pass ReadRevision+1 to close
-	// the read-to-watch race.
-	Watch(ctx context.Context, prefix string, startRevision int64) (*WatchStream, error)
-	// Snapshot writes the complete etcd snapshot to w. The deployment contract
-	// uses a dedicated single-node etcd, so this is the complete DR state export.
-	Snapshot(ctx context.Context, w io.Writer) error
-	Close() error
-}
 
 type client interface {
 	Get(context.Context, string, ...clientv3.OpOption) (*clientv3.GetResponse, error)
@@ -208,7 +78,7 @@ func (s *store) Health(ctx context.Context) error {
 	_, err := s.client.Get(ctx, s.root+"/.health", clientv3.WithLimit(1))
 	return wrap(ctx, err)
 }
-func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
+func (s *store) Get(ctx context.Context, key string) (*etcdstore.GetResult, error) {
 	physical, err := s.physicalKey(key)
 	if err != nil {
 		return nil, err
@@ -220,7 +90,7 @@ func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
 	if response.Header == nil {
 		return nil, errs.New(errs.KindInternal, "etcd get response is missing its read revision")
 	}
-	result := &GetResult{ReadRevision: response.Header.Revision}
+	result := &etcdstore.GetResult{ReadRevision: response.Header.Revision}
 	if len(response.Kvs) == 0 {
 		return result, nil
 	}
@@ -229,7 +99,7 @@ func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
 	if !ok {
 		return nil, errs.New(errs.KindInternal, "etcd returned a key outside the configured prefix")
 	}
-	result.Entry = &KeyValue{
+	result.Entry = &etcdstore.KeyValue{
 		Key:         logical,
 		Value:       append([]byte(nil), item.Value...),
 		Version:     item.Version,
@@ -237,7 +107,7 @@ func (s *store) Get(ctx context.Context, key string) (*GetResult, error) {
 	}
 	return result, nil
 }
-func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyResult, error) {
+func (s *store) GetMany(ctx context.Context, request etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error) {
 	if len(request.Keys) == 0 {
 		return nil, errs.New(errs.KindValidationFailed, "etcd multi-get requires at least one key")
 	}
@@ -273,8 +143,8 @@ func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyRe
 		return nil, errs.New(errs.KindInternal, "etcd multi-get returned an unexpected response count")
 	}
 
-	result := &GetManyResult{
-		Values:           make([]*KeyValue, len(request.Keys)),
+	result := &etcdstore.GetManyResult{
+		Values:           make([]*etcdstore.KeyValue, len(request.Keys)),
 		ReadRevision:     readRevision(request.Revision, response.Header.Revision),
 		ResponseRevision: response.Header.Revision,
 	}
@@ -300,7 +170,7 @@ func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyRe
 			clearGetManyResponseValues(response)
 			return nil, errs.New(errs.KindInternal, "etcd returned a key outside the configured prefix")
 		}
-		result.Values[index] = &KeyValue{
+		result.Values[index] = &etcdstore.KeyValue{
 			Key:         logical,
 			Value:       append([]byte(nil), item.Value...),
 			Version:     item.Version,
@@ -311,7 +181,7 @@ func (s *store) GetMany(ctx context.Context, request GetManyRequest) (*GetManyRe
 }
 
 // clearGetManyResponseValues releases response buffers on paths where no
-// caller can take ownership. Successful reads retain the Store's established
+// caller can take ownership. Successful reads retain the etcdstore.Store's established
 // copy-out behavior and do not mutate the client response.
 func clearGetManyResponseValues(response *clientv3.TxnResponse) {
 	if response == nil {
@@ -362,7 +232,7 @@ func (s *store) Delete(ctx context.Context, key string) (int64, error) {
 	return response.Header.Revision, nil
 }
 
-func (s *store) Range(ctx context.Context, request RangeRequest) (*RangeResult, error) {
+func (s *store) Range(ctx context.Context, request etcdstore.RangeRequest) (*etcdstore.RangeResult, error) {
 	if request.Limit <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "etcd range limit must be positive")
 	}
@@ -411,8 +281,8 @@ func (s *store) Range(ctx context.Context, request RangeRequest) (*RangeResult, 
 		return nil, errs.New(errs.KindInternal, "etcd range response is missing its revision")
 	}
 
-	result := &RangeResult{
-		Values:           make([]KeyValue, 0, len(response.Kvs)),
+	result := &etcdstore.RangeResult{
+		Values:           make([]etcdstore.KeyValue, 0, len(response.Kvs)),
 		ReadRevision:     readRevision(request.Revision, response.Header.Revision),
 		ResponseRevision: response.Header.Revision,
 		More:             response.More,
@@ -425,7 +295,7 @@ func (s *store) Range(ctx context.Context, request RangeRequest) (*RangeResult, 
 		if !strings.HasPrefix(key, request.Prefix) {
 			return nil, errs.New(errs.KindInternal, "etcd range returned a key outside the requested prefix")
 		}
-		result.Values = append(result.Values, KeyValue{
+		result.Values = append(result.Values, etcdstore.KeyValue{
 			Key:         key,
 			Value:       append([]byte(nil), item.Value...),
 			Version:     item.Version,
@@ -444,17 +314,17 @@ func readRevision(requested, response int64) int64 {
 
 func (s *store) Transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) (etcdstore.TransactionResult, error) {
 	if len(mutations) == 0 {
-		return TransactionResult{}, errs.New(errs.KindValidationFailed, "etcd transaction requires a mutation")
+		return etcdstore.TransactionResult{}, errs.New(errs.KindValidationFailed, "etcd transaction requires a mutation")
 	}
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
-		return TransactionResult{}, errs.Newf(
+	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
+		return etcdstore.TransactionResult{}, errs.Newf(
 			errs.KindValidationFailed,
 			"etcd transaction exceeds the %d compare-and-mutation limit",
-			maximumTransactionOperations,
+			etcdstore.MaximumOperations,
 		)
 	}
 	return s.transact(ctx, conditions, mutations)
@@ -462,24 +332,24 @@ func (s *store) Transact(
 
 func (s *store) TransactEnvironmentBlueprint(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) (etcdstore.TransactionResult, error) {
 	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
-		return TransactionResult{}, err
+		return etcdstore.TransactionResult{}, err
 	}
 	return s.transact(ctx, conditions, mutations)
 }
 
 func (s *store) transact(
 	ctx context.Context,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) (etcdstore.TransactionResult, error) {
 
 	prepared, err := s.prepareTransaction(conditions, mutations)
 	if err != nil {
-		return TransactionResult{}, err
+		return etcdstore.TransactionResult{}, err
 	}
 
 	transaction := s.client.Txn(ctx)
@@ -492,23 +362,23 @@ func (s *store) transact(
 	}
 	response, err := transaction.Commit()
 	if err != nil {
-		return TransactionResult{}, wrap(ctx, err)
+		return etcdstore.TransactionResult{}, wrap(ctx, err)
 	}
 	if response.Header == nil {
-		return TransactionResult{}, errs.New(errs.KindInternal, "etcd transaction response is missing its revision")
+		return etcdstore.TransactionResult{}, errs.New(errs.KindInternal, "etcd transaction response is missing its revision")
 	}
-	result := TransactionResult{Succeeded: response.Succeeded, Revision: response.Header.Revision}
+	result := etcdstore.TransactionResult{Succeeded: response.Succeeded, Revision: response.Header.Revision}
 	if !response.Succeeded {
 		reads, err := transactionFailureReads(response, conditions, prepared.physicalConditions, s.root)
 		if err != nil {
-			return TransactionResult{}, err
+			return etcdstore.TransactionResult{}, err
 		}
 		result.FailureReads = reads
 	}
 	return result, nil
 }
 
-func validateEnvironmentBlueprintTransactionBudget(conditions []Condition, mutations []Mutation) error {
+func validateEnvironmentBlueprintTransactionBudget(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
 	if len(conditions) <= maximumEnvironmentBlueprintTransactionOperationsPerArm &&
 		len(mutations) <= maximumEnvironmentBlueprintTransactionOperationsPerArm {
 		return nil
@@ -522,23 +392,23 @@ func validateEnvironmentBlueprintTransactionBudget(conditions []Condition, mutat
 }
 
 type environmentBlueprintTransactionStore interface {
-	TransactEnvironmentBlueprint(context.Context, []Condition, []Mutation) (TransactionResult, error)
+	TransactEnvironmentBlueprint(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
 func executeEnvironmentBlueprintTransaction(
 	ctx context.Context,
 	store environmentBlueprintTransactionStore,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) (etcdstore.TransactionResult, error) {
 	if store == nil {
-		return TransactionResult{}, errs.New(errs.KindInternal, "Environment Blueprint transaction store is required")
+		return etcdstore.TransactionResult{}, errs.New(errs.KindInternal, "Environment Blueprint transaction store is required")
 	}
 	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
-		return TransactionResult{}, err
+		return etcdstore.TransactionResult{}, err
 	}
 	if len(mutations) == 0 {
-		return TransactionResult{}, errs.New(errs.KindValidationFailed, "etcd transaction requires a mutation")
+		return etcdstore.TransactionResult{}, errs.New(errs.KindValidationFailed, "etcd transaction requires a mutation")
 	}
 	physicalConditions := make([]string, len(conditions))
 	for index := range conditions {
@@ -554,8 +424,8 @@ func executeEnvironmentBlueprintTransaction(
 		physicalConditions,
 		physicalMutations,
 	).Size() >
-		maximumTransactionBytes {
-		return TransactionResult{}, errs.New(
+		etcdstore.MaximumBytes {
+		return etcdstore.TransactionResult{}, errs.New(
 			errs.KindValidationFailed, "etcd transaction exceeds the 1 MiB serialized request limit",
 		)
 	}
@@ -563,8 +433,8 @@ func executeEnvironmentBlueprintTransaction(
 }
 
 func transactionRequest(
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	physicalConditions []string,
 	physicalMutations []string,
 ) *etcdserverpb.TxnRequest {
@@ -580,7 +450,7 @@ func transactionRequest(
 			Key:         []byte(physicalConditions[index]),
 			TargetUnion: &etcdserverpb.Compare_ModRevision{ModRevision: condition.ModRevision},
 		}
-		failure := &etcdserverpb.RangeRequest{Key: []byte(physicalConditions[index])}
+		failure := &etcdserverpb.etcdstore.RangeRequest{Key: []byte(physicalConditions[index])}
 		if condition.Prefix {
 			end := []byte(clientv3.GetPrefixRangeEnd(physicalConditions[index]))
 			comparison.RangeEnd = end
@@ -595,11 +465,11 @@ func transactionRequest(
 	for index, mutation := range mutations {
 		operation := &etcdserverpb.RequestOp{}
 		switch mutation.Type {
-		case MutationPut:
+		case etcdstore.MutationPut:
 			operation.Request = &etcdserverpb.RequestOp_RequestPut{RequestPut: &etcdserverpb.PutRequest{
 				Key: []byte(physicalMutations[index]), Value: mutation.Value,
 			}}
-		case MutationDelete:
+		case etcdstore.MutationDelete:
 			request := &etcdserverpb.DeleteRangeRequest{Key: []byte(physicalMutations[index])}
 			if mutation.Prefix {
 				request.RangeEnd = []byte(clientv3.GetPrefixRangeEnd(physicalMutations[index]))
@@ -615,14 +485,14 @@ func transactionRequest(
 
 func transactionFailureReads(
 	response *clientv3.TxnResponse,
-	conditions []Condition,
+	conditions []etcdstore.Condition,
 	physicalKeys []string,
 	root string,
-) ([]*KeyValue, error) {
+) ([]*etcdstore.KeyValue, error) {
 	if len(response.Responses) != len(physicalKeys) || len(conditions) != len(physicalKeys) {
 		return nil, errs.New(errs.KindInternal, "etcd transaction failure reads are incomplete")
 	}
-	values := make([]*KeyValue, len(physicalKeys))
+	values := make([]*etcdstore.KeyValue, len(physicalKeys))
 	for index, operation := range response.Responses {
 		rangeResponse := operation.GetResponseRange()
 		if rangeResponse == nil || (!conditions[index].Prefix && rangeResponse.More) || len(rangeResponse.Kvs) > 1 {
@@ -639,7 +509,7 @@ func transactionFailureReads(
 		if !matches || entry.ModRevision <= 0 {
 			return nil, errs.New(errs.KindInternal, "etcd transaction failure read is inconsistent")
 		}
-		values[index] = &KeyValue{
+		values[index] = &etcdstore.KeyValue{
 			Key:         strings.TrimPrefix(string(entry.Key), root),
 			Value:       append([]byte(nil), entry.Value...),
 			Version:     entry.Version,
@@ -649,7 +519,7 @@ func transactionFailureReads(
 	return values, nil
 }
 
-func (s *store) Watch(ctx context.Context, prefix string, startRevision int64) (*WatchStream, error) {
+func (s *store) Watch(ctx context.Context, prefix string, startRevision int64) (*etcdstore.WatchStream, error) {
 	physical, err := s.physicalKey(prefix)
 	if err != nil {
 		return nil, err
@@ -663,7 +533,7 @@ func (s *store) Watch(ctx context.Context, prefix string, startRevision int64) (
 		options = append(options, clientv3.WithRev(startRevision))
 	}
 	upstream := s.client.Watch(ctx, physical, options...)
-	events := make(chan Event)
+	events := make(chan etcdstore.Event)
 	watchErrors := make(chan error, 1)
 	go func() {
 		defer close(events)
@@ -691,16 +561,16 @@ func (s *store) Watch(ctx context.Context, prefix string, startRevision int64) (
 					)
 					return
 				}
-				event := Event{
+				event := etcdstore.Event{
 					Key:         key,
 					Value:       append([]byte(nil), item.Kv.Value...),
 					ModRevision: item.Kv.ModRevision,
 				}
 				switch item.Type {
 				case mvccpb.PUT:
-					event.Type = EventPut
+					event.Type = etcdstore.EventPut
 				case mvccpb.DELETE:
-					event.Type = EventDelete
+					event.Type = etcdstore.EventDelete
 				default:
 					continue
 				}
@@ -714,7 +584,7 @@ func (s *store) Watch(ctx context.Context, prefix string, startRevision int64) (
 		}
 	}()
 
-	return &WatchStream{Events: events, Errors: watchErrors}, nil
+	return &etcdstore.WatchStream{Events: events, Errors: watchErrors}, nil
 }
 
 func deliverWatchError(ctx context.Context, destination chan<- error, err error) {

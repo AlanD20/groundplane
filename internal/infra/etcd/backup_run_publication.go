@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"sync"
 	"time"
@@ -96,7 +97,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		environmentKey(input.EnvironmentID),
 		backupPolicyKey(input.EnvironmentID),
 	}
-	var anchor *GetManyResult
+	var anchor *etcdstore.GetManyResult
 	var err error
 	if input.FixedRevision == 0 {
 		anchor, err = repository.readCurrentKeys(ctx, anchorKeys)
@@ -794,7 +795,7 @@ func (repository *BackupRuntimeRepository) validateQueuedBackupRunPublication(
 	ctx context.Context,
 	run BackupRunRecord,
 	task TaskRecord,
-	primary []*KeyValue,
+	primary []*etcdstore.KeyValue,
 	readRevision int64,
 	commitRevision int64,
 ) error {
@@ -828,7 +829,7 @@ func (repository *BackupRuntimeRepository) validateRunningBackupRunPublication(
 	ctx context.Context,
 	run BackupRunRecord,
 	task TaskRecord,
-	primary []*KeyValue,
+	primary []*etcdstore.KeyValue,
 	readRevision int64,
 	publicationRevision int64,
 ) error {
@@ -860,8 +861,8 @@ func (repository *BackupRuntimeRepository) validateTerminalBackupRunPublication(
 	ctx context.Context,
 	marker IdempotencyMarker,
 	task TaskRecord,
-	runValue *KeyValue,
-	taskValue *KeyValue,
+	runValue *etcdstore.KeyValue,
+	taskValue *etcdstore.KeyValue,
 	readRevision int64,
 	terminalRevision int64,
 ) error {
@@ -903,7 +904,7 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 	ctx context.Context,
 	marker IdempotencyMarker,
 	task TaskRecord,
-	runValue *KeyValue,
+	runValue *etcdstore.KeyValue,
 	readRevision int64,
 	terminalRevision int64,
 ) bool {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 	"time"
 
@@ -18,7 +19,7 @@ func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 	task TaskRecord,
 	terminalStatus TaskStatus,
 	readRevision int64,
-) ([]Condition, []Mutation, []byte, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, []byte, error) {
 	state, err := repository.readTaskEnvironmentMutationState(ctx, task.Target, readRevision, true)
 	if err != nil {
 		return nil, nil, nil, err
@@ -42,14 +43,14 @@ func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: environmentKey(record.ID), ModRevision: state.Environment.Revision},
 		{Key: environmentMutationEpochKey(record.ID), ModRevision: state.EpochRevision},
 		{Key: environmentOperationLockKey(record.ID)},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: environmentKey(record.ID), Value: encoded},
-		{Type: MutationPut, Key: environmentMutationEpochKey(record.ID), Value: state.EpochValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: environmentKey(record.ID), Value: encoded},
+		{Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(record.ID), Value: state.EpochValue},
 	}
 	return conditions, mutations, encoded, nil
 }
@@ -85,7 +86,7 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 	updatedAt time.Time,
 ) (bool, error) {
 	prefix := environmentBlueprintRevisionsPrefix(task.Target)
-	page, err := repository.store.Range(ctx, RangeRequest{
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, Limit: environmentBlueprintDeletionBatchSize,
 	})
 	if err != nil {
@@ -98,7 +99,7 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 	if len(page.Values) == 0 {
 		return false, nil
 	}
-	tombstoneResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	tombstoneResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 			environmentMutationEpochKey(task.Target),
@@ -173,18 +174,18 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 	}
 	defer clear(encodedTombstone)
 
-	conditions := make([]Condition, 0, len(page.Values)+3)
-	mutations := make([]Mutation, 0, len(page.Values)+2)
+	conditions := make([]etcdstore.Condition, 0, len(page.Values)+3)
+	mutations := make([]etcdstore.Mutation, 0, len(page.Values)+2)
 	for _, value := range page.Values {
-		conditions = append(conditions, Condition{Key: value.Key, ModRevision: value.ModRevision})
-		mutations = append(mutations, Mutation{Type: MutationDelete, Key: value.Key})
+		conditions = append(conditions, etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: value.Key})
 	}
-	conditions = append(conditions, Condition{
+	conditions = append(conditions, etcdstore.Condition{
 		Key:         deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 		ModRevision: tombstoneValue.ModRevision,
 	})
-	mutations = append(mutations, Mutation{
-		Type:  MutationPut,
+	mutations = append(mutations, etcdstore.Mutation{
+		Type:  etcdstore.MutationPut,
 		Key:   deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 		Value: encodedTombstone,
 	})
@@ -230,13 +231,13 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	task TaskRecord,
 	terminalStatus TaskStatus,
 	readRevision int64,
-) ([]Condition, []Mutation, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if terminalStatus == TaskStatusCompleted {
 		if err := cleanupTaskEnvironmentDeletionScriptLocators(ctx, repository.store, task.Target, task.ID); err != nil {
 			return nil, nil, err
 		}
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			environmentKey(task.Target),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
@@ -312,7 +313,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		poolRegistry.Reservations[environment.ID] != environment.NetworkPool {
 		return nil, nil, errs.New(errs.KindInternal, "environment pool reservation is inconsistent")
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			environmentNameKey(environment.ProjectID, environment.Name),
 			environmentOwnerKey(environment.ProjectID, environment.ID),
@@ -328,7 +329,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		) != environment.ID || string(indexes.Values[1].Value) != environment.ID {
 		return nil, nil, errs.New(errs.KindInternal, "environment deletion indexes are corrupt")
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: environmentKey(environment.ID), ModRevision: environmentValue.ModRevision},
 		{Key: environmentNameKey(environment.ProjectID, environment.Name), ModRevision: indexes.Values[0].ModRevision},
 		{Key: environmentOwnerKey(environment.ProjectID, environment.ID), ModRevision: indexes.Values[1].ModRevision},
@@ -375,43 +376,43 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		conditions = append(conditions,
 			environmentDeletionLiveAuthorityConditions(environment.ID, task.OperationID, projectedKeys...)...)
 	}
-	mutations := make([]Mutation, 0, len(intentMutations)+12)
+	mutations := make([]etcdstore.Mutation, 0, len(intentMutations)+12)
 	if terminalStatus == TaskStatusCompleted {
 		mutations = append(mutations,
-			Mutation{
-				Type: MutationDelete,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
 				Key:  deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
 			},
-			Mutation{Type: MutationDelete, Key: environmentOperationLockKey(environment.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentOperationLockKey(environment.ID)},
 		)
 		mutations = append(mutations, intentMutations...)
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationDelete, Key: environmentMutationEpochKey(environment.ID)},
-			Mutation{Type: MutationDelete, Key: releaseGroupCollectionEpochKey(environment.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentMutationEpochKey(environment.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupCollectionEpochKey(environment.ID)},
 		)
 		nextPoolRegistry, err := poolRegistry.Release(environment.ID, environment.NetworkPool)
 		if err != nil {
 			return nil, nil, err
 		}
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: environmentPoolRegistryKey, ModRevision: stored.Values[4].ModRevision,
 		})
 		if len(nextPoolRegistry.Reservations) == 0 {
 			mutations = append(
 				mutations,
-				Mutation{Type: MutationDelete, Key: environmentPoolRegistryKey},
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentPoolRegistryKey},
 			)
 		} else {
 			poolRegistryValue, err := encodeEnvelope("environment_pool_registry", nextPoolRegistry)
 			if err != nil {
 				return nil, nil, err
 			}
-			mutations = append(mutations, Mutation{
-				Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue,
+			mutations = append(mutations, etcdstore.Mutation{
+				Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue,
 			})
 		}
-		remaining, err := repository.store.Range(ctx, RangeRequest{
+		remaining, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: environmentBlueprintRevisionsPrefix(
 				environment.ID,
 			),
@@ -436,34 +437,34 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		if stored.Values[2] != nil {
 			mutations = append(
 				mutations,
-				Mutation{Type: MutationDelete, Key: environmentBlueprintHeadKey(environment.ID)},
-				Mutation{
-					Type: MutationDelete,
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentBlueprintHeadKey(environment.ID)},
+				etcdstore.Mutation{
+					Type: etcdstore.MutationDelete,
 					Key:  environmentComposeProjectionKey(environment.ID),
 				},
 			)
 		}
 		mutations = append(
 			mutations,
-			Mutation{
-				Type: MutationDelete,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
 				Key:  environmentNameKey(environment.ProjectID, environment.Name),
 			},
-			Mutation{
-				Type: MutationDelete,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
 				Key:  environmentOwnerKey(environment.ProjectID, environment.ID),
 			},
-			Mutation{Type: MutationDelete, Key: environmentKey(environment.ID)},
-			Mutation{Type: MutationDelete, Key: scriptSetEnvironmentPrefix(environment.ID), Prefix: true},
-			Mutation{Type: MutationDelete, Key: scriptEnvironmentLocatorPrefixFor(environment.ID), Prefix: true},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentKey(environment.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptSetEnvironmentPrefix(environment.ID), Prefix: true},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptEnvironmentLocatorPrefixFor(environment.ID), Prefix: true},
 		)
 	} else {
 		epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)
 		if err != nil {
 			return nil, nil, err
 		}
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: environmentMutationEpochKey(environment.ID), Value: epochValue,
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(environment.ID), Value: epochValue,
 		})
 	}
 	if err := validateEnvironmentMutationTransactionBudget(conditions, mutations); err != nil {
@@ -474,9 +475,9 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 }
 
 func appendEnvironmentMutationFenceConditions(
-	conditions []Condition,
+	conditions []etcdstore.Condition,
 	fence environmentMutationFenceEvidence,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	indexes := make(map[string]int, len(conditions))
 	for index, condition := range conditions {
 		if condition.Key == "" || condition.Prefix {
@@ -504,10 +505,10 @@ func appendEnvironmentMutationFenceConditions(
 }
 
 func validateEnvironmentMutationTransactionBudget(
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 ) error {
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
+	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return errs.New(
 			errs.KindValidationFailed,
 			"environment mutation exceeds the atomic transaction limit",
@@ -522,7 +523,7 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 	terminalStatus TaskStatus,
 	readRevision int64,
 ) error {
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			environmentKey(task.Target),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),

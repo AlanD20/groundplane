@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupschedule"
@@ -46,7 +47,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 	if err := validateID(ids.KindEnvironment, environmentID); err != nil {
 		return BackupPolicyProjection{}, err
 	}
-	base, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		environmentKey(environmentID),
 		backupPolicyKey(environmentID),
 		backupKeyKey(environmentID),
@@ -112,7 +113,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 			keys = append(keys, backupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID))
 		}
 	}
-	support, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: base.ReadRevision})
+	support, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: base.ReadRevision})
 	if err != nil {
 		return BackupPolicyProjection{}, err
 	}
@@ -209,7 +210,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		})
 	}
 	if len(identityKeys) > 0 {
-		identityIndexes, readErr := repository.store.GetMany(ctx, GetManyRequest{
+		identityIndexes, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: identityKeys, Revision: base.ReadRevision,
 		})
 		if readErr != nil {
@@ -268,8 +269,8 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 
 func decodeBackupPolicyProjectionKey(
 	environmentID string,
-	recordValue *KeyValue,
-	encryptedValue *KeyValue,
+	recordValue *etcdstore.KeyValue,
+	encryptedValue *etcdstore.KeyValue,
 ) (*BackupKeyRecord, error) {
 	if recordValue == nil && encryptedValue == nil {
 		return nil, nil

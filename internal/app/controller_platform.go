@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/controller/agentmanagement"
+	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"log/slog"
 	"os"
 	"time"
@@ -28,8 +30,8 @@ import (
 
 type controllerPlatformDependencies struct {
 	Config        config.ControllerConfig
-	Key           controllerKey
-	Store         etcd.Store
+	Key           agentruntime.ControllerKey
+	Store         etcdstore.Store
 	Agents        *etcd.LocalAgentRepository
 	Tasks         *etcd.TaskRepository
 	Intents       *requestidempotency.Coordinator
@@ -68,23 +70,23 @@ func newControllerPlatform(
 	dependencies controllerPlatformDependencies,
 ) (_ *controllerPlatform, result error) {
 	cfg := dependencies.Config
-	configIdempotency, err := newDurableLocalAgentConfigIdempotency(dependencies.Intents, dependencies.Idempotency)
+	configIdempotency, err := agentruntime.NewConfigIdempotency(dependencies.Intents, dependencies.Idempotency)
 	if err != nil {
 		return nil, err
 	}
-	repository, err := newLocalAgentRepositoryAdapter(dependencies.Agents, configIdempotency)
+	repository, err := agentruntime.NewRepository(dependencies.Agents, configIdempotency)
 	if err != nil {
 		return nil, err
 	}
-	sessions, err := newLocalAgentSessionsAdapter(dependencies.Channel.registry)
+	sessions, err := agentruntime.NewSessions(dependencies.Channel.registry)
 	if err != nil {
 		return nil, err
 	}
-	work, err := newLocalAgentTasksAdapter(dependencies.Tasks, dependencies.Channel.registry)
+	work, err := agentruntime.NewTasks(dependencies.Tasks, dependencies.Channel.registry)
 	if err != nil {
 		return nil, err
 	}
-	cipher, err := newCredentialCipher(dependencies.Key)
+	cipher, err := agentruntime.NewCredentialCipher(dependencies.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +94,7 @@ func newControllerPlatform(
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := newLocalAgentRuntimeAdapter(credentials, cfg.Log, cfg.Storage.VolumeRoot)
+	runtime, err := agentruntime.NewCredentials(credentials, cfg.Log, cfg.Storage.VolumeRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +108,7 @@ func newControllerPlatform(
 			_ = platform.Close()
 		} // Constructor failure releases only its owned handles.
 	}()
-	containerAdapter, err := newLocalAgentContainerAdapter(container)
+	containerAdapter, err := agentruntime.NewContainer(container)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +195,7 @@ func newControllerPlatform(
 	if err != nil {
 		return nil, err
 	}
-	platform.reconciliation, err = newLocalAgentReconciliation(platform.agents, dependencies.Tick, dependencies.Logger)
+	platform.reconciliation, err = agentruntime.NewReconciliation(platform.agents, dependencies.Tick, dependencies.Logger)
 	if err != nil {
 		return nil, err
 	}

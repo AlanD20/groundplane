@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -87,7 +88,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			platformComponentOwnerKey(current.Record.Desired.ID),
 			platformComponentKindKey(current.Record.Desired.Kind),
@@ -121,7 +122,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: componentKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{Key: platformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
@@ -132,15 +133,15 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		{Key: taskQueueKey(task.Executor, task.ID)},
 		{Key: platformComponentTaskActiveKey(replacement.Desired.ID)},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: componentKey(replacement.Desired.ID), Value: componentValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: componentKey(replacement.Desired.ID), Value: componentValue},
 		componentWriteFenceMutation(replacement.Desired.ID),
-		{Type: MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderInputValue},
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: platformComponentTaskActiveKey(replacement.Desired.ID), Value: []byte(task.ID)},
+		{Type: etcdstore.MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderInputValue},
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(replacement.Desired.ID), Value: []byte(task.ID)},
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,
@@ -209,11 +210,11 @@ func PlatformComponentDesiredDigest(record ComponentRecord) (string, error) {
 
 func classifyPlatformComponentTaskConflict(
 	current Versioned[ComponentRecord],
-	indexes *GetManyResult,
+	indexes *etcdstore.GetManyResult,
 	operationID string,
 ) idempotencyPlanClassifier {
 	taskClassifier := classifyTaskCreateConflict(operationID)
-	return func(revision int64, values []*KeyValue) error {
+	return func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != 9 {
 			return errs.New(errs.KindInternal, "platform Component Task compare evidence is incomplete")
 		}

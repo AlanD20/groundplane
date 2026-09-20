@@ -1,8 +1,8 @@
 package desiredrevision
 
-import "github.com/AlanD20/groundplane/internal/infra/etcd"
+import etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
-func clearKeyValues(values []*etcd.KeyValue) {
+func clearKeyValues(values []*etcdstore.KeyValue) {
 	for _, value := range values {
 		if value != nil {
 			clear(value.Value)
@@ -10,13 +10,13 @@ func clearKeyValues(values []*etcd.KeyValue) {
 	}
 }
 
-func clearKeyValueSlice(values []etcd.KeyValue) {
+func clearKeyValueSlice(values []etcdstore.KeyValue) {
 	for index := range values {
 		clear(values[index].Value)
 	}
 }
 
-func clearMutationValues(values []etcd.Mutation) {
+func clearMutationValues(values []etcdstore.Mutation) {
 	for index := range values {
 		clear(values[index].Value)
 	}

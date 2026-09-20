@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -111,7 +112,7 @@ func loadEnvironmentDeletionIntent(
 	tombstone DeletionTombstoneRecord,
 	revision int64,
 ) (Versioned[EnvironmentDeletionIntentRecord], error) {
-	result, err := store.GetMany(ctx, GetManyRequest{
+	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentDeletionIntentKey(task.OperationID)}, Revision: revision,
 	})
 	if err != nil {
@@ -155,7 +156,7 @@ func loadEnvironmentDeletionIntent(
 func classifyEnvironmentDeletionIntentStartConflict(
 	base idempotencyPlanClassifier,
 ) idempotencyPlanClassifier {
-	return func(revision int64, values []*KeyValue) error {
+	return func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) == 0 {
 			return errs.New(
 				errs.KindInternal,
@@ -209,7 +210,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	if err != nil {
 		return environmentTaskChange{}, err
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			deletionTombstoneKey(string(DeletionTargetEnvironment), source.Target),
 			environmentOperationLockKey(source.Target),
@@ -248,7 +249,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	if err != nil {
 		return environmentTaskChange{}, err
 	}
-	retentionCondition := Condition{Key: retentionKey}
+	retentionCondition := etcdstore.Condition{Key: retentionKey}
 	if state.Values[2] != nil {
 		retainedTaskID, decodeErr := decodeTaskReference(state.Values[2].Value)
 		if decodeErr != nil || retainedTaskID != source.ID {
@@ -300,7 +301,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	}
 	conditions := fence.transactionConditions()
 	conditions = append(conditions,
-		Condition{
+		etcdstore.Condition{
 			Key: environmentDeletionIntentKey(source.OperationID), ModRevision: intent.Revision,
 		},
 		retentionCondition,
@@ -308,20 +309,20 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	return environmentTaskChange{
 		applies:    true,
 		conditions: conditions,
-		mutations: []Mutation{
+		mutations: []etcdstore.Mutation{
 			{
-				Type:  MutationPut,
+				Type:  etcdstore.MutationPut,
 				Key:   deletionTombstoneKey(string(DeletionTargetEnvironment), source.Target),
 				Value: tombstoneValue,
 			},
-			{Type: MutationPut, Key: environmentOperationLockKey(source.Target), Value: lockValue},
+			{Type: etcdstore.MutationPut, Key: environmentOperationLockKey(source.Target), Value: lockValue},
 			{
-				Type:  MutationPut,
+				Type:  etcdstore.MutationPut,
 				Key:   environmentDeletionIntentKey(source.OperationID),
 				Value: intentValue,
 			},
 			epochMutation,
-			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
+			{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
 		},
 		values: [][]byte{
 			tombstoneValue, lockValue, intentValue, epochMutation.Value, retentionValue,
@@ -335,12 +336,12 @@ func (repository *TaskRepository) prepareEnvironmentDeletionIntentTerminal(
 	tombstone DeletionTombstoneRecord,
 	terminalStatus TaskStatus,
 	revision int64,
-) ([]Condition, []Mutation, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	intent, err := loadEnvironmentDeletionIntent(ctx, repository.store, task, tombstone, revision)
 	if err != nil {
 		return nil, nil, err
 	}
-	conditions := []Condition{{
+	conditions := []etcdstore.Condition{{
 		Key: environmentDeletionIntentKey(task.OperationID), ModRevision: intent.Revision,
 	}}
 	if terminalStatus != TaskStatusCompleted {
@@ -357,8 +358,8 @@ func (repository *TaskRepository) prepareEnvironmentDeletionIntentTerminal(
 	); err != nil {
 		return nil, nil, err
 	}
-	return conditions, []Mutation{{
-		Type: MutationDelete, Key: environmentDeletionIntentKey(task.OperationID),
+	return conditions, []etcdstore.Mutation{{
+		Type: etcdstore.MutationDelete, Key: environmentDeletionIntentKey(task.OperationID),
 	}}, nil
 }
 
@@ -410,7 +411,7 @@ func environmentDeletionBackupAuthorityPresent(
 	operationID string,
 	revision int64,
 ) (bool, error) {
-	direct, err := store.GetMany(ctx, GetManyRequest{
+	direct, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			backupPolicyKey(environmentID),
 			backupKeyKey(environmentID),
@@ -455,7 +456,7 @@ func environmentDeletionBackupAuthorityPresent(
 		environmentDeletionWorkOperationPrefix(operationID),
 	}
 	for _, prefix := range prefixes {
-		page, err := store.Range(ctx, RangeRequest{Prefix: prefix, Limit: 1, Revision: revision})
+		page, err := store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: 1, Revision: revision})
 		if err != nil {
 			return false, err
 		}
@@ -494,7 +495,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 			"environment deletion cleanup task is invalid",
 		)
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 		taskKey(task.ID),
 	}})
@@ -573,14 +574,14 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 	defer clear(epochMutation.Value)
 	conditions := fence.transactionConditions()
 	conditions = append(conditions,
-		Condition{
+		etcdstore.Condition{
 			Key: environmentDeletionIntentKey(task.OperationID), ModRevision: intent.Revision,
 		},
-		Condition{Key: taskKey(task.ID), ModRevision: state.Values[1].ModRevision},
+		etcdstore.Condition{Key: taskKey(task.ID), ModRevision: state.Values[1].ModRevision},
 	)
-	transaction, err := repository.store.Transact(ctx, conditions, []Mutation{
+	transaction, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   environmentDeletionIntentKey(task.OperationID),
 			Value: intentValue,
 		},
@@ -603,7 +604,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 
 func environmentDeletionTaskPruneFence(
 	task TaskRecord,
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 ) (bool, string, error) {
 	if len(values) != 3 {
 		return false, "", corruptTaskPruneIntent()
@@ -649,7 +650,7 @@ func (repository *TaskRepository) validateEnvironmentDeletionIntentReplay(
 	terminalStatus TaskStatus,
 	revision int64,
 ) error {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentDeletionIntentKey(task.OperationID)}, Revision: revision,
 	})
 	if err != nil {

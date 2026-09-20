@@ -3,14 +3,15 @@ package etcd
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type scriptTerminalSourceRelease struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	advance    *blueprintTerminalSourceAdvance
 }
 
@@ -28,10 +29,10 @@ func (change *scriptTerminalSourceRelease) clear() {
 func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	ctx context.Context,
 	task TaskRecord,
-	taskValue *KeyValue,
+	taskValue *etcdstore.KeyValue,
 	assignment TaskAssignmentRecord,
-	assignmentValue *KeyValue,
-	assignmentIndexValue *KeyValue,
+	assignmentValue *etcdstore.KeyValue,
+	assignmentIndexValue *etcdstore.KeyValue,
 	recovery releaseRecoveryAcknowledgement,
 	terminalStatus TaskStatus,
 	terminalAt *time.Time,
@@ -86,7 +87,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	for _, step := range steps {
 		keys = append(keys, scriptExecutionKey(step.executionID))
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return scriptTerminalSourceRelease{}, false, err
 	}
@@ -130,7 +131,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 			)
 		}
 	}
-	guards := []Condition{
+	guards := []etcdstore.Condition{
 		{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 		{
 			Key:         taskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
@@ -145,13 +146,13 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		guards = append(guards, recovery.conditions...)
 	}
 	if materializes {
-		guards = append(guards, Condition{
+		guards = append(guards, etcdstore.Condition{
 			Key: taskMaterializationWriterKey(environmentID), ModRevision: read.Values[writerIndex].ModRevision,
 		})
 	}
-	executionGuards := make([]Condition, 0, len(steps))
+	executionGuards := make([]etcdstore.Condition, 0, len(steps))
 	for index := range steps {
-		executionGuards = append(executionGuards, Condition{
+		executionGuards = append(executionGuards, etcdstore.Condition{
 			Key: read.Values[index+executionOffset].Key, ModRevision: read.Values[index+executionOffset].ModRevision,
 		})
 	}
@@ -164,8 +165,8 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 			terminalAt: *terminalAt, revision: revision, submittedStatus: submittedStatus, submittedResult: submittedResult,
 		}
 	}
-	var closingCondition Condition
-	var closingMutation Mutation
+	var closingCondition etcdstore.Condition
+	var closingMutation etcdstore.Mutation
 	if task.Type == TaskUpdate {
 		current := TaskAssignment{
 			Task:       Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: revision},
@@ -253,7 +254,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	// Environment epoch, writer, and recovery authority. Add only source and
 	// execution evidence here; duplicate compares are rejected by its compiler.
 	change := scriptTerminalSourceRelease{
-		conditions: append(append([]Condition(nil), final.conditions...), executionGuards...),
+		conditions: append(append([]etcdstore.Condition(nil), final.conditions...), executionGuards...),
 		mutations:  cloneBlueprintCandidateMutations(final.mutations),
 	}
 	if task.Type == TaskUpdate {
@@ -267,7 +268,7 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 	ctx context.Context,
 	task TaskRecord,
 	executions []ScriptExecutionRecord,
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	terminalAt time.Time,
 ) (scriptTerminalSourceRelease, error) {
 	authority, err := newScriptSourceReferenceAuthority(repository.store)
@@ -278,7 +279,7 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 	if err != nil {
 		return scriptTerminalSourceRelease{}, err
 	}
-	conditions := append([]Condition(nil), release.conditions...)
+	conditions := append([]etcdstore.Condition(nil), release.conditions...)
 	mutations := cloneBlueprintCandidateMutations(release.mutations)
 	release.Clear()
 	for index, execution := range executions {
@@ -334,8 +335,8 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 			clearMutationValues(mutations)
 			return scriptTerminalSourceRelease{}, encodeErr
 		}
-		conditions = append(conditions, Condition{Key: values[index].Key, ModRevision: values[index].ModRevision})
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: values[index].Key, Value: encoded})
+		conditions = append(conditions, etcdstore.Condition{Key: values[index].Key, ModRevision: values[index].ModRevision})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: values[index].Key, Value: encoded})
 	}
 	return scriptTerminalSourceRelease{conditions: conditions, mutations: mutations}, nil
 }

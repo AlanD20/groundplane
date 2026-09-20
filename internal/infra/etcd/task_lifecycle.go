@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -237,17 +238,17 @@ func (repository *TaskRepository) CreateTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(record.ID)},
 		{Key: taskOperationIndexKey(record.OperationID, record.ID)},
 		{Key: taskActiveOperationKey(record.OperationID)},
 		{Key: taskQueueKey(record.Executor, record.ID)},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(record.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(record.OperationID, record.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(record.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(record.Executor, record.ID), Value: reference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(record.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(record.OperationID, record.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(record.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(record.Executor, record.ID), Value: reference},
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		record,
@@ -267,7 +268,7 @@ func (repository *TaskRepository) CreateTask(
 }
 
 func classifyTaskCreateConflict(operationID string) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != 4 {
 			return errs.New(errs.KindInternal, "task creation compare evidence is incomplete")
 		}
@@ -375,7 +376,7 @@ func (repository *TaskRepository) retryTask(
 				"system task retry initiation is invalid",
 			)
 		}
-		fences := append(append([]Condition(nil), initiation.fences...), provided.fences...)
+		fences := append(append([]etcdstore.Condition(nil), initiation.fences...), provided.fences...)
 		initiation, err = newTaskInitiation(source.Record.Owner, TaskActorSystem, fences...)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
@@ -414,18 +415,18 @@ func (repository *TaskRepository) retryTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(sourceTaskID), ModRevision: source.Revision},
 		{Key: taskKey(retry.ID)},
 		{Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
 		{Key: taskActiveOperationKey(retry.OperationID)},
 		{Key: taskQueueKey(retry.Executor, retry.ID)},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(retry.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(retry.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
 	}
 	releaseChange, err := repository.prepareReleaseTaskRetry(ctx, source.Record, retry, source.ReadRevision)
 	if err != nil {
@@ -617,7 +618,7 @@ func (repository *TaskRepository) retryTask(
 		conditions = environmentBinding.conditions
 		mutations = environmentBinding.mutations
 		baseClassifier := retryClassifier
-		retryClassifier = func(revision int64, values []*KeyValue) error {
+		retryClassifier = func(revision int64, values []*etcdstore.KeyValue) error {
 			return environmentBinding.classify(revision, values, baseClassifier)
 		}
 	}
@@ -664,7 +665,7 @@ func classifyTaskRetryConflict(
 	requirementGateConditions int,
 	resolverConditions int,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		expectedValues := 5 + attachConditions + environmentConditions + secretConditions +
 			scriptConditions + routeConditions + serviceConditions + backingZoneConditions + componentConditions +
 			connectorConditions + runnerConditions + releaseConditions + requirementGateConditions + resolverConditions
@@ -767,7 +768,7 @@ func (repository *TaskRepository) claimNextTask(
 		if candidate.writerKey != "" {
 			companionKeys = append(companionKeys, candidate.writerKey)
 		}
-		companions, err := repository.store.GetMany(ctx, GetManyRequest{
+		companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: companionKeys, Revision: candidate.readRevision,
 		})
 		if err != nil {
@@ -813,7 +814,7 @@ func (repository *TaskRepository) claimNextTask(
 			clear(runningValue)
 			return TaskAssignment{}, false, err
 		}
-		conditions := []Condition{
+		conditions := []etcdstore.Condition{
 			{Key: queued.Key, ModRevision: queued.ModRevision},
 			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 			{Key: activeKey, ModRevision: companions.Values[0].ModRevision},
@@ -821,12 +822,12 @@ func (repository *TaskRepository) claimNextTask(
 			{Key: assignmentIndexKey},
 			{Key: timeoutIndexKey},
 		}
-		mutations := []Mutation{
-			{Type: MutationPut, Key: taskKey(task.ID), Value: runningValue},
-			{Type: MutationDelete, Key: queued.Key},
-			{Type: MutationPut, Key: assignmentKey, Value: assignmentValue},
-			{Type: MutationPut, Key: assignmentIndexKey, Value: assignmentValue},
-			{Type: MutationPut, Key: timeoutIndexKey, Value: assignmentValue},
+		mutations := []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: runningValue},
+			{Type: etcdstore.MutationDelete, Key: queued.Key},
+			{Type: etcdstore.MutationPut, Key: assignmentKey, Value: assignmentValue},
+			{Type: etcdstore.MutationPut, Key: assignmentIndexKey, Value: assignmentValue},
+			{Type: etcdstore.MutationPut, Key: timeoutIndexKey, Value: assignmentValue},
 		}
 		hookInputConditions, err := repository.backingHookInputClaimConditions(ctx, task, candidate.readRevision)
 		if err != nil {
@@ -876,9 +877,9 @@ func (repository *TaskRepository) claimNextTask(
 				return TaskAssignment{}, false, err
 			}
 			conditions = append(conditions, writerConditions...)
-			conditions = append(conditions, Condition{Key: candidate.writerKey})
-			mutations = append(mutations, Mutation{
-				Type: MutationPut, Key: candidate.writerKey, Value: writerValue,
+			conditions = append(conditions, etcdstore.Condition{Key: candidate.writerKey})
+			mutations = append(mutations, etcdstore.Mutation{
+				Type: etcdstore.MutationPut, Key: candidate.writerKey, Value: writerValue,
 			})
 			if taskHasBlueprintCandidateAppliedAuthority(task) {
 				authority, authorityDigest, authorityConditions, authorityErr := repository.prepareBlueprintRestorationAuthority(
@@ -901,7 +902,7 @@ func (repository *TaskRepository) claimNextTask(
 				assignmentValue = updatedAssignmentValue
 				mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
 				conditions = append(conditions, authorityConditions...)
-				conditions = append(conditions, Condition{Key: releaseRecoveryKey(task.ID)})
+				conditions = append(conditions, etcdstore.Condition{Key: releaseRecoveryKey(task.ID)})
 				epochCondition, epochMutation, claimErr :=
 					repository.prepareBlueprintCandidateClaimEpoch(
 						ctx, task, writer, candidate.readRevision, requirementEvidence.gateRevision,
@@ -934,7 +935,7 @@ func (repository *TaskRepository) claimNextTask(
 			assignmentValue = updatedAssignmentValue
 			mutations[2].Value, mutations[3].Value, mutations[4].Value = assignmentValue, assignmentValue, assignmentValue
 			conditions = append(conditions, authorityConditions...)
-			conditions = append(conditions, Condition{Key: releaseRecoveryKey(task.ID)})
+			conditions = append(conditions, etcdstore.Condition{Key: releaseRecoveryKey(task.ID)})
 		}
 		attachChange, err := repository.prepareAttachTaskClaim(ctx, task, candidate.readRevision)
 		if err != nil {
@@ -989,8 +990,8 @@ func (repository *TaskRepository) claimNextTask(
 const taskClaimQueuePageSize = 64
 
 type taskClaimCandidate struct {
-	queued        KeyValue
-	taskValue     *KeyValue
+	queued        etcdstore.KeyValue
+	taskValue     *etcdstore.KeyValue
 	task          TaskRecord
 	readRevision  int64
 	writerKey     string
@@ -1005,7 +1006,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 	start := ""
 	var revision int64
 	for {
-		page, err := repository.store.Range(ctx, RangeRequest{
+		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: prefix, StartExclusive: start, Limit: taskClaimQueuePageSize, Revision: revision,
 		})
 		if err != nil {
@@ -1029,7 +1030,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 					"task queue record does not match its key",
 				)
 			}
-			taskRead, err := repository.store.GetMany(ctx, GetManyRequest{
+			taskRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 				Keys: []string{taskKey(taskID)}, Revision: revision,
 			})
 			if err != nil {
@@ -1054,7 +1055,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 			writerKey := ""
 			if materializes {
 				writerKey = taskMaterializationWriterKey(environmentID)
-				writerRead, err := repository.store.GetMany(ctx, GetManyRequest{
+				writerRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 					Keys: []string{writerKey}, Revision: revision,
 				})
 				if err != nil {
@@ -1107,7 +1108,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 	if validateStableID(ids.KindAgent, agentID) != nil || agentGeneration == 0 || maximum <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "agent assignment query is invalid")
 	}
-	assignments, err := repository.store.Range(ctx, RangeRequest{
+	assignments, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: taskAssignmentScopePrefix(agentID),
 		Limit:  int64(maximum) + 1,
 	})
@@ -1154,7 +1155,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 			taskRecoveryProofRequiredKey(taskID),
 		)
 	}
-	companions, err := repository.store.GetMany(ctx, GetManyRequest{
+	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: companionKeys, Revision: assignments.ReadRevision,
 	})
 	if err != nil {
@@ -1204,7 +1205,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 		}
 		if materializes {
 			writerKeys := []string{taskMaterializationWriterKey(environmentID)}
-			writerRead, err := repository.store.GetMany(ctx, GetManyRequest{
+			writerRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 				Keys: writerKeys, Revision: assignments.ReadRevision,
 			})
 			if err != nil {
@@ -1265,7 +1266,7 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 	if err := validateContext(ctx); err != nil {
 		return nil, err
 	}
-	claims, err := repository.store.Range(ctx, RangeRequest{
+	claims, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: controllerTaskClaimPrefix,
 		Limit:  2,
 	})
@@ -1287,7 +1288,7 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 		claim.ClaimedTaskRevision >= claimValue.ModRevision {
 		return nil, errs.New(errs.KindInternal, "controller Task claim does not match its key")
 	}
-	companions, err := repository.store.GetMany(ctx, GetManyRequest{
+	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			taskKey(claim.TaskID),
 			taskAssignmentIndexKey(claim.TaskID),
@@ -1511,7 +1512,7 @@ func (repository *TaskRepository) acknowledgeTask(
 	for {
 		terminalStatus = submittedTerminalStatus
 		result = cloneTaskResult(submittedResult)
-		primaryAndAssignment, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+		primaryAndAssignment, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 			taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
 		}})
 		if err != nil {
@@ -1681,7 +1682,7 @@ func (repository *TaskRepository) acknowledgeTask(
 						return Versioned[TaskRecord]{}, err
 					}
 				} else if task.Params[TaskReleasePublicationParam] != "" {
-					headRead, err := repository.store.GetMany(ctx, GetManyRequest{
+					headRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 						Keys: []string{
 							releaseOperationKey(task.OperationID),
 						},
@@ -1888,7 +1889,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			writerKey = taskMaterializationWriterKey(materializationEnvironmentID)
 			companionKeys = append(companionKeys, writerKey)
 		}
-		companions, err := repository.store.GetMany(ctx, GetManyRequest{
+		companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys:     companionKeys,
 			Revision: primaryAndAssignment.ReadRevision,
 		})
@@ -1946,7 +1947,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clear(retentionValue)
 			return Versioned[TaskRecord]{}, err
 		}
-		conditions := []Condition{
+		conditions := []etcdstore.Condition{
 			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 			{Key: claimKey, ModRevision: assignmentValue.ModRevision},
 			{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
@@ -1958,25 +1959,25 @@ func (repository *TaskRepository) acknowledgeTask(
 			{Key: lifecycleKey, ModRevision: companions.Values[4].ModRevision},
 		}
 		conditions = append(conditions, timeoutEvidenceConditions...)
-		mutations := []Mutation{
-			{Type: MutationPut, Key: taskKey(task.ID), Value: terminalValue},
-			{Type: MutationDelete, Key: claimKey},
-			{Type: MutationDelete, Key: taskAssignmentIndexKey(task.ID)},
-			{Type: MutationDelete, Key: taskActiveOperationKey(task.OperationID)},
-			{Type: MutationPut, Key: markerKey, Value: markerValue},
-			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
-			{Type: MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
-			{Type: MutationDelete, Key: lifecycleKey},
+		mutations := []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: terminalValue},
+			{Type: etcdstore.MutationDelete, Key: claimKey},
+			{Type: etcdstore.MutationDelete, Key: taskAssignmentIndexKey(task.ID)},
+			{Type: etcdstore.MutationDelete, Key: taskActiveOperationKey(task.OperationID)},
+			{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
+			{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
+			{Type: etcdstore.MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
+			{Type: etcdstore.MutationDelete, Key: lifecycleKey},
 		}
 		if recoveryAcknowledgement.final {
 			conditions = append(conditions, recoveryAcknowledgement.conditions...)
-			mutations = append(mutations, Mutation{Type: MutationDelete, Key: releaseRecoveryKey(task.ID)})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseRecoveryKey(task.ID)})
 		}
 		conditions = append(conditions, terminalScriptSourceRelease.conditions...)
 		mutations = append(mutations, terminalScriptSourceRelease.mutations...)
 		if materializes {
-			conditions = append(conditions, Condition{Key: writerKey, ModRevision: companions.Values[5].ModRevision})
-			mutations = append(mutations, Mutation{Type: MutationDelete, Key: writerKey})
+			conditions = append(conditions, etcdstore.Condition{Key: writerKey, ModRevision: companions.Values[5].ModRevision})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: writerKey})
 		}
 		blueprintCandidateChange := blueprintCandidateTerminalChange{}
 		if result != nil {
@@ -2453,8 +2454,8 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		var conditions []Condition
-		var mutations []Mutation
+		var conditions []etcdstore.Condition
+		var mutations []etcdstore.Mutation
 		var terminal TaskRecord
 		switch current.Task.Record.Type {
 		case TaskBackup:
@@ -2576,7 +2577,7 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 	assignmentID string,
 ) (TaskAssignment, bool, error) {
 	claimKey := taskAssignmentKey(agentID, taskID)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
 	}})
 	if err != nil {
@@ -2661,7 +2662,7 @@ func (repository *TaskRepository) loadBackupPruneTerminalAuthority(
 	for index, pointID := range dispatchRecord.RecoveryPointIDs {
 		keys[index] = backupRecoveryPointPruneKey(pointID)
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, err
 	}
@@ -2859,7 +2860,7 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 	if err := validateTimestamp("task timeout collector", now); err != nil {
 		return 0, err
 	}
-	page, err := repository.store.Range(ctx, RangeRequest{Prefix: taskTimeoutIndexPrefix, Limit: 24})
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskTimeoutIndexPrefix, Limit: 24})
 	if err != nil {
 		return 0, err
 	}
@@ -3086,7 +3087,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		companions, err := repository.store.GetMany(ctx, GetManyRequest{
+		companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
 				taskActiveOperationKey(current.Record.OperationID), markerKey,
 				taskQueueKey(current.Record.Executor, taskID), retentionKey,
@@ -3145,7 +3146,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(retentionValue)
 			return Versioned[TaskRecord]{}, err
 		}
-		conditions := []Condition{
+		conditions := []etcdstore.Condition{
 			{Key: taskKey(taskID), ModRevision: current.Revision},
 			{Key: taskActiveOperationKey(current.Record.OperationID), ModRevision: companions.Values[0].ModRevision},
 			{Key: markerKey, ModRevision: companions.Values[1].ModRevision},
@@ -3153,13 +3154,13 @@ func (repository *TaskRepository) AbortPendingTask(
 			{Key: retentionKey},
 			{Key: taskRetentionKey},
 		}
-		mutations := []Mutation{
-			{Type: MutationPut, Key: taskKey(taskID), Value: terminalValue},
-			{Type: MutationDelete, Key: taskActiveOperationKey(current.Record.OperationID)},
-			{Type: MutationDelete, Key: taskQueueKey(current.Record.Executor, taskID)},
-			{Type: MutationPut, Key: markerKey, Value: markerValue},
-			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
-			{Type: MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
+		mutations := []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: taskKey(taskID), Value: terminalValue},
+			{Type: etcdstore.MutationDelete, Key: taskActiveOperationKey(current.Record.OperationID)},
+			{Type: etcdstore.MutationDelete, Key: taskQueueKey(current.Record.Executor, taskID)},
+			{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
+			{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
+			{Type: etcdstore.MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
 		}
 		var environmentValue []byte
 		if environmentCreation {
@@ -3197,7 +3198,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			conditions = append(conditions, environmentConditions...)
 			mutations = append(mutations, environmentMutations...)
 		}
-		var zoneMutations []Mutation
+		var zoneMutations []etcdstore.Mutation
 		if zoneRemoval {
 			zoneConditions, preparedZoneMutations, prepareErr := repository.prepareZoneRemovalAcknowledgement(
 				ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
@@ -3597,8 +3598,8 @@ func (repository *TaskRepository) abortPendingBackupTask(
 		if err != nil {
 			return Versioned[TaskRecord]{}, err
 		}
-		var conditions []Condition
-		var mutations []Mutation
+		var conditions []etcdstore.Condition
+		var mutations []etcdstore.Mutation
 		var terminal TaskRecord
 		switch current.Record.Type {
 		case TaskBackup:
@@ -3738,7 +3739,7 @@ func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 		taskActiveOperationKey(task.OperationID), markerKey,
 		taskQueueKey(task.Executor, task.ID), retentionKey, taskRetentionKey,
 	}
-	companions, err := repository.store.GetMany(ctx, GetManyRequest{
+	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: keys, Revision: current.ReadRevision,
 	})
 	if err != nil {
@@ -3785,20 +3786,20 @@ func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 		clear(markerValue)
 		return backupTaskTerminalPlan{}, errs.Wrap(errs.KindInternal, err)
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID), ModRevision: current.Revision},
 		{Key: keys[0], ModRevision: companions.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: companions.Values[1].ModRevision},
 		{Key: keys[2], ModRevision: companions.Values[2].ModRevision},
 		{Key: keys[3]}, {Key: keys[4]},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: terminalValue},
-		{Type: MutationDelete, Key: keys[0]},
-		{Type: MutationPut, Key: keys[1], Value: markerValue},
-		{Type: MutationDelete, Key: keys[2]},
-		{Type: MutationPut, Key: keys[3], Value: retentionValue},
-		{Type: MutationPut, Key: keys[4], Value: append([]byte(nil), taskRetentionValue...)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: terminalValue},
+		{Type: etcdstore.MutationDelete, Key: keys[0]},
+		{Type: etcdstore.MutationPut, Key: keys[1], Value: markerValue},
+		{Type: etcdstore.MutationDelete, Key: keys[2]},
+		{Type: etcdstore.MutationPut, Key: keys[3], Value: retentionValue},
+		{Type: etcdstore.MutationPut, Key: keys[4], Value: append([]byte(nil), taskRetentionValue...)},
 	}
 	return backupTaskTerminalPlan{conditions: conditions, mutations: mutations, record: terminal}, nil
 }
@@ -3807,8 +3808,8 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 	ctx context.Context,
 	task TaskRecord,
 	readRevision int64,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	materializationChange bool,
 	attachChange bool,
 	entryChange bool,

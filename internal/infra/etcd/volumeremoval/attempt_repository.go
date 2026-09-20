@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
@@ -33,7 +34,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) ReplayRootResponse(
 	if err != nil {
 		return "", false, removalrecord.Corrupt()
 	}
-	read, err := repository.store.GetMany(ctx, etcd.GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{markerKey}, Revision: state.Runtime.ReadRevision,
 	})
 	if err != nil {
@@ -60,7 +61,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignmentFence
 	revision int64,
 	runtime removalrecord.Runtime,
 	attempt removalrecord.Attempt,
-) ([]etcd.Condition, error) {
+) ([]etcdstore.Condition, error) {
 	_, conditions, err := repository.loadAssignedTask(ctx, input, revision, runtime, attempt)
 	return conditions, err
 }
@@ -71,7 +72,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 	revision int64,
 	runtime removalrecord.Runtime,
 	attempt removalrecord.Attempt,
-) (etcd.TaskRecord, []etcd.Condition, error) {
+) (etcd.TaskRecord, []etcdstore.Condition, error) {
 	if input.OperationID != runtime.OperationID || input.TaskID != runtime.CurrentTaskID ||
 		ids.Validate(ids.KindAssignment, input.AssignmentID) != nil ||
 		ids.Validate(ids.KindAgent, input.AgentID) != nil || input.AgentGeneration == 0 || revision <= 0 {
@@ -80,7 +81,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 			"Environment Volume removal assignment is invalid",
 		)
 	}
-	primary, err := repository.store.GetMany(ctx, etcd.GetManyRequest{
+	primary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{etcd.CapabilityTaskKey(input.TaskID), etcd.CapabilityTaskAssignmentIndexKey(input.TaskID)},
 		Revision: revision,
 	})
@@ -113,7 +114,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 		)
 	}
 	claimKey := etcd.CapabilityTaskExecutionClaimKey(etcd.TaskExecutorAgent, input.AgentID, input.TaskID)
-	claim, err := repository.store.GetMany(ctx, etcd.GetManyRequest{
+	claim, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{claimKey, etcd.CapabilityTaskTimeoutIndexKey(input.TaskID, assignment.Deadline)},
 		Revision: revision,
 	})
@@ -136,7 +137,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 	if err != nil {
 		return etcd.TaskRecord{}, nil, err
 	}
-	return task, append(ownerFences, []etcd.Condition{
+	return task, append(ownerFences, []etcdstore.Condition{
 		{Key: etcd.CapabilityTaskKey(input.TaskID), ModRevision: primary.Values[0].ModRevision},
 		{Key: etcd.CapabilityTaskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
 		{Key: claimKey, ModRevision: claim.Values[0].ModRevision},
@@ -151,9 +152,9 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadOwnerFences(
 	ctx context.Context,
 	runtime removalrecord.Runtime,
 	revision int64,
-) ([]etcd.Condition, error) {
+) ([]etcdstore.Condition, error) {
 	keys := []string{removalrecord.OwnerKey(runtime.VolumeID), removalrecord.EnvironmentLockKey(runtime.EnvironmentID)}
-	read, err := repository.store.GetMany(ctx, etcd.GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +162,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadOwnerFences(
 		return nil, errs.New(errs.KindStateConflict, "volume removal ownership evidence is missing")
 	}
 	defer clearKeyValues(read.Values)
-	conditions := make([]etcd.Condition, len(keys))
+	conditions := make([]etcdstore.Condition, len(keys))
 	for index, key := range keys {
 		value := read.Values[index]
 		if value == nil || value.Key != key || value.ModRevision <= 0 {
@@ -172,7 +173,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadOwnerFences(
 			owner.OperationID != runtime.OperationID {
 			return nil, errs.New(errs.KindStateConflict, "volume removal ownership changed")
 		}
-		conditions[index] = etcd.Condition{Key: key, ModRevision: value.ModRevision}
+		conditions[index] = etcdstore.Condition{Key: key, ModRevision: value.ModRevision}
 	}
 	return conditions, nil
 }
@@ -196,8 +197,8 @@ func validateEnvironmentVolumeRemovalRootMarker(
 
 func validateEnvironmentVolumeRemovalTransaction(
 	store store,
-	conditions []etcd.Condition,
-	mutations []etcd.Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	maximumOperations int,
 ) error {
 	operations := len(conditions) + len(mutations)
@@ -214,7 +215,7 @@ func validateEnvironmentVolumeRemovalTransaction(
 		if len(mutation.Key) == 0 || len(mutation.Key) > maximumKeyBytes {
 			return errs.New(errs.KindInternal, "Environment Volume removal transaction key is invalid")
 		}
-		if mutation.Type == etcd.MutationPut {
+		if mutation.Type == etcdstore.MutationPut {
 			valueBytes += len(mutation.Value)
 		}
 	}

@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
@@ -14,13 +15,13 @@ type preparedStoreTransaction struct {
 }
 
 // prepareTransaction validates and encodes the exact physical request without
-// contacting etcd, then applies the Store-wide serialized-request ceiling.
-func (s *store) prepareTransaction(conditions []Condition, mutations []Mutation) (preparedStoreTransaction, error) {
+// contacting etcd, then applies the etcdstore.Store-wide serialized-request ceiling.
+func (s *store) prepareTransaction(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) (preparedStoreTransaction, error) {
 	prepared, err := s.prepareTransactionWithoutLimit(conditions, mutations)
 	if err != nil {
 		return preparedStoreTransaction{}, err
 	}
-	if prepared.requestBytes > maximumTransactionBytes {
+	if prepared.requestBytes > etcdstore.MaximumBytes {
 		return preparedStoreTransaction{}, errs.New(
 			errs.KindValidationFailed,
 			"etcd transaction exceeds the 1 MiB serialized request limit",
@@ -32,8 +33,8 @@ func (s *store) prepareTransaction(conditions []Condition, mutations []Mutation)
 // prepareTransactionWithoutLimit is shared by execution and non-executing
 // measurement so both validate and encode one identical physical request.
 func (s *store) prepareTransactionWithoutLimit(
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 ) (preparedStoreTransaction, error) {
 	comparisons := make([]clientv3.Cmp, 0, len(conditions))
 	failureReads := make([]clientv3.Op, 0, len(conditions))
@@ -75,7 +76,7 @@ func (s *store) prepareTransactionWithoutLimit(
 			return preparedStoreTransaction{}, err
 		}
 		switch mutation.Type {
-		case MutationPut:
+		case etcdstore.MutationPut:
 			if mutation.Prefix {
 				return preparedStoreTransaction{}, errs.New(
 					errs.KindValidationFailed,
@@ -83,7 +84,7 @@ func (s *store) prepareTransactionWithoutLimit(
 				)
 			}
 			operations = append(operations, clientv3.OpPut(key, string(mutation.Value)))
-		case MutationDelete:
+		case etcdstore.MutationDelete:
 			if mutation.Prefix {
 				operations = append(operations, clientv3.OpDelete(key, clientv3.WithPrefix()))
 			} else {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 )
 
@@ -10,8 +11,8 @@ import (
 // bounded and use one MVCC view; no durable deadline or discovery key is moved.
 func (repository *TaskRepository) nextTaskRetentionPruneCandidate(
 	ctx context.Context, now time.Time,
-) (*RangeResult, error) {
-	request := RangeRequest{Prefix: taskRetentionIndexPrefix, Limit: 1}
+) (*etcdstore.RangeResult, error) {
+	request := etcdstore.RangeRequest{Prefix: taskRetentionIndexPrefix, Limit: 1}
 	for {
 		page, err := repository.store.Range(ctx, request)
 		if err != nil {
@@ -48,7 +49,7 @@ func (repository *TaskRepository) nextTaskRetentionPruneCandidate(
 func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 	ctx context.Context, taskID string, deadline time.Time, revision int64,
 ) (bool, error) {
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{taskKey(taskID)}, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{taskKey(taskID)}, Revision: revision})
 	if err != nil {
 		return false, err
 	}
@@ -64,7 +65,7 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 	if task.Type != TaskScript {
 		return false, nil
 	}
-	sources, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	sources, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		scriptSourceRootKey(task.OperationID), scriptExecutionKey(task.Params[ScriptExecutionIDParam]),
 	}, Revision: revision})
 	if err != nil {

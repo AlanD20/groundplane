@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -188,60 +189,60 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	conditions := backingServiceCreationConditions(creation, publication, creationStageKey)
-	mutations := []Mutation{
-		{Type: MutationDelete, Key: creationStageKey},
-		{Type: MutationPut, Key: taskKey(creation.Task.ID), Value: taskValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationDelete, Key: creationStageKey},
+		{Type: etcdstore.MutationPut, Key: taskKey(creation.Task.ID), Value: taskValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   taskOperationIndexKey(creation.Task.OperationID, creation.Task.ID),
 			Value: taskReference,
 		},
-		{Type: MutationPut, Key: taskActiveOperationKey(creation.Task.OperationID), Value: taskReference},
-		{Type: MutationPut, Key: taskQueueKey(creation.Task.Executor, creation.Task.ID), Value: taskReference},
-		{Type: MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
-		{Type: MutationDelete, Key: publication.locatorKey},
-		{Type: MutationPut, Key: environmentBlueprintHeadKey(creation.Environment.ID), Value: taskReference},
-		{Type: MutationPut, Key: projectKey(creation.Project.ID), Value: projectValue},
-		{Type: MutationPut, Key: projectSlugKey(creation.Project), Value: []byte(creation.Project.ID)},
-		{Type: MutationPut, Key: projectOwnerKey(creation.Project), Value: []byte(creation.Project.ID)},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(creation.Task.OperationID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(creation.Task.Executor, creation.Task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
+		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
+		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(creation.Environment.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: projectKey(creation.Project.ID), Value: projectValue},
+		{Type: etcdstore.MutationPut, Key: projectSlugKey(creation.Project), Value: []byte(creation.Project.ID)},
+		{Type: etcdstore.MutationPut, Key: projectOwnerKey(creation.Project), Value: []byte(creation.Project.ID)},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), creation.Project.ID),
 			Value: projectCoordinationValue,
 		},
-		{Type: MutationPut, Key: environmentKey(creation.Environment.ID), Value: environmentValue},
+		{Type: etcdstore.MutationPut, Key: environmentKey(creation.Environment.ID), Value: environmentValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   environmentNameKey(creation.Project.ID, creation.Environment.Name),
 			Value: []byte(creation.Environment.ID),
 		},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   environmentOwnerKey(creation.Project.ID, creation.Environment.ID),
 			Value: []byte(creation.Environment.ID),
 		},
-		{Type: MutationPut, Key: environmentMutationEpochKey(creation.Environment.ID), Value: epochValue},
+		{Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(creation.Environment.ID), Value: epochValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID),
 			Value: environmentCoordinationValue,
 		},
-		{Type: MutationPut, Key: scriptSetActiveKey(creation.Environment.ID), Value: scriptSetValue},
-		{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
-		{Type: MutationPut, Key: zonePoolRegistryKey(creation.Environment.ID), Value: zoneRegistryValue},
-		{Type: MutationPut, Key: serviceRuntimeKey(creation.Service.Desired.ID), Value: serviceValue},
+		{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(creation.Environment.ID), Value: scriptSetValue},
+		{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
+		{Type: etcdstore.MutationPut, Key: zonePoolRegistryKey(creation.Environment.ID), Value: zoneRegistryValue},
+		{Type: etcdstore.MutationPut, Key: serviceRuntimeKey(creation.Service.Desired.ID), Value: serviceValue},
 	}
 	for index, component := range creation.Components {
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationPut, Key: componentKey(component.Desired.ID), Value: componentValues[index]},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentKey(component.Desired.ID), Value: componentValues[index]},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   componentEnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID),
 				Value: []byte(component.Desired.ID),
 			},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   componentEnvironmentKindKey(creation.Environment.ID, component.Desired.Kind),
 				Value: []byte(component.Desired.ID),
 			},
@@ -253,21 +254,21 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	for index, entry := range creation.Entries {
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationPut, Key: entryRecordKey(entry.Entry.ID), Value: entryValues[index]},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: entryRecordKey(entry.Entry.ID), Value: entryValues[index]},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   entryOwnerKey(creation.Environment.ID, entry.Entry.ID),
 				Value: []byte(entry.Entry.ID),
 			},
-			Mutation{Type: MutationPut, Key: entryGenerationKeys[index], Value: entryGenerationValues[index]},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: entryGenerationKeys[index], Value: entryGenerationValues[index]},
 		)
 	}
 	for index, secret := range creation.Secrets {
 		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: secretRecordKey(secret.Secret.ID), Value: secretValues[index]},
-			Mutation{Type: MutationPut, Key: secretOwnerKey(secret.Secret), Value: []byte(secret.Secret.ID)},
-			Mutation{Type: MutationPut, Key: secretScopedKey(secret.Secret), Value: []byte(secret.Secret.ID)},
-			Mutation{Type: MutationPut, Key: secretValueKey(secret.Secret.ID), Value: secretEncryptedValues[index]},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretRecordKey(secret.Secret.ID), Value: secretValues[index]},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretOwnerKey(secret.Secret), Value: []byte(secret.Secret.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretScopedKey(secret.Secret), Value: []byte(secret.Secret.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretValueKey(secret.Secret.ID), Value: secretEncryptedValues[index]},
 		)
 	}
 	classifier := classifyBackingServiceCreation(creation, publication, len(conditions))
@@ -295,8 +296,8 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 }
 
 func validateBackingServicePublicationBudget(
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 ) error {
 	return validateBackingServicePublicationOperationCounts(
 		len(conditions),
@@ -312,7 +313,7 @@ func validateBackingServicePublicationOperationCounts(
 ) error {
 	selectedOperations := comparisons + successMutations
 	requestOperations := selectedOperations + failureReads
-	if selectedOperations > maximumTransactionOperations ||
+	if selectedOperations > etcdstore.MaximumOperations ||
 		requestOperations > maximumBackingServiceTransactionRequestOperations {
 		return errs.Newf(
 			errs.KindValidationFailed,
@@ -321,7 +322,7 @@ func validateBackingServicePublicationOperationCounts(
 			successMutations,
 			failureReads,
 			selectedOperations,
-			maximumTransactionOperations,
+			etcdstore.MaximumOperations,
 			requestOperations,
 			maximumBackingServiceTransactionRequestOperations,
 		)
@@ -477,8 +478,8 @@ func backingServiceCreationConditions(
 	creation BackingServiceCreation,
 	publication environmentBlueprintPublicationEvidence,
 	creationStageKey string,
-) []Condition {
-	conditions := []Condition{
+) []etcdstore.Condition {
+	conditions := []etcdstore.Condition{
 		{Key: creationStageKey, ModRevision: creation.Stage.Revision},
 		{Key: taskKey(creation.Task.ID)},
 		{Key: taskOperationIndexKey(creation.Task.OperationID, creation.Task.ID)},
@@ -511,9 +512,9 @@ func backingServiceCreationConditions(
 	}
 	for _, component := range creation.Components {
 		conditions = append(conditions,
-			Condition{Key: componentKey(component.Desired.ID)},
-			Condition{Key: componentEnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID)},
-			Condition{Key: componentEnvironmentKindKey(creation.Environment.ID, component.Desired.Kind)},
+			etcdstore.Condition{Key: componentKey(component.Desired.ID)},
+			etcdstore.Condition{Key: componentEnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID)},
+			etcdstore.Condition{Key: componentEnvironmentKindKey(creation.Environment.ID, component.Desired.Kind)},
 		)
 	}
 	for index, entry := range creation.Entries {
@@ -522,18 +523,18 @@ func backingServiceCreationConditions(
 			generationKey = plainEntryValueGenerationKey(entry.Entry.ID, entry.CurrentValueGenerationID)
 		}
 		conditions = append(conditions,
-			Condition{Key: entryRecordKey(entry.Entry.ID)},
-			Condition{Key: entryOwnerKey(creation.Environment.ID, entry.Entry.ID)},
-			Condition{Key: generationKey},
+			etcdstore.Condition{Key: entryRecordKey(entry.Entry.ID)},
+			etcdstore.Condition{Key: entryOwnerKey(creation.Environment.ID, entry.Entry.ID)},
+			etcdstore.Condition{Key: generationKey},
 		)
 	}
 	for _, secret := range creation.Secrets {
 		conditions = append(conditions,
-			Condition{Key: secretRecordKey(secret.Secret.ID)},
-			Condition{Key: secretOwnerKey(secret.Secret)},
-			Condition{Key: secretScopedKey(secret.Secret)},
-			Condition{Key: secretValueKey(secret.Secret.ID)},
-			Condition{Key: deletionTombstoneKey("secret", secret.Secret.ID)},
+			etcdstore.Condition{Key: secretRecordKey(secret.Secret.ID)},
+			etcdstore.Condition{Key: secretOwnerKey(secret.Secret)},
+			etcdstore.Condition{Key: secretScopedKey(secret.Secret)},
+			etcdstore.Condition{Key: secretValueKey(secret.Secret.ID)},
+			etcdstore.Condition{Key: deletionTombstoneKey("secret", secret.Secret.ID)},
 		)
 	}
 	return conditions
@@ -572,7 +573,7 @@ func classifyBackingServiceCreation(
 		serviceTombstoneCondition
 		componentConditionStart
 	)
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != want {
 			return errs.New(errs.KindInternal, "Backing-service creation compare evidence is incomplete")
 		}

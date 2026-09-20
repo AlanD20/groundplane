@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"time"
 
@@ -10,10 +11,10 @@ import (
 )
 
 type ReleaseCheckpointAuthority struct {
-	store Store
+	store etcdstore.Store
 }
 
-func NewReleaseCheckpointAuthority(store Store) (*ReleaseCheckpointAuthority, error) {
+func NewReleaseCheckpointAuthority(store etcdstore.Store) (*ReleaseCheckpointAuthority, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "release checkpoint store is not configured")
 	}
@@ -38,8 +39,8 @@ type ReleaseCheckpointResult struct {
 }
 
 type releaseCheckpointTransaction struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	checkpoint domain.Checkpoint
 	projection domain.ServiceProjection
 	head       ReleaseOperationHead
@@ -95,7 +96,7 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 		releaseCheckpointStagingKey(input.PublicationID, input.ReleaseID), releaseFenceSetKey(input.EnvironmentID),
 		environmentMutationEpochKey(input.EnvironmentID),
 	}
-	loaded, err := authority.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	loaded, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return releaseCheckpointTransaction{}, err
 	}
@@ -204,7 +205,7 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 		clear(checkpointValue)
 		return releaseCheckpointTransaction{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: keys[0], ModRevision: loaded.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: loaded.Values[1].ModRevision},
 		{Key: keys[2], ModRevision: loaded.Values[2].ModRevision},
@@ -212,11 +213,11 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 		{Key: keys[4], ModRevision: loaded.Values[4].ModRevision},
 		{Key: releaseProjectionKey(member.ServiceID), ModRevision: projectionRevision},
 	}
-	mutations := []Mutation{{Type: MutationPut, Key: keys[2], Value: checkpointValue}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: keys[2], Value: checkpointValue}}
 	if input.NextState == domain.StateServing {
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationPut, Key: releaseProjectionKey(member.ServiceID), Value: projectionValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: releaseProjectionKey(member.ServiceID), Value: projectionValue},
 		)
 	} else {
 		clear(projectionValue)
@@ -243,7 +244,7 @@ func (authority *ReleaseCheckpointAuthority) loadProjectionAt(
 ) (domain.ServiceProjection, int64, error) {
 	result, err := authority.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{releaseProjectionKey(serviceID)}, Revision: revision},
 	)
 	if err != nil {
 		return domain.ServiceProjection{}, 0, err

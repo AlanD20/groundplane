@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -74,28 +75,28 @@ func (repository *HierarchyDeletionRepository) AppendActions(
 			return HierarchyDeletionOperation{}, err
 		}
 		defer clear(tombstoneValue)
-		conditions := make([]Condition, 0, len(actions)+1)
-		conditions = append(conditions, Condition{
+		conditions := make([]etcdstore.Condition, 0, len(actions)+1)
+		conditions = append(conditions, etcdstore.Condition{
 			Key: HierarchyDeletionTombstoneKey(
 				string(current.Tombstone.TargetKind),
 				current.Tombstone.TargetID,
 			),
 			ModRevision: current.TombstoneRevision,
 		})
-		mutations := make([]Mutation, 0, len(actions)+1)
+		mutations := make([]etcdstore.Mutation, 0, len(actions)+1)
 		for index, key := range keys {
-			conditions = append(conditions, Condition{Key: key})
-			mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: encoded[index]})
+			conditions = append(conditions, etcdstore.Condition{Key: key})
+			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded[index]})
 		}
-		mutations = append(mutations, Mutation{
-			Type:  MutationPut,
+		mutations = append(mutations, etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
 			Key:   HierarchyDeletionTombstoneKey(string(current.Tombstone.TargetKind), current.Tombstone.TargetID),
 			Value: tombstoneValue,
 		})
 		if err := validateHierarchyDeletionTransaction(
 			conditions,
 			mutations,
-			maximumTransactionOperations,
+			etcdstore.MaximumOperations,
 		); err != nil {
 			return HierarchyDeletionOperation{}, err
 		}
@@ -129,7 +130,7 @@ func (repository *HierarchyDeletionRepository) verifyActionBatch(
 	if len(keys) == 0 {
 		return nil
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: keys, Revision: operation.TombstoneRevision,
 	})
 	if err != nil {
@@ -171,7 +172,7 @@ func (repository *HierarchyDeletionRepository) sealPlan(
 			clearByteSlices(values)
 			return HierarchyDeletionOperation{}, keyErr
 		}
-		stored, getErr := repository.store.GetMany(ctx, GetManyRequest{
+		stored, getErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{key}, Revision: current.TombstoneRevision,
 		})
 		if getErr != nil {
@@ -216,11 +217,11 @@ func (repository *HierarchyDeletionRepository) sealPlan(
 	fenceKey, _ := HierarchyDeletionCleanupFenceKey(current.Tombstone.OperationID)
 	transaction, err := repository.store.Transact(
 		ctx,
-		[]Condition{{Key: tombstoneKey, ModRevision: current.TombstoneRevision}, {
+		[]etcdstore.Condition{{Key: tombstoneKey, ModRevision: current.TombstoneRevision}, {
 			Key: fenceKey, ModRevision: current.FenceRevision,
 		}},
-		[]Mutation{{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue}, {
-			Type: MutationPut, Key: fenceKey, Value: fenceValue,
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue}, {
+			Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue,
 		}},
 	)
 	if err != nil {

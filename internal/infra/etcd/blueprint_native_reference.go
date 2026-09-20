@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -149,7 +150,7 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 	marker ReleasePublicationMarker,
 	manifest ReleaseStagedManifest,
 	revision int64,
-) ([]BlueprintNativePredecessor, []Condition, error) {
+) ([]BlueprintNativePredecessor, []etcdstore.Condition, error) {
 	if len(marker.NativePredecessors) == 0 {
 		return nil, nil, nil
 	}
@@ -158,7 +159,7 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 		keys = append(keys, releaseIntentStagingKey(manifest.PublicationID, member.ReleaseID),
 			releaseRenderInputStagingKey(manifest.PublicationID, member.ReleaseID))
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -167,7 +168,7 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 	}
 	defer clearKeyValues(read.Values)
 	members := make([]ReleaseTaskRenderMember, len(manifest.Members))
-	conditions := make([]Condition, len(keys))
+	conditions := make([]etcdstore.Condition, len(keys))
 	for index, reference := range manifest.Members {
 		intentValue, renderValue := read.Values[index*2], read.Values[index*2+1]
 		if intentValue == nil || renderValue == nil {
@@ -189,8 +190,8 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 			return nil, nil, corruptReleaseRecord()
 		}
 		members[index] = ReleaseTaskRenderMember{Intent: intent, Render: render}
-		conditions[index*2] = Condition{Key: keys[index*2], ModRevision: intentValue.ModRevision}
-		conditions[index*2+1] = Condition{Key: keys[index*2+1], ModRevision: renderValue.ModRevision}
+		conditions[index*2] = etcdstore.Condition{Key: keys[index*2], ModRevision: intentValue.ModRevision}
+		conditions[index*2+1] = etcdstore.Condition{Key: keys[index*2+1], ModRevision: renderValue.ModRevision}
 	}
 	native, err := resolveBlueprintNativePredecessors(marker.NativePredecessors, members)
 	return native, conditions, err

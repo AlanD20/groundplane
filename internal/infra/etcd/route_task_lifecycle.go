@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"maps"
 	"time"
 
@@ -10,8 +11,8 @@ import (
 
 type routeTaskChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -25,7 +26,7 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	if err != nil || mutation.applies {
 		return mutation, err
 	}
-	intentRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{routeRemovalIntentKey(source.ID)}, Revision: revision,
 	})
 	if err != nil {
@@ -88,14 +89,14 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	}
 	change := routeTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: routeRemovalIntentKey(source.ID), ModRevision: intentValue.ModRevision},
 			{Key: routeRemovalIntentKey(retry.ID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID)},
 		},
 	}
 	for index, key := range keys {
-		condition := Condition{Key: key}
+		condition := etcdstore.Condition{Key: key}
 		if parents.Values[index] != nil {
 			condition.ModRevision = parents.Values[index].ModRevision
 		}
@@ -117,15 +118,15 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	}
 	change.values = append(change.values, tombstoneValue, intentBytes)
 	change.mutations = append(change.mutations,
-		Mutation{
-			Type: MutationPut, Key: deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID),
+		etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID),
 			Value: tombstoneValue,
 		},
-		Mutation{Type: MutationPut, Key: routeRemovalIntentKey(retry.ID), Value: intentBytes},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: routeRemovalIntentKey(retry.ID), Value: intentBytes},
 	)
 	if intent.CurrentProjection != nil {
-		change.mutations = append(change.mutations, Mutation{
-			Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
+		change.mutations = append(change.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
 		})
 	}
 	return change, nil
@@ -137,7 +138,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	retry TaskRecord,
 	revision int64,
 ) (routeTaskChange, error) {
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{routeMutationIntentKey(source.ID)}, Revision: revision,
 	})
 	if err != nil {
@@ -164,7 +165,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry changed its pinned Task")
 	}
 	stateKeys := []string{componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -185,7 +186,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: routeMutationIntentKey(source.ID), ModRevision: read.Values[0].ModRevision},
 		{Key: routeMutationIntentKey(retry.ID)},
 		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
@@ -193,9 +194,9 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	return routeTaskChange{
 		applies:    true,
 		conditions: conditions,
-		mutations: []Mutation{
-			{Type: MutationPut, Key: routeMutationIntentKey(retry.ID), Value: encoded},
-			{Type: MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID)},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: routeMutationIntentKey(retry.ID), Value: encoded},
+			{Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID)},
 		},
 		values: [][]byte{encoded},
 	}, nil
@@ -206,7 +207,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 	route RouteRecord,
 	intent RouteRemovalIntent,
 	revision int64,
-) (*GetManyResult, []string, error) {
+) (*etcdstore.GetManyResult, []string, error) {
 	service, err := findServiceAtRevision(ctx, repository.store, route.Desired.TargetServiceID, revision)
 	if err != nil || service.Record.EnvironmentID != route.EnvironmentID {
 		return nil, nil, errs.New(errs.KindResourceInUse, "Route retry target Service is unavailable")
@@ -217,7 +218,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		deletionTombstoneKey(string(DeletionTargetEnvironment), route.EnvironmentID),
 		deletionTombstoneKey("service", route.Desired.TargetServiceID),
 	}
-	base, err := repository.store.GetMany(ctx, GetManyRequest{Keys: baseKeys, Revision: revision})
+	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: revision})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -236,7 +237,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		projectKey(environment.ProjectID),
 		deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
 	}
-	projectRead, err := repository.store.GetMany(ctx, GetManyRequest{Keys: extraKeys, Revision: revision})
+	projectRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: extraKeys, Revision: revision})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -254,7 +255,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		tenantKey := deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID)
 		tenantRead, readErr := repository.store.GetMany(
 			ctx,
-			GetManyRequest{Keys: []string{tenantKey}, Revision: revision},
+			etcdstore.GetManyRequest{Keys: []string{tenantKey}, Revision: revision},
 		)
 		if readErr != nil {
 			return nil, nil, readErr
@@ -267,7 +268,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 	}
 	if intent.CurrentProjection != nil {
 		activeKey := componentTaskActiveEnvironmentKey(intent.EnvironmentID)
-		activeRead, readErr := repository.store.GetMany(ctx, GetManyRequest{
+		activeRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{activeKey}, Revision: revision,
 		})
 		if readErr != nil {
@@ -279,7 +280,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		keys = append(keys, activeKey)
 		values = append(values, activeRead.Values[0])
 	}
-	return &GetManyResult{Values: values, ReadRevision: revision}, keys, nil
+	return &etcdstore.GetManyResult{Values: values, ReadRevision: revision}, keys, nil
 }
 
 func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
@@ -293,7 +294,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 	if err != nil || mutation.applies {
 		return mutation, err
 	}
-	intentRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{routeRemovalIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
@@ -322,7 +323,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		environmentBlueprintHeadKey(intent.EnvironmentID),
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -362,7 +363,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 	}
 	change := routeTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: routeRemovalIntentKey(task.ID), ModRevision: intentValue.ModRevision},
 			{
 				Key:         deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID),
@@ -371,18 +372,18 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
 			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
 		},
-		mutations: []Mutation{
-			{Type: MutationPut, Key: routeRemovalIntentKey(task.ID), Value: intentBytes},
-			{Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID)},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: routeRemovalIntentKey(task.ID), Value: intentBytes},
+			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID)},
 		},
 		values: [][]byte{intentBytes},
 	}
 	change.mutations = append(
 		change.mutations,
-		Mutation{Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 	)
 	if terminalStatus == TaskStatusCompleted {
-		change.mutations[0] = Mutation{Type: MutationDelete, Key: routeRemovalIntentKey(task.ID)}
+		change.mutations[0] = etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routeRemovalIntentKey(task.ID)}
 		promotion, promotionErr := prepareRouteHeadPromotion(ctx, repository.store, intent, revision)
 		if promotionErr != nil {
 			clearRouteTaskChange(change)
@@ -391,7 +392,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		change.conditions = append(change.conditions, promotion.conditions...)
 		change.mutations = append(change.mutations, promotion.mutations...)
 		change.values = append(change.values, promotion.values...)
-		observation, readErr := repository.store.GetMany(ctx, GetManyRequest{
+		observation, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{routeObservationKey(intent.RouteID)}, Revision: revision,
 		})
 		if readErr != nil {
@@ -409,15 +410,15 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 			}
 			change.conditions = append(
 				change.conditions,
-				Condition{Key: routeObservationKey(intent.RouteID), ModRevision: observation.Values[0].ModRevision},
+				etcdstore.Condition{Key: routeObservationKey(intent.RouteID), ModRevision: observation.Values[0].ModRevision},
 			)
 			change.mutations = append(
 				change.mutations,
-				Mutation{Type: MutationDelete, Key: routeObservationKey(intent.RouteID)},
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routeObservationKey(intent.RouteID)},
 			)
 			clear(observation.Values[0].Value)
 		} else {
-			change.conditions = append(change.conditions, Condition{Key: routeObservationKey(intent.RouteID)})
+			change.conditions = append(change.conditions, etcdstore.Condition{Key: routeObservationKey(intent.RouteID)})
 		}
 	}
 	return change, nil
@@ -430,7 +431,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	terminalAt time.Time,
 	revision int64,
 ) (routeTaskChange, error) {
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{routeMutationIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
@@ -456,7 +457,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		routeObservationKey(intent.RouteID),
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -519,7 +520,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 		clear(routeValue)
 		return routeTaskChange{}, err
 	}
-	observationCondition := Condition{Key: routeObservationKey(intent.RouteID)}
+	observationCondition := etcdstore.Condition{Key: routeObservationKey(intent.RouteID)}
 	if state.Values[1] != nil {
 		prior, decodeErr := decodeRouteObservation(state.Values[1].Value)
 		if decodeErr != nil || prior.EnvironmentID != intent.EnvironmentID || prior.RouteID != intent.RouteID {
@@ -531,15 +532,15 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	}
 	change := routeTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: routeMutationIntentKey(task.ID), ModRevision: read.Values[0].ModRevision},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[0].ModRevision},
 			observationCondition,
 		},
-		mutations: []Mutation{
-			{Type: MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
-			{Type: MutationPut, Key: routeObservationKey(intent.RouteID), Value: routeValue},
-			{Type: MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
+			{Type: etcdstore.MutationPut, Key: routeObservationKey(intent.RouteID), Value: routeValue},
+			{Type: etcdstore.MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 		},
 		values: [][]byte{routeValue, intentValue},
 	}
@@ -556,7 +557,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 	if err != nil || matched {
 		return err
 	}
-	intentRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{routeRemovalIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
@@ -582,7 +583,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 		!intent.TerminalAt.Equal(*task.FinishedAt) {
 		return errs.New(errs.KindStateConflict, "Route removal intent does not match terminal Task")
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			deletionTombstoneKey(string(DeletionTargetRoute), intent.RouteID),
 			componentTaskActiveEnvironmentKey(intent.EnvironmentID),
@@ -622,7 +623,7 @@ func (repository *TaskRepository) validateRouteMutationTaskAcknowledgementReplay
 	terminalStatus TaskStatus,
 	revision int64,
 ) (bool, error) {
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{routeMutationIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
@@ -640,7 +641,7 @@ func (repository *TaskRepository) validateRouteMutationTaskAcknowledgementReplay
 		return true, errs.New(errs.KindStateConflict, "Route mutation replay evidence changed")
 	}
 	stateKeys := []string{componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
 		return true, err
 	}

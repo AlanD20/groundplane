@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -34,7 +35,7 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 	manifest ReleaseStagedManifest,
 	procedure *agentpb.CandidateReleaseProcedure,
 	revision int64,
-) ([]ReleaseNativePredecessorAuthority, []Condition, error) {
+) ([]ReleaseNativePredecessorAuthority, []etcdstore.Condition, error) {
 	keys := make([]string, 0, len(manifest.Members)*2)
 	selected := make(map[string]bool, len(procedure.GetMembers()))
 	for _, member := range procedure.GetMembers() {
@@ -47,10 +48,10 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 		keys = append(keys, releaseIntentStagingKey(manifest.PublicationID, member.ReleaseID),
 			releaseRenderInputStagingKey(manifest.PublicationID, member.ReleaseID))
 	}
-	read := &GetManyResult{ReadRevision: revision}
+	read := &etcdstore.GetManyResult{ReadRevision: revision}
 	var err error
 	if len(keys) != 0 {
-		read, err = repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+		read, err = repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	}
 	if err != nil {
 		return nil, nil, err
@@ -60,7 +61,7 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 	}
 	defer clearKeyValues(read.Values)
 	witnesses := make([]ReleaseNativePredecessorAuthority, 0, len(manifest.Members))
-	conditions := make([]Condition, 0, len(keys))
+	conditions := make([]etcdstore.Condition, 0, len(keys))
 	index := 0
 	for _, member := range manifest.Members {
 		if !selected[member.ServiceID] {
@@ -100,8 +101,8 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 			}
 		}
 		witnesses = append(witnesses, witness)
-		conditions = append(conditions, Condition{Key: keys[2*index], ModRevision: intentValue.ModRevision},
-			Condition{Key: keys[2*index+1], ModRevision: renderValue.ModRevision})
+		conditions = append(conditions, etcdstore.Condition{Key: keys[2*index], ModRevision: intentValue.ModRevision},
+			etcdstore.Condition{Key: keys[2*index+1], ModRevision: renderValue.ModRevision})
 		index++
 	}
 	slices.SortFunc(witnesses, func(a, b ReleaseNativePredecessorAuthority) int {

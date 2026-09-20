@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -19,7 +20,7 @@ func (repository *ScriptRepository) manualScriptExecutionAtRevision(
 	ctx context.Context,
 	task TaskRecord,
 	revision int64,
-) (ScriptExecutionRecord, *KeyValue, error) {
+) (ScriptExecutionRecord, *etcdstore.KeyValue, error) {
 	if task.Type != TaskScript || len(task.Steps) != 1 || revision <= 0 {
 		return ScriptExecutionRecord{}, nil, errs.New(errs.KindInternal, "manual Script Task identity is corrupt")
 	}
@@ -43,7 +44,7 @@ func (repository *ScriptRepository) manualScriptExecutionAuthority(
 	task TaskRecord,
 	execution ScriptExecutionRecord,
 	revision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	if task.Type != TaskScript || !taskOwnsScriptExecution(task, execution) ||
 		execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
 		execution.EnvironmentID != task.Owner.EnvironmentID || execution.PlanHash != task.PlanHash || !execution.ActiveReference {
@@ -62,7 +63,7 @@ func (repository *ScriptRepository) manualScriptExecutionAuthority(
 		(root.RetryDisposition != ScriptRetryDispositionUndecided && root.RetryDisposition != ScriptRetryDispositionTransferred) {
 		return nil, errs.New(errs.KindStateConflict, "manual Script source authority is closed to execution")
 	}
-	return []Condition{{Key: key, ModRevision: value.ModRevision}}, nil
+	return []etcdstore.Condition{{Key: key, ModRevision: value.ModRevision}}, nil
 }
 
 func preparedScriptExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, error) {

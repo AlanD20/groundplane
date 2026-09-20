@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -48,7 +49,7 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	projectAuthority, err := repository.store.GetMany(ctx, GetManyRequest{
+	projectAuthority, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{projectKey(current.Record.ProjectID)}, Revision: current.ReadRevision,
 	})
 	if err != nil {
@@ -76,7 +77,7 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	if renaming {
 		secondaryKeys = append(secondaryKeys, environmentNameKey(replacement.ProjectID, replacement.Name))
 	}
-	secondary, err := repository.store.GetMany(ctx, GetManyRequest{
+	secondary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: secondaryKeys, Revision: current.ReadRevision,
 	})
 	if err != nil {
@@ -122,7 +123,7 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: environmentKey(current.Record.ID), ModRevision: current.Revision},
 		{
 			Key:         environmentNameKey(current.Record.ProjectID, current.Record.Name),
@@ -138,14 +139,14 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 		{Key: tenantKey(tenant.ID), ModRevision: secondary.Values[4].ModRevision},
 		{Key: deletionTombstoneKey("tenant", tenant.ID)},
 	}
-	mutations := []Mutation{{Type: MutationPut, Key: environmentKey(current.Record.ID), Value: value}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: environmentKey(current.Record.ID), Value: value}}
 	if renaming {
-		conditions = append(conditions, Condition{Key: environmentNameKey(replacement.ProjectID, replacement.Name)})
+		conditions = append(conditions, etcdstore.Condition{Key: environmentNameKey(replacement.ProjectID, replacement.Name)})
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationDelete, Key: environmentNameKey(current.Record.ProjectID, current.Record.Name)},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentNameKey(current.Record.ProjectID, current.Record.Name)},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   environmentNameKey(replacement.ProjectID, replacement.Name),
 				Value: []byte(current.Record.ID),
 			},
@@ -179,7 +180,7 @@ func classifyEnvironmentMutationConflict(
 	tenantRevision int64,
 	renaming bool,
 ) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		expected := 8
 		if renaming {
 			expected++

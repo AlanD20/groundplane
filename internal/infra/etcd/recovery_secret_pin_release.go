@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpins"
@@ -46,7 +47,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinTerminal(
 	change := taskMaterializationProjectionChange{}
 	if task.Configuration.BackingHookInputs != nil {
 		key := backingHookTaskInputKey(task.OperationID)
-		read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 		if err != nil {
 			return taskMaterializationProjectionChange{}, err
 		}
@@ -73,8 +74,8 @@ func (repository *TaskRepository) prepareRecoverySecretPinTerminal(
 			)
 		}
 		change.applies = true
-		change.conditions = append(change.conditions, Condition{Key: key, ModRevision: read.Values[0].ModRevision})
-		change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: key})
+		change.conditions = append(change.conditions, etcdstore.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
+		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	}
 	if task.Configuration.SecretPins == nil {
 		return change, nil
@@ -126,7 +127,7 @@ func (repository *TaskRepository) beginRecoverySecretPinRelease(
 // Expiry releases only after Retry and recovery ownership are gone. A retry
 // winning the active-operation compare preserves every membership.
 func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
-	ctx context.Context, task TaskRecord, taskRevision int64, retention KeyValue, now time.Time,
+	ctx context.Context, task TaskRecord, taskRevision int64, retention etcdstore.KeyValue, now time.Time,
 ) (bool, error) {
 	if task.Configuration == nil {
 		return false, nil
@@ -156,7 +157,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 		hookInputIndex = len(keys)
 		keys = append(keys, backingHookTaskInputKey(task.OperationID))
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return true, err
 	}
@@ -217,17 +218,17 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	}
 	change := taskMaterializationProjectionChange{conditions: conditions, mutations: mutations}
 	defer clearTaskMaterializationProjectionChange(change)
-	change.conditions = append(change.conditions, Condition{Key: taskKey(task.ID), ModRevision: taskRevision},
-		Condition{Key: retention.Key, ModRevision: retention.ModRevision})
+	change.conditions = append(change.conditions, etcdstore.Condition{Key: taskKey(task.ID), ModRevision: taskRevision},
+		etcdstore.Condition{Key: retention.Key, ModRevision: retention.ModRevision})
 	for index, key := range keys {
 		change.conditions = append(
 			change.conditions,
-			Condition{Key: key, ModRevision: keyValueRevision(read.Values[index])},
+			etcdstore.Condition{Key: key, ModRevision: keyValueRevision(read.Values[index])},
 		)
 	}
 	if hookInputIndex >= 0 {
-		change.mutations = append(change.mutations, Mutation{
-			Type: MutationDelete, Key: backingHookTaskInputKey(task.OperationID),
+		change.mutations = append(change.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete, Key: backingHookTaskInputKey(task.OperationID),
 		})
 	}
 	commit, err := repository.store.Transact(ctx, change.conditions, change.mutations)
@@ -246,7 +247,7 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 	ctx context.Context,
 	task TaskRecord,
 	taskRevision int64,
-	retention KeyValue,
+	retention etcdstore.KeyValue,
 	now time.Time,
 ) (bool, error) {
 	if task.Configuration.BackingHookInputs == nil {
@@ -259,7 +260,7 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 		taskActiveOperationKey(task.OperationID), taskAssignmentIndexKey(task.ID),
 		backingHookTaskInputKey(task.OperationID),
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return true, err
 	}
@@ -282,13 +283,13 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 		stored.CiphertextSHA256 != task.Configuration.BackingHookInputs.CiphertextSHA256 {
 		return true, corruptTaskPruneIntent()
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID), ModRevision: taskRevision},
 		{Key: retention.Key, ModRevision: retention.ModRevision},
 		{Key: keys[0]}, {Key: keys[1]},
 		{Key: keys[2], ModRevision: read.Values[2].ModRevision},
 	}
-	commit, err := repository.store.Transact(ctx, conditions, []Mutation{{Type: MutationDelete, Key: keys[2]}})
+	commit, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: keys[2]}})
 	clearKeyValues(commit.FailureReads)
 	if err != nil {
 		return true, err
@@ -299,10 +300,10 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 	return true, nil
 }
 
-func recoverySecretPinPruneConditions(task TaskRecord) []Condition {
+func recoverySecretPinPruneConditions(task TaskRecord) []etcdstore.Condition {
 	if task.Configuration == nil || task.Configuration.SecretPins == nil {
 		return nil
 	}
-	return []Condition{{Key: tasksecretpins.RootKey(task.OperationID)},
+	return []etcdstore.Condition{{Key: tasksecretpins.RootKey(task.OperationID)},
 		{Key: tasksecretpins.ReversePrefix(task.OperationID), Prefix: true}}
 }

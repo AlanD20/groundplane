@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -128,7 +129,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(retry.ID)},
 		{Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
 		{Key: taskActiveOperationKey(retry.OperationID)},
@@ -158,18 +159,18 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	}
 	if current.Record.Desired.OwnerKind == RunnerOwnerProject {
 		conditions = append(conditions,
-			Condition{Key: projectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
-			Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
+			etcdstore.Condition{Key: projectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
+			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
 		)
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(retry.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
-		{Type: MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: recordValue},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(retry.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: recordValue},
 	}
-	classifier := func(_ int64, values []*KeyValue) error {
+	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "runner creation retry compare evidence is incomplete")
 		}

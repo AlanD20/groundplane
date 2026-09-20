@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 	"time"
 
@@ -11,8 +12,8 @@ import (
 )
 
 type hierarchyDeletionRootAckChange struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -63,7 +64,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	terminalAt time.Time,
 ) (Versioned[TaskRecord], error) {
 	claimKey := taskExecutionClaimKey(TaskExecutorController, "", taskID)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
 	}})
 	if err != nil {
@@ -153,7 +154,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	defer clear(taskRetentionValue)
 	activeKey := taskActiveOperationKey(task.OperationID)
 	timeoutKey := taskTimeoutIndexKey(task.ID, assignment.Deadline)
-	companions, err := repository.store.GetMany(ctx, GetManyRequest{
+	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			activeKey, markerKey, taskQueueKey(task.Executor, task.ID), markerRetentionKey,
 			taskRetentionKey, timeoutKey,
@@ -203,7 +204,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 		return Versioned[TaskRecord]{}, err
 	}
 	defer change.clear()
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 		{Key: claimKey, ModRevision: assignmentValue.ModRevision},
 		{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
@@ -213,15 +214,15 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 		{Key: taskRetentionKey}, {Key: timeoutKey, ModRevision: companions.Values[5].ModRevision},
 	}
 	conditions = append(conditions, change.conditions...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: terminalValue},
-		{Type: MutationDelete, Key: claimKey},
-		{Type: MutationDelete, Key: taskAssignmentIndexKey(task.ID)},
-		{Type: MutationDelete, Key: activeKey},
-		{Type: MutationPut, Key: markerKey, Value: markerValue},
-		{Type: MutationPut, Key: markerRetentionKey, Value: markerRetentionValue},
-		{Type: MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
-		{Type: MutationDelete, Key: timeoutKey},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: terminalValue},
+		{Type: etcdstore.MutationDelete, Key: claimKey},
+		{Type: etcdstore.MutationDelete, Key: taskAssignmentIndexKey(task.ID)},
+		{Type: etcdstore.MutationDelete, Key: activeKey},
+		{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
+		{Type: etcdstore.MutationPut, Key: markerRetentionKey, Value: markerRetentionValue},
+		{Type: etcdstore.MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},
+		{Type: etcdstore.MutationDelete, Key: timeoutKey},
 	}
 	mutations = append(mutations, change.mutations...)
 	if err := enforceHierarchyDeletionTransaction(conditions, mutations); err != nil {
@@ -263,7 +264,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 	lockKey := HierarchyDeletionLockKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
 	auxiliary, err := repository.store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{replayKey, lockKey}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{replayKey, lockKey}, Revision: revision},
 	)
 	if err != nil {
 		return hierarchyDeletionRootAckChange{}, err
@@ -290,7 +291,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 	nextFence.Generation++
 	nextFence.Dispatch = HierarchyDeletionDispatchClosed
 	nextFence.UpdatedAt = terminalAt
-	change := hierarchyDeletionRootAckChange{conditions: []Condition{
+	change := hierarchyDeletionRootAckChange{conditions: []etcdstore.Condition{
 		{Key: tombstoneKey, ModRevision: operation.TombstoneRevision},
 		{Key: fenceKey, ModRevision: operation.FenceRevision},
 		{Key: replayKey, ModRevision: auxiliary.Values[0].ModRevision},
@@ -306,7 +307,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 		change.conditions = append(change.conditions, completed.conditions...)
 		change.mutations = append(change.mutations, completed.mutations...)
 		change.values = append(change.values, completed.values...)
-		change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: lockKey})
+		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: lockKey})
 	}
 	tombstoneValue, err := encodeHierarchyDeletionRecord(nextTombstone, hierarchyDeletionLargeRecordBytes)
 	if err != nil {
@@ -328,9 +329,9 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 	}
 	change.values = append(change.values, tombstoneValue, fenceValue, replayValue)
 	change.mutations = append(change.mutations,
-		Mutation{Type: MutationPut, Key: tombstoneKey, Value: tombstoneValue},
-		Mutation{Type: MutationPut, Key: fenceKey, Value: fenceValue},
-		Mutation{Type: MutationPut, Key: replayKey, Value: replayValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: replayKey, Value: replayValue},
 	)
 	return change, nil
 }
@@ -360,7 +361,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 	}
 	rootOrdinal := *operation.Tombstone.PlanCount - 1
 	actionKey, _ := HierarchyDeletionActionKey(operation.Tombstone.OperationID, rootOrdinal)
-	actionRead, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{actionKey}, Revision: revision})
+	actionRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{actionKey}, Revision: revision})
 	if err != nil {
 		return hierarchyDeletionRootAckChange{}, err
 	}
@@ -453,8 +454,8 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 		return hierarchyDeletionRootAckChange{}, err
 	}
 	change.conditions = append(change.conditions, summary.conditions...)
-	change.mutations = append(change.mutations, Mutation{
-		Type: MutationPut, Key: mustHierarchyDeletionCompletionKey(operation.Tombstone.OperationID, rootOrdinal), Value: completionValue,
+	change.mutations = append(change.mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: mustHierarchyDeletionCompletionKey(operation.Tombstone.OperationID, rootOrdinal), Value: completionValue,
 	})
 	change.mutations = append(change.mutations, summary.mutations...)
 	change.values = append(change.values, completionValue)
@@ -527,7 +528,7 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 		for ordinal := begin; ordinal < end; ordinal++ {
 			keys[ordinal-begin] = mustHierarchyDeletionCompletionKey(operation.Tombstone.OperationID, ordinal)
 		}
-		read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 		if err != nil {
 			return hierarchyDeletionRootAckChange{}, err
 		}
@@ -624,18 +625,18 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 		operation.Tombstone.CurrentTaskID,
 	)
 	return hierarchyDeletionRootAckChange{
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: receiptSummaryKey},
 			{Key: completionSummaryKey},
 			{Key: receiptCursorKey},
 			{Key: completionCursorKey},
 			{Key: mustHierarchyDeletionCompletionKey(operation.Tombstone.OperationID, count-1)},
 		},
-		mutations: []Mutation{
-			{Type: MutationPut, Key: receiptSummaryKey, Value: receiptSummaryValue},
-			{Type: MutationPut, Key: completionSummaryKey, Value: completionSummaryValue},
-			{Type: MutationPut, Key: receiptCursorKey, Value: receiptCursorValue},
-			{Type: MutationPut, Key: completionCursorKey, Value: completionCursorValue},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: receiptSummaryKey, Value: receiptSummaryValue},
+			{Type: etcdstore.MutationPut, Key: completionSummaryKey, Value: completionSummaryValue},
+			{Type: etcdstore.MutationPut, Key: receiptCursorKey, Value: receiptCursorValue},
+			{Type: etcdstore.MutationPut, Key: completionCursorKey, Value: completionCursorValue},
 		},
 		values: [][]byte{receiptSummaryValue, completionSummaryValue, receiptCursorValue, completionCursorValue},
 	}, nil

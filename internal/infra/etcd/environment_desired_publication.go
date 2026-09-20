@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/netip"
 	"time"
 
@@ -360,7 +361,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		defer clearBackupRuntimeMutations(volumePolicyPublication.mutations)
 	}
 
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
@@ -374,35 +375,35 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		{Key: environmentBlueprintHeadKey(revision.EnvironmentID), ModRevision: expectedHeadRevision},
 		{Key: zonePoolRegistryKey(revision.EnvironmentID), ModRevision: zonePool.currentRevision},
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
-		{Type: MutationDelete, Key: publication.locatorKey},
-		{Type: MutationPut, Key: environmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},
-		{Type: MutationPut, Key: zonePoolRegistryKey(revision.EnvironmentID), Value: zonePool.value},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
+		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
+		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: zonePoolRegistryKey(revision.EnvironmentID), Value: zonePool.value},
 	}
 	zonePoolConditionIndex := len(conditions) - 1
 	poolRegistryConditionIndex := -1
 	if poolChange.changed() {
 		poolRegistryConditionIndex = len(conditions)
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: environmentPoolRegistryKey, ModRevision: poolChange.registryRevision,
 		})
 		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: environmentKey(environment.Record.ID), Value: poolChange.environmentValue},
-			Mutation{Type: MutationPut, Key: environmentPoolRegistryKey, Value: poolChange.registryValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentKey(environment.Record.ID), Value: poolChange.environmentValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolChange.registryValue},
 		)
 	}
 	removalLockConditionIndex := -1
 	if volumeInitial == nil {
 		removalLockConditionIndex = len(conditions)
-		conditions = append(conditions, Condition{Key: removalrecord.EnvironmentLockKey(environment.Record.ID)})
+		conditions = append(conditions, etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(environment.Record.ID)})
 	}
 	baseCount := len(conditions)
-	baseClassifier := func(_ int64, values []*KeyValue) error {
+	baseClassifier := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != baseCount+len(fence.conditions) {
 			return errs.New(errs.KindInternal, "Environment desired publication compare evidence is incomplete")
 		}
@@ -466,7 +467,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	conditions = append(conditions, requirementPublication.conditions...)
 	mutations = append(mutations, requirementPublication.mutations...)
 	requirementBaseClassifier := classified
-	classified = func(revision int64, values []*KeyValue) error {
+	classified = func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != requirementBaseConditionCount+len(requirementPublication.conditions) {
 			return errs.New(errs.KindInternal, "Blueprint requirement publication compare evidence is incomplete")
 		}
@@ -495,7 +496,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		conditions = append(conditions, releaseGroupPreparation.conditions...)
 		mutations = append(mutations, releaseGroupPreparation.mutations...)
 		previousClassifier := classified
-		classified = func(revision int64, values []*KeyValue) error {
+		classified = func(revision int64, values []*etcdstore.KeyValue) error {
 			if len(values) != releaseGroupBaseConditionCount+len(releaseGroupPreparation.conditions) {
 				return errs.New(errs.KindInternal, "Blueprint Release Group compare evidence is incomplete")
 			}
@@ -505,7 +506,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		conditions = append(conditions, scriptPublication.conditions...)
 		mutations = append(mutations, scriptPublication.mutations...)
 		scriptBaseClassifier := classified
-		classified = func(revision int64, values []*KeyValue) error {
+		classified = func(revision int64, values []*etcdstore.KeyValue) error {
 			if len(values) != scriptBaseConditionCount+len(scriptPublication.conditions) {
 				return errs.New(errs.KindInternal, "Blueprint Script compare evidence is incomplete")
 			}
@@ -525,7 +526,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			return IdempotencyTransactionResult{}, err
 		}
 		releaseBaseClassifier := classified
-		classified = func(revision int64, values []*KeyValue) error {
+		classified = func(revision int64, values []*etcdstore.KeyValue) error {
 			if len(values) != releaseBaseConditionCount+len(releaseForCompare.conditions) {
 				return errs.New(errs.KindInternal, "Blueprint Release compare evidence is incomplete")
 			}
@@ -551,7 +552,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	}
 	conditions, mutations, classified = entryPublication.bind(conditions, mutations, classified)
 	conditions, mutations, classified = bindRecoverySecretPinPublication(pinChange, conditions, mutations, classified)
-	classifier := func(revision int64, values []*KeyValue) error {
+	classifier := func(revision int64, values []*etcdstore.KeyValue) error {
 		if conflict := classified(revision, values); conflict != nil {
 			return conflict
 		}

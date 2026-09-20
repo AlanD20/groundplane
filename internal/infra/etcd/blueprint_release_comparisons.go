@@ -1,18 +1,21 @@
 package etcd
 
-import "github.com/AlanD20/groundplane/pkg/errs"
+import (
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
 
 // Hook Attach and backing topology evidence can overlap the owning Blueprint's
 // own Attach comparisons. Preserve one equal comparison, never weaken a
 // conflicting revision to make the transaction fit.
 func (publication BlueprintReleasePublication) withExistingComparisons(
-	existing []Condition,
+	existing []etcdstore.Condition,
 ) (BlueprintReleasePublication, error) {
-	seen := make(map[string]Condition, len(existing)+len(publication.conditions))
+	seen := make(map[string]etcdstore.Condition, len(existing)+len(publication.conditions))
 	for _, condition := range existing {
 		seen[condition.Key] = condition
 	}
-	remaining := make([]Condition, 0, len(publication.conditions))
+	remaining := make([]etcdstore.Condition, 0, len(publication.conditions))
 	for _, condition := range publication.conditions {
 		if previous, found := seen[condition.Key]; found {
 			if previous != condition {

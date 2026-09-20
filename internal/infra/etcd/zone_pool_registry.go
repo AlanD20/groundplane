@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -44,7 +45,7 @@ func (r *ZoneRepository) getZonePoolRegistryAtRevision(
 	if r == nil || r.store == nil || ids.Validate(ids.KindEnvironment, id) != nil || revision < 0 {
 		return Versioned[zonePoolRegistry]{}, errs.New(errs.KindInternal, "Environment capacity read is invalid")
 	}
-	result, err := r.store.GetMany(ctx, GetManyRequest{Keys: []string{zonePoolRegistryKey(id)}, Revision: revision})
+	result, err := r.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{zonePoolRegistryKey(id)}, Revision: revision})
 	if err != nil {
 		return Versioned[zonePoolRegistry]{}, err
 	}

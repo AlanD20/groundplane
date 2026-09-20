@@ -2,6 +2,7 @@ package desiredrevision
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -36,7 +37,7 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	}
 	evidence, err := repository.store.GetMany(
 		ctx,
-		etcd.GetManyRequest{Keys: []string{descriptorKey, locatorKey, markerKey, etcd.CapabilityTaskKey(claim.TaskID)}},
+		etcdstore.GetManyRequest{Keys: []string{descriptorKey, locatorKey, markerKey, etcd.CapabilityTaskKey(claim.TaskID)}},
 	)
 	if err != nil {
 		return err
@@ -68,14 +69,14 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 		return err
 	}
 	defer clear(value)
-	conditions := []etcd.Condition{
+	conditions := []etcdstore.Condition{
 		{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision},
 		{Key: locatorKey, ModRevision: evidence.Values[1].ModRevision},
 		{Key: markerKey},
 	}
-	mutations := []etcd.Mutation{
-		{Type: etcd.MutationPut, Key: descriptorKey, Value: value},
-		{Type: etcd.MutationDelete, Key: locatorKey},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value},
+		{Type: etcdstore.MutationDelete, Key: locatorKey},
 	}
 	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 5, etcd.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return err
@@ -104,7 +105,7 @@ func (repository *Repository) CleanupEnvironmentBlueprintStaging(
 	if !etcd.ValidDesiredRevisionTime(now) || limit < 1 || limit > 128 {
 		return 0, errs.New(errs.KindValidationFailed, "Blueprint staging cleanup request is invalid")
 	}
-	page, err := repository.store.Range(ctx, etcd.RangeRequest{
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: etcd.EnvironmentBlueprintDescriptorPrefix,
 		Limit:  int64(limit),
 	})
@@ -185,7 +186,7 @@ func (repository *Repository) expireEnvironmentBlueprintStage(
 	if err != nil {
 		return false, err
 	}
-	evidence, err := repository.store.GetMany(ctx, etcd.GetManyRequest{
+	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			descriptorKey,
 			locatorKey,
@@ -221,14 +222,14 @@ func (repository *Repository) expireEnvironmentBlueprintStage(
 		return false, err
 	}
 	defer clear(value)
-	conditions := []etcd.Condition{
+	conditions := []etcdstore.Condition{
 		{Key: descriptorKey, ModRevision: descriptorRevision},
 		{Key: locatorKey, ModRevision: evidence.Values[1].ModRevision},
 		{Key: markerKey},
 	}
-	mutations := []etcd.Mutation{
-		{Type: etcd.MutationPut, Key: descriptorKey, Value: value},
-		{Type: etcd.MutationDelete, Key: locatorKey},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value},
+		{Type: etcdstore.MutationDelete, Key: locatorKey},
 	}
 	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 5, etcd.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return false, err
@@ -249,7 +250,7 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 		descriptor.Claim.EnvironmentID,
 		descriptor.Claim.RevisionID,
 	) + "chunks/"
-	page, err := repository.store.Range(ctx, etcd.RangeRequest{Prefix: chunkPrefix, Limit: 33})
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: chunkPrefix, Limit: 33})
 	if err != nil {
 		return false, err
 	}
@@ -266,7 +267,7 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 	if err != nil {
 		return false, err
 	}
-	evidence, err := repository.store.GetMany(ctx, etcd.GetManyRequest{
+	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{descriptorKey, locatorKey, markerKey}, Revision: page.ReadRevision,
 	})
 	if err != nil {
@@ -298,19 +299,19 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 		count = 32
 	}
 	final := count == len(page.Values) && !page.More
-	conditions := make([]etcd.Condition, 0, count+1)
-	mutations := make([]etcd.Mutation, 0, count+1)
+	conditions := make([]etcdstore.Condition, 0, count+1)
+	mutations := make([]etcdstore.Mutation, 0, count+1)
 	for index := 0; index < count; index++ {
 		entry := page.Values[index]
 		if entry.ModRevision <= 0 || !strings.HasPrefix(entry.Key, chunkPrefix) {
 			return false, etcd.CorruptDesiredRevisionStage()
 		}
-		conditions = append(conditions, etcd.Condition{Key: entry.Key, ModRevision: entry.ModRevision})
-		mutations = append(mutations, etcd.Mutation{Type: etcd.MutationDelete, Key: entry.Key})
+		conditions = append(conditions, etcdstore.Condition{Key: entry.Key, ModRevision: entry.ModRevision})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entry.Key})
 	}
-	conditions = append(conditions, etcd.Condition{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision})
+	conditions = append(conditions, etcdstore.Condition{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision})
 	if final {
-		mutations = append(mutations, etcd.Mutation{Type: etcd.MutationDelete, Key: descriptorKey})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: descriptorKey})
 	} else {
 		stored.UpdatedAt = now
 		if !stored.UpdatedAt.After(descriptor.UpdatedAt) {
@@ -321,7 +322,7 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 			return false, encodeErr
 		}
 		defer clear(value)
-		mutations = append(mutations, etcd.Mutation{Type: etcd.MutationPut, Key: descriptorKey, Value: value})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: descriptorKey, Value: value})
 	}
 	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 66, etcd.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return false, err
@@ -348,7 +349,7 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 	}
 	rootKey := etcd.DesiredRevisionRootKey(descriptor.Claim.EnvironmentID, descriptor.Claim.RevisionID)
 	taskPrimaryKey := etcd.CapabilityTaskKey(descriptor.Claim.TaskID)
-	evidence, err := repository.store.GetMany(ctx, etcd.GetManyRequest{
+	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{descriptorKey, locatorKey, markerKey, rootKey, taskPrimaryKey},
 	})
 	if err != nil {
@@ -383,8 +384,8 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 		task.Params[etcd.EnvironmentDesiredRevisionParam] != stored.Claim.RevisionID {
 		return false, etcd.CorruptDesiredRevisionStage()
 	}
-	conditions := []etcd.Condition{{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision}}
-	mutations := []etcd.Mutation{{Type: etcd.MutationDelete, Key: descriptorKey}}
+	conditions := []etcdstore.Condition{{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: descriptorKey}}
 	if err := etcd.ValidateDesiredRevisionTransaction(repository.store, conditions, mutations, 2, etcd.EnvironmentBlueprintGCTransactionBytes); err != nil {
 		return false, err
 	}

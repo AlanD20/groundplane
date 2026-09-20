@@ -2,13 +2,14 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type environmentMutationFenceStore interface {
-	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 }
 
 type environmentMutationFenceOwner struct {
@@ -268,7 +269,7 @@ func loadEnvironmentMutationFence(
 			modRevision: lockRevision, kind: environmentMutationFenceLock,
 		},
 	)
-	if len(conditions)+1 > maximumTransactionOperations {
+	if len(conditions)+1 > etcdstore.MaximumOperations {
 		return environmentMutationFenceEvidence{}, errs.New(
 			errs.KindInternal,
 			"environment mutation fence exceeds transaction limit",
@@ -292,8 +293,8 @@ func readEnvironmentMutationFenceKeys(
 	store environmentMutationFenceStore,
 	keys []string,
 	readRevision int64,
-) (*GetManyResult, error) {
-	result, err := store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: readRevision})
+) (*etcdstore.GetManyResult, error) {
+	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +316,7 @@ func readEnvironmentMutationFenceKeys(
 	return result, nil
 }
 
-func decodeEnvironmentMutationFenceEpoch(value *KeyValue, environmentID string) (*KeyValue, error) {
+func decodeEnvironmentMutationFenceEpoch(value *etcdstore.KeyValue, environmentID string) (*etcdstore.KeyValue, error) {
 	if value == nil {
 		return nil, errs.New(errs.KindInternal, "environment mutation epoch is missing")
 	}
@@ -327,7 +328,7 @@ func decodeEnvironmentMutationFenceEpoch(value *KeyValue, environmentID string) 
 }
 
 func validateEnvironmentMutationFenceLock(
-	value *KeyValue,
+	value *etcdstore.KeyValue,
 	environmentID string,
 	owner *environmentMutationFenceOwner,
 ) (int64, error) {
@@ -361,7 +362,7 @@ func validateEnvironmentMutationFenceLock(
 }
 
 func validateOwnedEnvironmentDeletionTombstone(
-	value *KeyValue,
+	value *etcdstore.KeyValue,
 	environmentID string,
 	environmentRevision int64,
 	owner environmentMutationFenceOwner,
@@ -405,27 +406,27 @@ func (evidence environmentMutationFenceEvidence) readAtRevision() int64 {
 	return evidence.readRevision
 }
 
-func (evidence environmentMutationFenceEvidence) transactionConditions() []Condition {
-	conditions := make([]Condition, len(evidence.conditions))
+func (evidence environmentMutationFenceEvidence) transactionConditions() []etcdstore.Condition {
+	conditions := make([]etcdstore.Condition, len(evidence.conditions))
 	for index, condition := range evidence.conditions {
-		conditions[index] = Condition{Key: condition.key, ModRevision: condition.modRevision}
+		conditions[index] = etcdstore.Condition{Key: condition.key, ModRevision: condition.modRevision}
 	}
 	return conditions
 }
 
-func (evidence environmentMutationFenceEvidence) epochRewriteMutation() (Mutation, error) {
+func (evidence environmentMutationFenceEvidence) epochRewriteMutation() (etcdstore.Mutation, error) {
 	value, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
 		EnvironmentID: evidence.environmentID,
 	})
 	if err != nil {
-		return Mutation{}, err
+		return etcdstore.Mutation{}, err
 	}
-	return Mutation{
-		Type: MutationPut, Key: environmentMutationEpochKey(evidence.environmentID), Value: value,
+	return etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(evidence.environmentID), Value: value,
 	}, nil
 }
 
-func (evidence environmentMutationFenceEvidence) classifyCAS(values []*KeyValue) error {
+func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore.KeyValue) error {
 	if len(values) != len(evidence.conditions) {
 		return errs.New(
 			errs.KindInternal,

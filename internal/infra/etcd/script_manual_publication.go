@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -103,7 +104,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	if err != nil {
 		return result, err
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: scriptExecutionKey(execution.ID)},
 		{Key: taskKey(task.ID)},
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
@@ -139,12 +140,12 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return result, err
 	}
 	defer clear(taskReference)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: scriptExecutionKey(execution.ID), Value: executionValue},
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: scriptExecutionKey(execution.ID), Value: executionValue},
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
 	}
 	mutations = append(mutations, fragment.mutations...)
 	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations,
@@ -173,8 +174,8 @@ func (repository *ScriptRepository) prepareManualScriptSnapshot(
 	key := scriptRunnerSnapshotKey(execution.SnapshotID)
 	result, err := repository.store.Transact(
 		ctx,
-		[]Condition{{Key: key}},
-		[]Mutation{{Type: MutationPut, Key: key, Value: value}},
+		[]etcdstore.Condition{{Key: key}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: value}},
 	)
 	if err != nil {
 		return 0, err
@@ -192,9 +193,9 @@ func (repository *ScriptRepository) prepareManualScriptSnapshot(
 
 // manualScriptSourceConditions fences the desired sources captured for a manual
 // execution. Release image and render-input fences are owned by its publication.
-func manualScriptSourceConditions(sources ScriptExecutionSources) ([]Condition, error) {
-	conditions := []Condition{serviceDesiredCondition(sources.Service)}
-	byKey := map[string]Condition{conditions[0].Key: conditions[0]}
+func manualScriptSourceConditions(sources ScriptExecutionSources) ([]etcdstore.Condition, error) {
+	conditions := []etcdstore.Condition{serviceDesiredCondition(sources.Service)}
+	byKey := map[string]etcdstore.Condition{conditions[0].Key: conditions[0]}
 	for _, condition := range scriptExecutionProjectionConditions(sources) {
 		if existing, found := byKey[condition.Key]; found {
 			if existing != condition {
@@ -209,7 +210,7 @@ func manualScriptSourceConditions(sources ScriptExecutionSources) ([]Condition, 
 }
 
 func classifyScriptExecutionPublication(expected int) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != expected {
 			return errs.New(errs.KindInternal, "Script execution publication compare evidence is incomplete")
 		}

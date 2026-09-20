@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"strings"
 
@@ -98,7 +99,7 @@ func (repository *HierarchyRepository) ListEnvironmentAppliedComposeProjections(
 	start := ""
 	var revision int64
 	for {
-		page, err := repository.store.Range(ctx, RangeRequest{
+		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: environmentComposeProjectionPrefix, StartExclusive: start,
 			Limit: 128, Revision: revision,
 		})
@@ -318,7 +319,7 @@ func (repository *HierarchyRepository) FindEnvironmentVolume(
 	const headsPrefix = "/v1/records/environment-blueprints/"
 	start := ""
 	for {
-		page, err := repository.store.Range(ctx, RangeRequest{
+		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: headsPrefix, StartExclusive: start, Limit: 128,
 		})
 		if err != nil {

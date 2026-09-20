@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -10,8 +11,8 @@ import (
 
 type serviceTaskChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 }
 
 func (repository *TaskRepository) prepareServiceTaskRetry(
@@ -27,7 +28,7 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 	if err != nil {
 		return serviceTaskChange{}, err
 	}
-	values, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		serviceLifecycleActiveKey(source.Target),
 		serviceLifecycleRenderInputKey(source.ID),
 		serviceLifecycleRenderInputKey(retry.ID),
@@ -53,12 +54,12 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 	}
 	change := serviceTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			serviceDesiredCondition(service),
 			serviceRuntimeCondition(service),
 			{Key: serviceLifecycleActiveKey(source.Target)},
 		},
-		mutations: []Mutation{{Type: MutationPut, Key: serviceLifecycleActiveKey(source.Target), Value: reference}},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: serviceLifecycleActiveKey(source.Target), Value: reference}},
 	}
 	if source.Executor == TaskExecutorAgent {
 		if values.Values[1] == nil {
@@ -69,11 +70,11 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 			return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input changed")
 		}
 		change.conditions = append(change.conditions,
-			Condition{Key: serviceLifecycleRenderInputKey(source.ID), ModRevision: values.Values[1].ModRevision},
-			Condition{Key: serviceLifecycleRenderInputKey(retry.ID)},
+			etcdstore.Condition{Key: serviceLifecycleRenderInputKey(source.ID), ModRevision: values.Values[1].ModRevision},
+			etcdstore.Condition{Key: serviceLifecycleRenderInputKey(retry.ID)},
 		)
-		change.mutations = append(change.mutations, Mutation{
-			Type: MutationPut, Key: serviceLifecycleRenderInputKey(retry.ID), Value: values.Values[1].Value,
+		change.mutations = append(change.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: serviceLifecycleRenderInputKey(retry.ID), Value: values.Values[1].Value,
 		})
 	} else if values.Values[1] != nil {
 		return serviceTaskChange{}, errs.New(errs.KindInternal, "Controller Service Task has a render input")
@@ -89,7 +90,7 @@ func (repository *TaskRepository) prepareServiceTaskAcknowledgement(
 	if !isServiceLifecycleTask(task) {
 		return serviceTaskChange{}, nil
 	}
-	values, err := repository.store.GetMany(ctx, GetManyRequest{
+	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{serviceLifecycleActiveKey(task.Target)}, Revision: readRevision,
 	})
 	if err != nil {
@@ -107,10 +108,10 @@ func (repository *TaskRepository) prepareServiceTaskAcknowledgement(
 	}
 	return serviceTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: serviceLifecycleActiveKey(task.Target), ModRevision: values.Values[0].ModRevision},
 		},
-		mutations: []Mutation{{Type: MutationDelete, Key: serviceLifecycleActiveKey(task.Target)}},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: serviceLifecycleActiveKey(task.Target)}},
 	}, nil
 }
 
@@ -125,7 +126,7 @@ func (repository *TaskRepository) prepareAcknowledgedServiceTask(
 	if err != nil || !change.applies || terminalStatus != TaskStatusCompleted || task.Executor != TaskExecutorAgent {
 		return change, err
 	}
-	inputRead, err := repository.store.GetMany(ctx, GetManyRequest{
+	inputRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{serviceLifecycleRenderInputKey(task.ID)}, Revision: readRevision,
 	})
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
@@ -74,7 +75,7 @@ type BackupSecretResolutionReader struct {
 }
 
 type backupSecretResolutionStore interface {
-	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 }
 
 func NewBackupSecretResolutionReader(store backupSecretResolutionStore) (*BackupSecretResolutionReader, error) {
@@ -103,7 +104,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 		return BackupSecretResolutionEvidence{}, err
 	}
 
-	anchor, err := reader.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	anchor, err := reader.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(request.TaskID), taskAssignmentIndexKey(request.TaskID),
 	}})
 	if err != nil {
@@ -399,7 +400,7 @@ type backupSecretDynamicRead struct {
 	secretRecords    map[string]int
 	secretFences     map[string]int
 	secretValues     map[string]int
-	last             *GetManyResult
+	last             *etcdstore.GetManyResult
 }
 
 type backupSecretIndexRead struct {
@@ -519,13 +520,13 @@ func (reader *BackupSecretResolutionReader) readFixed(
 	ctx context.Context,
 	keys []string,
 	revision int64,
-) (*GetManyResult, error) {
+) (*etcdstore.GetManyResult, error) {
 	if len(keys) == 0 || revision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "backup secret fixed read is invalid")
 	}
-	combined := &GetManyResult{Values: make([]*KeyValue, 0, len(keys)), ReadRevision: revision}
-	for start := 0; start < len(keys); start += maximumTransactionOperations {
-		end := min(start+maximumTransactionOperations, len(keys))
+	combined := &etcdstore.GetManyResult{Values: make([]*etcdstore.KeyValue, 0, len(keys)), ReadRevision: revision}
+	for start := 0; start < len(keys); start += etcdstore.MaximumOperations {
+		end := min(start+etcdstore.MaximumOperations, len(keys))
 		batch := keys[start:end]
 		result, err := getBackupSecretManyOwned(ctx, reader.store, batch, revision)
 		if err != nil {
@@ -539,7 +540,7 @@ func (reader *BackupSecretResolutionReader) readFixed(
 	return combined, nil
 }
 
-func anchorValues(result *GetManyResult) []*KeyValue {
+func anchorValues(result *etcdstore.GetManyResult) []*etcdstore.KeyValue {
 	if result == nil {
 		return nil
 	}
@@ -547,7 +548,7 @@ func anchorValues(result *GetManyResult) []*KeyValue {
 }
 
 func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
-	result *GetManyResult,
+	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
 	evidence *BackupSecretResolutionEvidence,
 	environmentID string,
@@ -617,7 +618,7 @@ func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
 	return nil
 }
 
-func requireNoDeletionFence(value *KeyValue, targetKind DeletionTargetKind, stableID string) error {
+func requireNoDeletionFence(value *etcdstore.KeyValue, targetKind DeletionTargetKind, stableID string) error {
 	if value == nil {
 		return nil
 	}
@@ -629,7 +630,7 @@ func requireNoDeletionFence(value *KeyValue, targetKind DeletionTargetKind, stab
 }
 
 func (reader *BackupSecretResolutionReader) decodeSourceDynamicEvidence(
-	result *GetManyResult,
+	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
 	evidence *BackupSecretResolutionEvidence,
 	plan *agentpb.ExecutionPlan,
@@ -665,7 +666,7 @@ func (reader *BackupSecretResolutionReader) decodeSourceDynamicEvidence(
 }
 
 func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
-	result *GetManyResult,
+	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
 	run *BackupRunRecord,
 	source BackupRunSourceAttemptRecord,
@@ -677,7 +678,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 		if snapshot == nil {
 			return errs.New(errs.KindInternal, "postgres backup source snapshot is corrupt")
 		}
-		keys := []*KeyValue{
+		keys := []*etcdstore.KeyValue{
 			result.Values[dynamic.index[attachKey(source.TargetID)]],
 			result.Values[dynamic.index[attachFactsKey(source.TargetID)]],
 			result.Values[dynamic.index[projectKey(snapshot.BackingProjectID)]],
@@ -690,7 +691,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 		if snapshot == nil {
 			return errs.New(errs.KindInternal, "volume backup source snapshot is corrupt")
 		}
-		keys := make([]*KeyValue, 0, len(snapshot.Services)+3)
+		keys := make([]*etcdstore.KeyValue, 0, len(snapshot.Services)+3)
 		keys = append(
 			keys,
 			result.Values[dynamic.index[environmentKey(snapshot.EnvironmentID)]],
@@ -720,7 +721,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 
 func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 	ctx context.Context,
-	result *GetManyResult,
+	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
 	evidence *BackupSecretResolutionEvidence,
 	plan *agentpb.ExecutionPlan,
@@ -838,7 +839,7 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 	return errs.New(errs.KindStateConflict, "backup prune point is not in its dispatch")
 }
 
-func mustDecodeBackupSource(value *KeyValue) BackupSourceRecord {
+func mustDecodeBackupSource(value *etcdstore.KeyValue) BackupSourceRecord {
 	if value == nil {
 		return BackupSourceRecord{}
 	}
@@ -851,7 +852,7 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 	fixedRevision int64,
 	dynamic *backupSecretDynamicRead,
 	evidence *BackupSecretResolutionEvidence,
-	second *GetManyResult,
+	second *etcdstore.GetManyResult,
 ) error {
 	if dynamic.project < 0 || second.Values[dynamic.project] == nil {
 		return errs.New(errs.KindStateConflict, "backup project evidence is unavailable")
@@ -907,13 +908,13 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 	for index, reference := range refs {
 		projectIndexValue := second.Values[reference.projectIndex]
 		platformIndexValue := second.Values[reference.platformIndex]
-		for _, candidate := range []*KeyValue{projectIndexValue, platformIndexValue} {
+		for _, candidate := range []*etcdstore.KeyValue{projectIndexValue, platformIndexValue} {
 			if candidate != nil && ids.Validate(ids.KindSecret, string(candidate.Value)) != nil {
 				return errs.New(errs.KindInternal, "backup Secret key index is corrupt")
 			}
 		}
 		secretPlans[index] = reference
-		for _, candidate := range []*KeyValue{projectIndexValue, platformIndexValue} {
+		for _, candidate := range []*etcdstore.KeyValue{projectIndexValue, platformIndexValue} {
 			if candidate == nil {
 				continue
 			}
@@ -957,13 +958,13 @@ type backupSecretCandidate struct {
 }
 
 func selectBackupSecretCandidate(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	dynamic *backupSecretDynamicRead,
 	reference backupSecretIndexRead,
 	projectID string,
 ) (backupSecretCandidate, error) {
 	candidates := []struct {
-		value   *KeyValue
+		value   *etcdstore.KeyValue
 		project bool
 	}{
 		{value: values[reference.projectIndex], project: true},

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -14,8 +15,8 @@ import (
 
 type platformComponentTaskChange struct {
 	applies     bool
-	conditions  []Condition
-	mutations   []Mutation
+	conditions  []etcdstore.Condition
+	mutations   []etcdstore.Mutation
 	values      [][]byte
 	promoted    *ComponentRecord
 	observation *ComponentObservationRecord
@@ -38,7 +39,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 		platformComponentTaskActiveKey(task.Target),
 		componentObservationKey(task.Target),
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: stateKeys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: stateKeys, Revision: revision})
 	if err != nil {
 		return platformComponentTaskChange{}, err
 	}
@@ -86,12 +87,12 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 
 	change := platformComponentTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: componentKey(task.Target), ModRevision: componentValue.ModRevision},
 			{Key: platformComponentTaskRenderInputKey(task.PlanID), ModRevision: renderInputValue.ModRevision},
 		},
 	}
-	change.conditions = append(change.conditions, Condition{
+	change.conditions = append(change.conditions, etcdstore.Condition{
 		Key: platformComponentTaskActiveKey(task.Target), ModRevision: state.Values[2].ModRevision,
 	})
 	if terminalStatus != TaskStatusCompleted {
@@ -139,12 +140,12 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	if err != nil {
 		return platformComponentTaskChange{}, err
 	}
-	change.conditions = append(change.conditions, Condition{
+	change.conditions = append(change.conditions, etcdstore.Condition{
 		Key: componentObservationKey(task.Target), ModRevision: priorModRevision,
 	})
 	change.values = append(change.values, observationValue)
-	change.mutations = append(change.mutations, Mutation{
-		Type: MutationPut, Key: componentObservationKey(task.Target), Value: observationValue,
+	change.mutations = append(change.mutations, etcdstore.Mutation{
+		Type: etcdstore.MutationPut, Key: componentObservationKey(task.Target), Value: observationValue,
 	})
 	change.observation = &observation
 	generatedServices := []string(nil)
@@ -165,8 +166,8 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 		return platformComponentTaskChange{}, err
 	}
 	change.values = append(change.values, value)
-	change.mutations = append(change.mutations, Mutation{
-		Type:  MutationPut,
+	change.mutations = append(change.mutations, etcdstore.Mutation{
+		Type:  etcdstore.MutationPut,
 		Key:   componentKey(task.Target),
 		Value: value,
 	}, componentWriteFenceMutation(task.Target))
@@ -263,7 +264,7 @@ func (repository *TaskRepository) validatePlatformComponentTaskAcknowledgementRe
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return nil
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			platformComponentTaskRenderInputKey(task.PlanID),
 			platformComponentTaskActiveKey(task.Target),

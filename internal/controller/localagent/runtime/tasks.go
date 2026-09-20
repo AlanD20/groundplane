@@ -1,4 +1,4 @@
-package app
+package runtime
 
 import (
 	"context"
@@ -32,7 +32,7 @@ type localAgentTaskSubscription struct {
 	result       <-chan error
 }
 
-func newLocalAgentTasksAdapter(
+func NewTasks(
 	assignments localAgentTaskAssignments,
 	channel localAgentTaskChannel,
 ) (*localAgentTasksAdapter, error) {

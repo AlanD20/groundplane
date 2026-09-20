@@ -4,11 +4,12 @@ package releasegroup
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
-	infraetcd "github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -47,10 +48,10 @@ type Removal struct {
 
 // Store is the concrete etcd Release Group adapter.
 type Store struct {
-	backend infraetcd.Store
+	backend etcdstore.Store
 }
 
-func New(backend infraetcd.Store) (*Store, error) {
+func New(backend etcdstore.Store) (*Store, error) {
 	if backend == nil {
 		return nil, errs.New(errs.KindInternal, "release group etcd store is required")
 	}
@@ -84,7 +85,7 @@ func (store *Store) GetAtRevision(ctx context.Context, id string, revision int64
 	if ids.Validate(ids.KindReleaseGroup, id) != nil || revision <= 0 {
 		return Versioned{}, errs.New(errs.KindValidationFailed, "release group revision read is invalid")
 	}
-	primary, err := store.backend.GetMany(ctx, infraetcd.GetManyRequest{
+	primary, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{recordKey(id)}, Revision: revision,
 	})
 	if err != nil {
@@ -100,7 +101,7 @@ func (store *Store) GetAtRevision(ctx context.Context, id string, revision int64
 	if err != nil || group.ID != id {
 		return Versioned{}, corruptRecord()
 	}
-	owner, err := store.backend.GetMany(ctx, infraetcd.GetManyRequest{
+	owner, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{ownerKey(group.EnvironmentID, id)}, Revision: revision,
 	})
 	if err != nil {
@@ -130,7 +131,7 @@ func (store *Store) Resolve(ctx context.Context, environmentID string, name stri
 	if ids.Validate(ids.KindReleaseGroup, id) != nil {
 		return Versioned{}, corruptRecord()
 	}
-	result, err := store.backend.GetMany(ctx, infraetcd.GetManyRequest{
+	result, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{recordKey(id), ownerKey(environmentID, id)}, Revision: index.ReadRevision,
 	})
 	if err != nil {
@@ -175,7 +176,7 @@ func (store *Store) List(ctx context.Context, environmentID string, request Page
 		}
 		revision = decoded.Revision
 		start = ownerKey(environmentID, decoded.LastID)
-		anchor, err := store.backend.GetMany(ctx, infraetcd.GetManyRequest{
+		anchor, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{start}, Revision: revision,
 		})
 		if err != nil {
@@ -186,7 +187,7 @@ func (store *Store) List(ctx context.Context, environmentID string, request Page
 			return Page{}, invalidCursor()
 		}
 	}
-	ranged, err := store.backend.Range(ctx, infraetcd.RangeRequest{
+	ranged, err := store.backend.Range(ctx, etcdstore.RangeRequest{
 		Prefix: ownerScopePrefix(environmentID), StartExclusive: start,
 		Limit: int64(limit + 1), Revision: revision,
 	})
@@ -216,7 +217,7 @@ func (store *Store) List(ctx context.Context, environmentID string, request Page
 	}
 	items := make([]Versioned, 0, len(keys))
 	if len(keys) > 0 {
-		records, err := store.backend.GetMany(ctx, infraetcd.GetManyRequest{Keys: keys, Revision: ranged.ReadRevision})
+		records, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: ranged.ReadRevision})
 		if err != nil {
 			return Page{}, err
 		}
@@ -231,7 +232,7 @@ func (store *Store) List(ctx context.Context, environmentID string, request Page
 			if err != nil || group.ID != idsInPage[index] || group.EnvironmentID != environmentID {
 				return Page{}, corruptRecord()
 			}
-			nameIndex, indexErr := store.backend.GetMany(ctx, infraetcd.GetManyRequest{
+			nameIndex, indexErr := store.backend.GetMany(ctx, etcdstore.GetManyRequest{
 				Keys: []string{nameKey(environmentID, group.Name)}, Revision: ranged.ReadRevision,
 			})
 			if indexErr != nil {

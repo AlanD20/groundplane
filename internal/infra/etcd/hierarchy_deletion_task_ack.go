@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 	"time"
 
@@ -20,7 +21,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	terminalAt time.Time,
 ) (Versioned[TaskRecord], error) {
 	claimKey := taskExecutionClaimKey(TaskExecutorAgent, agentID, taskID)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
 	}})
 	if err != nil {
@@ -114,7 +115,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 	defer clear(retentionValue)
 	activeKey := taskActiveOperationKey(task.OperationID)
 	timeoutKey := taskTimeoutIndexKey(task.ID, assignment.Deadline)
-	companions, err := repository.store.GetMany(ctx, GetManyRequest{
+	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{activeKey, taskQueueKey(task.Executor, task.ID), timeoutKey, retentionKey},
 		Revision: read.ReadRevision,
 	})
@@ -138,7 +139,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 		)
 	}
 	transaction, err := repository.store.Transact(ctx,
-		[]Condition{
+		[]etcdstore.Condition{
 			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
 			{Key: claimKey, ModRevision: assignmentValue.ModRevision},
 			{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
@@ -147,13 +148,13 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 			{Key: timeoutKey, ModRevision: companions.Values[2].ModRevision},
 			{Key: retentionKey},
 		},
-		[]Mutation{
-			{Type: MutationPut, Key: taskKey(task.ID), Value: terminalValue},
-			{Type: MutationDelete, Key: claimKey},
-			{Type: MutationDelete, Key: taskAssignmentIndexKey(task.ID)},
-			{Type: MutationDelete, Key: activeKey},
-			{Type: MutationDelete, Key: timeoutKey},
-			{Type: MutationPut, Key: retentionKey, Value: retentionValue},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: terminalValue},
+			{Type: etcdstore.MutationDelete, Key: claimKey},
+			{Type: etcdstore.MutationDelete, Key: taskAssignmentIndexKey(task.ID)},
+			{Type: etcdstore.MutationDelete, Key: activeKey},
+			{Type: etcdstore.MutationDelete, Key: timeoutKey},
+			{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
 		},
 	)
 	if err != nil {
@@ -195,7 +196,7 @@ func (repository *TaskRepository) ensureHierarchyDeletionReceiptForTask(
 	if err != nil {
 		return err
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{actionKey, childKey}})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{actionKey, childKey}})
 	if err != nil {
 		return err
 	}

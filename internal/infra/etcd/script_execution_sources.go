@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -71,7 +72,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 		releaseIntentStagingKey(publicationID, member.Intent.ID),
 		releaseRenderInputStagingKey(publicationID, member.Intent.ID),
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
@@ -445,11 +446,11 @@ func loadScriptExecutionDesiredProjection(
 			corruptEnvironmentComposeProjection()
 	}
 	return Versioned[EnvironmentBlueprintHead]{
-			Record:   EnvironmentBlueprintHead{EnvironmentID: environmentID, RevisionID: headRevisionID},
-			Revision: headValue.ModRevision, ReadRevision: revision,
-		}, Versioned[EnvironmentComposeProjection]{
-			Record: projection, Revision: rootValue.ModRevision, ReadRevision: revision,
-		}, nil
+		Record:   EnvironmentBlueprintHead{EnvironmentID: environmentID, RevisionID: headRevisionID},
+		Revision: headValue.ModRevision, ReadRevision: revision,
+	}, Versioned[EnvironmentComposeProjection]{
+		Record: projection, Revision: rootValue.ModRevision, ReadRevision: revision,
+	}, nil
 }
 
 func resolveScriptExecutionNetworks(
@@ -471,8 +472,8 @@ func scriptExecutionValueAt(
 	store hierarchyStore,
 	key string,
 	revision int64,
-) (*KeyValue, error) {
-	read, err := store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+) (*etcdstore.KeyValue, error) {
+	read, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return nil, err
 	}

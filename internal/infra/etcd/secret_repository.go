@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -29,7 +30,7 @@ type SecretRepository struct {
 	store hierarchyStore
 }
 
-func NewSecretRepository(store Store) (*SecretRepository, error) {
+func NewSecretRepository(store etcdstore.Store) (*SecretRepository, error) {
 	return newSecretRepository(store)
 }
 
@@ -64,11 +65,11 @@ func (repository *SecretRepository) CreateSecret(
 	defer clear(encryptedValue)
 
 	conditions := secretCreateConditions(owner, record)
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationPut, Key: secretRecordKey(record.Secret.ID), Value: primaryValue},
-		{Type: MutationPut, Key: secretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
-		{Type: MutationPut, Key: secretScopedKey(record.Secret), Value: []byte(record.Secret.ID)},
-		{Type: MutationPut, Key: secretValueKey(record.Secret.ID), Value: encryptedValue},
+	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: secretRecordKey(record.Secret.ID), Value: primaryValue},
+		{Type: etcdstore.MutationPut, Key: secretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
+		{Type: etcdstore.MutationPut, Key: secretScopedKey(record.Secret), Value: []byte(record.Secret.ID)},
+		{Type: etcdstore.MutationPut, Key: secretValueKey(record.Secret.ID), Value: encryptedValue},
 	})
 	if err != nil {
 		return Versioned[SecretRecord]{}, err
@@ -119,13 +120,13 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 	defer clear(encryptedValue)
 	plan, err := newIdempotencyMutationPlan(
 		secretCreateConditions(owner, record),
-		[]Mutation{
-			{Type: MutationPut, Key: secretRecordKey(record.Secret.ID), Value: primaryValue},
-			{Type: MutationPut, Key: secretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
-			{Type: MutationPut, Key: secretScopedKey(record.Secret), Value: []byte(record.Secret.ID)},
-			{Type: MutationPut, Key: secretValueKey(record.Secret.ID), Value: encryptedValue},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: secretRecordKey(record.Secret.ID), Value: primaryValue},
+			{Type: etcdstore.MutationPut, Key: secretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
+			{Type: etcdstore.MutationPut, Key: secretScopedKey(record.Secret), Value: []byte(record.Secret.ID)},
+			{Type: etcdstore.MutationPut, Key: secretValueKey(record.Secret.ID), Value: encryptedValue},
 		},
-		func(_ int64, values []*KeyValue) error {
+		func(_ int64, values []*etcdstore.KeyValue) error {
 			return classifySecretCreateConflict(values, owner, record)
 		},
 	)
@@ -153,7 +154,7 @@ func (repository *SecretRepository) GetSecretValue(
 	if err := validateSecretVersion(current); err != nil {
 		return SecretEncryptedValue{}, err
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{secretValueKey(current.Record.Secret.ID)}, Revision: current.ReadRevision,
 	})
 	if err != nil {
@@ -203,7 +204,7 @@ func (repository *SecretRepository) ListSecrets(
 	for index, item := range page.Items {
 		keys[index] = deletionTombstoneKey(string(DeletionTargetSecret), item.Record.Secret.ID)
 	}
-	tombstones, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: page.Revision})
+	tombstones, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: page.Revision})
 	if err != nil {
 		return Page[SecretRecord]{}, err
 	}
@@ -258,7 +259,7 @@ func (repository *SecretRepository) resolveSecretAtRevision(
 		return Versioned[SecretRecord]{}, errs.New(errs.KindSecretNotFound, "Secret was not found in scope")
 	}
 
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		secretKeyIndexKey(core.SecretScopeProject, projectID, reference),
 		secretKeyIndexKey(core.SecretScopePlatform, "", reference),
 	}, Revision: revision})
@@ -276,7 +277,7 @@ func (repository *SecretRepository) resolveSecretAtRevision(
 		if ids.Validate(ids.KindSecret, id) != nil {
 			return Versioned[SecretRecord]{}, errs.New(errs.KindInternal, "Secret key index is corrupt")
 		}
-		stored, err := repository.store.GetMany(ctx, GetManyRequest{
+		stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
 				secretRecordKey(id),
 				deletionTombstoneKey(string(DeletionTargetSecret), id),
@@ -315,7 +316,7 @@ func (repository *SecretRepository) resolveSecretAtRevision(
 	return Versioned[SecretRecord]{}, errs.New(errs.KindSecretNotFound, "Secret was not found in scope")
 }
 
-func validateSecretDeletionFence(value *KeyValue, secretID string) error {
+func validateSecretDeletionFence(value *etcdstore.KeyValue, secretID string) error {
 	if value == nil {
 		return errs.New(errs.KindInternal, "Secret deletion fence is missing")
 	}
@@ -338,7 +339,7 @@ func (repository *SecretRepository) DeleteSecret(
 	if err := validateSecretVersion(current); err != nil {
 		return 0, err
 	}
-	dependencies, err := repository.store.GetMany(ctx, GetManyRequest{
+	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			secretOwnerKey(current.Record.Secret),
 			secretScopedKey(current.Record.Secret),
@@ -361,11 +362,11 @@ func (repository *SecretRepository) DeleteSecret(
 		return 0, err
 	}
 	conditions = append(conditions, fences...)
-	result, err := repository.store.Transact(ctx, conditions, []Mutation{
-		{Type: MutationDelete, Key: secretRecordKey(current.Record.Secret.ID)},
-		{Type: MutationDelete, Key: secretOwnerKey(current.Record.Secret)},
-		{Type: MutationDelete, Key: secretScopedKey(current.Record.Secret)},
-		{Type: MutationDelete, Key: secretValueKey(current.Record.Secret.ID)},
+	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
+		{Type: etcdstore.MutationDelete, Key: secretRecordKey(current.Record.Secret.ID)},
+		{Type: etcdstore.MutationDelete, Key: secretOwnerKey(current.Record.Secret)},
+		{Type: etcdstore.MutationDelete, Key: secretScopedKey(current.Record.Secret)},
+		{Type: etcdstore.MutationDelete, Key: secretValueKey(current.Record.Secret.ID)},
 	})
 	if err != nil {
 		return 0, err
@@ -434,8 +435,8 @@ func validateSecretListScope(scope core.SecretScope, projectID string) error {
 	}
 }
 
-func secretCreateConditions(owner SecretOwner, record SecretRecord) []Condition {
-	conditions := []Condition{
+func secretCreateConditions(owner SecretOwner, record SecretRecord) []etcdstore.Condition {
+	conditions := []etcdstore.Condition{
 		{Key: secretRecordKey(record.Secret.ID)},
 		{Key: secretOwnerKey(record.Secret)},
 		{Key: secretScopedKey(record.Secret)},
@@ -443,16 +444,16 @@ func secretCreateConditions(owner SecretOwner, record SecretRecord) []Condition 
 	}
 	if owner.Project != nil {
 		conditions = append(conditions,
-			Condition{Key: projectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
+			etcdstore.Condition{Key: projectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
 		)
 	}
-	conditions = append(conditions, Condition{Key: deletionTombstoneKey("secret", record.Secret.ID)})
+	conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("secret", record.Secret.ID)})
 	if owner.Project != nil {
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("project", owner.Project.Record.ID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("project", owner.Project.Record.ID)})
 		if owner.Project.Record.TenantID != "" {
 			conditions = append(
 				conditions,
-				Condition{Key: deletionTombstoneKey("tenant", owner.Project.Record.TenantID)},
+				etcdstore.Condition{Key: deletionTombstoneKey("tenant", owner.Project.Record.TenantID)},
 			)
 		}
 	}
@@ -462,9 +463,9 @@ func secretCreateConditions(owner SecretOwner, record SecretRecord) []Condition 
 func secretDeleteConditions(
 	owner SecretOwner,
 	current Versioned[SecretRecord],
-	dependencies []*KeyValue,
-) []Condition {
-	conditions := []Condition{
+	dependencies []*etcdstore.KeyValue,
+) []etcdstore.Condition {
+	conditions := []etcdstore.Condition{
 		{Key: secretRecordKey(current.Record.Secret.ID), ModRevision: current.Revision},
 		{Key: secretOwnerKey(current.Record.Secret), ModRevision: dependencies[0].ModRevision},
 		{Key: secretScopedKey(current.Record.Secret), ModRevision: dependencies[1].ModRevision},
@@ -472,19 +473,19 @@ func secretDeleteConditions(
 	}
 	if owner.Project != nil {
 		conditions = append(conditions,
-			Condition{Key: projectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
+			etcdstore.Condition{Key: projectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
 		)
 	}
 	conditions = append(
 		conditions,
-		Condition{Key: deletionTombstoneKey("secret", current.Record.Secret.ID)},
+		etcdstore.Condition{Key: deletionTombstoneKey("secret", current.Record.Secret.ID)},
 	)
 	if owner.Project != nil {
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("project", owner.Project.Record.ID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("project", owner.Project.Record.ID)})
 		if owner.Project.Record.TenantID != "" {
 			conditions = append(
 				conditions,
-				Condition{Key: deletionTombstoneKey("tenant", owner.Project.Record.TenantID)},
+				etcdstore.Condition{Key: deletionTombstoneKey("tenant", owner.Project.Record.TenantID)},
 			)
 		}
 	}
@@ -492,7 +493,7 @@ func secretDeleteConditions(
 }
 
 func classifySecretCreateConflict(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	owner SecretOwner,
 	record SecretRecord,
 ) error {

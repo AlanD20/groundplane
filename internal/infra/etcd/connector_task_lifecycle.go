@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -15,8 +16,8 @@ const (
 
 type connectorTaskChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -40,7 +41,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		retry.Params[TaskConnectorNameParam] != source.Params[TaskConnectorNameParam] {
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector retry changed its durable target")
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			connectorRecordKey(source.Target),
 			deletionTombstoneKey(string(DeletionTargetConnector), source.Target),
@@ -69,7 +70,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 			"connector deletion task target metadata is corrupt",
 		)
 	}
-	dependencies, err := repository.store.GetMany(ctx, GetManyRequest{
+	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorNameKey(connector.EnvironmentID, connector.Name),
@@ -116,7 +117,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	if err != nil || environment.ID != connector.EnvironmentID {
 		return connectorTaskChange{}, corruptRecord()
 	}
-	parents, err := repository.store.GetMany(ctx, GetManyRequest{
+	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			projectKey(environment.ProjectID),
 			deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
@@ -141,7 +142,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	}
 	change := connectorTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: connectorRecordKey(connector.ID), ModRevision: stored.Values[0].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID)},
 			{Key: connectorRemovalIntentKey(retry.ID)},
@@ -162,7 +163,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	}
 	change.conditions = append(change.conditions, referenceConditions...)
 	if project.TenantID != "" {
-		tenantFence, err := repository.store.GetMany(ctx, GetManyRequest{
+		tenantFence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys:     []string{deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID)},
 			Revision: revision,
 		})
@@ -175,7 +176,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		if tenantFence.Values[0] != nil {
 			return connectorTaskChange{}, errs.New(errs.KindResourceInUse, "tenant is being deleted")
 		}
-		change.conditions = append(change.conditions, Condition{
+		change.conditions = append(change.conditions, etcdstore.Condition{
 			Key: deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID),
 		})
 	}
@@ -201,12 +202,12 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	}
 	change.values = append(change.values, tombstoneValue, intentValue)
 	change.mutations = append(change.mutations,
-		Mutation{
-			Type:  MutationPut,
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
 			Key:   deletionTombstoneKey(string(DeletionTargetConnector), connector.ID),
 			Value: tombstoneValue,
 		},
-		Mutation{Type: MutationPut, Key: connectorRemovalIntentKey(retry.ID), Value: intentValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: connectorRemovalIntentKey(retry.ID), Value: intentValue},
 	)
 	return change, nil
 }
@@ -221,7 +222,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	if err != nil || !applies {
 		return connectorTaskChange{}, err
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			connectorRecordKey(task.Target),
 			deletionTombstoneKey(string(DeletionTargetConnector), task.Target),
@@ -266,7 +267,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 			"connector deletion intent does not match its task",
 		)
 	}
-	dependencies, err := repository.store.GetMany(ctx, GetManyRequest{
+	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorNameKey(connector.EnvironmentID, connector.Name),
@@ -295,7 +296,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are corrupt")
 	}
 	clear(credentials.Ciphertext)
-	referenceConditions := []Condition(nil)
+	referenceConditions := []etcdstore.Condition(nil)
 	if terminalStatus == TaskStatusCompleted {
 		referenceConditions, err = requireConnectorReferencePrefixesEmpty(
 			ctx, repository.store, connector.ID, connector.EnvironmentID, revision,
@@ -306,7 +307,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	}
 	change := connectorTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: connectorRecordKey(task.Target), ModRevision: stored.Values[0].ModRevision},
 			{
 				Key:         deletionTombstoneKey(string(DeletionTargetConnector), task.Target),
@@ -323,18 +324,18 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 			},
 			{Key: connectorCredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
 		},
-		mutations: []Mutation{
-			{Type: MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetConnector), task.Target)},
-			{Type: MutationDelete, Key: connectorRemovalIntentKey(task.ID)},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetConnector), task.Target)},
+			{Type: etcdstore.MutationDelete, Key: connectorRemovalIntentKey(task.ID)},
 		},
 	}
 	change.conditions = append(change.conditions, referenceConditions...)
 	if terminalStatus == TaskStatusCompleted {
 		change.mutations = append(change.mutations,
-			Mutation{Type: MutationDelete, Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
-			Mutation{Type: MutationDelete, Key: connectorNameKey(connector.EnvironmentID, connector.Name)},
-			Mutation{Type: MutationDelete, Key: connectorCredentialValueKey(connector.ID)},
-			Mutation{Type: MutationDelete, Key: connectorRecordKey(connector.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorNameKey(connector.EnvironmentID, connector.Name)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorCredentialValueKey(connector.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorRecordKey(connector.ID)},
 		)
 	}
 	return change, nil
@@ -383,7 +384,7 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 		}
 		keys = append(keys, replayTargetKey)
 	}
-	stored, err := repository.store.GetMany(ctx, GetManyRequest{
+	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     keys,
 		Revision: revision,
 	})

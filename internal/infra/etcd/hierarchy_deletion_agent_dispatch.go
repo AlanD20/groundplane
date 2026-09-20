@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 	"time"
 
@@ -262,7 +263,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		return HierarchyDeletionChildEntry{}, err
 	}
 	defer clear(fenceValue)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)}, {Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskQueueKey(task.Executor, task.ID)},
 		{Key: childKey, ModRevision: previousRevision}, {Key: successorKey},
@@ -276,28 +277,28 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		},
 	}
 	fenceKey, _ := HierarchyDeletionCleanupFenceKey(operation.Tombstone.OperationID)
-	conditions = append(conditions, Condition{Key: fenceKey, ModRevision: operation.FenceRevision})
-	mutations := []Mutation{
-		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		{Type: MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
-		{Type: MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
-		{Type: MutationPut, Key: childKey, Value: entryValue},
-		{Type: MutationPut, Key: successorKey, Value: successorValue},
+	conditions = append(conditions, etcdstore.Condition{Key: fenceKey, ModRevision: operation.FenceRevision})
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: childKey, Value: entryValue},
+		{Type: etcdstore.MutationPut, Key: successorKey, Value: successorValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID),
 			Value: tombstoneValue,
 		},
-		{Type: MutationPut, Key: fenceKey, Value: fenceValue},
+		{Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue},
 	}
 	ownerKeys, err := taskOwnerIndexKeys(task.Owner, task.ID)
 	if err != nil {
 		return HierarchyDeletionChildEntry{}, err
 	}
 	for _, key := range ownerKeys {
-		conditions = append(conditions, Condition{Key: key})
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: key, Value: []byte(task.ID)})
+		conditions = append(conditions, etcdstore.Condition{Key: key})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: []byte(task.ID)})
 	}
 	if err := enforceHierarchyDeletionTransaction(conditions, mutations); err != nil {
 		return HierarchyDeletionChildEntry{}, err

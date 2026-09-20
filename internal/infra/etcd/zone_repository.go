@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"strings"
 
@@ -15,7 +16,7 @@ type ZoneRepository struct {
 	store hierarchyStore
 }
 
-func NewZoneRepository(store Store) (*ZoneRepository, error) {
+func NewZoneRepository(store etcdstore.Store) (*ZoneRepository, error) {
 	return newZoneRepository(store)
 }
 
@@ -101,7 +102,7 @@ func findZoneAtRevision(
 	fixedRevision := revision
 	var matched *Versioned[ZoneRecord]
 	for {
-		page, err := store.Range(ctx, RangeRequest{
+		page, err := store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: environmentDesiredHeadScanPrefix, StartExclusive: start, Limit: 200, Revision: fixedRevision,
 		})
 		if err != nil {

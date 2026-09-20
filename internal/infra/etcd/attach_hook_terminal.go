@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -50,7 +51,7 @@ func (repository *TaskRepository) applyBackingHookTerminal(
 		return errs.New(errs.KindInternal, "Attach hook checkpoint facts are missing")
 	}
 	factKey := attachFactsKey(task.Target)
-	current, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{factKey}, Revision: revision})
+	current, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{factKey}, Revision: revision})
 	if err != nil {
 		return err
 	}
@@ -65,8 +66,8 @@ func (repository *TaskRepository) applyBackingHookTerminal(
 	if err != nil {
 		return err
 	}
-	change.conditions = append(change.conditions, Condition{Key: factKey, ModRevision: current.Values[0].ModRevision})
-	change.mutations = append(change.mutations, Mutation{Type: MutationPut, Key: factKey, Value: value})
+	change.conditions = append(change.conditions, etcdstore.Condition{Key: factKey, ModRevision: current.Values[0].ModRevision})
+	change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: factKey, Value: value})
 	change.values = append(change.values, value)
 	change.mutates = true
 	return nil
@@ -80,18 +81,18 @@ func (repository *TaskRepository) requireBackingHookResultCheckpoint(
 	attachID string,
 	event backinghook.Event,
 	revision int64,
-) (BackingHookCheckpointRecord, Condition, error) {
+) (BackingHookCheckpointRecord, etcdstore.Condition, error) {
 	key := backingHookCheckpointKey(task.ID, stepID)
-	checkpointResult, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+	checkpointResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
-		return BackingHookCheckpointRecord{}, Condition{}, err
+		return BackingHookCheckpointRecord{}, etcdstore.Condition{}, err
 	}
 	if checkpointResult == nil || checkpointResult.ReadRevision != revision ||
 		len(checkpointResult.Values) != 1 || checkpointResult.Values[0] == nil {
 		if checkpointResult != nil {
 			clearKeyValues(checkpointResult.Values)
 		}
-		return BackingHookCheckpointRecord{}, Condition{}, errs.New(
+		return BackingHookCheckpointRecord{}, etcdstore.Condition{}, errs.New(
 			errs.KindStateConflict,
 			"Backing hook RESULT checkpoint is missing",
 		)
@@ -110,12 +111,12 @@ func (repository *TaskRepository) requireBackingHookResultCheckpoint(
 		if checkpoint.Facts != nil {
 			clear(checkpoint.Facts.Ciphertext)
 		}
-		return BackingHookCheckpointRecord{}, Condition{}, errs.New(
+		return BackingHookCheckpointRecord{}, etcdstore.Condition{}, errs.New(
 			errs.KindStateConflict,
 			"Backing hook RESULT checkpoint does not match the terminal Task",
 		)
 	}
-	return checkpoint, Condition{
+	return checkpoint, etcdstore.Condition{
 		Key: key, ModRevision: checkpointResult.Values[0].ModRevision,
 	}, nil
 }

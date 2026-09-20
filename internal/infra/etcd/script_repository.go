@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -11,7 +12,9 @@ import (
 // ScriptRepository owns Script records, Environment membership, slug uniqueness, and CAS updates.
 type ScriptRepository struct{ store hierarchyStore }
 
-func NewScriptRepository(store Store) (*ScriptRepository, error) { return newScriptRepository(store) }
+func NewScriptRepository(store etcdstore.Store) (*ScriptRepository, error) {
+	return newScriptRepository(store)
+}
 
 func newScriptRepository(store hierarchyStore) (*ScriptRepository, error) {
 	if store == nil {
@@ -79,7 +82,7 @@ func (repository *ScriptRepository) prepareScriptCreation(
 	project Versioned[ProjectRecord],
 	target Versioned[ServiceRecord],
 	record ScriptRecord,
-) ([]Condition, []Mutation, idempotencyPlanClassifier, error) {
+) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	if err := validateScriptHierarchy(ctx, environment, project, target, record); err != nil {
 		return nil, nil, nil, err
 	}
@@ -88,7 +91,7 @@ func (repository *ScriptRepository) prepareScriptCreation(
 		return nil, nil, nil, err
 	}
 	record.ScriptSetGeneration = active.Record.GenerationID
-	page, err := repository.store.Range(ctx, RangeRequest{
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: scriptSetOwnerPrefix(
 			record.EnvironmentID,
 			active.Record.GenerationID,
@@ -130,17 +133,17 @@ func (repository *ScriptRepository) prepareScriptCreation(
 		return nil, nil, nil, err
 	}
 	conditions := scriptWriteConditions(environment, project, target, record, nil, active, 0, 0)
-	conditions = append(conditions, Condition{Key: scriptSetBodyGenerationKey(
+	conditions = append(conditions, etcdstore.Condition{Key: scriptSetBodyGenerationKey(
 		record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID, record.ActiveGeneration,
 	)})
-	mutations := []Mutation{
+	mutations := []etcdstore.Mutation{
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 			Value: value,
 		},
 		{
-			Type: MutationPut,
+			Type: etcdstore.MutationPut,
 			Key: scriptSetBodyGenerationKey(
 				record.EnvironmentID,
 				record.ScriptSetGeneration,
@@ -150,24 +153,24 @@ func (repository *ScriptRepository) prepareScriptCreation(
 			Value: bodyValue,
 		},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 			Value: []byte(record.Desired.ID),
 		},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 			Value: []byte(record.Desired.ID),
 		},
-		{Type: MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locatorValue},
+		{Type: etcdstore.MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locatorValue},
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
 			Value: []byte(record.Desired.ID),
 		},
-		{Type: MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
+		{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
 	}
-	classify := func(_ int64, values []*KeyValue) error {
+	classify := func(_ int64, values []*etcdstore.KeyValue) error {
 		return classifyScriptWriteConflict(
 			values,
 			environment,
@@ -203,7 +206,7 @@ func (repository *ScriptRepository) GetScript(ctx context.Context, id string) (V
 	if err != nil {
 		return Versioned[ScriptRecord]{}, err
 	}
-	primary, err := repository.store.GetMany(ctx, GetManyRequest{
+	primary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			scriptSetScriptKey(locator.EnvironmentID, active.Record.GenerationID, id),
 		}, Revision: active.ReadRevision,
@@ -302,7 +305,7 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 	target Versioned[ServiceRecord],
 	current Versioned[ScriptRecord],
 	desired core.Script,
-) (ScriptRecord, []Condition, []Mutation, idempotencyPlanClassifier, error) {
+) (ScriptRecord, []etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	replacement, err := ReplaceScriptDesired(current.Record, desired)
 	if err != nil {
 		return ScriptRecord{}, nil, nil, nil, err
@@ -332,7 +335,7 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 			scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, replacement.Desired.Slug),
 		)
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     indexKeys,
 		Revision: current.ReadRevision,
 	})
@@ -361,33 +364,33 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 		clear(value)
 		return ScriptRecord{}, nil, nil, nil, err
 	}
-	mutations := []Mutation{
+	mutations := []etcdstore.Mutation{
 		{
-			Type:  MutationPut,
+			Type:  etcdstore.MutationPut,
 			Key:   scriptSetScriptKey(replacement.EnvironmentID, active.Record.GenerationID, replacement.Desired.ID),
 			Value: value,
 		},
-		{Type: MutationPut, Key: scriptSetActiveKey(replacement.EnvironmentID), Value: activeValue},
+		{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(replacement.EnvironmentID), Value: activeValue},
 	}
 	extras := scriptWriteConflictExtras{}
 	if slugChanged {
 		extras.newSlug = replacement.Desired.Slug
 		conditions = append(
 			conditions,
-			Condition{Key: scriptSetSlugKey(replacement.EnvironmentID, active.Record.GenerationID, extras.newSlug)},
+			etcdstore.Condition{Key: scriptSetSlugKey(replacement.EnvironmentID, active.Record.GenerationID, extras.newSlug)},
 		)
 		mutations = append(
 			mutations,
-			Mutation{
-				Type: MutationDelete,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
 				Key: scriptSetSlugKey(
 					current.Record.EnvironmentID,
 					active.Record.GenerationID,
 					current.Record.Desired.Slug,
 				),
 			},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   scriptSetSlugKey(replacement.EnvironmentID, active.Record.GenerationID, extras.newSlug),
 				Value: []byte(replacement.Desired.ID),
 			},
@@ -405,15 +408,15 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 			return ScriptRecord{}, nil, nil, nil, generationErr
 		}
 		extras.bodyGeneration = true
-		conditions = append(conditions, Condition{Key: scriptSetBodyGenerationKey(
+		conditions = append(conditions, etcdstore.Condition{Key: scriptSetBodyGenerationKey(
 			replacement.EnvironmentID, active.Record.GenerationID, replacement.Desired.ID, replacement.ActiveGeneration,
 		)})
-		mutations = append(mutations, Mutation{
-			Type: MutationPut, Key: scriptSetBodyGenerationKey(replacement.EnvironmentID, active.Record.GenerationID, replacement.Desired.ID, replacement.ActiveGeneration),
+		mutations = append(mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationPut, Key: scriptSetBodyGenerationKey(replacement.EnvironmentID, active.Record.GenerationID, replacement.Desired.ID, replacement.ActiveGeneration),
 			Value: generationValue,
 		})
 	}
-	classify := func(_ int64, values []*KeyValue) error {
+	classify := func(_ int64, values []*etcdstore.KeyValue) error {
 		return classifyScriptWriteConflict(
 			values,
 			environment,
@@ -447,14 +450,14 @@ func scriptWriteConditions(
 	active Versioned[ScriptSetGenerationRecord],
 	ownerRevision int64,
 	slugRevision int64,
-) []Condition {
-	scriptCondition := Condition{
+) []etcdstore.Condition {
+	scriptCondition := etcdstore.Condition{
 		Key: scriptSetScriptKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.ID),
 	}
-	ownerCondition := Condition{
+	ownerCondition := etcdstore.Condition{
 		Key: scriptSetOwnerKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.ID),
 	}
-	slugCondition := Condition{
+	slugCondition := etcdstore.Condition{
 		Key: scriptSetSlugKey(record.EnvironmentID, active.Record.GenerationID, record.Desired.Slug),
 	}
 	if current != nil {
@@ -462,7 +465,7 @@ func scriptWriteConditions(
 		ownerCondition.ModRevision = ownerRevision
 		slugCondition.ModRevision = slugRevision
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		scriptCondition,
 		ownerCondition,
 		slugCondition,
@@ -477,12 +480,12 @@ func scriptWriteConditions(
 	}
 	if current == nil {
 		conditions = append(conditions,
-			Condition{Key: scriptLocatorKey(record.Desired.ID)},
-			Condition{Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID)},
+			etcdstore.Condition{Key: scriptLocatorKey(record.Desired.ID)},
+			etcdstore.Condition{Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID)},
 		)
 	}
 	if project.Record.TenantID != "" {
-		conditions = append(conditions, Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
+		conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("tenant", project.Record.TenantID)})
 	}
 	return conditions
 }
@@ -536,7 +539,7 @@ func validateScriptVersion(current Versioned[ScriptRecord]) error {
 }
 
 func classifyScriptWriteConflict(
-	values []*KeyValue,
+	values []*etcdstore.KeyValue,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
 	target Versioned[ServiceRecord],
@@ -642,7 +645,7 @@ func (repository *ScriptRepository) hydrateScriptBody(
 	ctx context.Context,
 	record Versioned[ScriptRecord],
 ) (Versioned[ScriptRecord], error) {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{scriptSetBodyGenerationKey(
 			record.Record.EnvironmentID, record.Record.ScriptSetGeneration,
 			record.Record.Desired.ID, record.Record.ActiveGeneration,

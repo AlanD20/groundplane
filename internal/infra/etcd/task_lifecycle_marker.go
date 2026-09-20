@@ -1,8 +1,11 @@
 package etcd
 
-import "github.com/AlanD20/groundplane/pkg/errs"
+import (
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
 
-func validateTaskLifecycleCompanions(task TaskRecord, activeValue *KeyValue, markerValue *KeyValue) error {
+func validateTaskLifecycleCompanions(task TaskRecord, activeValue *etcdstore.KeyValue, markerValue *etcdstore.KeyValue) error {
 	activeTaskID, err := decodeTaskReference(activeValue.Value)
 	if err != nil || activeTaskID != task.ID {
 		return errs.New(errs.KindInternal, "active-operation record does not match its Task")

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"maps"
 	"slices"
 
@@ -109,7 +110,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	defer clear(epochMutation.Value)
 
 	serviceID := input.Change.Record.Desired.ID
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{
 			Key:         environmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID),
 			ModRevision: publication.rootRevision,
@@ -120,18 +121,18 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		{Key: deletionTombstoneKey("service", serviceID)},
 	}
 	if input.Change.Current == nil {
-		conditions = append(conditions, Condition{Key: serviceRuntimeKey(serviceID)})
+		conditions = append(conditions, etcdstore.Condition{Key: serviceRuntimeKey(serviceID)})
 	}
 	removalLockIndex := len(conditions)
-	conditions = append(conditions, Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)})
+	conditions = append(conditions, etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)})
 	conditions = append(conditions, referenceConditions...)
 	referenceOffset := len(conditions) - len(referenceConditions)
 	fenceOffset := len(conditions)
 	conditions = append(conditions, fence.transactionConditions()...)
-	mutations := []Mutation{
-		{Type: MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
-		{Type: MutationDelete, Key: publication.locatorKey},
-		{Type: MutationPut, Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
+		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
+		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
 	}
 	if input.Change.Current == nil {
 		runtimeValue, runtimeErr := encodeServiceRuntimeRecord(newServiceRuntimeRecord(input.Change.Record))
@@ -141,11 +142,11 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		defer clear(runtimeValue)
 		mutations = append(
 			mutations,
-			Mutation{Type: MutationPut, Key: serviceRuntimeKey(serviceID), Value: runtimeValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: serviceRuntimeKey(serviceID), Value: runtimeValue},
 		)
 	}
 	mutations = append(mutations, epochMutation)
-	classifier := func(_ int64, values []*KeyValue) error {
+	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {
 			return errs.New(errs.KindInternal, "direct Service publication compare evidence is incomplete")
 		}
@@ -194,7 +195,7 @@ func (repository *HierarchyRepository) validateDirectServiceHierarchy(
 	input EnvironmentServiceDesiredPublication,
 	readRevision int64,
 ) error {
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			environmentKey(input.Environment.Record.ID),
 			projectKey(input.Project.Record.ID),
@@ -348,7 +349,7 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 		return environmentBlueprintPublicationEvidence{}, err
 	}
 	rootKey := environmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID)
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{rootKey, descriptorKey, locatorKey}, Revision: descriptorRead.ReadRevision,
 	})
 	if err != nil {

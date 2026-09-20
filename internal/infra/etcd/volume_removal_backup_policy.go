@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -22,7 +23,7 @@ type volumeRemovalBackupPolicyState struct {
 	policy        *BackupPolicyRecord
 	coordination  EnvironmentCoordinationRecord
 	sources       []BackupSourceRecord
-	conditions    []Condition
+	conditions    []etcdstore.Condition
 }
 
 // Projection supplies the replacement decisions for ADR0051 staging. It does
@@ -55,7 +56,7 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 		environmentCoordinationKey(environmentID),
 		environmentMutationEpochKey(environmentID),
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: readRevision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
 		return VolumeRemovalBackupPolicyPreparation{}, err
 	}
@@ -68,7 +69,7 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 	if err != nil || epoch.EnvironmentID != environmentID {
 		return VolumeRemovalBackupPolicyPreparation{}, corruptBackupRuntimeRecord()
 	}
-	state.conditions = []Condition{
+	state.conditions = []etcdstore.Condition{
 		{Key: keys[0]}, {Key: keys[1]},
 		{Key: keys[2], ModRevision: read.Values[2].ModRevision},
 	}
@@ -98,8 +99,8 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 }
 
 type volumeRemovalBackupPolicyPublication struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	projection *EnvironmentBlueprintBackupPolicy
 }
 
@@ -114,7 +115,7 @@ func prepareVolumeRemovalBackupPolicyPublication(
 			"Volume policy preparation is required",
 		)
 	}
-	publication := volumeRemovalBackupPolicyPublication{conditions: append([]Condition(nil), state.conditions...)}
+	publication := volumeRemovalBackupPolicyPublication{conditions: append([]etcdstore.Condition(nil), state.conditions...)}
 	if state.policy == nil {
 		return publication, nil
 	}
@@ -134,13 +135,13 @@ func prepareVolumeRemovalBackupPolicyPublication(
 		return volumeRemovalBackupPolicyPublication{}, err
 	}
 	publication.projection = projection
-	publication.mutations = []Mutation{
-		{Type: MutationPut, Key: backupPolicyKey(state.environmentID), Value: policyValue},
-		{Type: MutationPut, Key: environmentCoordinationKey(state.environmentID), Value: coordinationValue},
+	publication.mutations = []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: backupPolicyKey(state.environmentID), Value: policyValue},
+		{Type: etcdstore.MutationPut, Key: environmentCoordinationKey(state.environmentID), Value: coordinationValue},
 	}
 	if state.policy.Enabled && !replacement.Enabled {
-		publication.mutations = append(publication.mutations, Mutation{
-			Type: MutationDelete, Key: backupPolicyConnectorReferenceKey(state.policy.ConnectorID, state.environmentID),
+		publication.mutations = append(publication.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete, Key: backupPolicyConnectorReferenceKey(state.policy.ConnectorID, state.environmentID),
 		})
 	}
 	return publication, nil
@@ -193,13 +194,13 @@ func (prepared VolumeRemovalBackupPolicyPreparation) validateDesiredPublication(
 // Equal fences collapse; different revisions reject rather than losing either
 // owner's fixed-revision authority to fit the publication budget.
 func (publication volumeRemovalBackupPolicyPublication) withExistingComparisons(
-	existing []Condition,
+	existing []etcdstore.Condition,
 ) (volumeRemovalBackupPolicyPublication, error) {
-	seen := make(map[string]Condition, len(existing)+len(publication.conditions))
+	seen := make(map[string]etcdstore.Condition, len(existing)+len(publication.conditions))
 	for _, condition := range existing {
 		seen[condition.Key] = condition
 	}
-	remaining := make([]Condition, 0, len(publication.conditions))
+	remaining := make([]etcdstore.Condition, 0, len(publication.conditions))
 	for _, condition := range publication.conditions {
 		if previous, found := seen[condition.Key]; found {
 			if previous != condition {
@@ -220,7 +221,7 @@ func (publication volumeRemovalBackupPolicyPublication) classifyConflict(
 	baseCount int,
 	previous idempotencyPlanClassifier,
 ) idempotencyPlanClassifier {
-	return func(revision int64, values []*KeyValue) error {
+	return func(revision int64, values []*etcdstore.KeyValue) error {
 		if len(values) != baseCount+len(publication.conditions) {
 			return errs.New(errs.KindInternal, "Volume policy publication compare evidence is incomplete")
 		}

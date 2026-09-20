@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"strings"
 
@@ -41,7 +42,7 @@ func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
 	}
 	prefix, start := scriptSetOwnerPrefix(scope.Environment.Record.ID, active.Record.GenerationID), ""
 	for {
-		page, err := ledger.store.Range(ctx, RangeRequest{
+		page, err := ledger.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: prefix, StartExclusive: start, Limit: 64, Revision: scope.ReadRevision,
 		})
 		if err != nil {

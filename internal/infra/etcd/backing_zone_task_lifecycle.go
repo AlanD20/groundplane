@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"maps"
 	"time"
 
@@ -11,8 +12,8 @@ import (
 
 type backingZoneTaskChange struct {
 	applies    bool
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 	values     [][]byte
 }
 
@@ -45,7 +46,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		environmentComposeProjectionKey(source.Params[TaskZoneEnvironmentParam]),
 		componentTaskActiveEnvironmentKey(source.Params[TaskZoneEnvironmentParam]),
 	}
-	state, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return backingZoneTaskChange{}, err
 	}
@@ -112,7 +113,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 	}
 	return backingZoneTaskChange{
 		applies: true,
-		conditions: []Condition{
+		conditions: []etcdstore.Condition{
 			{Key: keys[0], ModRevision: state.Values[0].ModRevision},
 			{Key: keys[1]},
 			{Key: keys[2], ModRevision: state.Values[2].ModRevision},
@@ -125,10 +126,10 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 			{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 			{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		},
-		mutations: []Mutation{
-			{Type: MutationPut, Key: keys[0], Value: intentValue},
-			{Type: MutationPut, Key: keys[1], Value: tombstoneValue},
-			{Type: MutationPut, Key: keys[4], Value: []byte(retry.ID)},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: keys[0], Value: intentValue},
+			{Type: etcdstore.MutationPut, Key: keys[1], Value: tombstoneValue},
+			{Type: etcdstore.MutationPut, Key: keys[4], Value: []byte(retry.ID)},
 		},
 		values: [][]byte{intentValue, tombstoneValue, publication.publishedDescriptor},
 	}, nil

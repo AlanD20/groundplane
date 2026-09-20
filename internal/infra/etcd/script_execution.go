@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"strconv"
 	"strings"
@@ -92,8 +93,8 @@ type releaseHookExecutionStep struct {
 }
 
 type releaseHookExecutionRetryTransfer struct {
-	conditions []Condition
-	mutations  []Mutation
+	conditions []etcdstore.Condition
+	mutations  []etcdstore.Mutation
 }
 
 func (transfer *releaseHookExecutionRetryTransfer) clear() {
@@ -123,7 +124,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 	for index, step := range steps {
 		keys[index] = scriptExecutionKey(step.executionID)
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return false, err
 	}
@@ -133,7 +134,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 	type activeHook struct {
 		step   releaseHookExecutionStep
 		record ScriptExecutionRecord
-		value  *KeyValue
+		value  *etcdstore.KeyValue
 	}
 	active := make([]activeHook, 0, maximumReleaseHookTerminalBatch)
 	seenScripts := make(map[string]struct{}, len(steps))
@@ -185,15 +186,15 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 			scriptBodyReverseReferenceKey(hook.record.ID),
 		)
 	}
-	details, err := repository.store.GetMany(ctx, GetManyRequest{Keys: detailKeys, Revision: revision})
+	details, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: detailKeys, Revision: revision})
 	if err != nil {
 		return false, err
 	}
 	if details == nil || details.ReadRevision != revision || len(details.Values) != len(detailKeys) {
 		return false, corruptReleaseRecord()
 	}
-	conditions := make([]Condition, 0, len(active)*4)
-	mutations := make([]Mutation, 0, len(active)*4)
+	conditions := make([]etcdstore.Condition, 0, len(active)*4)
+	mutations := make([]etcdstore.Mutation, 0, len(active)*4)
 	defer clearMutations(mutations)
 	for index, hook := range active {
 		values := details.Values[index*3 : index*3+3]
@@ -226,19 +227,19 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 			return false, encodeErr
 		}
 		conditions = append(conditions,
-			Condition{Key: hook.value.Key, ModRevision: hook.value.ModRevision},
-			Condition{Key: values[0].Key, ModRevision: values[0].ModRevision},
-			Condition{Key: values[1].Key, ModRevision: values[1].ModRevision},
-			Condition{Key: values[2].Key, ModRevision: values[2].ModRevision},
+			etcdstore.Condition{Key: hook.value.Key, ModRevision: hook.value.ModRevision},
+			etcdstore.Condition{Key: values[0].Key, ModRevision: values[0].ModRevision},
+			etcdstore.Condition{Key: values[1].Key, ModRevision: values[1].ModRevision},
+			etcdstore.Condition{Key: values[2].Key, ModRevision: values[2].ModRevision},
 		)
 		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: hook.value.Key, Value: executionValue},
-			Mutation{Type: MutationPut, Key: values[0].Key, Value: scriptValue},
-			Mutation{Type: MutationDelete, Key: values[1].Key},
-			Mutation{Type: MutationDelete, Key: values[2].Key},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hook.value.Key, Value: executionValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: values[0].Key, Value: scriptValue},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: values[1].Key},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: values[2].Key},
 		)
 	}
-	if len(conditions)+len(mutations) > maximumTransactionOperations {
+	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return false, errs.New(errs.KindInternal, "release hook terminal batch exceeds the transaction ceiling")
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
@@ -278,7 +279,7 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 	for index, step := range steps {
 		keys[index] = scriptExecutionKey(step.executionID)
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return releaseHookExecutionRetryTransfer{}, err
 	}
@@ -286,7 +287,7 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 		return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script retry barrier read is incomplete")
 	}
 	transfer := releaseHookExecutionRetryTransfer{
-		conditions: make([]Condition, 0, len(steps)), mutations: make([]Mutation, 0, len(steps)),
+		conditions: make([]etcdstore.Condition, 0, len(steps)), mutations: make([]etcdstore.Mutation, 0, len(steps)),
 	}
 	seenExecutions := make(map[string]struct{}, len(steps))
 	for index, step := range steps {
@@ -325,8 +326,8 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 			transfer.clear()
 			return releaseHookExecutionRetryTransfer{}, encodeErr
 		}
-		transfer.conditions = append(transfer.conditions, Condition{Key: value.Key, ModRevision: value.ModRevision})
-		transfer.mutations = append(transfer.mutations, Mutation{Type: MutationPut, Key: value.Key, Value: encoded})
+		transfer.conditions = append(transfer.conditions, etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision})
+		transfer.mutations = append(transfer.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: value.Key, Value: encoded})
 	}
 	return transfer, nil
 }
@@ -362,7 +363,7 @@ func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 	task TaskRecord,
 	assignment TaskAssignmentRecord,
 	revision int64,
-) (bool, []Condition, error) {
+) (bool, []etcdstore.Condition, error) {
 	steps, err := releaseHookExecutionSteps(task)
 	if err != nil {
 		return false, nil, err
@@ -374,7 +375,7 @@ func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 	for index, step := range steps {
 		keys[index] = scriptExecutionKey(step.executionID)
 	}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return false, nil, err
 	}
@@ -382,7 +383,7 @@ func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 		return false, nil, corruptReleaseRecord()
 	}
 	effect := false
-	conditions := make([]Condition, len(keys))
+	conditions := make([]etcdstore.Condition, len(keys))
 	for index, value := range read.Values {
 		if value == nil {
 			return false, nil, corruptReleaseRecord()
@@ -395,7 +396,7 @@ func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 			record.State != ScriptExecutionNotStarted && record.AssignmentID != assignment.AssignmentID {
 			return false, nil, corruptReleaseRecord()
 		}
-		conditions[index] = Condition{Key: value.Key, ModRevision: value.ModRevision}
+		conditions[index] = etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision}
 		effect = effect || record.State != ScriptExecutionNotStarted
 	}
 	return effect, conditions, nil
@@ -428,7 +429,7 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 	task TaskRecord,
 	execution ScriptExecutionRecord,
 	revision int64,
-) ([]Condition, error) {
+) ([]etcdstore.Condition, error) {
 	if repository == nil || repository.store == nil || !blueprintScriptTaskShape(task) ||
 		execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
 		execution.EnvironmentID != task.Owner.EnvironmentID ||
@@ -438,7 +439,7 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 	}
 	publicationID := task.Params[TaskReleasePublicationParam]
 	keys := []string{releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID)}
-	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +468,7 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script execution is outside the candidate manifest")
 	}
 	intentKey := releaseIntentStagingKey(publicationID, selected.ReleaseID)
-	intentRead, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{intentKey}, Revision: revision})
+	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{intentKey}, Revision: revision})
 	if err != nil {
 		return nil, err
 	}
@@ -483,7 +484,7 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 		intent.OperationID != task.OperationID || intent.OperationKind != domain.OperationBlueprintApply {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script candidate Intent changed")
 	}
-	return []Condition{
+	return []etcdstore.Condition{
 		{Key: keys[0], ModRevision: read.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
 		{Key: intentKey, ModRevision: intentRead.Values[0].ModRevision},
@@ -667,8 +668,8 @@ func validateScriptExecutionSources(sources ScriptExecutionSources, execution Sc
 	return validateStoredScriptContext(sources, execution)
 }
 
-func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []Condition {
-	conditions := []Condition{
+func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []etcdstore.Condition {
+	conditions := []etcdstore.Condition{
 		{
 			Key:         environmentBlueprintHeadKey(sources.Environment.Record.ID),
 			ModRevision: sources.DesiredHead.Revision,
@@ -681,7 +682,7 @@ func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []Condi
 		},
 	}
 	for _, network := range sources.Networks {
-		conditions = append(conditions, Condition{
+		conditions = append(conditions, etcdstore.Condition{
 			Key: deletionTombstoneKey(string(DeletionTargetZone), network.Record.Desired.ID),
 		})
 	}

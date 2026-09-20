@@ -1,8 +1,11 @@
 package etcd
 
-import "github.com/AlanD20/groundplane/pkg/errs"
+import (
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
 
-func validateEnvironmentDesiredPublicationBudget(conditions []Condition, mutations []Mutation) error {
+func validateEnvironmentDesiredPublicationBudget(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
 	return validateEnvironmentDesiredPublicationPartitionCounts(len(conditions), len(mutations), len(conditions))
 }
 

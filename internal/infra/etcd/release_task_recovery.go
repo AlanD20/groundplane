@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"time"
 
@@ -19,8 +20,8 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 	terminalAt time.Time,
 	head ReleaseOperationHead,
 	fence ReleaseFenceSet,
-	base *GetManyResult,
-	terminals *GetManyResult,
+	base *etcdstore.GetManyResult,
+	terminals *etcdstore.GetManyResult,
 	proofConditions ...Condition,
 ) (bool, error) {
 	if terminalStatus != TaskStatusCompleted || result.ReconciliationRequired {
@@ -51,20 +52,20 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 			releaseProjectionKey(member.ServiceID),
 		)
 	}
-	details, err := repository.store.GetMany(ctx, GetManyRequest{Keys: detailKeys, Revision: base.ReadRevision})
+	details, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: detailKeys, Revision: base.ReadRevision})
 	if err != nil {
 		return false, err
 	}
 	if details == nil || details.ReadRevision != base.ReadRevision || len(details.Values) != len(detailKeys) {
 		return false, corruptReleaseRecord()
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: base.Values[0].Key, ModRevision: base.Values[0].ModRevision},
 		{Key: base.Values[1].Key, ModRevision: base.Values[1].ModRevision},
 		{Key: base.Values[2].Key, ModRevision: base.Values[2].ModRevision},
 		{Key: base.Values[3].Key, ModRevision: base.Values[3].ModRevision},
 	}
-	mutations := make([]Mutation, 0, len(pending)*3)
+	mutations := make([]etcdstore.Mutation, 0, len(pending)*3)
 	defer clearMutations(mutations)
 	for offset, index := range pending {
 		member := head.Members[index]
@@ -173,18 +174,18 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 			return false, err
 		}
 		conditions = append(conditions,
-			Condition{Key: detailKeys[offset*3], ModRevision: intentValue.ModRevision},
-			Condition{Key: detailKeys[offset*3+1], ModRevision: checkpointValue.ModRevision},
-			Condition{Key: detailKeys[offset*3+2], ModRevision: keyValueRevision(projectionValue)},
-			Condition{Key: terminalValue.Key, ModRevision: terminalValue.ModRevision},
+			etcdstore.Condition{Key: detailKeys[offset*3], ModRevision: intentValue.ModRevision},
+			etcdstore.Condition{Key: detailKeys[offset*3+1], ModRevision: checkpointValue.ModRevision},
+			etcdstore.Condition{Key: detailKeys[offset*3+2], ModRevision: keyValueRevision(projectionValue)},
+			etcdstore.Condition{Key: terminalValue.Key, ModRevision: terminalValue.ModRevision},
 		)
 		mutations = append(mutations,
-			Mutation{Type: MutationPut, Key: checkpointValue.Key, Value: encodedCheckpoint},
-			Mutation{Type: MutationPut, Key: detailKeys[offset*3+2], Value: encodedProjection},
-			Mutation{Type: MutationPut, Key: terminalValue.Key, Value: encodedTerminal},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: checkpointValue.Key, Value: encodedCheckpoint},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: detailKeys[offset*3+2], Value: encodedProjection},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: terminalValue.Key, Value: encodedTerminal},
 		)
 	}
-	if len(conditions)+len(proofConditions)+len(mutations) > maximumTransactionOperations {
+	if len(conditions)+len(proofConditions)+len(mutations) > etcdstore.MaximumOperations {
 		return false, errs.New(errs.KindInternal, "release recovery batch exceeds the transaction ceiling")
 	}
 	transaction, err := repository.store.Transact(ctx, append(conditions, proofConditions...), mutations)
@@ -202,7 +203,7 @@ func (repository *TaskRepository) returnReleaseToRecovery(
 	ctx context.Context,
 	task TaskRecord,
 	head ReleaseOperationHead,
-	base *GetManyResult,
+	base *etcdstore.GetManyResult,
 	terminalAt time.Time,
 	proofConditions ...Condition,
 ) (bool, error) {
@@ -213,14 +214,14 @@ func (repository *TaskRepository) returnReleaseToRecovery(
 		return false, err
 	}
 	defer clear(headValue)
-	transaction, err := repository.store.Transact(ctx, append([]Condition{
+	transaction, err := repository.store.Transact(ctx, append([]etcdstore.Condition{
 		{Key: base.Values[0].Key, ModRevision: base.Values[0].ModRevision},
 		{Key: base.Values[1].Key, ModRevision: base.Values[1].ModRevision},
 		{Key: base.Values[2].Key, ModRevision: base.Values[2].ModRevision},
 		{Key: base.Values[3].Key, ModRevision: base.Values[3].ModRevision},
-	}, proofConditions...), []Mutation{
-		{Type: MutationPut, Key: releaseOperationKey(task.OperationID), Value: headValue},
-		{Type: MutationPut, Key: base.Values[3].Key, Value: slices.Clone(base.Values[3].Value)},
+	}, proofConditions...), []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: releaseOperationKey(task.OperationID), Value: headValue},
+		{Type: etcdstore.MutationPut, Key: base.Values[3].Key, Value: slices.Clone(base.Values[3].Value)},
 	})
 	if err != nil {
 		return false, err
@@ -237,7 +238,7 @@ func (repository *TaskRepository) closeRecoveredRelease(
 	task TaskRecord,
 	head ReleaseOperationHead,
 	fence ReleaseFenceSet,
-	base, terminals *GetManyResult,
+	base, terminals *etcdstore.GetManyResult,
 	terminalAt time.Time,
 	proofConditions ...Condition,
 ) (bool, error) {
@@ -253,19 +254,19 @@ func (repository *TaskRepository) closeRecoveredRelease(
 		return false, err
 	}
 	defer clear(headValue)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: base.Values[0].Key, ModRevision: base.Values[0].ModRevision},
 		{Key: base.Values[1].Key, ModRevision: base.Values[1].ModRevision},
 		{Key: base.Values[2].Key, ModRevision: base.Values[2].ModRevision},
 		{Key: base.Values[3].Key, ModRevision: base.Values[3].ModRevision},
 	}
 	for _, terminal := range terminals.Values {
-		conditions = append(conditions, Condition{Key: terminal.Key, ModRevision: terminal.ModRevision})
+		conditions = append(conditions, etcdstore.Condition{Key: terminal.Key, ModRevision: terminal.ModRevision})
 	}
-	mutations := []Mutation{
-		{Type: MutationPut, Key: releaseOperationKey(task.OperationID), Value: headValue},
-		{Type: MutationDelete, Key: releaseFenceSetKey(task.Owner.EnvironmentID)},
-		{Type: MutationPut, Key: base.Values[3].Key, Value: slices.Clone(base.Values[3].Value)},
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: releaseOperationKey(task.OperationID), Value: headValue},
+		{Type: etcdstore.MutationDelete, Key: releaseFenceSetKey(task.Owner.EnvironmentID)},
+		{Type: etcdstore.MutationPut, Key: base.Values[3].Key, Value: slices.Clone(base.Values[3].Value)},
 	}
 	defer clearMutations(mutations)
 	transaction, err := repository.store.Transact(ctx, append(conditions, proofConditions...), mutations)

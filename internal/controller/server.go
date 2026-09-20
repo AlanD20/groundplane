@@ -9,6 +9,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -26,7 +27,7 @@ import (
 // cmd/controller and pass down; handlers are methods on *Server so they
 // share the store/logger without globals.
 type Server struct {
-	Store             etcd.Store
+	Store             etcdstore.Store
 	Logger            *slog.Logger
 	Mux               *http.ServeMux
 	API               huma.API
@@ -172,7 +173,7 @@ type taskQueries interface {
 	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
 }
 
-func New(store etcd.Store, logger *slog.Logger, options Options) *Server {
+func New(store etcdstore.Store, logger *slog.Logger, options Options) *Server {
 	configureProblemResponses()
 	mux := http.NewServeMux()
 	config := problemAPIConfig("Groundplane API", version.Value)

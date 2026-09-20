@@ -2,13 +2,14 @@ package etcd
 
 import (
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func decodeReleaseProjection(value *KeyValue, environmentID, serviceID string) (domain.ServiceProjection, error) {
+func decodeReleaseProjection(value *etcdstore.KeyValue, environmentID, serviceID string) (domain.ServiceProjection, error) {
 	if value == nil {
 		return domain.ServiceProjection{}, nil
 	}
@@ -29,32 +30,32 @@ func releaseTerminalRecordMutations(
 	retention domain.RollbackMaterial,
 	projection domain.ServiceProjection,
 	writeProjection bool,
-) ([]Mutation, error) {
-	mutations := make([]Mutation, 0, 4)
+) ([]etcdstore.Mutation, error) {
+	mutations := make([]etcdstore.Mutation, 0, 4)
 	checkpointValue, err := encodeReleaseRecord("release-checkpoint", checkpoint)
 	if err != nil {
 		return nil, err
 	}
-	mutations = append(mutations, Mutation{Type: MutationPut, Key: keys[1], Value: checkpointValue})
+	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[1], Value: checkpointValue})
 	terminalValue, err := encodeReleaseRecord("release-terminal-summary", terminal)
 	if err != nil {
 		clearMutations(mutations)
 		return nil, err
 	}
-	mutations = append(mutations, Mutation{Type: MutationPut, Key: keys[3], Value: terminalValue})
+	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[3], Value: terminalValue})
 	retentionValue, err := encodeReleaseRecord("release-retention", retention)
 	if err != nil {
 		clearMutations(mutations)
 		return nil, err
 	}
-	mutations = append(mutations, Mutation{Type: MutationPut, Key: keys[4], Value: retentionValue})
+	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[4], Value: retentionValue})
 	if writeProjection {
 		projectionValue, err := encodeReleaseRecord("service-release-projection", projection)
 		if err != nil {
 			clearMutations(mutations)
 			return nil, err
 		}
-		mutations = append(mutations, Mutation{Type: MutationPut, Key: keys[2], Value: projectionValue})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[2], Value: projectionValue})
 	}
 	return mutations, nil
 }

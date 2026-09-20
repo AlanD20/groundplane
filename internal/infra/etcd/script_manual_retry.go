@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,7 +11,7 @@ import (
 
 func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 	ctx context.Context, task TaskRecord, execution ScriptExecutionRecord,
-	executionValue, rootValue *KeyValue, status TaskStatus, terminalAt *time.Time,
+	executionValue, rootValue *etcdstore.KeyValue, status TaskStatus, terminalAt *time.Time,
 ) (scriptTerminalSourceRelease, error) {
 	if execution.State != ScriptExecutionNotStarted || execution.StartAuthorized || execution.AssignmentID != "" ||
 		!execution.ActiveReference || execution.ReconciliationRequired {
@@ -36,9 +37,9 @@ func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 	}
 	defer fragment.Clear()
 	return scriptTerminalSourceRelease{
-		conditions: append(append([]Condition(nil), fragment.conditions...),
-			Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision},
-			Condition{Key: manualScriptClosingReportKey(task.ID)}),
+		conditions: append(append([]etcdstore.Condition(nil), fragment.conditions...),
+			etcdstore.Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision},
+			etcdstore.Condition{Key: manualScriptClosingReportKey(task.ID)}),
 		mutations: cloneBlueprintCandidateMutations(fragment.mutations),
 	}, nil
 }
@@ -72,7 +73,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 		return scriptTaskChange{}, err
 	}
 	defer clear(retentionValue)
-	read, err := repository.store.GetMany(ctx, GetManyRequest{
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{scriptSourceRootKey(source.OperationID), retentionKey}, Revision: revision,
 	})
 	if err != nil {
@@ -112,16 +113,16 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 		return scriptTaskChange{}, err
 	}
 	mutations := append(cloneBlueprintCandidateMutations(fragment.mutations),
-		Mutation{Type: MutationPut, Key: executionValue.Key, Value: encoded})
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: executionValue.Key, Value: encoded})
 	values := make([][]byte, len(mutations))
 	for index, mutation := range mutations {
 		values[index] = mutation.Value
 	}
 	return scriptTaskChange{applies: true,
-		conditions: append(append([]Condition(nil), fragment.conditions...),
-			Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision},
-			Condition{Key: retentionKey, ModRevision: read.Values[1].ModRevision},
-			Condition{Key: taskAssignmentIndexKey(source.ID)}, Condition{Key: manualScriptClosingReportKey(source.ID)}),
+		conditions: append(append([]etcdstore.Condition(nil), fragment.conditions...),
+			etcdstore.Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision},
+			etcdstore.Condition{Key: retentionKey, ModRevision: read.Values[1].ModRevision},
+			etcdstore.Condition{Key: taskAssignmentIndexKey(source.ID)}, etcdstore.Condition{Key: manualScriptClosingReportKey(source.ID)}),
 		mutations: mutations, values: values,
 	}, nil
 }

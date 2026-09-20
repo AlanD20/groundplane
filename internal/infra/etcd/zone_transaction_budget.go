@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -17,16 +18,16 @@ const (
 
 func zoneRemovalTransactionBudgetValidator(
 	phase zoneRemovalTransactionPhase,
-) func([]Condition, []Mutation) error {
-	return func(conditions []Condition, mutations []Mutation) error {
+) func([]etcdstore.Condition, []etcdstore.Mutation) error {
+	return func(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
 		return validateZoneRemovalTransactionBudget(phase, conditions, mutations)
 	}
 }
 
 func validateZoneRemovalTransactionBudget(
 	phase zoneRemovalTransactionPhase,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 ) error {
 	switch phase {
 	case zoneRemovalTransactionBegin,
@@ -36,12 +37,12 @@ func validateZoneRemovalTransactionBudget(
 	default:
 		return errs.New(errs.KindInternal, "Zone removal transaction phase is invalid")
 	}
-	if len(conditions)+len(mutations) >= maximumTransactionOperations {
+	if len(conditions)+len(mutations) >= etcdstore.MaximumOperations {
 		return errs.Newf(
 			errs.KindValidationFailed,
 			"Zone removal %s transaction must remain below %d operations",
 			phase,
-			maximumTransactionOperations,
+			etcdstore.MaximumOperations,
 		)
 	}
 	return nil
@@ -51,12 +52,12 @@ func (repository *TaskRepository) transactZoneRemovalTaskLifecycle(
 	ctx context.Context,
 	task TaskRecord,
 	phase zoneRemovalTransactionPhase,
-	conditions []Condition,
-	mutations []Mutation,
-) (TransactionResult, error) {
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) (etcdstore.TransactionResult, error) {
 	if task.Params[TaskZoneRemovalOperationParam] != "" {
 		if err := validateZoneRemovalTransactionBudget(phase, conditions, mutations); err != nil {
-			return TransactionResult{}, err
+			return etcdstore.TransactionResult{}, err
 		}
 	}
 	return repository.store.Transact(ctx, conditions, mutations)

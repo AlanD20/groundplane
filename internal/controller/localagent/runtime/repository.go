@@ -1,4 +1,4 @@
-package app
+package runtime
 
 import (
 	"context"
@@ -52,7 +52,7 @@ type localAgentRepositoryAdapter struct {
 	now         func() time.Time
 }
 
-func newLocalAgentRepositoryAdapter(
+func NewRepository(
 	repository localAgentRecords,
 	idempotency localAgentConfigIdempotency,
 ) (*localAgentRepositoryAdapter, error) {

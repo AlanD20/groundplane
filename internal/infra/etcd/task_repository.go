@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math/rand/v2"
 	"time"
 
@@ -15,11 +16,11 @@ const (
 )
 
 type taskRepositoryStore interface {
-	Get(context.Context, string) (*GetResult, error)
-	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
-	Range(context.Context, RangeRequest) (*RangeResult, error)
-	MeasureTransaction(context.Context, []Condition, []Mutation) (TransactionBudget, error)
-	Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
+	Get(context.Context, string) (*etcdstore.GetResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+	MeasureTransaction(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionBudget, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
 // PlatformResolverTaskPreparer is the private composition-root seam for
@@ -165,7 +166,7 @@ func (repository *TaskRepository) GetTask(
 	if err != nil {
 		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner indexes are corrupt")
 	}
-	indexes, err := repository.store.GetMany(ctx, GetManyRequest{
+	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: indexKeys, Revision: result.ReadRevision,
 	})
 	if err != nil {
@@ -191,14 +192,14 @@ func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) e
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	primary, err := repository.store.Range(ctx, RangeRequest{Prefix: taskPrefix, Limit: 1})
+	primary, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskPrefix, Limit: 1})
 	if err != nil {
 		return err
 	}
 	if primary == nil {
 		return errs.New(errs.KindInternal, "task journal schema primary read is missing")
 	}
-	marker, err := repository.store.GetMany(ctx, GetManyRequest{
+	marker, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskJournalSchemaKey}, Revision: primary.ReadRevision,
 	})
 	if err != nil {
@@ -218,8 +219,8 @@ func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) e
 	}
 	initialized, err := repository.store.Transact(
 		ctx,
-		[]Condition{{Key: taskJournalSchemaKey}, {Key: taskPrefix, Prefix: true}},
-		[]Mutation{{Type: MutationPut, Key: taskJournalSchemaKey, Value: []byte(taskJournalSchemaValue)}},
+		[]etcdstore.Condition{{Key: taskJournalSchemaKey}, {Key: taskPrefix, Prefix: true}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: taskJournalSchemaKey, Value: []byte(taskJournalSchemaValue)}},
 	)
 	if err != nil {
 		return err
@@ -472,7 +473,7 @@ func (repository *TaskRepository) ListTaskEvents(
 	if revision < 0 {
 		return TaskEventSnapshot{}, errs.New(errs.KindValidationFailed, "task event revision must not be negative")
 	}
-	taskResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskKey(taskID)}, Revision: revision,
 	})
 	if err != nil {
@@ -491,7 +492,7 @@ func (repository *TaskRepository) ListTaskEvents(
 	if task.ID != taskID {
 		return TaskEventSnapshot{}, errs.New(errs.KindInternal, "task event snapshot has a mismatched task")
 	}
-	eventsResult, err := repository.store.Range(ctx, RangeRequest{
+	eventsResult, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix:   taskEventScopePrefix(taskID),
 		Limit:    int64(MaximumTaskEvents) + 1,
 		Revision: taskResult.ReadRevision,
@@ -545,7 +546,7 @@ func (repository *TaskRepository) verifyDuplicateEvent(
 	if dedup.Sequence >= task.NextEventSequence {
 		return errs.New(errs.KindInternal, "task event dedupe sequence is outside its task summary")
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskEventKey(task.ID, dedup.Sequence)}, Revision: revision,
 	})
 	if err != nil {

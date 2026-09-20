@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -92,10 +93,10 @@ type localAgentReference struct {
 }
 
 type localAgentRepositoryStore interface {
-	Get(context.Context, string) (*GetResult, error)
-	GetMany(context.Context, GetManyRequest) (*GetManyResult, error)
-	Range(context.Context, RangeRequest) (*RangeResult, error)
-	Transact(context.Context, []Condition, []Mutation) (TransactionResult, error)
+	Get(context.Context, string) (*etcdstore.GetResult, error)
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
 type LocalAgentRepository struct {
@@ -106,15 +107,15 @@ type localAgentEvidence struct {
 	record          LocalAgentRecord
 	primaryRevision int64
 	readRevision    int64
-	singleton       *KeyValue
-	primary         *KeyValue
-	owner           *KeyValue
-	config          *KeyValue
-	token           *KeyValue
-	digest          *KeyValue
+	singleton       *etcdstore.KeyValue
+	primary         *etcdstore.KeyValue
+	owner           *etcdstore.KeyValue
+	config          *etcdstore.KeyValue
+	token           *etcdstore.KeyValue
+	digest          *etcdstore.KeyValue
 }
 
-func NewLocalAgentRepository(store Store) (*LocalAgentRepository, error) {
+func NewLocalAgentRepository(store etcdstore.Store) (*LocalAgentRepository, error) {
 	return newLocalAgentRepository(store)
 }
 
@@ -153,12 +154,12 @@ func (repository *LocalAgentRepository) CreateSingleton(
 	defer clear(tokenValue)
 	defer clear(reference)
 	keys := localAgentKeys(record.ID, record.TokenDigest)
-	conditions := make([]Condition, len(keys))
-	mutations := make([]Mutation, len(keys))
+	conditions := make([]etcdstore.Condition, len(keys))
+	mutations := make([]etcdstore.Mutation, len(keys))
 	values := [][]byte{reference, primaryValue, reference, configValue, tokenValue, reference}
 	for index, key := range keys {
-		conditions[index] = Condition{Key: key}
-		mutations[index] = Mutation{Type: MutationPut, Key: key, Value: values[index]}
+		conditions[index] = etcdstore.Condition{Key: key}
+		mutations[index] = etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: values[index]}
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
@@ -287,19 +288,19 @@ func (repository *LocalAgentRepository) ReplaceGeneration(
 	defer clear(tokenValue)
 	defer clear(reference)
 	newDigestKey := localAgentDigestKey(tokenDigest)
-	result, err := repository.store.Transact(ctx, []Condition{
+	result, err := repository.store.Transact(ctx, []etcdstore.Condition{
 		{Key: localAgentSingletonKey, ModRevision: evidence.singleton.ModRevision},
 		{Key: localAgentPrimaryKey(replacement.ID), ModRevision: evidence.primary.ModRevision},
 		{Key: localAgentConfigKey(replacement.ID), ModRevision: evidence.config.ModRevision},
 		{Key: localAgentTokenKey(replacement.ID), ModRevision: evidence.token.ModRevision},
 		{Key: evidence.digest.Key, ModRevision: evidence.digest.ModRevision},
 		{Key: newDigestKey},
-	}, []Mutation{
-		{Type: MutationPut, Key: localAgentPrimaryKey(replacement.ID), Value: primaryValue},
-		{Type: MutationPut, Key: localAgentConfigKey(replacement.ID), Value: configValue},
-		{Type: MutationPut, Key: localAgentTokenKey(replacement.ID), Value: tokenValue},
-		{Type: MutationDelete, Key: evidence.digest.Key},
-		{Type: MutationPut, Key: newDigestKey, Value: reference},
+	}, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: localAgentPrimaryKey(replacement.ID), Value: primaryValue},
+		{Type: etcdstore.MutationPut, Key: localAgentConfigKey(replacement.ID), Value: configValue},
+		{Type: etcdstore.MutationPut, Key: localAgentTokenKey(replacement.ID), Value: tokenValue},
+		{Type: etcdstore.MutationDelete, Key: evidence.digest.Key},
+		{Type: etcdstore.MutationPut, Key: newDigestKey, Value: reference},
 	})
 	if err != nil {
 		return Versioned[LocalAgentRecord]{}, err
@@ -387,13 +388,13 @@ func (repository *LocalAgentRepository) UpdateConfigIdempotent(
 	}
 	defer clear(configValue)
 	plan, err := newIdempotencyMutationPlan(
-		[]Condition{
+		[]etcdstore.Condition{
 			{Key: localAgentSingletonKey, ModRevision: evidence.singleton.ModRevision},
 			{Key: localAgentPrimaryKey(current.Record.ID), ModRevision: evidence.primary.ModRevision},
 			{Key: localAgentConfigKey(current.Record.ID), ModRevision: evidence.config.ModRevision},
 		},
-		[]Mutation{{
-			Type: MutationPut, Key: localAgentConfigKey(current.Record.ID), Value: configValue,
+		[]etcdstore.Mutation{{
+			Type: etcdstore.MutationPut, Key: localAgentConfigKey(current.Record.ID), Value: configValue,
 		}},
 		classifyLocalAgentConfigConflict(current.Record.ID),
 	)
@@ -411,7 +412,7 @@ func (repository *LocalAgentRepository) UpdateConfigIdempotent(
 }
 
 func classifyLocalAgentConfigConflict(agentID string) idempotencyPlanClassifier {
-	return func(_ int64, values []*KeyValue) error {
+	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != 3 {
 			return errs.New(errs.KindInternal, "local Agent config compare evidence is incomplete")
 		}
@@ -472,12 +473,12 @@ func (repository *LocalAgentRepository) BeginDelete(
 		return Versioned[LocalAgentRecord]{}, err
 	}
 	defer clear(primaryValue)
-	result, err := repository.store.Transact(ctx, []Condition{
+	result, err := repository.store.Transact(ctx, []etcdstore.Condition{
 		{Key: localAgentPrimaryKey(agentID), ModRevision: evidence.primary.ModRevision},
 		{Key: evidence.digest.Key, ModRevision: evidence.digest.ModRevision},
-	}, []Mutation{
-		{Type: MutationPut, Key: localAgentPrimaryKey(agentID), Value: primaryValue},
-		{Type: MutationDelete, Key: evidence.digest.Key},
+	}, []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: localAgentPrimaryKey(agentID), Value: primaryValue},
+		{Type: etcdstore.MutationDelete, Key: evidence.digest.Key},
 	})
 	if err != nil {
 		return Versioned[LocalAgentRecord]{}, err
@@ -512,16 +513,16 @@ func (repository *LocalAgentRepository) Delete(
 		evidence.digest != nil {
 		return errs.New(errs.KindStateConflict, "local Agent is not at the deletable generation and revision")
 	}
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: localAgentSingletonKey, ModRevision: evidence.singleton.ModRevision},
 		{Key: localAgentPrimaryKey(agentID), ModRevision: evidence.primary.ModRevision},
 		{Key: localAgentOwnerKey(agentID), ModRevision: evidence.owner.ModRevision},
 		{Key: localAgentConfigKey(agentID), ModRevision: evidence.config.ModRevision},
 		{Key: localAgentTokenKey(agentID), ModRevision: evidence.token.ModRevision},
 	}
-	mutations := make([]Mutation, len(conditions))
+	mutations := make([]etcdstore.Mutation, len(conditions))
 	for index, condition := range conditions {
-		mutations[index] = Mutation{Type: MutationDelete, Key: condition.Key}
+		mutations[index] = etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: condition.Key}
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
@@ -558,7 +559,7 @@ func (repository *LocalAgentRepository) ResolveAgentChannel(
 	if err != nil || resolvedAgentID != presentedAgentID {
 		return LocalAgentChannelAuthorization{}, agentCredentialNotFound()
 	}
-	values, err := repository.store.GetMany(ctx, GetManyRequest{
+	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			localAgentSingletonKey,
 			localAgentPrimaryKey(resolvedAgentID),
@@ -643,9 +644,9 @@ func (repository *LocalAgentRepository) transitionPhase(
 		return Versioned[LocalAgentRecord]{}, err
 	}
 	defer clear(primaryValue)
-	result, err := repository.store.Transact(ctx, []Condition{{
+	result, err := repository.store.Transact(ctx, []etcdstore.Condition{{
 		Key: localAgentPrimaryKey(agentID), ModRevision: evidence.primary.ModRevision,
-	}}, []Mutation{{Type: MutationPut, Key: localAgentPrimaryKey(agentID), Value: primaryValue}})
+	}}, []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: localAgentPrimaryKey(agentID), Value: primaryValue}})
 	if err != nil {
 		return Versioned[LocalAgentRecord]{}, err
 	}
@@ -670,7 +671,7 @@ func (repository *LocalAgentRepository) readSingleton(ctx context.Context) (loca
 	if err != nil {
 		return localAgentEvidence{}, err
 	}
-	values, err := repository.store.GetMany(ctx, GetManyRequest{
+	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			localAgentPrimaryKey(agentID), localAgentOwnerKey(agentID),
 			localAgentConfigKey(agentID), localAgentTokenKey(agentID),
@@ -708,7 +709,7 @@ func (repository *LocalAgentRepository) readSingleton(ctx context.Context) (loca
 		primary.Generation != config.Generation || primary.Generation != token.Generation {
 		return localAgentEvidence{}, errs.New(errs.KindInternal, "local Agent aggregate identities do not match")
 	}
-	digests, err := repository.store.Range(ctx, RangeRequest{
+	digests, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: localAgentDigestPrefix, Limit: 2, Revision: pointer.ReadRevision,
 	})
 	if err != nil {
@@ -717,7 +718,7 @@ func (repository *LocalAgentRepository) readSingleton(ctx context.Context) (loca
 	if digests.More || len(digests.Values) > 1 {
 		return localAgentEvidence{}, errs.New(errs.KindInternal, "local Agent has multiple credential indexes")
 	}
-	var digestValue *KeyValue
+	var digestValue *etcdstore.KeyValue
 	digestText := ""
 	if len(digests.Values) == 1 {
 		value := digests.Values[0]

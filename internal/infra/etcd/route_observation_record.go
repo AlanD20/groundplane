@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -89,7 +90,7 @@ func routeObservationAtRevision(
 	desiredGeneration uint64,
 	revision int64,
 ) (RouteObservation, error) {
-	read, err := store.GetMany(ctx, GetManyRequest{
+	read, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{routeObservationKey(routeID)}, Revision: revision,
 	})
 	if err != nil {

@@ -5,13 +5,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type blueprintTransactionSizer interface {
-	transactionSize([]Condition, []Mutation) (int, error)
+	transactionSize([]etcdstore.Condition, []etcdstore.Mutation) (int, error)
 }
 
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
@@ -55,7 +56,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	}
 	rootKey := environmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID)
 	keys := []string{rootKey, descriptorKey, locatorKey}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: descriptorRead.ReadRevision})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: descriptorRead.ReadRevision})
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}
@@ -129,7 +130,7 @@ func environmentBlueprintChunkKeys(descriptor EnvironmentBlueprintStageDescripto
 	return keys
 }
 
-func verifyEnvironmentBlueprintChunks(descriptor EnvironmentBlueprintStageDescriptor, values []*KeyValue) error {
+func verifyEnvironmentBlueprintChunks(descriptor EnvironmentBlueprintStageDescriptor, values []*etcdstore.KeyValue) error {
 	if len(values) != int(descriptor.AuditChunks+descriptor.ProjectionChunks) {
 		return corruptEnvironmentBlueprintStage()
 	}
@@ -212,7 +213,7 @@ func (repository *HierarchyRepository) readEnvironmentBlueprintStreamAtRevision(
 	} else if family != "audit" {
 		return nil, 0, errs.New(errs.KindInternal, "Blueprint stream family is invalid")
 	}
-	result, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys, Revision: revision})
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, 0, err
 	}
@@ -248,7 +249,7 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 	environmentID string,
 	revision int64,
 ) (Versioned[EnvironmentComposeProjection], bool, error) {
-	headResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	headResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentBlueprintHeadKey(environmentID)}, Revision: revision,
 	})
 	if err != nil {
@@ -264,7 +265,7 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 	if err != nil {
 		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
 	}
-	rootResult, err := repository.store.GetMany(ctx, GetManyRequest{
+	rootResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentBlueprintRootKey(environmentID, revisionID)}, Revision: headResult.ReadRevision,
 	})
 	if err != nil {
@@ -301,8 +302,8 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 
 func validateBlueprintTransaction(
 	store hierarchyStore,
-	conditions []Condition,
-	mutations []Mutation,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
 	maximumOperations int,
 	maximumBytes int,
 ) error {
@@ -320,7 +321,7 @@ func validateBlueprintTransaction(
 		if len(mutation.Key) == 0 || len(mutation.Key) > EnvironmentBlueprintKeyMaxBytes {
 			return errs.New(errs.KindInternal, "Blueprint transaction key exceeds 2 KiB")
 		}
-		if mutation.Type == MutationPut {
+		if mutation.Type == etcdstore.MutationPut {
 			valueBytes += len(mutation.Value)
 		}
 	}

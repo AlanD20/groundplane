@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"slices"
 	"time"
@@ -15,11 +16,11 @@ import (
 )
 
 type ReleaseLedger struct {
-	store Store
+	store etcdstore.Store
 	tasks *TaskRepository
 }
 
-func NewReleaseLedger(store Store, tasks *TaskRepository) (*ReleaseLedger, error) {
+func NewReleaseLedger(store etcdstore.Store, tasks *TaskRepository) (*ReleaseLedger, error) {
 	if store == nil || tasks == nil || tasks.store == nil {
 		return nil, errs.New(errs.KindInternal, "release ledger dependencies are not configured")
 	}
@@ -114,11 +115,11 @@ func (ledger *ReleaseLedger) Stage(ctx context.Context, input ReleaseStage) (Ver
 	defer clearStagedReleaseRecords(records)
 	for start := 0; start < len(records); start += 16 {
 		end := min(start+16, len(records))
-		conditions := make([]Condition, end-start)
-		mutations := make([]Mutation, end-start)
+		conditions := make([]etcdstore.Condition, end-start)
+		mutations := make([]etcdstore.Mutation, end-start)
 		for index, record := range records[start:end] {
-			conditions[index] = Condition{Key: record.key}
-			mutations[index] = Mutation{Type: MutationPut, Key: record.key, Value: record.value}
+			conditions[index] = etcdstore.Condition{Key: record.key}
+			mutations[index] = etcdstore.Mutation{Type: etcdstore.MutationPut, Key: record.key, Value: record.value}
 		}
 		result, err := ledger.store.Transact(ctx, conditions, mutations)
 		if err != nil {
@@ -146,8 +147,8 @@ func (ledger *ReleaseLedger) Stage(ctx context.Context, input ReleaseStage) (Ver
 	}
 	defer clear(manifestValue)
 	result, err := ledger.store.Transact(ctx,
-		[]Condition{{Key: releaseManifestStagingKey(input.PublicationID)}},
-		[]Mutation{{Type: MutationPut, Key: releaseManifestStagingKey(input.PublicationID), Value: manifestValue}},
+		[]etcdstore.Condition{{Key: releaseManifestStagingKey(input.PublicationID)}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: releaseManifestStagingKey(input.PublicationID), Value: manifestValue}},
 	)
 	if err != nil {
 		return VersionedReleaseManifest{}, err
@@ -239,7 +240,7 @@ func (ledger *ReleaseLedger) Publish(
 		return ReleasePublicationResult{}, err
 	}
 	defer clear(operationValue)
-	conditions := []Condition{
+	conditions := []etcdstore.Condition{
 		{Key: environmentMutationEpochKey(evidence.EnvironmentID), ModRevision: evidence.EnvironmentEpochRevision},
 		{Key: deletionTombstoneKey("environment", evidence.EnvironmentID)},
 		{Key: deletionTombstoneKey("project", evidence.ProjectID)},
@@ -265,7 +266,7 @@ func (ledger *ReleaseLedger) Publish(
 		conditions = append(conditions, configurationCondition)
 		configurationConditions = 1
 	}
-	mutations := make([]Mutation, 0, len(evidence.Manifest.Record.Members)*2+11)
+	mutations := make([]etcdstore.Mutation, 0, len(evidence.Manifest.Record.Members)*2+11)
 	for _, member := range evidence.Manifest.Record.Members {
 		environmentValue, encodeErr := json.Marshal(releaseEnvironmentIndexValue{
 			Schema: 1, ServiceID: member.ServiceID, PublicationID: evidence.Manifest.Record.PublicationID,
@@ -284,13 +285,13 @@ func (ledger *ReleaseLedger) Publish(
 		}
 		mutations = append(
 			mutations,
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   releaseEnvironmentIndexKey(evidence.EnvironmentID, member.ReleaseID),
 				Value: environmentValue,
 			},
-			Mutation{
-				Type:  MutationPut,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
 				Key:   releaseServiceIndexKey(evidence.EnvironmentID, member.ServiceID, member.ReleaseID),
 				Value: serviceValue,
 			},
@@ -299,14 +300,14 @@ func (ledger *ReleaseLedger) Publish(
 	defer clearMutations(mutations)
 	mutations = append(
 		mutations,
-		Mutation{
-			Type:  MutationPut,
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
 			Key:   releasePublicationKey(evidence.Manifest.Record.PublicationID),
 			Value: publicationValue,
 		},
-		Mutation{Type: MutationPut, Key: releaseFenceSetKey(evidence.EnvironmentID), Value: fenceValue},
-		Mutation{
-			Type:  MutationPut,
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: releaseFenceSetKey(evidence.EnvironmentID), Value: fenceValue},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
 			Key:   releaseOperationKey(evidence.Manifest.Record.OperationID),
 			Value: operationValue,
 		},
@@ -315,9 +316,9 @@ func (ledger *ReleaseLedger) Publish(
 	mutations = append(mutations, hookFragment.mutations...)
 	mutations = append(
 		mutations,
-		Mutation{Type: MutationPut, Key: markerKey, Value: markerValue},
-		Mutation{
-			Type:  MutationPut,
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
 			Key:   environmentMutationEpochKey(evidence.EnvironmentID),
 			Value: slices.Clone(evidence.EnvironmentEpochValue),
 		},
@@ -332,7 +333,7 @@ func (ledger *ReleaseLedger) Publish(
 			pinChange.conditions,
 		)+len(
 			pinChange.mutations,
-		) > maximumTransactionOperations {
+		) > etcdstore.MaximumOperations {
 		return ReleasePublicationResult{}, errs.New(
 			errs.KindInternal,
 			"release publication operation budget is invalid",
@@ -388,7 +389,7 @@ func (ledger *ReleaseLedger) GetIntent(
 		ids.Validate(ids.KindDeployment, releaseID) != nil {
 		return Versioned[domain.Intent]{}, errs.New(errs.KindValidationFailed, "release read identity is invalid")
 	}
-	result, err := ledger.store.GetMany(ctx, GetManyRequest{Keys: []string{
+	result, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releaseIntentStagingKey(publicationID, releaseID), releasePublicationKey(publicationID),
 	}})
 	if err != nil {
@@ -467,7 +468,7 @@ func releaseDesiredRecordKey(kind ReleaseDesiredKind, id string, environmentID s
 	return "", errs.New(errs.KindValidationFailed, "release publication desired identity is invalid")
 }
 
-func classifyReleasePublicationConflict(values []*KeyValue) error {
+func classifyReleasePublicationConflict(values []*etcdstore.KeyValue) error {
 	if len(values) != 11 {
 		return errs.New(errs.KindInternal, "release publication conflict evidence is incomplete")
 	}
@@ -486,7 +487,7 @@ func clearStagedReleaseRecords(records []releaseStagedWrite) {
 	}
 }
 
-func clearMutations(mutations []Mutation) {
+func clearMutations(mutations []etcdstore.Mutation) {
 	for index := range mutations {
 		clear(mutations[index].Value)
 	}

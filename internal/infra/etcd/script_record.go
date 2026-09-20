@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 	"strings"
 
@@ -269,7 +270,7 @@ func readActiveScriptSet(
 ) (Versioned[ScriptSetGenerationRecord], error) {
 	read, err := store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{scriptSetActiveKey(environmentID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{scriptSetActiveKey(environmentID)}, Revision: revision},
 	)
 	if err != nil {
 		return Versioned[ScriptSetGenerationRecord]{}, err
@@ -304,7 +305,7 @@ func readActiveScriptStorage(
 ) (activeScriptStorage, error) {
 	locatorRead, err := store.GetMany(
 		ctx,
-		GetManyRequest{Keys: []string{scriptLocatorKey(scriptID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{scriptLocatorKey(scriptID)}, Revision: revision},
 	)
 	if err != nil {
 		return activeScriptStorage{}, err
@@ -316,7 +317,7 @@ func readActiveScriptStorage(
 	if err != nil || locator.ScriptID != scriptID {
 		return activeScriptStorage{}, corruptRecord()
 	}
-	environmentLocatorRead, err := store.GetMany(ctx, GetManyRequest{
+	environmentLocatorRead, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			scriptEnvironmentLocatorKey(locator.EnvironmentID, scriptID),
 		}, Revision: locatorRead.ReadRevision,
@@ -332,7 +333,7 @@ func readActiveScriptStorage(
 	if err != nil {
 		return activeScriptStorage{}, err
 	}
-	primary, err := store.GetMany(ctx, GetManyRequest{
+	primary, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{scriptSetScriptKey(locator.EnvironmentID, active.Record.GenerationID, scriptID)},
 		Revision: active.ReadRevision,
 	})

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -44,6 +45,6 @@ func (repository *TaskRepository) prepareBackingServiceCreationHookAcknowledgeme
 	}
 	return taskMaterializationProjectionChange{
 		applies:    true,
-		conditions: []Condition{condition},
+		conditions: []etcdstore.Condition{condition},
 	}, nil
 }
