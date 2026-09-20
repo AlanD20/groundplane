@@ -111,8 +111,8 @@ full gate green. Existing owners and acceptance conditions above remain unchange
 - Service extraction: the unfinished opaque-receipt/typed-Service proposal was
   identified by historical branch `refactor/mvp-service-mutations-20260908` and
   worktree `.tmp/mvp-service-mutations-20260908`. These are not active-worktree
-  instructions. Consult the [consolidation evidence](../acceptance/repository-consolidation.md)
-  and preserved recovery archive before any authorized reuse; do not transplant
+  instructions. Obtain and inspect the preserved local recovery archive before
+  any authorized reuse; if unavailable, do not assume recoverability. Do not transplant
   the proposal as though it were landed implementation.
 - Environment Blueprint extraction: a proposed extraction spanning seven production files and
   roughly 3,927 lines depends on EntryGeneration and AttachFact prerequisites. It is a deferred

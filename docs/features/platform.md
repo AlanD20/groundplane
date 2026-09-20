@@ -124,8 +124,8 @@ two-platform releases additionally require their own recovery and host proofs.
 
 Host health, Agent lifecycle and settings have recorded qualification. Native
 updates retain the [Safe updates](upgrade-safety.md#current-status) limits.
-Current work and the live-mutation pause are in [head.md](../head.md); a dated
-health result never establishes present host health or operational permission.
+A dated health result never establishes present host health or operational
+permission; follow current user instructions before live mutations.
 Normal shutdown previously stopped etcd through its manager's `Close`. The local
 correction closes only the Docker client, leaving the store running. Its regression
 proves no inspect/stop call even when client closure fails; Controller shutdown

@@ -6,8 +6,7 @@ document plus a namespaced `x-gp-*` extension grammar** — not a bespoke
 YAML schema. This repository contains the Go implementation, production
 Console, packaging, and authoritative product and engineering contracts.
 Implementation and acceptance remain incremental; use
-[`docs/capabilities.md`](docs/capabilities.md) for the delivery ledger and
-[`docs/head.md`](docs/head.md) for the compact continuation checkpoint.
+[`docs/capabilities.md`](docs/capabilities.md) for implementation and qualification gaps.
 
 The authoritative documents live in [`docs/`](docs/). Start with
 [`docs/README.md`](docs/README.md), which routes product, API, Blueprint,

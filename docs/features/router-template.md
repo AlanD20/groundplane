@@ -113,5 +113,5 @@ Rendering, preview and operator surfaces have [local implementation evidence](..
 evidence. The [retained-reload correction](../acceptance/router-and-visibility.md)
 has local proof but is not deployed. Live mutations remain paused for the
 [storage incident](../acceptance/storage-integrity-incident.md).
-The failed desired configuration and remaining live checks are recorded in
-[head.md](../head.md) and [the task list](../../tasks/todo.md); this is not full qualification.
+The [router evidence](../acceptance/router-and-visibility.md) records the
+retained-reload defect and remaining live checks; this is not full qualification.

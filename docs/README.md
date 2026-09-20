@@ -16,12 +16,11 @@ Git preserves previous versions. Start with the document that owns the question.
 | [agents.md](agents.md) and [delivery.md](delivery.md) | Repository workflow, verification and delivery |
 | [deployment.md](deployment.md) and [acceptance.md](acceptance.md) | Deployment and qualification procedures |
 | [qa-matrix.md](qa-matrix.md) | Product cases, independent expected outcomes, coverage gaps and links to execution evidence |
-| [head.md](head.md) | Current work, authority limits, blockers and next actions |
 | [capabilities.md](capabilities.md) | Product-wide implementation and qualification gaps |
 | [Changelog](../CHANGELOG.md) | Release features and known limits; not product or qualification authority |
 
-Read relevant sections, not every linked document. Read `head.md` in full after
-context recovery. Requirements describe what must be true; implementation and
+Read relevant sections, not every linked document.
+Requirements describe what must be true; implementation and
 qualification status describe what has been built and proved. Neither a missing
 implementation nor an old test result changes a requirement.
 
@@ -98,8 +97,12 @@ or partial capabilities as completed features or copy test transcripts into it.
 - Record a design choice in the feature document. Use a separate ADR when a
   shared or expensive-to-reverse decision needs its own rationale and alternatives.
   An ordinary commit does not require a new ADR or acceptance report.
-- Keep one current work checkpoint. Replace completed next actions instead of
-  appending a journal. Group related open issues; remove resolved task lists.
+- Keep agent checkpoints, task schedules and local integration logs untracked.
+  Existing local records (`docs/head.md`, `tasks/todo.md` and
+  `docs/acceptance/repository-consolidation.md`) are ignored; new iteration
+  records belong under ignored `.tmp/`. Public docs must not depend on them.
+  Replace completed next actions instead of appending a journal. Product gaps,
+  requirements and reusable qualification evidence remain in tracked documents.
 - Retain evidence needed for unfinished qualification, unresolved incidents or
   a claim still used by the project. It is dated evidence, not a current command
   or permission. Keep private logs and credentials out of tracked documentation.

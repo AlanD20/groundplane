@@ -13,9 +13,8 @@ Status is deliberately conservative:
   failure-path qualification remains.
 - **In progress** means required production behavior is still being built.
 
-Missing implementation or evidence does not narrow the product contract. See
-[head.md](head.md) for the current work checkpoint and [tasks/todo.md](../tasks/todo.md)
-for remaining implementation and qualification.
+Missing implementation or evidence does not narrow the product contract.
+The feature entries below record remaining implementation and qualification.
 
 [The product QA matrix](qa-matrix.md) breaks these areas into behavioral cases,
 failure/recovery sequences and reviewed execution evidence. This coarse capability
@@ -54,7 +53,7 @@ its owning feature document; a focused suite or one live journey does not
 qualify unrelated capabilities.
 
 Live mutations remain paused pending storage and source-integrity qualification.
-Current operational authority is recorded in [head.md](head.md). Historical
+Current operational authority comes from explicit user instructions. Historical
 host observations do not lift the pause.
 
 ## Completion

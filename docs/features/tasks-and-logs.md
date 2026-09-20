@@ -151,6 +151,6 @@ No successful Abort may claim an external effect was undone without that proof.
 
 Tasks, Activity, retention, Retry and Abort have recorded qualification.
 Feature-owned recovery and Task producers still have gaps, especially Backups,
-Scripts and release orchestration. See [capabilities.md](../capabilities.md) and
-[the current task list](../../tasks/todo.md). No new runtime verification was
+Scripts and release orchestration. See [capabilities.md](../capabilities.md).
+No new runtime verification was
 performed by the documentation migration.

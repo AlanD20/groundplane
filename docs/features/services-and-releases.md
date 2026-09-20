@@ -239,7 +239,7 @@ Readers must not use a partially maintained record, backfill it from old Release
 input, or infer a missing acknowledgement. Consumer cutover and any clean QA
 rebuild follow only after those writers and source-retention checks are closed.
 Their existence does not authorize further implementation; current work is scoped
-by the owner instruction in [head.md](../head.md).
+by current owner instructions.
 
 ### Ordinary Release predecessors
 
@@ -340,7 +340,7 @@ round trip; they do not contact Docker or prove live workload visibility.
 
 Agent/channel worker and session handling are integrated on `main` with focused
 race and transport proof. The owner approved the eight composition-only wiring
-lines; [head.md](../head.md) records the resolved decision and remaining gates.
+lines. Remaining qualification is described below.
 
 `internal/controller/serviceobservation` selects the serving Release and immutable
 render input at one storage revision, verifies their digest and workload identity,
@@ -392,6 +392,6 @@ stalled response. [Visibility evidence](../acceptance/router-and-visibility.md#s
 records the exact scope. Fresh QA now proves healthy observation of 11 Services
 and 12 workload replicas, CLI/API semantic parity and matching Console runtime
 status. An exact Blueprint reapply preserves every serving Release. Full CI,
-failure-state and recovery qualification remain open; [head.md](../head.md) records
-the private evidence and application-level blocker. No new endpoint or mutation
+failure-state and recovery qualification remain open; private run evidence is
+retained locally, not published with this document. No new endpoint or mutation
 was added.

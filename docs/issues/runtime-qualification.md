@@ -6,8 +6,8 @@
 - MVP-required: yes for the actual hosting and recovery paths exercised by Gate A/B
 
 This file records unresolved proof, not a historical implementation journal.
-The [task list](../../tasks/todo.md) owns scheduling; [head.md](../head.md) owns
-operational authority. The owner authorized fresh QA with disposable data on
+Current user instructions own scheduling and operational authority.
+The owner authorized fresh QA with disposable data on
 2026-09-12, without restoring incident-affected state. That state's integrity
 remains unresolved; the fresh run does not qualify it.
 
@@ -485,6 +485,6 @@ directory. This fixture-only repair does not qualify full CI or live recovery.
 
 Go 1.27 crashed the pinned analyzer in the recorded run; Go 1.26.7 ran it and
 reported SA4006. That tool crash is not a source finding or a green result.
-Exact current tasks and evidence are in [tasks/todo.md](../../tasks/todo.md).
+Product-wide gaps are indexed in [capabilities](../capabilities.md).
 Architecture-only cleanup remains separately [deferred](deferred-architecture-cleanup.md)
 under its explicit authority, without waiving real safety, build or runtime defects.

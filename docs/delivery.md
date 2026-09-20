@@ -216,8 +216,10 @@ does not waive them or authorize deployment.
 
 An owner-designated QA host may be reset or wiped without repeated approval
 while executing the accepted Groundplane verification journey. The current
-authorized host and any active pause must be named in `docs/head.md`; follow
-those current limits. This authority is limited to
+authorized host and any active pause must be explicit in the current user
+instructions; an optional local checkpoint can record them but cannot grant
+authority. If the target or permission is unclear, ask before mutating it.
+This authority is limited to
 that disposable host and its Groundplane test state; it never extends to source
 worktrees, non-Groundplane data, or a production host. Prefer a bounded repair
 when it is faster and preserves useful evidence, otherwise reprovision cleanly

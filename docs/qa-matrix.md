@@ -232,7 +232,7 @@ remains a separate, larger scope.
   latency, capacity or recovery-time target and then claim production readiness.
 - A case or gap here is not permission to implement a feature, fix a failure,
   mutate a host, or change a requirement. Report failures and limitations for the
-  user's decision. [head.md](head.md) records current operational authority.
+  user's decision. Current user instructions define operational authority.
 
 The catalogue covers all current feature areas, including accepted but incomplete
 features. It is not a claim that every existing test has been correlated or that

@@ -220,8 +220,8 @@ After recovery, follow the context instructions in `AGENTS.md`. Check actual
 delegate status only if delegated work is recorded or present, reconcile it with
 Git and preserve pending changes. Address ready integration and stalled work
 before starting new tasks; do not refill slots merely because they are free.
-The primary updates `docs/head.md` in the same landing commit when `main`,
-active work, blockers or next actions change.
+Keep the ignored local checkpoint current under `AGENTS.md`'s recovery policy;
+it is not part of a landing commit or a source of operational permission.
 
 ## Source-of-truth order
 

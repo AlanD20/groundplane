@@ -142,7 +142,7 @@ retain matching Console, CLI and API surfaces.
 Shared coding, generation and verification rules live in
 [standards.md](../standards.md) and [delivery.md](../delivery.md). Temporary-path
 rules are in [agents.md](../agents.md#repository-local-temporary-state); current
-operational permissions and safety pauses are in [head.md](../head.md).
+user instructions determine operational permissions and safety pauses.
 
 ## Technical design
 
@@ -229,5 +229,5 @@ proof. Live mutations are paused until the recorded
 [storage incident](../acceptance/storage-integrity-incident.md) is qualified.
 The broader Script and Blueprint suite also retains pre-existing recovery and
 fixture failure groups, and two broader CLI failure groups, for the later
-qualification work tracked in [tasks/todo.md](../../tasks/todo.md). None of those
+qualification work indexed in [capabilities](../capabilities.md). None of those
 open items changes the requirements in this document.

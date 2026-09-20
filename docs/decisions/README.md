@@ -25,5 +25,4 @@ Approval and implementation are distinct:
   Backing extension is Deferred outside the current MVP; Destroy remains
   runtime-only, and no permanent Backing deletion surface is approved.
 
-For actual progress, use [capabilities](../capabilities.md),
-[current tasks](../../tasks/todo.md) and the [work checkpoint](../head.md).
+For implementation and qualification status, use [capabilities](../capabilities.md).

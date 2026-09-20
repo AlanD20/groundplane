@@ -197,4 +197,4 @@ and lost-response replay without changing the original timestamp. Local
 storage and Agent-admission tests do not prove live gRPC, Docker or full-bundle
 Apply. [Script evidence](../acceptance/script-execution.md#preserved-broad-failures-and-remaining-qualification)
 retains broader failing fixtures. Full integration, remaining source/recovery
-paths and CI are not claimed complete; see [tasks](../../tasks/todo.md).
+paths and CI are not claimed complete; see [capabilities](../capabilities.md).

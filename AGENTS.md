@@ -37,22 +37,20 @@ Console (`console/`), and the Go Controller, Agent and CLI.
   before committing, opening a PR, or declaring a change complete.
 - **docs/capabilities.md** — the current implementation and qualification gaps.
   Reach for it before selecting or declaring an MVP slice complete.
-- **docs/head.md** — the compact operational head checkpoint for live lanes,
-  blockers, next actions, and integration handoffs. It is not product
-  authority.
 - **docs/decisions/** — accepted architectural decisions. Reach for the
   relevant ADR before changing a recorded seam or dependency choice.
 
 ## Context recovery (MUST)
 
 After context compaction, a session restart, or head-agent replacement, every
-agent MUST read `docs/head.md` in full. The head then reads only the exact
+agent MUST read the ignored local `docs/head.md` if present, then verify its
+checkpoint against Git and the current user instructions. If absent, recover
+from those sources; a fresh clone does not require a checkpoint. Read only the exact
 authoritative contract sections needed for the current decision. A delegate
 starts with the task-scoped docs named in its prompt and retrieves additional
 relevant sources when needed; it does not reread broad project docs by default.
-The primary agent MUST update `docs/head.md` in
-the same landing commit whenever `main`, active lanes, blockers, or next
-actions change. `docs/head.md` is an operational checkpoint only; the named
+Keep local checkpoints current when work, blockers or next actions change;
+never stage them. `docs/head.md` is an operational checkpoint only; the named
 authoritative contracts remain the source of truth. Read dated acceptance
 evidence only when it is relevant to the current task.
 

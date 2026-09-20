@@ -19,8 +19,9 @@ tests and `make ci` remain separate, scope-dependent gates in
 ## Workflow
 
 1. Read [the feature map](features/README.md) and select the narrowest relevant journey.
-2. Check [head.md](../../../docs/head.md) for the current target, authority and
-   pauses. A recorded command or mutation flag is not user permission.
+2. Confirm the target, authority and pauses from current user instructions.
+   Consult the ignored local `docs/head.md` if present for context only.
+   A recorded command or mutation flag is not user permission.
 3. Confirm the selected guide's prerequisites, resource ownership and required
    environment variables. Shell entrypoints initialize the
    [repository environment](../../../docs/agents.md#supported-tooling-invocation);

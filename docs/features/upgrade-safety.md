@@ -90,5 +90,6 @@ are recorded in [Agent admission](../acceptance/safe-updates.md),
 
 Whole-build Tunnel continuity and remaining recovery qualification are unresolved.
 Live mutation checks are paused for the [storage incident](../acceptance/storage-integrity-incident.md).
-These records do not establish production readiness. Current operational limits
-and unfinished qualification are in [head.md](../head.md) and [the task list](../../tasks/todo.md).
+These records do not establish production readiness. Unfinished qualification
+is indexed in [capabilities](../capabilities.md); current user instructions
+determine operational permission.

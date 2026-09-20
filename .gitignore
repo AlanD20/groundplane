@@ -9,3 +9,8 @@ console/dist/
 __pycache__/
 *.py[cod]
 /.private/
+
+# Local agent checkpoints and iteration records (keep local copies).
+/docs/head.md
+/tasks/todo.md
+/docs/acceptance/repository-consolidation.md
