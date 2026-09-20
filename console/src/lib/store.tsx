@@ -1,5 +1,11 @@
 "use client";
 import {
+  createReleaseGroupActions,
+  type ReleaseGroupActions,
+} from "@/features/release-group/actions";
+import { listAllReleaseGroups } from "@/features/release-group/api";
+import { refreshReleaseGroupTags } from "@/features/release-group/projection";
+import {
   createScriptActions,
   type ScriptActions,
 } from "@/features/script/actions";
@@ -94,7 +100,6 @@ import type {
   EnvironmentEntry,
   EnvironmentComponent,
   Project,
-  ReleaseGroup,
   Service,
   ServiceRuntimeIntent,
   TaskJournalScope,
@@ -235,16 +240,6 @@ type ComponentConfigResponse =
   operations["component-config.show"]["responses"][200]["content"]["application/json"];
 type ComponentConfigMutationResponse =
   operations["component-config.set"]["responses"][200]["content"]["application/json"];
-type ReleaseGroupMutationAccepted =
-  operations["release-group.remove"]["responses"][202]["content"]["application/json"];
-type ReleaseGroupTaskAccepted =
-  operations["release-group.deploy"]["responses"][202]["content"]["application/json"];
-type ReleaseGroupPageResponse =
-  operations["release-group.list"]["responses"][200]["content"]["application/json"];
-type ReleaseGroupResponse =
-  operations["release-group.show"]["responses"][200]["content"]["application/json"];
-export type ReleaseGroupRollbackPreviewResponse =
-  operations["release-group.rollback-preview"]["responses"][200]["content"]["application/json"];
 type ComponentConfigInput =
   | { zone_ids: string[]; caddyfile_template?: string; alias?: string }
   | {
@@ -334,43 +329,6 @@ async function listAllEntries(
     cursor = page.next_cursor ?? "";
   } while (cursor);
   return entries;
-}
-
-async function listAllReleaseGroups(
-  environmentId: string,
-  services: Service[],
-  signal?: AbortSignal,
-): Promise<ReleaseGroup[]> {
-  const groups: ReleaseGroup[] = [];
-  const names = new Map(services.map((service) => [service.id, service.name]));
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({
-      environment_id: environmentId,
-      limit: "200",
-    });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<ReleaseGroupPageResponse>(
-      `/release-groups?${query}`,
-      200,
-      { signal },
-    );
-    groups.push(
-      ...(page.items ?? []).map((group) => ({
-        id: group.id,
-        name: group.name,
-        services: (group.service_ids ?? []).map((id) => names.get(id) ?? id),
-        order: (group.order ?? []).map((id) => names.get(id) ?? id),
-        tag: group.tag,
-        onFailure:
-          group.on_failure === "leave_active"
-            ? ("leave_active" as const)
-            : ("switch_back" as const),
-      })),
-    );
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return groups;
 }
 
 function attachHealth(status: string): HealthState {
@@ -695,22 +653,6 @@ async function listAllBackingProjects(
   );
 }
 
-function refreshReleaseGroupTags(environment: Environment) {
-  for (const group of environment.releaseGroups) {
-    const activeTags = group.order.map(
-      (service) =>
-        environment.deploys.find(
-          (record) => record.service === service && record.status === "active",
-        )?.tag,
-    );
-    const distinct = new Set(activeTags);
-    group.tag =
-      activeTags.every(Boolean) && distinct.size === 1
-        ? activeTags[0]
-        : undefined;
-  }
-}
-
 type State = ReusableSecretState &
   ConnectorState &
   RunnerState & {
@@ -796,6 +738,7 @@ type StoreContext = State &
   NetworkActions &
   VolumeActions &
   ScriptActions &
+  ReleaseGroupActions &
   ReturnType<typeof useControllerPlatform> &
   ReturnType<typeof useBackupStore> & {
     adapters: typeof seedAdapters;
@@ -870,32 +813,6 @@ type StoreContext = State &
       envId: string,
       service: string,
       tag: string,
-    ) => Promise<string>;
-    addReleaseGroup: (
-      envId: string,
-      group: ReleaseGroup,
-    ) => Promise<ReleaseGroup>;
-    updateReleaseGroup: (
-      envId: string,
-      groupId: string,
-      patch: Pick<ReleaseGroup, "name" | "services" | "order" | "onFailure">,
-    ) => Promise<ReleaseGroup>;
-    removeReleaseGroup: (envId: string, groupId: string) => Promise<string>;
-    deployReleaseGroup: (
-      envId: string,
-      groupId: string,
-      tag?: string,
-    ) => Promise<string>;
-    previewReleaseGroupRollback: (
-      envId: string,
-      groupId: string,
-      tag?: string,
-    ) => Promise<ReleaseGroupRollbackPreviewResponse>;
-    rollbackReleaseGroup: (
-      envId: string,
-      groupId: string,
-      tag: string | undefined,
-      previewRevision: string,
     ) => Promise<string>;
     addTenant: (t: {
       slug: string;
@@ -2200,135 +2117,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         environmentGenerations,
         dispatchResourceRemoval,
       ),
-      addReleaseGroup: async (envId, group) => {
-        assertEnvironmentMutable(envId, "Release group mutation");
-        const environment = findEnvironment(state, envId);
-        if (!environment) throw new Error(`Environment ${envId} was not found`);
-        const serviceIDs = new Map(
-          environment.services.map((service) => [service.name, service.id]),
-        );
-        const response = await controllerRequest<ReleaseGroupResponse>(
-          "/release-groups",
-          201,
-          {
-            method: "POST",
-            body: {
-              environment_id: envId,
-              name: group.name,
-              service_ids: group.services.map(
-                (name) => serviceIDs.get(name) ?? name,
-              ),
-              order: group.order.map((name) => serviceIDs.get(name) ?? name),
-              on_failure: group.onFailure,
-            },
-          },
-        );
-        const names = new Map(
-          environment.services.map((service) => [service.id, service.name]),
-        );
-        const created: ReleaseGroup = {
-          id: response.id,
-          name: response.name,
-          services: (response.service_ids ?? []).map(
-            (id) => names.get(id) ?? id,
-          ),
-          order: (response.order ?? []).map((id) => names.get(id) ?? id),
-          tag: response.tag,
-          onFailure:
-            response.on_failure === "leave_active"
-              ? "leave_active"
-              : "switch_back",
-        };
-        update((draft) => {
-          findEnvironment(draft, envId)?.releaseGroups.push(created);
-        });
-        return created;
-      },
-      updateReleaseGroup: async (envId, groupId, patch) => {
-        assertEnvironmentMutable(envId, "Release group mutation");
-        const environment = findEnvironment(state, envId);
-        if (!environment) throw new Error(`Environment ${envId} was not found`);
-        const serviceIDs = new Map(
-          environment.services.map((service) => [service.name, service.id]),
-        );
-        const response = await controllerRequest<ReleaseGroupResponse>(
-          `/release-groups/${encodeURIComponent(groupId)}`,
-          200,
-          {
-            method: "PATCH",
-            body: {
-              name: patch.name,
-              service_ids: patch.services.map(
-                (name) => serviceIDs.get(name) ?? name,
-              ),
-              order: patch.order.map((name) => serviceIDs.get(name) ?? name),
-              on_failure: patch.onFailure,
-            },
-          },
-        );
-        const names = new Map(
-          environment.services.map((service) => [service.id, service.name]),
-        );
-        const edited: ReleaseGroup = {
-          id: response.id,
-          name: response.name,
-          services: (response.service_ids ?? []).map(
-            (id) => names.get(id) ?? id,
-          ),
-          order: (response.order ?? []).map((id) => names.get(id) ?? id),
-          tag: response.tag,
-          onFailure:
-            response.on_failure === "leave_active"
-              ? "leave_active"
-              : "switch_back",
-        };
-        update((draft) => {
-          const groups = findEnvironment(draft, envId)?.releaseGroups;
-          const index =
-            groups?.findIndex((candidate) => candidate.id === groupId) ?? -1;
-          if (groups && index >= 0) groups[index] = edited;
-        });
-        return edited;
-      },
-      removeReleaseGroup: async (_envId, groupId) => {
-        assertEnvironmentMutable(_envId, "Release group mutation");
-        const response = await controllerRequest<ReleaseGroupMutationAccepted>(
-          `/release-groups/${encodeURIComponent(groupId)}`,
-          202,
-          { method: "DELETE" },
-        );
-        return requireTaskId(response, "Release group removal");
-      },
-      deployReleaseGroup: async (_envId, groupId, tag) => {
-        assertEnvironmentMutable(_envId, "Release group mutation");
-        const body = tag ? { tag } : {};
-        const response = await controllerRequest<ReleaseGroupTaskAccepted>(
-          `/release-groups/${encodeURIComponent(groupId)}/deploy`,
-          202,
-          { method: "POST", body },
-        );
-        return requireTaskId(response, "Release group deploy");
-      },
-      previewReleaseGroupRollback: async (_envId, groupId, tag) =>
-        controllerRequest<ReleaseGroupRollbackPreviewResponse>(
-          `/release-groups/${encodeURIComponent(groupId)}/rollback-preview${tag === undefined ? "" : `?tag=${encodeURIComponent(tag)}`}`,
-          200,
-        ),
-      rollbackReleaseGroup: async (_envId, groupId, tag, previewRevision) => {
-        assertEnvironmentMutable(_envId, "Release group mutation");
-        const response = await controllerRequest<ReleaseGroupTaskAccepted>(
-          `/release-groups/${encodeURIComponent(groupId)}/rollback`,
-          202,
-          {
-            method: "POST",
-            body: {
-              ...(tag === undefined ? {} : { tag }),
-              preview_revision: previewRevision,
-            },
-          },
-        );
-        return requireTaskId(response, "Release group rollback");
-      },
+      ...createReleaseGroupActions(state, update, assertEnvironmentMutable),
       addAttach: async (_envId, input) => {
         assertEnvironmentMutable(_envId, "Attach mutation");
         const body: AttachCreateRequest = {
