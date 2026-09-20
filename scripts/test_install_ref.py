@@ -42,9 +42,11 @@ class RefBuildCleanupTests(unittest.TestCase):
                  patch.object(install_ref.subprocess, "run"):
                 if fail_at:
                     with self.assertRaises(subprocess.CalledProcessError):
-                        install_ref.build(source, source, "0.0.1-ref.fixture", identity)
+                        install_ref.build(source, source, "0.0.1-ref.fixture", identity,
+                                          source_epoch=1789900000)
                 else:
-                    install_ref.build(source, source, "0.0.1-ref.fixture", identity)
+                    install_ref.build(source, source, "0.0.1-ref.fixture", identity,
+                                      source_epoch=1789900000)
         self.assertEqual(builders, {"unrelated"})
         self.assertEqual(cache, {"unrelated"})
         self.assertEqual(images, {install_ref.CLIENT_IMAGE, "unrelated:keep"})

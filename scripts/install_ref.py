@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import ipaddress
+import json
 import os
 from pathlib import Path
 import re
@@ -30,7 +32,7 @@ def present(image: str) -> bool:
 
 
 def build(source: Path, output: Path, version: str, identity: str,
-          *, include_runner: bool = True) -> tuple[str, str]:
+          *, source_epoch: int, include_runner: bool = True) -> tuple[str, str]:
     """Only this builder owns its cache; never prune the host's shared cache."""
     builder = f"groundplane-ref-{identity}"
     client = f"{builder}-client"
@@ -51,7 +53,8 @@ def build(source: Path, output: Path, version: str, identity: str,
         run(*command, "create", "--name", builder, "--driver", "docker-container",
             "--driver-opt", f"image={BUILDKIT_IMAGE},restart-policy=no")
         created = True
-        common = [*command, "build", "--builder", builder, "--provenance=false"]
+        common = [*command, "build", "--builder", builder, "--provenance=false",
+                  "--build-arg", f"SOURCE_DATE_EPOCH={source_epoch}"]
         run(*common, "--file", "Dockerfile.build", "--build-arg", f"VERSION={version}",
             "--output", f"type=local,dest={output}", ".", cwd=source)
         for kind, tag in zip(("agent", "runner"), tags):
@@ -60,7 +63,7 @@ def build(source: Path, output: Path, version: str, identity: str,
             argument = (f"AGENT_VERSION={version}" if kind == "agent" else
                         f"RUNNER_VERSION={(source / '.runner-version').read_text().strip()}")
             run(*common, "--file", f"Dockerfile.{kind}", "--build-arg", argument,
-                "--tag", tag, "--load", ".", cwd=source)
+                "--tag", tag, "--output", "type=docker,rewrite-timestamp=true", ".", cwd=source)
     finally:
         # An interrupted client may leave its container running despite --rm.
         subprocess.run(["docker", "container", "rm", "--force", client],
@@ -81,7 +84,7 @@ def build(source: Path, output: Path, version: str, identity: str,
 
 
 def install(source: Path, output: Path, version: str, identity: str,
-            listen_ip: str, stage_only: bool, config: str | None) -> None:
+            listen_ip: str, stage_only: bool, config: str | None, source_epoch: int) -> None:
     mode = Layout(RELEASE_ROOT, GUARD, UNIT, 0).mode()
     if mode != "native":
         if stage_only:
@@ -96,7 +99,8 @@ def install(source: Path, output: Path, version: str, identity: str,
     tags = tuple(f"groundplane-{kind}:ref-{identity}" for kind in ("agent", "runner"))
     started_install = False
     try:
-        build(source, output, version, identity, include_runner=mode != "native")
+        build(source, output, version, identity, source_epoch=source_epoch,
+              include_runner=mode != "native")
         for path in (deploy.RELEASE_STAGER, deploy.BOOTSTRAP_HELPER, deploy.UPDATE_CLIENT,
                      deploy.CONTROLLER_UNIT, deploy.TMPFILES, deploy.CONFIG_EXAMPLE):
             shutil.copyfile(path, output / path.name)
@@ -137,6 +141,18 @@ def main() -> None:
             or not re.fullmatch(r"groundplane-deploy-[0-9a-f]{32}", output.name)):
         parser.error("invalid deployment directory")
     source = Path(__file__).resolve().parents[1]
+    # The installer resolved this metadata before downloading the exact source.
+    # Never substitute the current clock: repeated builds must keep image identity.
+    metadata = json.loads((source.parent / "commit.json").read_text())
+    if metadata.get("sha") != args.commit:
+        parser.error("source commit metadata does not match the selected commit")
+    timestamp = metadata["commit"]["committer"]["date"]
+    if not isinstance(timestamp, str) or not re.fullmatch(
+            r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", timestamp):
+        parser.error("source commit timestamp must be a UTC date")
+    source_epoch = int(datetime.fromisoformat(timestamp.replace("Z", "+00:00")).timestamp())
+    if source_epoch < 0:
+        parser.error("source commit timestamp must not precede the Unix epoch")
     version = (source / "VERSION").read_text().strip()
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
         parser.error("source VERSION must contain a stable numeric version")
@@ -146,7 +162,8 @@ def main() -> None:
         raise SystemExit(128 + signum)
     for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
         signal.signal(sig, interrupted)
-    install(source, output, version, identity, args.listen_ip, args.stage_only, args.config)
+    install(source, output, version, identity, args.listen_ip, args.stage_only, args.config,
+            source_epoch)
 
 
 if __name__ == "__main__":

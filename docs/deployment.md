@@ -28,6 +28,9 @@ required for unresolved installation/recovery remain; they are not build debris.
 Installation reuses the normal bootstrap or guarded Controller/Agent update.
 Existing installations retain their CLI, Runner, etcd, configuration and keys.
 They skip the Runner build because normal updates do not replace it.
+Image configuration and layer timestamps use the resolved commit's UTC committer
+time, not the build clock. This keeps repeated Agent builds of the same source
+from appearing as a different runtime solely because they were built later.
 The display version includes the full source commit; immutable image and binary
 identities still govern activation. `--stage-only`, `--listen-ip` and initial-only
 `--config` remain available. `--ref` cannot be combined with `--version`, `--bundle`
