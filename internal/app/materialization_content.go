@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/controller"
@@ -17,7 +18,7 @@ func initializeTaskMaterializationResolver(
 	secrets *etcd.SecretRepository,
 	plans *controller.TaskPlanResolver,
 	protector *secretvalue.Protector,
-) (*controller.TaskMaterializationResolver, error) {
+) (*taskmaterialization.TaskMaterializationResolver, error) {
 	contents, err := etcd.NewMaterializationContentRepository(store)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Component materialization content repository: %w", err)
@@ -25,7 +26,7 @@ func initializeTaskMaterializationResolver(
 	if err := plans.EnableComponentMaterializationContent(contents); err != nil {
 		return nil, fmt.Errorf("controller: initialize Component materialization plan content: %w", err)
 	}
-	resolver, err := controller.NewTaskMaterializationResolver(blueprints, values, secrets, plans, protector)
+	resolver, err := taskmaterialization.NewTaskMaterializationResolver(blueprints, values, secrets, plans, protector)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize materialization value resolver: %w", err)
 	}

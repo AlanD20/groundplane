@@ -54,15 +54,3 @@ func (resolver *TaskPlanResolver) EnableConfigurationRecovery(snapshots configur
 	resolver.configurationRecovery = sources
 	return nil
 }
-
-func (resolver *TaskMaterializationResolver) EnableConfigurationRecovery(snapshots configurationSnapshotReader) error {
-	if resolver == nil {
-		return errs.New(errs.KindInternal, "configuration recovery sources are required")
-	}
-	sources, err := configurationrecovery.NewSources(snapshots)
-	if err != nil {
-		return err
-	}
-	resolver.configurationRecovery = sources
-	return nil
-}

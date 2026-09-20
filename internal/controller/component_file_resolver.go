@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -38,7 +39,7 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 				if intent.TaskID != reference.RouteTaskID || intent.EnvironmentID != environmentID ||
 					intent.Status != etcd.TaskStatusPending || intent.CandidateProjection == nil ||
 					intent.CandidateProjection.RevisionID != reference.RevisionID || intent.Provider == nil {
-					return nil, corruptMaterializationSource()
+					return nil, taskmaterialization.CorruptSource()
 				}
 				return resolver.routeProviderFile(*intent.Provider, *intent.CandidateProjection)
 			}
@@ -55,7 +56,7 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 		if !found || intent.TaskID != reference.RouteTaskID || intent.EnvironmentID != environmentID ||
 			intent.Status != etcd.TaskStatusPending || intent.CandidateProjection == nil ||
 			intent.CandidateProjection.RevisionID != reference.RevisionID || intent.Provider == nil {
-			return nil, corruptMaterializationSource()
+			return nil, taskmaterialization.CorruptSource()
 		}
 		return resolver.routeProviderFile(*intent.Provider, *intent.CandidateProjection)
 	}
@@ -64,7 +65,7 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 		return nil, err
 	}
 	if !found || projection.Record.RevisionID != reference.RevisionID {
-		return nil, corruptMaterializationSource()
+		return nil, taskmaterialization.CorruptSource()
 	}
 	return resolver.resolveComponentFileFromProjection(ctx, environmentID, reference, projection.Record)
 }
@@ -76,7 +77,7 @@ func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
 	projection etcd.EnvironmentComposeProjection,
 ) ([]byte, error) {
 	if projection.EnvironmentID != environmentID || projection.RevisionID != reference.RevisionID {
-		return nil, corruptMaterializationSource()
+		return nil, taskmaterialization.CorruptSource()
 	}
 	environment, err := resolver.blueprints.GetEnvironment(ctx, environmentID)
 	if err != nil {
@@ -92,7 +93,7 @@ func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
 	}
 	if environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		project.Record.Kind != hierarchyrecord.ProjectKindTenant {
-		return nil, corruptMaterializationSource()
+		return nil, taskmaterialization.CorruptSource()
 	}
 	identity := pinnedEnvironmentIdentity{
 		TenantID: tenant.Record.ID, TenantSlug: tenant.Record.Slug,
@@ -128,5 +129,5 @@ func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
 			return append([]byte(nil), file.Content...), nil
 		}
 	}
-	return nil, corruptMaterializationSource()
+	return nil, taskmaterialization.CorruptSource()
 }

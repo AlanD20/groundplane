@@ -1,4 +1,4 @@
-package controller
+package taskmaterialization
 
 import (
 	"bytes"
@@ -186,35 +186,35 @@ func (resolver *TaskMaterializationResolver) resolveSource(
 	case etcd.TaskMaterializationSourceBlueprintFile:
 		if source.BlueprintFile == nil || source.ComponentFile != nil || source.EntryValue != nil ||
 			source.GeneratedEnvironment != nil {
-			return nil, corruptMaterializationSource()
+			return nil, CorruptSource()
 		}
 		return resolver.resolveBlueprintFile(ctx, environmentID, *source.BlueprintFile)
 	case etcd.TaskMaterializationSourceComponentFile:
 		if source.ComponentFile == nil || source.BlueprintFile != nil || source.EntryValue != nil ||
 			source.GeneratedEnvironment != nil {
-			return nil, corruptMaterializationSource()
+			return nil, CorruptSource()
 		}
 		return resolver.components.ResolveComponentFile(ctx, environmentID, *source.ComponentFile)
 	case etcd.TaskMaterializationSourceEntryValue:
 		if source.EntryValue == nil || source.BlueprintFile != nil || source.ComponentFile != nil ||
 			source.GeneratedEnvironment != nil {
-			return nil, corruptMaterializationSource()
+			return nil, CorruptSource()
 		}
 		return resolver.resolveEntryValue(ctx, environmentID, *source.EntryValue)
 	case etcd.TaskMaterializationSourceGeneratedEnvironment:
 		if source.GeneratedEnvironment == nil || source.BlueprintFile != nil || source.ComponentFile != nil ||
 			source.EntryValue != nil {
-			return nil, corruptMaterializationSource()
+			return nil, CorruptSource()
 		}
 		return resolver.resolveGeneratedEnvironment(ctx, environmentID, *source.GeneratedEnvironment)
 	case etcd.TaskMaterializationSourceRemoval:
 		if source.BlueprintFile != nil || source.ComponentFile != nil || source.EntryValue != nil ||
 			source.GeneratedEnvironment != nil {
-			return nil, corruptMaterializationSource()
+			return nil, CorruptSource()
 		}
 		return []byte{}, nil
 	default:
-		return nil, corruptMaterializationSource()
+		return nil, CorruptSource()
 	}
 }
 
@@ -236,14 +236,14 @@ func (resolver *TaskMaterializationResolver) resolveBlueprintFile(
 	}
 	if !found || revision.Record.EnvironmentID != environmentID ||
 		revision.Record.RevisionID != reference.RevisionID {
-		return nil, corruptMaterializationSource()
+		return nil, CorruptSource()
 	}
 	for _, file := range revision.Record.RuntimeFiles {
 		if file.Path == reference.Path {
 			return append([]byte(nil), file.Content...), nil
 		}
 	}
-	return nil, corruptMaterializationSource()
+	return nil, CorruptSource()
 }
 
 func (resolver *TaskMaterializationResolver) resolveEntryValue(
@@ -260,7 +260,7 @@ func (resolver *TaskMaterializationResolver) resolveEntryValue(
 		if !found || record.EnvironmentID != environmentID || record.EntryID != reference.EntryID ||
 			record.GenerationID != reference.ValueGenerationID {
 			clear(record.Content)
-			return nil, corruptMaterializationSource()
+			return nil, CorruptSource()
 		}
 		return record.Content, nil
 	case etcd.TaskEntryValueStorageSecret:
@@ -271,7 +271,7 @@ func (resolver *TaskMaterializationResolver) resolveEntryValue(
 		if !found || record.EnvironmentID != environmentID || record.EntryID != reference.EntryID ||
 			record.GenerationID != reference.ValueGenerationID {
 			clear(record.Ciphertext)
-			return nil, corruptMaterializationSource()
+			return nil, CorruptSource()
 		}
 		metadata := secretvalue.Metadata{
 			Version: secretvalue.EnvelopeVersion(record.EnvelopeVersion),
@@ -297,7 +297,7 @@ func (resolver *TaskMaterializationResolver) resolveEntryValue(
 		}
 		return plaintext, nil
 	default:
-		return nil, corruptMaterializationSource()
+		return nil, CorruptSource()
 	}
 }
 
@@ -307,14 +307,14 @@ func (resolver *TaskMaterializationResolver) resolveGeneratedEnvironment(
 	reference etcd.TaskGeneratedEnvironmentValueReference,
 ) ([]byte, error) {
 	if reference.FormatVersion != 1 {
-		return nil, corruptMaterializationSource()
+		return nil, CorruptSource()
 	}
 	output := make([]byte, 0)
 	previousName := ""
 	for _, entry := range reference.Values {
 		if entry.Name <= previousName {
 			clear(output)
-			return nil, corruptMaterializationSource()
+			return nil, CorruptSource()
 		}
 		var value []byte
 		var err error
@@ -380,7 +380,7 @@ func (resolver *TaskMaterializationResolver) PinSecretValue(
 	}
 	defer clear(value.Ciphertext)
 	if value.SecretID != secretID || len(value.Ciphertext) == 0 || len(value.CiphertextSHA256) != sha256.Size*2 {
-		return etcd.TaskSecretValueReference{}, corruptMaterializationSource()
+		return etcd.TaskSecretValueReference{}, CorruptSource()
 	}
 	return etcd.TaskSecretValueReference{
 		SecretID: secretID, Revision: current.Revision, CiphertextSHA256: value.CiphertextSHA256,
@@ -396,7 +396,7 @@ func (resolver *TaskMaterializationResolver) resolveSecretValue(
 		return nil, err
 	}
 	if current.Revision != reference.Revision || current.Record.Secret.ID != reference.SecretID {
-		return nil, corruptMaterializationSource()
+		return nil, CorruptSource()
 	}
 	record, err := resolver.secrets.GetSecretValue(ctx, current)
 	if err != nil {
@@ -404,7 +404,7 @@ func (resolver *TaskMaterializationResolver) resolveSecretValue(
 	}
 	if record.SecretID != reference.SecretID || record.CiphertextSHA256 != reference.CiphertextSHA256 {
 		clear(record.Ciphertext)
-		return nil, corruptMaterializationSource()
+		return nil, CorruptSource()
 	}
 	metadata := secretvalue.Metadata{
 		Version: secretvalue.EnvelopeVersion(record.EnvelopeVersion), Cipher: secretvalue.CipherSuite(record.Cipher),
@@ -460,6 +460,6 @@ func appendComposeDotEnvBytes(output []byte, value []byte) []byte {
 	return output
 }
 
-func corruptMaterializationSource() error {
+func CorruptSource() error {
 	return errs.New(errs.KindInternal, "durable materialization source is corrupt")
 }
