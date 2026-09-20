@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -63,7 +63,7 @@ type routeMutationTaskPlanner interface {
 }
 
 type routeMutationEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -71,8 +71,8 @@ type routeMutationIntent struct {
 	method        string
 	route         string
 	environmentID string
-	path          []idempotentintent.PathBinding
-	body          idempotentintent.Value
+	path          []requestidempotency.PathBinding
+	body          requestidempotency.Value
 }
 
 type routeMutationIdempotency interface {
@@ -81,28 +81,28 @@ type routeMutationIdempotency interface {
 		context.Context,
 		etcd.IdempotencyLocator,
 		routeMutationEvidence,
-	) (idempotentintent.Resolution, bool, error)
+	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
 		context.Context,
 		routeMutationEvidence,
 		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
 		etcd.IdempotencyLocator,
 		routeMutationEvidence,
 		error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 }
 
 type durableRouteMutationIdempotency struct {
-	coordinator *idempotentintent.Coordinator
-	repository  idempotentintent.EvidenceRepository
+	coordinator *requestidempotency.Coordinator
+	repository  requestidempotency.EvidenceRepository
 }
 
 func newDurableRouteMutationIdempotency(
-	coordinator *idempotentintent.Coordinator,
-	repository idempotentintent.EvidenceRepository,
+	coordinator *requestidempotency.Coordinator,
+	repository requestidempotency.EvidenceRepository,
 ) (*durableRouteMutationIdempotency, error) {
 	if coordinator == nil || repository == nil {
 		return nil, errs.New(errs.KindInternal, "Route mutation idempotency is not configured")
@@ -114,16 +114,16 @@ func (service *durableRouteMutationIdempotency) Prepare(
 	ctx context.Context,
 	intent routeMutationIntent,
 ) (routeMutationEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: intent.method,
 		Route:  intent.route,
-		Scope: idempotentintent.Scope{
-			Kind: idempotentintent.ScopeEnvironment,
+		Scope: requestidempotency.Scope{
+			Kind: requestidempotency.ScopeEnvironment,
 			ID:   intent.environmentID,
 		},
 		Path:  intent.path,
-		Query: idempotentintent.Object(),
-		Body:  idempotentintent.JSONBody(intent.body),
+		Query: requestidempotency.Object(),
+		Body:  requestidempotency.JSONBody(intent.body),
 	})
 	if err != nil {
 		return routeMutationEvidence{}, err
@@ -144,7 +144,7 @@ func (service *durableRouteMutationIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence routeMutationEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -152,7 +152,7 @@ func (service *durableRouteMutationIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence routeMutationEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -161,7 +161,7 @@ func (service *durableRouteMutationIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence routeMutationEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
@@ -220,16 +220,16 @@ func (service *routeMutationService) CreateRoute(
 	}
 	intent := routeMutationIntent{
 		method: http.MethodPost, route: routeCreationRoute, environmentID: input.EnvironmentID,
-		body: idempotentintent.Object(
-			idempotentintent.Field{Name: "environment_id", Value: idempotentintent.String(input.EnvironmentID)},
-			idempotentintent.Field{Name: "exposure", Value: idempotentintent.String(input.Exposure)},
-			idempotentintent.Field{Name: "host", Value: idempotentintent.String(input.Host)},
-			idempotentintent.Field{Name: "path", Value: idempotentintent.String(input.Path)},
-			idempotentintent.Field{
+		body: requestidempotency.Object(
+			requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(input.EnvironmentID)},
+			requestidempotency.Field{Name: "exposure", Value: requestidempotency.String(input.Exposure)},
+			requestidempotency.Field{Name: "host", Value: requestidempotency.String(input.Host)},
+			requestidempotency.Field{Name: "path", Value: requestidempotency.String(input.Path)},
+			requestidempotency.Field{
 				Name:  "target_port",
-				Value: idempotentintent.UnsignedInteger(uint64(input.TargetPort)),
+				Value: requestidempotency.UnsignedInteger(uint64(input.TargetPort)),
 			},
-			idempotentintent.Field{Name: "target_service_id", Value: idempotentintent.String(input.TargetServiceID)},
+			requestidempotency.Field{Name: "target_service_id", Value: requestidempotency.String(input.TargetServiceID)},
 		),
 	}
 	for attempt := 0; attempt < maximumRouteMutationAttempts; attempt++ {
@@ -488,9 +488,9 @@ func routeEditMutationIntent(
 ) routeMutationIntent {
 	return routeMutationIntent{
 		method: http.MethodPatch, route: routeEditRoute, environmentID: environmentID,
-		path: []idempotentintent.PathBinding{{Name: "id", Value: routeID}},
-		body: idempotentintent.Object(
-			idempotentintent.Field{Name: "exposure", Value: idempotentintent.String(input.Exposure)},
+		path: []requestidempotency.PathBinding{{Name: "id", Value: routeID}},
+		body: requestidempotency.Object(
+			requestidempotency.Field{Name: "exposure", Value: requestidempotency.String(input.Exposure)},
 		),
 	}
 }
@@ -553,7 +553,7 @@ func (service *routeMutationService) resolveRouteMutation(
 	mutationErr error,
 	response etcd.IdempotencyResponse,
 ) (etcd.IdempotencyResponse, error) {
-	var resolution idempotentintent.Resolution
+	var resolution requestidempotency.Resolution
 	var err error
 	if mutationErr != nil {
 		if !isUnknownRouteMutationOutcome(mutationErr) {
@@ -569,9 +569,9 @@ func (service *routeMutationService) resolveRouteMutation(
 		return etcd.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
+	case requestidempotency.ResolutionApplied:
 		return response, nil
-	case idempotentintent.ResolutionReplay:
+	case requestidempotency.ResolutionReplay:
 		clear(response.Body)
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
@@ -587,8 +587,8 @@ func routeMutationLocator(intent routeMutationIntent, idempotencyKey string) etc
 	}
 }
 
-func routeReplayResponse(resolution idempotentintent.Resolution) (etcd.IdempotencyResponse, error) {
-	if resolution.Kind != idempotentintent.ResolutionReplay {
+func routeReplayResponse(resolution requestidempotency.Resolution) (etcd.IdempotencyResponse, error) {
+	if resolution.Kind != requestidempotency.ResolutionReplay {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route replay resolution is invalid")
 	}
 	return cloneIdempotencyResponse(resolution.Response), nil

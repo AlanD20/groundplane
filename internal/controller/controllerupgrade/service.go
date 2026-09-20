@@ -9,7 +9,7 @@ import (
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/imageref"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -42,8 +42,8 @@ type ServiceDependencies struct {
 	Unit                BootstrapUnit
 	Agents              AgentInventory
 	Tasks               UpdateTaskStore
-	Evidence            idempotentintent.EvidenceRepository
-	Intents             *idempotentintent.Coordinator
+	Evidence            requestidempotency.EvidenceRepository
+	Intents             *requestidempotency.Coordinator
 	ProcessDigest       upgrade.Digest
 	BootstrapAgentImage string
 }
@@ -55,8 +55,8 @@ type Service struct {
 	unit           BootstrapUnit
 	agents         AgentInventory
 	tasks          UpdateTaskStore
-	evidence       idempotentintent.EvidenceRepository
-	intents        *idempotentintent.Coordinator
+	evidence       requestidempotency.EvidenceRepository
+	intents        *requestidempotency.Coordinator
 	process        upgrade.Digest
 	bootstrapImage string
 	now            func() time.Time

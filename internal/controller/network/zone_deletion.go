@@ -13,7 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -54,7 +54,7 @@ type zoneDeletionRepository interface {
 }
 
 type zoneDeletionEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -71,28 +71,28 @@ type zoneDeletionIdempotency interface {
 		context.Context,
 		etcd.IdempotencyLocator,
 		zoneDeletionEvidence,
-	) (idempotentintent.Resolution, bool, error)
+	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
 		context.Context,
 		zoneDeletionEvidence,
 		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
 		etcd.IdempotencyLocator,
 		zoneDeletionEvidence,
 		error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	MatchesStaged(context.Context, zoneDeletionEvidence, etcd.ProtectedIntentRecord) (bool, error)
 }
 
 type durableZoneDeletionIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  idempotencyEvidenceRepository
 }
 
 func newDurableZoneDeletionIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository idempotencyEvidenceRepository,
 ) (*durableZoneDeletionIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -121,17 +121,17 @@ func (service *durableZoneDeletionIdempotency) Prepare(
 		ids.Validate(ids.KindEnvironment, locator.ScopeID) != nil {
 		return zoneDeletionEvidence{}, errs.New(errs.KindInternal, "Zone deletion replay scope is invalid")
 	}
-	query := idempotentintent.Object()
+	query := requestidempotency.Object()
 	if impactToken != "" {
-		query = idempotentintent.Object(idempotentintent.Field{
-			Name: "impact_token", Value: idempotentintent.String(impactToken),
+		query = requestidempotency.Object(requestidempotency.Field{
+			Name: "impact_token", Value: requestidempotency.String(impactToken),
 		})
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodDelete, Route: zoneDeletionRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: locator.ScopeID},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: zoneID}},
-		Query: query, Body: idempotentintent.NoBody(),
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: locator.ScopeID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: zoneID}},
+		Query: query, Body: requestidempotency.NoBody(),
 	})
 	if err != nil {
 		return zoneDeletionEvidence{}, err
@@ -152,7 +152,7 @@ func (service *durableZoneDeletionIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence zoneDeletionEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -160,7 +160,7 @@ func (service *durableZoneDeletionIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence zoneDeletionEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -169,7 +169,7 @@ func (service *durableZoneDeletionIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence zoneDeletionEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
@@ -350,7 +350,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion replay resolution is invalid")
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
@@ -501,9 +501,9 @@ func (service *zoneDeletionService) removeZoneOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
+	case requestidempotency.ResolutionApplied:
 		return cloneIdempotencyResponse(response), nil
-	case idempotentintent.ResolutionReplay:
+	case requestidempotency.ResolutionReplay:
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion resolution is invalid")
@@ -540,7 +540,7 @@ func (service *zoneDeletionService) replayZoneDeletion(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if !existing || resolution.Kind != idempotentintent.ResolutionReplay {
+	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion replay target is inconsistent")
 	}
 	return cloneIdempotencyResponse(resolution.Response), nil

@@ -23,7 +23,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -452,8 +452,8 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 ) (etcd.IdempotencyResponse, error) {
 	evidence, err := service.idempotency.Prepare(ctx, desiredrevision.IntentAddress{
 		Method: http.MethodPut, Route: environmentBlueprintRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: environmentID}},
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: environmentID}},
 	}, bundle)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -468,13 +468,13 @@ func (service *environmentBlueprintService) applyBlueprintOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Environment Blueprint replay resolution is invalid",
 			)
 		}
-		return cloneIdempotencyResponse(resolution.Response), nil
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 
 	environment, err := service.repository.GetEnvironment(ctx, environmentID)
@@ -1906,7 +1906,7 @@ func preserveEnvironmentBlueprintServiceExtensions(
 			continue
 		}
 		if extension, exists := previousExtensions[identity.Name]; exists {
-			result[identity.Name] = cloneEnvironmentBlueprintServiceExtension(extension)
+			result[identity.Name] = core.CloneServiceExtension(extension)
 		}
 	}
 	return result, nil
@@ -1917,25 +1917,9 @@ func cloneEnvironmentBlueprintServiceExtensions(
 ) map[string]core.ServiceExtensionSpec {
 	result := make(map[string]core.ServiceExtensionSpec, len(source))
 	for name, extension := range source {
-		result[name] = cloneEnvironmentBlueprintServiceExtension(extension)
+		result[name] = core.CloneServiceExtension(extension)
 	}
 	return result
-}
-
-func cloneEnvironmentBlueprintServiceExtension(extension core.ServiceExtensionSpec) core.ServiceExtensionSpec {
-	clone := extension
-	if extension.Release != nil {
-		release := *extension.Release
-		clone.Release = &release
-	}
-	if extension.DependsOn != nil {
-		clone.DependsOn = make(map[string]core.ServiceDependency, len(extension.DependsOn))
-		for dependency, decision := range extension.DependsOn {
-			decision.Phases = append([]core.ServiceDependencyPhase(nil), decision.Phases...)
-			clone.DependsOn[dependency] = decision
-		}
-	}
-	return clone
 }
 
 func preserveEnvironmentBlueprintResources(

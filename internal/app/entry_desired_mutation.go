@@ -16,7 +16,7 @@ import (
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -89,14 +89,14 @@ const (
 
 type entryDesiredEvidence struct {
 	durable         etcd.ProtectedIntentRecord
-	resolveExisting func(context.Context, etcd.IdempotencyLocator) (idempotentintent.Resolution, bool, error)
+	resolveExisting func(context.Context, etcd.IdempotencyLocator) (requestidempotency.Resolution, bool, error)
 	matchesStaged   func(context.Context, etcd.ProtectedIntentRecord) (bool, error)
-	resolveKnown    func(context.Context, etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error)
-	resolveUnknown  func(context.Context, etcd.IdempotencyLocator, error) (idempotentintent.Resolution, error)
+	resolveKnown    func(context.Context, etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error)
+	resolveUnknown  func(context.Context, etcd.IdempotencyLocator, error) (requestidempotency.Resolution, error)
 }
 
 type entryDesiredRemovalEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -114,27 +114,27 @@ type entryDesiredRemovalIdempotency interface {
 		context.Context,
 		etcd.IdempotencyLocator,
 		entryDesiredRemovalEvidence,
-	) (idempotentintent.Resolution, bool, error)
+	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
 		context.Context,
 		entryDesiredRemovalEvidence,
 		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
 		etcd.IdempotencyLocator,
 		entryDesiredRemovalEvidence,
 		error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 }
 
 type durableEntryDesiredRemovalIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func newDurableEntryDesiredRemovalIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableEntryDesiredRemovalIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -148,11 +148,11 @@ func (service *durableEntryDesiredRemovalIdempotency) Prepare(
 	environmentID string,
 	entryID string,
 ) (entryDesiredRemovalEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodDelete, Route: entryEditRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: entryID}},
-		Query: idempotentintent.Object(), Body: idempotentintent.NoBody(),
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: entryID}},
+		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
 	})
 	if err != nil {
 		return entryDesiredRemovalEvidence{}, err
@@ -191,7 +191,7 @@ func (service *durableEntryDesiredRemovalIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence entryDesiredRemovalEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -199,7 +199,7 @@ func (service *durableEntryDesiredRemovalIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence entryDesiredRemovalEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -208,7 +208,7 @@ func (service *durableEntryDesiredRemovalIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence entryDesiredRemovalEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
@@ -249,16 +249,16 @@ func (service *entryDesiredMutationService) CreateEntry(
 			},
 			evidence: entryDesiredEvidence{
 				durable: evidence.durable,
-				resolveExisting: func(ctx context.Context, locator etcd.IdempotencyLocator) (idempotentintent.Resolution, bool, error) {
+				resolveExisting: func(ctx context.Context, locator etcd.IdempotencyLocator) (requestidempotency.Resolution, bool, error) {
 					return service.creation.ResolveExisting(ctx, locator, evidence)
 				},
 				matchesStaged: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
 					return service.creation.MatchesStaged(ctx, evidence, existing)
 				},
-				resolveKnown: func(ctx context.Context, result etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error) {
+				resolveKnown: func(ctx context.Context, result etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error) {
 					return service.creation.ResolveKnown(ctx, evidence, result)
 				},
-				resolveUnknown: func(ctx context.Context, locator etcd.IdempotencyLocator, original error) (idempotentintent.Resolution, error) {
+				resolveUnknown: func(ctx context.Context, locator etcd.IdempotencyLocator, original error) (requestidempotency.Resolution, error) {
 					return service.creation.ResolveUnknown(ctx, locator, evidence, original)
 				},
 			},
@@ -327,16 +327,16 @@ func (service *entryDesiredMutationService) EditEntry(
 			},
 			evidence: entryDesiredEvidence{
 				durable: evidence.durable,
-				resolveExisting: func(ctx context.Context, locator etcd.IdempotencyLocator) (idempotentintent.Resolution, bool, error) {
+				resolveExisting: func(ctx context.Context, locator etcd.IdempotencyLocator) (requestidempotency.Resolution, bool, error) {
 					return service.edit.ResolveExisting(ctx, locator, evidence)
 				},
 				matchesStaged: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
 					return service.edit.MatchesStaged(ctx, evidence, existing)
 				},
-				resolveKnown: func(ctx context.Context, result etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error) {
+				resolveKnown: func(ctx context.Context, result etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error) {
 					return service.edit.ResolveKnown(ctx, evidence, result)
 				},
-				resolveUnknown: func(ctx context.Context, locator etcd.IdempotencyLocator, original error) (idempotentintent.Resolution, error) {
+				resolveUnknown: func(ctx context.Context, locator etcd.IdempotencyLocator, original error) (requestidempotency.Resolution, error) {
 					return service.edit.ResolveUnknown(ctx, locator, evidence, original)
 				},
 			},
@@ -380,7 +380,7 @@ func (service *entryDesiredMutationService) RemoveEntry(
 		if err != nil {
 			return entrycontroller.RemovalOutcome{}, err
 		}
-		if !existing || resolution.Kind != idempotentintent.ResolutionReplay {
+		if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
 			return entrycontroller.RemovalOutcome{}, errs.New(
 				errs.KindInternal,
 				"Entry removal replay resolution is invalid",
@@ -406,16 +406,16 @@ func (service *entryDesiredMutationService) RemoveEntry(
 			},
 			evidence: entryDesiredEvidence{
 				durable: evidence.durable,
-				resolveExisting: func(ctx context.Context, locator etcd.IdempotencyLocator) (idempotentintent.Resolution, bool, error) {
+				resolveExisting: func(ctx context.Context, locator etcd.IdempotencyLocator) (requestidempotency.Resolution, bool, error) {
 					return service.removal.ResolveExisting(ctx, locator, evidence)
 				},
 				matchesStaged: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
 					return service.removal.MatchesStaged(ctx, evidence, existing)
 				},
-				resolveKnown: func(ctx context.Context, result etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error) {
+				resolveKnown: func(ctx context.Context, result etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error) {
 					return service.removal.ResolveKnown(ctx, evidence, result)
 				},
-				resolveUnknown: func(ctx context.Context, locator etcd.IdempotencyLocator, original error) (idempotentintent.Resolution, error) {
+				resolveUnknown: func(ctx context.Context, locator etcd.IdempotencyLocator, original error) (requestidempotency.Resolution, error) {
 					return service.removal.ResolveUnknown(ctx, locator, evidence, original)
 				},
 			},
@@ -448,10 +448,10 @@ func (service *entryDesiredMutationService) replayEntryDesiredEdit(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if !existing || resolution.Kind != idempotentintent.ResolutionReplay {
+	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry edit replay resolution is invalid")
 	}
-	return cloneIdempotencyResponse(resolution.Response), nil
+	return requestidempotency.CloneResponse(resolution.Response), nil
 }
 
 func (service *entryDesiredMutationService) mutateEntryOnce(
@@ -463,13 +463,13 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Entry mutation replay resolution is invalid",
 			)
 		}
-		return cloneIdempotencyResponse(resolution.Response), nil
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	environment, err := service.repository.GetEnvironment(ctx, request.environmentID)
 	if err != nil {
@@ -502,7 +502,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	expectedHeadRevision, generation, err := serviceDesiredState(
+	expectedHeadRevision, generation, err := controllerrevision.NextGeneration(
 		request.environmentID, head, hasHead, current, hasCurrent,
 	)
 	if err != nil {
@@ -538,7 +538,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	candidate = cloneEnvironmentDesiredProjection(candidate)
+	candidate = controllerrevision.CloneProjection(candidate)
 	claim, _, err := controllerrevision.PreflightAndClaim(ctx, service.repository, candidate,
 		controllerrevision.ClaimInput{
 			EnvironmentID: request.environmentID, CandidateTaskID: candidateTaskID,
@@ -574,7 +574,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	candidate = cloneEnvironmentDesiredProjection(candidate)
+	candidate = controllerrevision.CloneProjection(candidate)
 	if previous != nil {
 		serviceIdentities, snapshotErr := entryDesiredServiceIdentities(candidate)
 		if snapshotErr != nil {
@@ -684,13 +684,13 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if resolution.Kind == idempotentintent.ResolutionReplay {
-		return cloneIdempotencyResponse(resolution.Response), nil
+	if resolution.Kind == requestidempotency.ResolutionReplay {
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
-	if resolution.Kind != idempotentintent.ResolutionApplied {
+	if resolution.Kind != requestidempotency.ResolutionApplied {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry desired mutation resolution is invalid")
 	}
-	return cloneIdempotencyResponse(response), nil
+	return requestidempotency.CloneResponse(response), nil
 }
 
 func entryDesiredServiceIdentities(

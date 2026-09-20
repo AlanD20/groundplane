@@ -13,7 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/volumeidentity"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -46,7 +46,7 @@ type MutationService struct {
 func NewMutationService(
 	volumeRoot string,
 	repository MutationRepository,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	idempotencyRepository *etcd.IdempotencyRepository,
 	reads *ReadService,
 	policies *etcd.BackupPolicyRepository,
@@ -83,11 +83,11 @@ func (service *MutationService) CreateVolume(
 	}
 	intent := mutationIntent{
 		method: http.MethodPost, route: volumeCreationRoute, environmentID: input.EnvironmentID,
-		query: idempotentintent.Object(),
-		body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "environment_id", Value: idempotentintent.String(input.EnvironmentID)},
-			idempotentintent.Field{Name: "key", Value: idempotentintent.String(input.Key)},
-			idempotentintent.Field{Name: "slug", Value: idempotentintent.String(input.Slug)},
+		query: requestidempotency.Object(),
+		body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(input.EnvironmentID)},
+			requestidempotency.Field{Name: "key", Value: requestidempotency.String(input.Key)},
+			requestidempotency.Field{Name: "slug", Value: requestidempotency.String(input.Slug)},
 		)),
 	}
 	return service.mutateWithRetry(ctx, volumeMutationRequest{
@@ -113,9 +113,9 @@ func (service *MutationService) EditVolume(
 	intent := mutationIntent{
 		method: http.MethodPatch, route: volumeIdentityRoute,
 		environmentID: projection.Record.EnvironmentID, volumeID: volumeID,
-		query: idempotentintent.Object(),
-		body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "slug", Value: idempotentintent.String(input.Slug)},
+		query: requestidempotency.Object(),
+		body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "slug", Value: requestidempotency.String(input.Slug)},
 		)),
 	}
 	return service.mutateWithRetry(ctx, volumeMutationRequest{
@@ -216,11 +216,11 @@ func volumeRemovalIntent(
 	return mutationIntent{
 		method: http.MethodDelete, route: volumeIdentityRoute,
 		environmentID: environmentID, volumeID: volumeID,
-		query: idempotentintent.Object(
-			idempotentintent.Field{Name: "confirm_key", Value: idempotentintent.String(confirmKey)},
-			idempotentintent.Field{Name: "impact_token", Value: idempotentintent.String(impactToken)},
+		query: requestidempotency.Object(
+			requestidempotency.Field{Name: "confirm_key", Value: requestidempotency.String(confirmKey)},
+			requestidempotency.Field{Name: "impact_token", Value: requestidempotency.String(impactToken)},
 		),
-		body: idempotentintent.NoBody(),
+		body: requestidempotency.NoBody(),
 	}
 }
 
@@ -502,10 +502,10 @@ func (service *MutationService) mutateOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if resolution.Kind == idempotentintent.ResolutionReplay {
+	if resolution.Kind == requestidempotency.ResolutionReplay {
 		return cloneResponse(resolution.Response), nil
 	}
-	if resolution.Kind != idempotentintent.ResolutionApplied {
+	if resolution.Kind != requestidempotency.ResolutionApplied {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Volume mutation resolution is invalid")
 	}
 	return cloneResponse(response), nil

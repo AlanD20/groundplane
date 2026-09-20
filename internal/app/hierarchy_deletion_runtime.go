@@ -2,7 +2,7 @@ package app
 
 import (
 	"github.com/AlanD20/groundplane/internal/controller/hierarchydeletion"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -10,7 +10,7 @@ import (
 func newHierarchyDeletionRuntime(
 	store etcd.Store,
 	idempotency *etcd.IdempotencyRepository,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 ) (*hierarchydeletion.Service, error) {
 	journal, err := etcd.NewHierarchyDeletionRepository(store)
 	if err != nil {

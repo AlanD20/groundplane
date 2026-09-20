@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	etcdinfra "github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -14,14 +14,14 @@ import (
 type EtcdRepository struct {
 	journal     *etcdinfra.HierarchyDeletionRepository
 	idempotency *etcdinfra.IdempotencyRepository
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	clock       Clock
 }
 
 func NewEtcdRepository(
 	journal *etcdinfra.HierarchyDeletionRepository,
 	idempotency *etcdinfra.IdempotencyRepository,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	clock Clock,
 ) (*EtcdRepository, error) {
 	if journal == nil || idempotency == nil || coordinator == nil || clock == nil {

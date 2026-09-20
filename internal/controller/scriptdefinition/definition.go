@@ -2,7 +2,7 @@ package scriptdefinition
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -39,50 +39,50 @@ func Response(record etcd.ScriptRecord) apiTypes.Script {
 }
 
 // CreateIntentBody captures the authored creation intent.
-func CreateIntentBody(input apiTypes.ScriptCreate) idempotentintent.Value {
-	fields := []idempotentintent.Field{
-		idempotentintent.Field{Name: "environment_id", Value: idempotentintent.String(input.EnvironmentID)},
-		idempotentintent.Field{Name: "slug", Value: idempotentintent.String(input.Slug)},
-		idempotentintent.Field{Name: "script", Value: idempotentintent.String(input.Body)},
-		idempotentintent.Field{Name: "service_id", Value: idempotentintent.String(input.ServiceID)},
-		idempotentintent.Field{Name: "when", Value: idempotentintent.String(input.When)},
+func CreateIntentBody(input apiTypes.ScriptCreate) requestidempotency.Value {
+	fields := []requestidempotency.Field{
+		requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(input.EnvironmentID)},
+		requestidempotency.Field{Name: "slug", Value: requestidempotency.String(input.Slug)},
+		requestidempotency.Field{Name: "script", Value: requestidempotency.String(input.Body)},
+		requestidempotency.Field{Name: "service_id", Value: requestidempotency.String(input.ServiceID)},
+		requestidempotency.Field{Name: "when", Value: requestidempotency.String(input.When)},
 	}
 	// Zero is the default and preserves pre-order creation intent identity.
 	if input.Order != 0 {
 		fields = append(
 			fields,
-			idempotentintent.Field{Name: "order", Value: idempotentintent.Integer(int64(input.Order))},
+			requestidempotency.Field{Name: "order", Value: requestidempotency.Integer(int64(input.Order))},
 		)
 	}
 	// Inheritance is the create default and keeps earlier protected intent identity.
 	if input.Execution != nil && input.Execution.Mode != "inherited" {
-		fields = append(fields, idempotentintent.Field{Name: "execution", Value: executionIntent(*input.Execution)})
+		fields = append(fields, requestidempotency.Field{Name: "execution", Value: executionIntent(*input.Execution)})
 	}
-	return idempotentintent.Object(fields...)
+	return requestidempotency.Object(fields...)
 }
 
 // EditIntentBody retains precisely the supplied patch fields.
-func EditIntentBody(input apiTypes.ScriptEdit) idempotentintent.Value {
-	fields := make([]idempotentintent.Field, 0, 5)
+func EditIntentBody(input apiTypes.ScriptEdit) requestidempotency.Value {
+	fields := make([]requestidempotency.Field, 0, 5)
 	if input.Slug != nil {
-		fields = append(fields, idempotentintent.Field{Name: "slug", Value: idempotentintent.String(*input.Slug)})
+		fields = append(fields, requestidempotency.Field{Name: "slug", Value: requestidempotency.String(*input.Slug)})
 	}
 	if input.Body != nil {
-		fields = append(fields, idempotentintent.Field{Name: "script", Value: idempotentintent.String(*input.Body)})
+		fields = append(fields, requestidempotency.Field{Name: "script", Value: requestidempotency.String(*input.Body)})
 	}
 	if input.When != nil {
-		fields = append(fields, idempotentintent.Field{Name: "when", Value: idempotentintent.String(*input.When)})
+		fields = append(fields, requestidempotency.Field{Name: "when", Value: requestidempotency.String(*input.When)})
 	}
 	if input.Order != nil {
 		fields = append(
 			fields,
-			idempotentintent.Field{Name: "order", Value: idempotentintent.Integer(int64(*input.Order))},
+			requestidempotency.Field{Name: "order", Value: requestidempotency.Integer(int64(*input.Order))},
 		)
 	}
 	if input.Execution != nil {
-		fields = append(fields, idempotentintent.Field{Name: "execution", Value: executionIntent(*input.Execution)})
+		fields = append(fields, requestidempotency.Field{Name: "execution", Value: executionIntent(*input.Execution)})
 	}
-	return idempotentintent.Object(fields...)
+	return requestidempotency.Object(fields...)
 }
 
 // CreateDesired binds the new Script identity to the resolved Service label.

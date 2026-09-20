@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -101,10 +101,10 @@ func (service *attachMutationService) renameAttachOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename replay resolution is invalid")
 		}
-		return cloneIdempotencyResponse(resolution.Response), nil
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	environment, err := service.repository.GetEnvironment(ctx, current.Record.EnvironmentID)
 	if err != nil {
@@ -146,10 +146,10 @@ func (service *attachMutationService) renameAttachOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
-		return cloneIdempotencyResponse(response), nil
-	case idempotentintent.ResolutionReplay:
-		return cloneIdempotencyResponse(resolution.Response), nil
+	case requestidempotency.ResolutionApplied:
+		return requestidempotency.CloneResponse(response), nil
+	case requestidempotency.ResolutionReplay:
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename resolution is invalid")
 	}
@@ -170,10 +170,10 @@ func (service *attachMutationService) replayAttachRename(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if !existing || resolution.Kind != idempotentintent.ResolutionReplay {
+	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename replay index is inconsistent")
 	}
-	return cloneIdempotencyResponse(resolution.Response), nil
+	return requestidempotency.CloneResponse(resolution.Response), nil
 }
 
 func attachAPI(record etcd.AttachRecord) apiTypes.Attach {

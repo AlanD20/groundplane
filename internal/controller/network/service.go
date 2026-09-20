@@ -7,7 +7,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/controller"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	corenetwork "github.com/AlanD20/groundplane/internal/core/network"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
@@ -27,7 +27,7 @@ type Service struct {
 }
 
 type idempotencyEvidenceRepository interface {
-	idempotentintent.EvidenceRepository
+	requestidempotency.EvidenceRepository
 	ResolveReplayLocator(
 		context.Context,
 		etcd.IdempotencyReplayTarget,
@@ -43,7 +43,7 @@ type idempotencyEvidenceRepository interface {
 func NewEtcdService(
 	repository *networketcd.Repository,
 	plans *controller.TaskPlanResolver,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 ) (*Service, error) {
 	if repository == nil || plans == nil || coordinator == nil {
 		return nil, errs.New(errs.KindInternal, "network capability dependencies are not configured")

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"filippo.io/age"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -41,32 +41,32 @@ type backupPolicyRepository interface {
 }
 
 type backupPolicyEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 }
 
 type backupPolicyIdempotency interface {
 	Prepare(context.Context, string, apiTypes.BackupPolicyReplacementRequest) (backupPolicyEvidence, error)
 	ResolveExisting(
 		context.Context, etcd.IdempotencyLocator, backupPolicyEvidence,
-	) (idempotentintent.Resolution, bool, error)
+	) (requestidempotency.Resolution, bool, error)
 	NewMarker(
 		backupPolicyEvidence, etcd.IdempotencyLocator, etcd.IdempotencyResponse, time.Time,
 	) (etcd.IdempotencyMarker, error)
 	ResolveKnown(
 		context.Context, backupPolicyEvidence, etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context, etcd.IdempotencyLocator, backupPolicyEvidence, error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 }
 
 type durableBackupPolicyIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func NewDurableBackupPolicyIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableBackupPolicyIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -80,7 +80,7 @@ func (service *durableBackupPolicyIdempotency) Prepare(
 	environmentID string,
 	input apiTypes.BackupPolicyReplacementRequest,
 ) (backupPolicyEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, backupPolicyIntent(environmentID, input))
+	version, digest, err := requestidempotency.Canonicalize(ctx, backupPolicyIntent(environmentID, input))
 	if err != nil {
 		return backupPolicyEvidence{}, err
 	}
@@ -96,7 +96,7 @@ func (service *durableBackupPolicyIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence backupPolicyEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -118,7 +118,7 @@ func (service *durableBackupPolicyIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence backupPolicyEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -127,7 +127,7 @@ func (service *durableBackupPolicyIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence backupPolicyEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
@@ -287,7 +287,7 @@ func (service *backupPolicyService) SetBackupPolicy(
 	if err != nil {
 		return apiTypes.BackupPolicyMutationResult{}, err
 	}
-	if resolution.Kind == idempotentintent.ResolutionApplied {
+	if resolution.Kind == requestidempotency.ResolutionApplied {
 		resolution.Response = etcd.IdempotencyResponse{
 			Status: response.Status, ContentKind: response.ContentKind,
 			Body: append([]byte(nil), response.Body...),
@@ -362,26 +362,26 @@ func backupPolicyLocator(environmentID string, key string) etcd.IdempotencyLocat
 func backupPolicyIntent(
 	environmentID string,
 	input apiTypes.BackupPolicyReplacementRequest,
-) idempotentintent.CanonicalIntentV1 {
-	sources := make([]idempotentintent.Value, len(input.Sources))
+) requestidempotency.CanonicalIntentV1 {
+	sources := make([]requestidempotency.Value, len(input.Sources))
 	for index, source := range input.Sources {
-		sources[index] = idempotentintent.Object(
-			idempotentintent.Field{Name: "kind", Value: idempotentintent.String(string(source.Kind))},
-			idempotentintent.Field{Name: "target_id", Value: idempotentintent.String(source.TargetID)},
+		sources[index] = requestidempotency.Object(
+			requestidempotency.Field{Name: "kind", Value: requestidempotency.String(string(source.Kind))},
+			requestidempotency.Field{Name: "target_id", Value: requestidempotency.String(source.TargetID)},
 		)
 	}
-	return idempotentintent.CanonicalIntentV1{
+	return requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPut, Route: backupPolicyReplacementRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: environmentID}},
-		Query: idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "enabled", Value: idempotentintent.Bool(input.Enabled)},
-			idempotentintent.Field{Name: "frequency", Value: idempotentintent.String(input.Frequency)},
-			idempotentintent.Field{Name: "keep", Value: idempotentintent.Integer(input.Keep)},
-			idempotentintent.Field{Name: "encryption", Value: idempotentintent.String(string(input.Encryption))},
-			idempotentintent.Field{Name: "connector_id", Value: idempotentintent.String(input.ConnectorID)},
-			idempotentintent.Field{Name: "sources", Value: idempotentintent.List(sources...)},
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: environmentID}},
+		Query: requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "enabled", Value: requestidempotency.Bool(input.Enabled)},
+			requestidempotency.Field{Name: "frequency", Value: requestidempotency.String(input.Frequency)},
+			requestidempotency.Field{Name: "keep", Value: requestidempotency.Integer(input.Keep)},
+			requestidempotency.Field{Name: "encryption", Value: requestidempotency.String(string(input.Encryption))},
+			requestidempotency.Field{Name: "connector_id", Value: requestidempotency.String(input.ConnectorID)},
+			requestidempotency.Field{Name: "sources", Value: requestidempotency.List(sources...)},
 		)),
 	}
 }

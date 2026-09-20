@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -21,7 +21,7 @@ func EnsurePlatformResolverTask(
 	components *etcd.ComponentRepository,
 	tasks *etcd.TaskRepository,
 	planner *PlatformRenderPlanner,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 ) error {
 	if ctx == nil || components == nil || tasks == nil || planner == nil || coordinator == nil {
 		return errs.New(errs.KindInternal, "platform resolver startup dependencies are required")

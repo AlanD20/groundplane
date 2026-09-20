@@ -6,28 +6,28 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) protect(ctx context.Context, release string) (idempotentintent.ProtectedEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+func (service *Service) protect(ctx context.Context, release string) (requestidempotency.ProtectedEvidence, error) {
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost, Route: UpdateRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopePlatform},
-		Query: idempotentintent.Object(), Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "release", Value: idempotentintent.String(release)},
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
+		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "release", Value: requestidempotency.String(release)},
 		)),
 	})
 	if err != nil {
-		return idempotentintent.ProtectedEvidence{}, err
+		return requestidempotency.ProtectedEvidence{}, err
 	}
 	defer digest.Destroy()
 	return service.intents.ProtectIntent(ctx, version, digest)
 }
 
 func (service *Service) resolvePublication(
-	ctx context.Context, locator etcd.IdempotencyLocator, evidence idempotentintent.ProtectedEvidence,
+	ctx context.Context, locator etcd.IdempotencyLocator, evidence requestidempotency.ProtectedEvidence,
 	result etcd.IdempotencyTransactionResult, publicationErr error, response etcd.IdempotencyResponse,
 ) (etcd.IdempotencyResponse, error) {
 	if publicationErr != nil {
@@ -83,8 +83,8 @@ func (service *Service) resolvePublication(
 	}
 }
 
-func acceptedReplay(resolution idempotentintent.Resolution) (etcd.IdempotencyResponse, error) {
-	if resolution.Kind != idempotentintent.ResolutionReplay {
+func acceptedReplay(resolution requestidempotency.Resolution) (etcd.IdempotencyResponse, error) {
+	if resolution.Kind != requestidempotency.ResolutionReplay {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "native update replay is invalid")
 	}
 	return copyResponse(resolution.Response), nil

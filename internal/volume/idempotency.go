@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type mutationEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -19,17 +19,17 @@ type mutationIntent struct {
 	route         string
 	environmentID string
 	volumeID      string
-	query         idempotentintent.Value
-	body          idempotentintent.Body
+	query         requestidempotency.Value
+	body          requestidempotency.Body
 }
 
 type mutationIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func newMutationIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*mutationIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -42,14 +42,14 @@ func (service *mutationIdempotency) Prepare(
 	ctx context.Context,
 	intent mutationIntent,
 ) (mutationEvidence, error) {
-	path := []idempotentintent.PathBinding(nil)
+	path := []requestidempotency.PathBinding(nil)
 	if intent.volumeID != "" {
-		path = []idempotentintent.PathBinding{{Name: "id", Value: intent.volumeID}}
+		path = []requestidempotency.PathBinding{{Name: "id", Value: intent.volumeID}}
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: intent.method,
 		Route:  intent.route,
-		Scope:  idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: intent.environmentID},
+		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: intent.environmentID},
 		Path:   path,
 		Query:  intent.query,
 		Body:   intent.body,
@@ -81,7 +81,7 @@ func (service *mutationIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence mutationEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -99,7 +99,7 @@ func (service *mutationIdempotency) ResolveOperationRootExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence mutationEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveOperationRootExisting(
 		ctx, service.repository, locator, evidence.candidate,
 	)
@@ -109,7 +109,7 @@ func (service *mutationIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence mutationEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -118,7 +118,7 @@ func (service *mutationIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence mutationEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
@@ -132,8 +132,8 @@ func mutationLocator(intent mutationIntent, idempotencyKey string) etcd.Idempote
 	}
 }
 
-func replayResponse(resolution idempotentintent.Resolution) (etcd.IdempotencyResponse, error) {
-	if resolution.Kind != idempotentintent.ResolutionReplay {
+func replayResponse(resolution requestidempotency.Resolution) (etcd.IdempotencyResponse, error) {
+	if resolution.Kind != requestidempotency.ResolutionReplay {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Volume replay resolution is invalid")
 	}
 	return cloneResponse(resolution.Response), nil

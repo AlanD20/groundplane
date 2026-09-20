@@ -56,6 +56,22 @@ evidence only when it is relevant to the current task.
 
 ## Execution
 
+### Active architecture cleanup rules
+
+For the owner-authorized architecture cleanup, change production code only,
+apart from this requested rule and the ignored local checkpoint. Preserve
+product behavior and migrate production callers directly to the new owning
+modules. Remove superseded production implementations; add no compatibility
+aliases, forwarding shims, fallback paths or parallel legacy implementations.
+
+Leave tests, fixtures, generated artifacts, CI gates and architecture allowances
+untouched. Do not run tests, builds, typechecks, static analysis, architecture
+checks, generation, runtime validation, QA or deployment. Only linting and
+formatting are authorized. Read source as needed to implement the migration;
+do not disguise validation as a migration tool. Report all results as unverified.
+These task-specific restrictions override the normal verification workflow
+until the owner explicitly changes them. QA remains paused.
+
 **Testing scope:** do not write tests for straightforward implementation. Tests
 are for complex logic, interacting actions or substantial edge cases. If uncertain,
 ask the user before writing or running tests. Follow `docs/delivery.md`'s testing

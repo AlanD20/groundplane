@@ -12,7 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -57,7 +57,7 @@ type ProvisioningService struct {
 	tasks       runnerTaskReader
 	projects    runnerProjectReader
 	idempotency *etcd.IdempotencyRepository
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	broker      *TokenBroker
 	allocation  runnerallocation.RunnerAllocationConfig
 	imageRef    string
@@ -69,7 +69,7 @@ func NewProvisioningService(
 	tasks runnerTaskReader,
 	projects runnerProjectReader,
 	idempotency *etcd.IdempotencyRepository,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	broker *TokenBroker,
 	allocation runnerallocation.RunnerAllocationConfig,
 	imageRef string,
@@ -119,7 +119,7 @@ func (service *ProvisioningService) CreateRunner(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner creation replay is invalid")
 		}
 		return cloneResponse(resolution.Response), nil
@@ -181,7 +181,7 @@ func (service *ProvisioningService) RetryRunner(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner retry replay is invalid")
 		}
 		return cloneResponse(resolution.Response), nil
@@ -268,28 +268,28 @@ func (service *ProvisioningService) protectCreateIntent(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	desired etcd.RunnerDesiredRecord,
-) (idempotentintent.ProtectedEvidence, error) {
-	labels := make([]idempotentintent.Value, len(desired.Labels))
+) (requestidempotency.ProtectedEvidence, error) {
+	labels := make([]requestidempotency.Value, len(desired.Labels))
 	for index, label := range desired.Labels {
-		labels[index] = idempotentintent.String(label)
+		labels[index] = requestidempotency.String(label)
 	}
-	ownerField := idempotentintent.Field{Name: "tenant_id", Value: idempotentintent.String(desired.OwnerID)}
+	ownerField := requestidempotency.Field{Name: "tenant_id", Value: requestidempotency.String(desired.OwnerID)}
 	if desired.OwnerKind == etcd.RunnerOwnerProject {
-		ownerField = idempotentintent.Field{Name: "project_id", Value: idempotentintent.String(desired.OwnerID)}
+		ownerField = requestidempotency.Field{Name: "project_id", Value: requestidempotency.String(desired.OwnerID)}
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost, Route: runnerCreateRoute,
-		Scope: runnerIntentScope(locator), Path: nil, Query: idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "slug", Value: idempotentintent.String(desired.Slug)},
+		Scope: runnerIntentScope(locator), Path: nil, Query: requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "slug", Value: requestidempotency.String(desired.Slug)},
 			ownerField,
-			idempotentintent.Field{Name: "github_url", Value: idempotentintent.String(desired.GitHubURL)},
-			idempotentintent.Field{Name: "labels", Value: idempotentintent.List(labels...)},
-			idempotentintent.Field{Name: "registration_token_present", Value: idempotentintent.Bool(true)},
+			requestidempotency.Field{Name: "github_url", Value: requestidempotency.String(desired.GitHubURL)},
+			requestidempotency.Field{Name: "labels", Value: requestidempotency.List(labels...)},
+			requestidempotency.Field{Name: "registration_token_present", Value: requestidempotency.Bool(true)},
 		)),
 	})
 	if err != nil {
-		return idempotentintent.ProtectedEvidence{}, err
+		return requestidempotency.ProtectedEvidence{}, err
 	}
 	return service.coordinator.ProtectIntent(ctx, version, digest)
 }
@@ -298,33 +298,33 @@ func (service *ProvisioningService) protectRetryIntent(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	runnerID string,
-) (idempotentintent.ProtectedEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+) (requestidempotency.ProtectedEvidence, error) {
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost, Route: runnerRetryRoute,
 		Scope: runnerIntentScope(locator),
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: runnerID}},
-		Query: idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "registration_token_present", Value: idempotentintent.Bool(true)},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: runnerID}},
+		Query: requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "registration_token_present", Value: requestidempotency.Bool(true)},
 		)),
 	})
 	if err != nil {
-		return idempotentintent.ProtectedEvidence{}, err
+		return requestidempotency.ProtectedEvidence{}, err
 	}
 	return service.coordinator.ProtectIntent(ctx, version, digest)
 }
 
-func runnerIntentScope(locator etcd.IdempotencyLocator) idempotentintent.Scope {
-	kind := idempotentintent.ScopeTenant
+func runnerIntentScope(locator etcd.IdempotencyLocator) requestidempotency.Scope {
+	kind := requestidempotency.ScopeTenant
 	if locator.ScopeKind == etcd.IdempotencyScopeProject {
-		kind = idempotentintent.ScopeProject
+		kind = requestidempotency.ScopeProject
 	}
-	return idempotentintent.Scope{Kind: kind, ID: locator.ScopeID}
+	return requestidempotency.Scope{Kind: kind, ID: locator.ScopeID}
 }
 
 func (service *ProvisioningService) newTaskMarker(
 	locator etcd.IdempotencyLocator,
-	evidence idempotentintent.ProtectedEvidence,
+	evidence requestidempotency.ProtectedEvidence,
 	task etcd.TaskRecord,
 	now time.Time,
 ) (etcd.IdempotencyResponse, etcd.IdempotencyMarker, error) {
@@ -352,14 +352,14 @@ func (service *ProvisioningService) newTaskMarker(
 func (service *ProvisioningService) resolvePublication(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
-	evidence idempotentintent.ProtectedEvidence,
+	evidence requestidempotency.ProtectedEvidence,
 	response etcd.IdempotencyResponse,
 	result etcd.IdempotencyTransactionResult,
 	mutationErr error,
 	key TokenKey,
 ) (etcd.IdempotencyResponse, error) {
 	var (
-		resolution idempotentintent.Resolution
+		resolution requestidempotency.Resolution
 		err        error
 	)
 	if mutationErr != nil {
@@ -377,9 +377,9 @@ func (service *ProvisioningService) resolvePublication(
 		return etcd.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
+	case requestidempotency.ResolutionApplied:
 		return cloneResponse(response), nil
-	case idempotentintent.ResolutionReplay:
+	case requestidempotency.ResolutionReplay:
 		if !taskResponseOwnsToken(resolution.Response, key.TaskID) {
 			service.broker.Drop(key)
 		}

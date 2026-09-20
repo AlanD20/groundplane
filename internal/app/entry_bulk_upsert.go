@@ -12,7 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -34,7 +34,7 @@ type entryBulkUpsertInput struct {
 }
 
 type entryBulkUpsertEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -45,27 +45,27 @@ type entryBulkUpsertIdempotency interface {
 		context.Context,
 		etcd.IdempotencyLocator,
 		entryBulkUpsertEvidence,
-	) (idempotentintent.Resolution, bool, error)
+	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
 		context.Context,
 		entryBulkUpsertEvidence,
 		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
 		etcd.IdempotencyLocator,
 		entryBulkUpsertEvidence,
 		error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 }
 
 type durableEntryBulkUpsertIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func newDurableEntryBulkUpsertIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableEntryBulkUpsertIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -78,24 +78,24 @@ func (service *durableEntryBulkUpsertIdempotency) Prepare(
 	ctx context.Context,
 	input entryBulkUpsertInput,
 ) (entryBulkUpsertEvidence, error) {
-	items := make([]idempotentintent.Value, len(input.entries))
+	items := make([]requestidempotency.Value, len(input.entries))
 	for index, entry := range input.entries {
 		digest := sha256.Sum256([]byte(entry.value))
-		items[index] = idempotentintent.Object(
-			idempotentintent.Field{Name: "key", Value: idempotentintent.String(entry.key)},
-			idempotentintent.Field{Name: "value_sha256", Value: idempotentintent.String(hex.EncodeToString(digest[:]))},
+		items[index] = requestidempotency.Object(
+			requestidempotency.Field{Name: "key", Value: requestidempotency.String(entry.key)},
+			requestidempotency.Field{Name: "value_sha256", Value: requestidempotency.String(hex.EncodeToString(digest[:]))},
 		)
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost,
 		Route:  entryBulkUpsertRoute,
-		Scope:  idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: input.environmentID},
-		Query:  idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "environment_id", Value: idempotentintent.String(input.environmentID)},
-			idempotentintent.Field{Name: "entries", Value: idempotentintent.List(items...)},
-			idempotentintent.Field{Name: "exposure", Value: canonicalEntryExposure(input.exposure)},
-			idempotentintent.Field{Name: "secret", Value: idempotentintent.Bool(input.secret)},
+		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: input.environmentID},
+		Query:  requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(input.environmentID)},
+			requestidempotency.Field{Name: "entries", Value: requestidempotency.List(items...)},
+			requestidempotency.Field{Name: "exposure", Value: canonicalEntryExposure(input.exposure)},
+			requestidempotency.Field{Name: "secret", Value: requestidempotency.Bool(input.secret)},
 		)),
 	})
 	if err != nil {
@@ -125,7 +125,7 @@ func (service *durableEntryBulkUpsertIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence entryBulkUpsertEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -133,7 +133,7 @@ func (service *durableEntryBulkUpsertIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence entryBulkUpsertEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -142,7 +142,7 @@ func (service *durableEntryBulkUpsertIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence entryBulkUpsertEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
@@ -221,13 +221,13 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Entry bulk upsert replay resolution is invalid",
 			)
 		}
-		return cloneIdempotencyResponse(resolution.Response), nil
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	environment, err := service.desired.repository.GetEnvironment(ctx, input.environmentID)
 	if err != nil {
@@ -258,7 +258,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	headRevision, generation, err := serviceDesiredState(input.environmentID, head, hasHead, current, hasCurrent)
+	headRevision, generation, err := controllerrevision.NextGeneration(input.environmentID, head, hasHead, current, hasCurrent)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -291,7 +291,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	candidate = cloneEnvironmentDesiredProjection(candidate)
+	candidate = controllerrevision.CloneProjection(candidate)
 	claim, _, err := controllerrevision.PreflightAndClaim(
 		ctx,
 		service.desired.repository,
@@ -337,7 +337,7 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	candidate = cloneEnvironmentDesiredProjection(candidate)
+	candidate = controllerrevision.CloneProjection(candidate)
 	serviceIdentities, err := entryDesiredServiceIdentities(candidate)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -448,13 +448,13 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if resolution.Kind == idempotentintent.ResolutionReplay {
-		return cloneIdempotencyResponse(resolution.Response), nil
+	if resolution.Kind == requestidempotency.ResolutionReplay {
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
-	if resolution.Kind != idempotentintent.ResolutionApplied {
+	if resolution.Kind != requestidempotency.ResolutionApplied {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry bulk upsert resolution is invalid")
 	}
-	return cloneIdempotencyResponse(response), nil
+	return requestidempotency.CloneResponse(response), nil
 }
 
 func prepareEntryBulkUpsert(request apiTypes.EntryBulkUpsertRequest) (entryBulkUpsertInput, error) {

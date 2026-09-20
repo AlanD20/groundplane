@@ -11,7 +11,7 @@ import (
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -30,7 +30,7 @@ type PlatformMutationService struct {
 	components  *etcd.ComponentRepository
 	tasks       *etcd.TaskRepository
 	idempotency *etcd.IdempotencyRepository
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	renderer    componentdns.Renderer
 	planner     *PlatformRenderPlanner
 	now         func() time.Time
@@ -157,7 +157,7 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 			TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 		},
 	)
-	var resolution idempotentintent.Resolution
+	var resolution requestidempotency.Resolution
 	if publishErr != nil {
 		if !unknownPlatformComponentMutationOutcome(publishErr) {
 			return etcd.IdempotencyResponse{}, publishErr
@@ -171,10 +171,10 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if resolution.Kind == idempotentintent.ResolutionReplay {
+	if resolution.Kind == requestidempotency.ResolutionReplay {
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
-	if resolution.Kind != idempotentintent.ResolutionApplied {
+	if resolution.Kind != requestidempotency.ResolutionApplied {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Platform Component lifecycle resolution is invalid",
@@ -185,18 +185,18 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 
 func platformComponentLifecycleIntent(
 	ctx context.Context,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	componentID string,
 	action string,
 	route string,
 ) (platformComponentProtectedIntent, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost, Route: route,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopePlatform},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: componentID}},
-		Query: idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "action", Value: idempotentintent.String(action)},
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: componentID}},
+		Query: requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "action", Value: requestidempotency.String(action)},
 		)),
 	})
 	if err != nil {
@@ -218,7 +218,7 @@ func NewPlatformMutationService(
 	components *etcd.ComponentRepository,
 	tasks *etcd.TaskRepository,
 	idempotency *etcd.IdempotencyRepository,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	renderer componentdns.Renderer,
 	planner *PlatformRenderPlanner,
 ) (*PlatformMutationService, error) {
@@ -259,7 +259,7 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if found {
-		if existing.Kind != idempotentintent.ResolutionReplay {
+		if existing.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Platform Component config replay resolution is invalid",
@@ -324,7 +324,7 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 			TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 		},
 	)
-	var resolution idempotentintent.Resolution
+	var resolution requestidempotency.Resolution
 	if publishErr != nil {
 		if !unknownPlatformComponentMutationOutcome(publishErr) {
 			return etcd.IdempotencyResponse{}, publishErr
@@ -338,10 +338,10 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if resolution.Kind == idempotentintent.ResolutionReplay {
+	if resolution.Kind == requestidempotency.ResolutionReplay {
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
-	if resolution.Kind != idempotentintent.ResolutionApplied {
+	if resolution.Kind != requestidempotency.ResolutionApplied {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Platform Component config resolution is invalid",
@@ -351,13 +351,13 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 }
 
 type platformComponentProtectedIntent struct {
-	protected idempotentintent.ProtectedEvidence
+	protected requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
 func platformComponentConfigIntent(
 	ctx context.Context,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	componentID string,
 	config core.CoreDNSComponentConfig,
 ) (platformComponentProtectedIntent, error) {
@@ -367,31 +367,31 @@ func platformComponentConfigIntent(
 			"Platform Component intent coordinator is not configured",
 		)
 	}
-	forwarders := make([]idempotentintent.Value, len(config.Forwarders))
+	forwarders := make([]requestidempotency.Value, len(config.Forwarders))
 	for index, forwarder := range config.Forwarders {
-		forwarders[index] = idempotentintent.Object(
-			idempotentintent.Field{Name: "domain", Value: idempotentintent.String(forwarder.Domain)},
-			idempotentintent.Field{Name: "resolvers", Value: coreDNSResolverIntent(forwarder.Resolvers)},
+		forwarders[index] = requestidempotency.Object(
+			requestidempotency.Field{Name: "domain", Value: requestidempotency.String(forwarder.Domain)},
+			requestidempotency.Field{Name: "resolvers", Value: coreDNSResolverIntent(forwarder.Resolvers)},
 		)
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPut, Route: platformComponentConfigRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopePlatform},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: componentID}},
-		Query: idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "config", Value: idempotentintent.Object(
-				idempotentintent.Field{
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: componentID}},
+		Query: requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "config", Value: requestidempotency.Object(
+				requestidempotency.Field{
 					Name:  "corefile_template",
-					Value: idempotentintent.String(config.CorefileTemplate),
+					Value: requestidempotency.String(config.CorefileTemplate),
 				},
-				idempotentintent.Field{Name: "forwarders", Value: idempotentintent.List(forwarders...)},
-				idempotentintent.Field{
+				requestidempotency.Field{Name: "forwarders", Value: requestidempotency.List(forwarders...)},
+				requestidempotency.Field{
 					Name:  "tailnet_delegation",
-					Value: idempotentintent.Bool(config.TailnetDelegation),
+					Value: requestidempotency.Bool(config.TailnetDelegation),
 				},
-				idempotentintent.Field{Name: "upstream_auto", Value: idempotentintent.Bool(config.UpstreamAuto)},
-				idempotentintent.Field{
+				requestidempotency.Field{Name: "upstream_auto", Value: requestidempotency.Bool(config.UpstreamAuto)},
+				requestidempotency.Field{
 					Name:  "upstream_resolvers",
 					Value: coreDNSResolverIntent(config.UpstreamResolvers),
 				},
@@ -466,12 +466,12 @@ func parseCoreDNSResolvers(values []string) ([]core.DNSResolverEndpoint, error) 
 	return result, nil
 }
 
-func coreDNSResolverIntent(resolvers []core.DNSResolverEndpoint) idempotentintent.Value {
-	values := make([]idempotentintent.Value, len(resolvers))
+func coreDNSResolverIntent(resolvers []core.DNSResolverEndpoint) requestidempotency.Value {
+	values := make([]requestidempotency.Value, len(resolvers))
 	for index, resolver := range resolvers {
-		values[index] = idempotentintent.String(formatCoreDNSResolver(resolver))
+		values[index] = requestidempotency.String(formatCoreDNSResolver(resolver))
 	}
-	return idempotentintent.List(values...)
+	return requestidempotency.List(values...)
 }
 
 func formatCoreDNSResolver(resolver core.DNSResolverEndpoint) string {

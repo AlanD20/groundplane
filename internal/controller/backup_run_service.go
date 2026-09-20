@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -155,7 +155,7 @@ type backupRunIdempotency interface {
 		context.Context,
 		etcd.IdempotencyLocator,
 		backupRunEvidence,
-	) (idempotentintent.Resolution, bool, error)
+	) (requestidempotency.Resolution, bool, error)
 	NewMarker(
 		backupRunEvidence,
 		etcd.IdempotencyLocator,
@@ -167,29 +167,29 @@ type backupRunIdempotency interface {
 		context.Context,
 		backupRunEvidence,
 		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
 		etcd.IdempotencyLocator,
 		backupRunEvidence,
 		error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 }
 
 type backupRunEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 }
 
 // durableBackupRunIdempotency is the production adapter for the protected
 // bodyless intent. The request body is explicitly NoBody; the idempotency key
 // remains only in the locator and is never persisted as task parameters.
 type durableBackupRunIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func NewDurableBackupRunIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableBackupRunIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -203,13 +203,13 @@ func (service *durableBackupRunIdempotency) Prepare(
 	environmentID string,
 	route string,
 ) (backupRunEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost,
 		Route:  route,
-		Scope:  idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Path:   []idempotentintent.PathBinding{{Name: "id", Value: environmentID}},
-		Query:  idempotentintent.Object(),
-		Body:   idempotentintent.NoBody(),
+		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path:   []requestidempotency.PathBinding{{Name: "id", Value: environmentID}},
+		Query:  requestidempotency.Object(),
+		Body:   requestidempotency.NoBody(),
 	})
 	if err != nil {
 		return backupRunEvidence{}, err
@@ -226,7 +226,7 @@ func (service *durableBackupRunIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence backupRunEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -255,7 +255,7 @@ func (service *durableBackupRunIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence backupRunEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -264,7 +264,7 @@ func (service *durableBackupRunIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence backupRunEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(
 		ctx,
 		service.repository,
@@ -526,7 +526,7 @@ func (service *BackupRunService) runBackup(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if resolution.Kind == idempotentintent.ResolutionApplied {
+	if resolution.Kind == requestidempotency.ResolutionApplied {
 		resolution.Response = response
 	}
 	return resolution.Response, nil

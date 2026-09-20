@@ -9,7 +9,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/slug"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -34,14 +34,14 @@ type mutationRepository interface {
 type MutationService struct {
 	repository  mutationRepository
 	idempotency *etcd.IdempotencyRepository
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	now         func() time.Time
 }
 
 func NewMutationService(
 	repository mutationRepository,
 	idempotency *etcd.IdempotencyRepository,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 ) (*MutationService, error) {
 	if repository == nil || idempotency == nil || coordinator == nil {
 		return nil, errs.New(errs.KindInternal, "Runner mutation service is not configured")
@@ -115,7 +115,7 @@ func (service *MutationService) renameOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner edit replay resolution is invalid")
 		}
 		return cloneResponse(resolution.Response), nil
@@ -171,9 +171,9 @@ func (service *MutationService) renameOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
+	case requestidempotency.ResolutionApplied:
 		return cloneResponse(response), nil
-	case idempotentintent.ResolutionReplay:
+	case requestidempotency.ResolutionReplay:
 		return cloneResponse(resolution.Response), nil
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner edit resolution is invalid")
@@ -197,7 +197,7 @@ func (service *MutationService) replay(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if !existing || resolution.Kind != idempotentintent.ResolutionReplay {
+	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner edit replay index is inconsistent")
 	}
 	return cloneResponse(resolution.Response), nil
@@ -208,22 +208,22 @@ func (service *MutationService) protectIntent(
 	locator etcd.IdempotencyLocator,
 	runnerID string,
 	slugValue string,
-) (idempotentintent.ProtectedEvidence, error) {
-	scopeKind := idempotentintent.ScopeTenant
+) (requestidempotency.ProtectedEvidence, error) {
+	scopeKind := requestidempotency.ScopeTenant
 	if locator.ScopeKind == etcd.IdempotencyScopeProject {
-		scopeKind = idempotentintent.ScopeProject
+		scopeKind = requestidempotency.ScopeProject
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPatch, Route: runnerEditRoute,
-		Scope: idempotentintent.Scope{Kind: scopeKind, ID: locator.ScopeID},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: runnerID}},
-		Query: idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "slug", Value: idempotentintent.String(slugValue)},
+		Scope: requestidempotency.Scope{Kind: scopeKind, ID: locator.ScopeID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: runnerID}},
+		Query: requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "slug", Value: requestidempotency.String(slugValue)},
 		)),
 	})
 	if err != nil {
-		return idempotentintent.ProtectedEvidence{}, err
+		return requestidempotency.ProtectedEvidence{}, err
 	}
 	return service.coordinator.ProtectIntent(ctx, version, digest)
 }

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -37,14 +37,14 @@ type removalRepository interface {
 type RemovalService struct {
 	repository  removalRepository
 	idempotency *etcd.IdempotencyRepository
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	now         func() time.Time
 }
 
 func NewRemovalService(
 	repository removalRepository,
 	idempotency *etcd.IdempotencyRepository,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 ) (*RemovalService, error) {
 	if repository == nil || idempotency == nil || coordinator == nil {
 		return nil, errs.New(errs.KindInternal, "Runner removal service is not configured")
@@ -98,7 +98,7 @@ func (service *RemovalService) RemoveRunner(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner removal replay is invalid")
 		}
 		return cloneResponse(resolution.Response), nil
@@ -145,9 +145,9 @@ func (service *RemovalService) RemoveRunner(
 		return etcd.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
+	case requestidempotency.ResolutionApplied:
 		return cloneResponse(response), nil
-	case idempotentintent.ResolutionReplay:
+	case requestidempotency.ResolutionReplay:
 		return cloneResponse(resolution.Response), nil
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner removal resolution is invalid")
@@ -170,7 +170,7 @@ func (service *RemovalService) replay(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if !existing || resolution.Kind != idempotentintent.ResolutionReplay {
+	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner removal replay index is inconsistent")
 	}
 	return cloneResponse(resolution.Response), nil
@@ -180,19 +180,19 @@ func (service *RemovalService) protectIntent(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	runnerID string,
-) (idempotentintent.ProtectedEvidence, error) {
-	scopeKind := idempotentintent.ScopeTenant
+) (requestidempotency.ProtectedEvidence, error) {
+	scopeKind := requestidempotency.ScopeTenant
 	if locator.ScopeKind == etcd.IdempotencyScopeProject {
-		scopeKind = idempotentintent.ScopeProject
+		scopeKind = requestidempotency.ScopeProject
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodDelete, Route: runnerRemoveRoute,
-		Scope: idempotentintent.Scope{Kind: scopeKind, ID: locator.ScopeID},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: runnerID}},
-		Query: idempotentintent.Object(), Body: idempotentintent.NoBody(),
+		Scope: requestidempotency.Scope{Kind: scopeKind, ID: locator.ScopeID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: runnerID}},
+		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
 	})
 	if err != nil {
-		return idempotentintent.ProtectedEvidence{}, err
+		return requestidempotency.ProtectedEvidence{}, err
 	}
 	return service.coordinator.ProtectIntent(ctx, version, digest)
 }

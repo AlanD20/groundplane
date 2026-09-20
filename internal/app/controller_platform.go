@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/controller/agentmanagement"
 	"log/slog"
 	"os"
 	"time"
@@ -14,7 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/controllerupgrade"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/internal/infra/controllerrelease"
@@ -30,7 +31,7 @@ type controllerPlatformDependencies struct {
 	Store         etcd.Store
 	Agents        *etcd.LocalAgentRepository
 	Tasks         *etcd.TaskRepository
-	Intents       *idempotentintent.Coordinator
+	Intents       *requestidempotency.Coordinator
 	Idempotency   *etcd.IdempotencyRepository
 	Channel       *agentChannelRuntime
 	EtcdEndpoints []string
@@ -42,8 +43,8 @@ type controllerPlatformDependencies struct {
 // client for the same process lifetime. It composes platform modules only.
 type controllerPlatform struct {
 	agents         *localagent.Manager
-	mutations      *agentMutationService
-	reads          *localAgentReadService
+	mutations      *agentmanagement.MutationService
+	reads          *agentmanagement.ReadService
 	host           *controller.HostService
 	reconciliation controllerScheduler
 	upgrades       *controllerupgrade.Service
@@ -158,11 +159,11 @@ func newControllerPlatform(
 	}
 	defaults := localagent.Config{PullIntervalSeconds: cfg.Agent.Runtime.PullIntervalSeconds,
 		MaxConcurrentTasks: cfg.Agent.Runtime.MaxConcurrentTasks, Labels: cfg.Agent.Runtime.Labels}
-	enrollmentIdempotency, err := newDurableAgentEnrollmentIdempotency(dependencies.Intents, dependencies.Idempotency)
+	enrollmentIdempotency, err := agentmanagement.NewEnrollmentIdempotency(dependencies.Intents, dependencies.Idempotency)
 	if err != nil {
 		return nil, err
 	}
-	enrollments, err := newAgentEnrollmentService(
+	enrollments, err := agentmanagement.NewEnrollmentService(
 		platform.upgrades,
 		defaults,
 		dependencies.Tasks,
@@ -171,23 +172,23 @@ func newControllerPlatform(
 	if err != nil {
 		return nil, err
 	}
-	updateIdempotency, err := newDurableAgentUpdateIdempotency(dependencies.Intents, dependencies.Idempotency)
+	updateIdempotency, err := agentmanagement.NewUpdateIdempotency(dependencies.Intents, dependencies.Idempotency)
 	if err != nil {
 		return nil, err
 	}
-	updates, err := newAgentUpdateService(platform.agents, dependencies.Tasks, updateIdempotency)
+	updates, err := agentmanagement.NewUpdateService(platform.agents, dependencies.Tasks, updateIdempotency)
 	if err != nil {
 		return nil, err
 	}
-	removalIdempotency, err := newDurableAgentRemovalIdempotency(dependencies.Intents, dependencies.Idempotency)
+	removalIdempotency, err := agentmanagement.NewRemovalIdempotency(dependencies.Intents, dependencies.Idempotency)
 	if err != nil {
 		return nil, err
 	}
-	removals, err := newAgentRemovalService(platform.agents, dependencies.Tasks, removalIdempotency)
+	removals, err := agentmanagement.NewRemovalService(platform.agents, dependencies.Tasks, removalIdempotency)
 	if err != nil {
 		return nil, err
 	}
-	platform.mutations, err = newAgentMutationService(enrollments, updates, removals)
+	platform.mutations, err = agentmanagement.NewMutationService(enrollments, updates, removals)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +200,7 @@ func newControllerPlatform(
 	if err != nil {
 		return nil, err
 	}
-	platform.reads, err = newLocalAgentReadService(platform.agents, dependencies.Tasks, hostname)
+	platform.reads, err = agentmanagement.NewReadService(platform.agents, dependencies.Tasks, hostname)
 	if err != nil {
 		return nil, err
 	}

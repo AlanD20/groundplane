@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -55,8 +55,8 @@ type PublicationRepository interface {
 }
 
 type PublicationIdempotency interface {
-	ResolveKnown(context.Context, Evidence, etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error)
-	ResolveUnknown(context.Context, etcd.IdempotencyLocator, Evidence, error) (idempotentintent.Resolution, error)
+	ResolveKnown(context.Context, Evidence, etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error)
+	ResolveUnknown(context.Context, etcd.IdempotencyLocator, Evidence, error) (requestidempotency.Resolution, error)
 }
 
 // Repository is the aggregate used by mutation services that both stage and
@@ -450,7 +450,7 @@ func Publish(
 		input.BackupPreparation,
 		input.ScriptPublication, input.ReleasePublication, input.RequirementGate, input.Task, marker,
 	)
-	var resolution idempotentintent.Resolution
+	var resolution requestidempotency.Resolution
 	if publicationErr != nil {
 		if !unknownOutcome(publicationErr) {
 			return etcd.IdempotencyResponse{}, abandonBlueprintKnownFailure(
@@ -465,9 +465,9 @@ func Publish(
 		return etcd.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
+	case requestidempotency.ResolutionApplied:
 		return cloneResponse(response), nil
-	case idempotentintent.ResolutionReplay:
+	case requestidempotency.ResolutionReplay:
 		return cloneResponse(resolution.Response), nil
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint resolution is invalid")

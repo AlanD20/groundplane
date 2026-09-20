@@ -13,7 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -44,7 +44,7 @@ type environmentCreationRepository interface {
 }
 
 type environmentCreationEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -54,27 +54,27 @@ type environmentCreationIdempotency interface {
 		context.Context,
 		etcd.IdempotencyLocator,
 		environmentCreationEvidence,
-	) (idempotentintent.Resolution, bool, error)
+	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
 		context.Context,
 		environmentCreationEvidence,
 		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
 		etcd.IdempotencyLocator,
 		environmentCreationEvidence,
 		error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 }
 
 type durableEnvironmentCreationIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func NewDurableCreationIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableEnvironmentCreationIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -87,14 +87,14 @@ func (service *durableEnvironmentCreationIdempotency) Prepare(
 	ctx context.Context,
 	input CreateEnvironmentInput,
 ) (environmentCreationEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost, Route: environmentCreationRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeProject, ID: input.ProjectID},
-		Query: idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "name", Value: idempotentintent.String(input.Name)},
-			idempotentintent.Field{Name: "network_pool", Value: idempotentintent.String(input.NetworkPool)},
-			idempotentintent.Field{Name: "project_id", Value: idempotentintent.String(input.ProjectID)},
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeProject, ID: input.ProjectID},
+		Query: requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "name", Value: requestidempotency.String(input.Name)},
+			requestidempotency.Field{Name: "network_pool", Value: requestidempotency.String(input.NetworkPool)},
+			requestidempotency.Field{Name: "project_id", Value: requestidempotency.String(input.ProjectID)},
 		)),
 	})
 	if err != nil {
@@ -116,7 +116,7 @@ func (service *durableEnvironmentCreationIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence environmentCreationEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -124,7 +124,7 @@ func (service *durableEnvironmentCreationIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence environmentCreationEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -133,7 +133,7 @@ func (service *durableEnvironmentCreationIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence environmentCreationEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
@@ -210,7 +210,7 @@ func (service *environmentCreationService) createEnvironmentOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Environment creation replay resolution is invalid",
@@ -303,10 +303,10 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if resolution.Kind == idempotentintent.ResolutionReplay {
+	if resolution.Kind == requestidempotency.ResolutionReplay {
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
-	if resolution.Kind != idempotentintent.ResolutionApplied {
+	if resolution.Kind != requestidempotency.ResolutionApplied {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation resolution is invalid")
 	}
 	return cloneIdempotencyResponse(response), nil

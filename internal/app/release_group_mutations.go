@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
@@ -32,7 +32,7 @@ type releaseGroupMutationService struct {
 	hierarchy   *etcd.HierarchyRepository
 	tasks       *etcd.TaskRepository
 	idempotency *etcd.IdempotencyRepository
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	now         func() time.Time
 }
 
@@ -41,7 +41,7 @@ func newReleaseGroupMutationService(
 	hierarchy *etcd.HierarchyRepository,
 	tasks *etcd.TaskRepository,
 	idempotency *etcd.IdempotencyRepository,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 ) (*releaseGroupMutationService, error) {
 	if groups == nil || hierarchy == nil || tasks == nil || idempotency == nil || coordinator == nil {
 		return nil, errs.New(errs.KindInternal, "release group mutation dependencies are not configured")
@@ -63,7 +63,7 @@ func (service *releaseGroupMutationService) AddReleaseGroup(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	body := idempotentintent.JSONBody(releaseGroupAddIntent(request))
+	body := requestidempotency.JSONBody(releaseGroupAddIntent(request))
 	return service.apply(ctx, key, http.MethodPost, releaseGroupAddRoute, group.EnvironmentID, nil, group, body)
 }
 
@@ -81,7 +81,7 @@ func (service *releaseGroupMutationService) EditReleaseGroup(
 			"release group edit requires at least one field",
 		)
 	}
-	body := idempotentintent.JSONBody(releaseGroupEditIntent(request))
+	body := requestidempotency.JSONBody(releaseGroupEditIntent(request))
 	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetReleaseGroup, ID: groupID}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx,
@@ -160,7 +160,7 @@ func (service *releaseGroupMutationService) RemoveReleaseGroup(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if indexed {
-		return service.replay(ctx, locator, groupID, idempotentintent.NoBody())
+		return service.replay(ctx, locator, groupID, requestidempotency.NoBody())
 	}
 	current, err := service.groups.Get(ctx, groupID)
 	if err != nil {
@@ -174,24 +174,24 @@ func (service *releaseGroupMutationService) RemoveReleaseGroup(
 		current.Group.EnvironmentID,
 		&current,
 		current.Group,
-		idempotentintent.NoBody(),
+		requestidempotency.NoBody(),
 	)
 }
 
 func (service *releaseGroupMutationService) apply(
 	ctx context.Context, key, method, route, environmentID string,
-	current *etcdreleasegroup.Versioned, desired domain.Group, body idempotentintent.Body,
+	current *etcdreleasegroup.Versioned, desired domain.Group, body requestidempotency.Body,
 ) (etcd.IdempotencyResponse, error) {
 	if ctx == nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release group mutation context is required")
 	}
-	path := []idempotentintent.PathBinding(nil)
+	path := []requestidempotency.PathBinding(nil)
 	if method != http.MethodPost {
-		path = []idempotentintent.PathBinding{{Name: "id", Value: desired.ID}}
+		path = []requestidempotency.PathBinding{{Name: "id", Value: desired.ID}}
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
-		Method: method, Route: route, Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Path: path, Query: idempotentintent.Object(), Body: body,
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
+		Method: method, Route: route, Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path: path, Query: requestidempotency.Object(), Body: body,
 	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -273,8 +273,8 @@ func (service *releaseGroupMutationService) apply(
 		if err != nil {
 			return etcd.IdempotencyResponse{}, err
 		}
-		if resolution.Kind == idempotentintent.ResolutionApplied {
-			return cloneIdempotencyResponse(response), nil
+		if resolution.Kind == requestidempotency.ResolutionApplied {
+			return requestidempotency.CloneResponse(response), nil
 		}
 		return releaseGroupReplayResponse(resolution)
 	}
@@ -332,8 +332,8 @@ func (service *releaseGroupMutationService) apply(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if resolution.Kind == idempotentintent.ResolutionApplied {
-		return cloneIdempotencyResponse(response), nil
+	if resolution.Kind == requestidempotency.ResolutionApplied {
+		return requestidempotency.CloneResponse(response), nil
 	}
 	return releaseGroupReplayResponse(resolution)
 }
@@ -347,13 +347,13 @@ func releaseGroupAPIResponse(group domain.Group) apiTypes.ReleaseGroup {
 }
 
 func (service *releaseGroupMutationService) replay(
-	ctx context.Context, locator etcd.IdempotencyLocator, groupID string, body idempotentintent.Body,
+	ctx context.Context, locator etcd.IdempotencyLocator, groupID string, body requestidempotency.Body,
 ) (etcd.IdempotencyResponse, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
-		Method: locator.Method, Route: locator.Route, Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: locator.ScopeID},
-		Path: []idempotentintent.PathBinding{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
+		Method: locator.Method, Route: locator.Route, Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: locator.ScopeID},
+		Path: []requestidempotency.PathBinding{
 			{Name: "id", Value: groupID},
-		}, Query: idempotentintent.Object(), Body: body,
+		}, Query: requestidempotency.Object(), Body: body,
 	})
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -373,11 +373,11 @@ func (service *releaseGroupMutationService) replay(
 	return releaseGroupReplayResponse(resolution)
 }
 
-func releaseGroupReplayResponse(resolution idempotentintent.Resolution) (etcd.IdempotencyResponse, error) {
-	if resolution.Kind != idempotentintent.ResolutionReplay {
+func releaseGroupReplayResponse(resolution requestidempotency.Resolution) (etcd.IdempotencyResponse, error) {
+	if resolution.Kind != requestidempotency.ResolutionReplay {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release group replay resolution is invalid")
 	}
-	return cloneIdempotencyResponse(resolution.Response), nil
+	return requestidempotency.CloneResponse(resolution.Response), nil
 }
 
 func releaseGroupMutationPlanHash(kind etcd.TaskType, group domain.Group) (string, error) {
@@ -401,51 +401,51 @@ func releaseGroupUnknownOutcome(err error) bool {
 	return ok && kind == errs.KindStorageUnavailable
 }
 
-func releaseGroupStrings(values []string) idempotentintent.Value {
-	items := make([]idempotentintent.Value, len(values))
+func releaseGroupStrings(values []string) requestidempotency.Value {
+	items := make([]requestidempotency.Value, len(values))
 	for index, value := range values {
-		items[index] = idempotentintent.String(value)
+		items[index] = requestidempotency.String(value)
 	}
-	return idempotentintent.List(items...)
+	return requestidempotency.List(items...)
 }
 
-func releaseGroupAddIntent(request apiTypes.ReleaseGroupAddRequest) idempotentintent.Value {
-	return idempotentintent.Object(
-		idempotentintent.Field{Name: "environment_id", Value: idempotentintent.String(request.EnvironmentID)},
-		idempotentintent.Field{Name: "name", Value: idempotentintent.String(request.Name)},
-		idempotentintent.Field{Name: "service_ids", Value: releaseGroupStrings(request.ServiceIDs)},
-		idempotentintent.Field{Name: "order", Value: releaseGroupStrings(request.Order)},
-		idempotentintent.Field{Name: "tag", Value: idempotentintent.String(request.Tag)},
-		idempotentintent.Field{Name: "on_failure", Value: idempotentintent.String(string(request.OnFailure))},
+func releaseGroupAddIntent(request apiTypes.ReleaseGroupAddRequest) requestidempotency.Value {
+	return requestidempotency.Object(
+		requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(request.EnvironmentID)},
+		requestidempotency.Field{Name: "name", Value: requestidempotency.String(request.Name)},
+		requestidempotency.Field{Name: "service_ids", Value: releaseGroupStrings(request.ServiceIDs)},
+		requestidempotency.Field{Name: "order", Value: releaseGroupStrings(request.Order)},
+		requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)},
+		requestidempotency.Field{Name: "on_failure", Value: requestidempotency.String(string(request.OnFailure))},
 	)
 }
 
-func releaseGroupEditIntent(request apiTypes.ReleaseGroupEditRequest) idempotentintent.Value {
-	fields := []idempotentintent.Field{}
+func releaseGroupEditIntent(request apiTypes.ReleaseGroupEditRequest) requestidempotency.Value {
+	fields := []requestidempotency.Field{}
 	if request.Name != nil {
-		fields = append(fields, idempotentintent.Field{Name: "name", Value: idempotentintent.String(*request.Name)})
+		fields = append(fields, requestidempotency.Field{Name: "name", Value: requestidempotency.String(*request.Name)})
 	}
 	if request.ServiceIDs != nil {
 		fields = append(
 			fields,
-			idempotentintent.Field{Name: "service_ids", Value: releaseGroupStrings(*request.ServiceIDs)},
+			requestidempotency.Field{Name: "service_ids", Value: releaseGroupStrings(*request.ServiceIDs)},
 		)
 	}
 	if request.Order != nil {
-		fields = append(fields, idempotentintent.Field{Name: "order", Value: releaseGroupStrings(*request.Order)})
+		fields = append(fields, requestidempotency.Field{Name: "order", Value: releaseGroupStrings(*request.Order)})
 	}
 	if request.Tag.Present {
-		value := idempotentintent.Null()
+		value := requestidempotency.Null()
 		if request.Tag.Value != nil {
-			value = idempotentintent.String(*request.Tag.Value)
+			value = requestidempotency.String(*request.Tag.Value)
 		}
-		fields = append(fields, idempotentintent.Field{Name: "tag", Value: value})
+		fields = append(fields, requestidempotency.Field{Name: "tag", Value: value})
 	}
 	if request.OnFailure != nil {
 		fields = append(
 			fields,
-			idempotentintent.Field{Name: "on_failure", Value: idempotentintent.String(string(*request.OnFailure))},
+			requestidempotency.Field{Name: "on_failure", Value: requestidempotency.String(string(*request.OnFailure))},
 		)
 	}
-	return idempotentintent.Object(fields...)
+	return requestidempotency.Object(fields...)
 }

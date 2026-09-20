@@ -17,7 +17,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -42,6 +42,10 @@ type backingServiceCreationRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
+type backingServiceHookInputs interface {
+	SealBackingHookTaskInputs(context.Context, string, string, backinghook.Configuration) (*etcd.BackingHookEncryptedInputs, error)
+}
+
 type backingServiceCreationService struct {
 	volumeRoot       string
 	environmentPool  netip.Prefix
@@ -49,7 +53,7 @@ type backingServiceCreationService struct {
 	idempotency      *desiredrevision.Idempotency
 	protector        *secretvalue.Protector
 	plans            *controller.TaskPlanResolver
-	hookInputs       serviceLifecycleHookInputs
+	hookInputs       backingServiceHookInputs
 	componentCatalog []controller.EnvironmentComponentRegistration
 	now              func() time.Time
 }
@@ -61,7 +65,7 @@ func newBackingServiceCreationService(
 	idempotency *desiredrevision.Idempotency,
 	protector *secretvalue.Protector,
 	plans *controller.TaskPlanResolver,
-	hookInputs serviceLifecycleHookInputs,
+	hookInputs backingServiceHookInputs,
 	componentCatalog []controller.EnvironmentComponentRegistration,
 ) (*backingServiceCreationService, error) {
 	if volumeRoot == "" || !environmentPool.IsValid() || repository == nil || idempotency == nil || protector == nil {
@@ -93,7 +97,7 @@ func (service *backingServiceCreationService) CreateBackingService(
 			errs.KindValidationFailed, "unsupported backing-service adapter %q", input.Adapter,
 		)
 	}
-	hooks := backingHookConfigurationFromAPI(input.Hooks)
+	hooks := controller.BackingHookConfigurationFromAPI(input.Hooks)
 	if hooks != nil && !adapter.Custom() {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
@@ -163,7 +167,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 	}
 	evidence, err := service.idempotency.Prepare(ctx, desiredrevision.IntentAddress{
 		Method: http.MethodPost, Route: backingServiceCreateRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopePlatform},
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
 	}, bundle)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -174,13 +178,13 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Backing-service replay resolution is invalid",
 			)
 		}
-		return cloneIdempotencyResponse(resolution.Response), nil
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 
 	authentication := core.BackingAuthentication(input.Authentication)
@@ -274,7 +278,7 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 		Expose:  append([]string(nil), spec.Expose...), Restart: "unless-stopped",
 		Adapter: input.Adapter, Authentication: authentication,
 		FactsPrefix: adapter.FactsPrefix(), Label: input.Name,
-		Hooks: backingHookConfigurationFromAPI(input.Hooks),
+		Hooks: controller.BackingHookConfigurationFromAPI(input.Hooks),
 	}
 	serviceRecord, err := etcd.NewServiceRecord(environment.ID, desiredService, zone.Desired.ID)
 	if err != nil {
@@ -536,17 +540,17 @@ func (service *backingServiceCreationService) createBackingServiceFromStage(
 		if resolveErr != nil {
 			return etcd.IdempotencyResponse{}, resolveErr
 		}
-		return cloneIdempotencyResponse(resolved.Response), nil
+		return requestidempotency.CloneResponse(resolved.Response), nil
 	}
 	outcome, err := service.idempotency.ResolveKnown(ctx, evidence, result)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	switch outcome.Kind {
-	case idempotentintent.ResolutionApplied:
-		return cloneIdempotencyResponse(response), nil
-	case idempotentintent.ResolutionReplay:
-		return cloneIdempotencyResponse(outcome.Response), nil
+	case requestidempotency.ResolutionApplied:
+		return requestidempotency.CloneResponse(response), nil
+	case requestidempotency.ResolutionReplay:
+		return requestidempotency.CloneResponse(outcome.Response), nil
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Backing-service creation resolution is invalid")
 	}

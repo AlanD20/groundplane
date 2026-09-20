@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ipam"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -36,7 +36,7 @@ type environmentCapacityRepository interface {
 }
 
 type environmentChangeEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -44,20 +44,20 @@ type environmentChangeIdempotency interface {
 	PrepareEdit(context.Context, string, EditEnvironmentInput) (environmentChangeEvidence, error)
 	PrepareRename(context.Context, string, RenameEnvironmentInput) (environmentChangeEvidence, error)
 	ResolveExisting(context.Context, etcd.IdempotencyLocator,
-		environmentChangeEvidence) (idempotentintent.Resolution, bool, error)
+		environmentChangeEvidence) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(context.Context, environmentChangeEvidence,
-		etcd.IdempotencyTransactionResult) (idempotentintent.Resolution, error)
+		etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error)
 	ResolveUnknown(context.Context, etcd.IdempotencyLocator,
-		environmentChangeEvidence, error) (idempotentintent.Resolution, error)
+		environmentChangeEvidence, error) (requestidempotency.Resolution, error)
 }
 
 type durableEnvironmentChangeIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func NewDurableChangeIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableEnvironmentChangeIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -71,8 +71,8 @@ func (service *durableEnvironmentChangeIdempotency) PrepareEdit(
 	id string,
 	input EditEnvironmentInput,
 ) (environmentChangeEvidence, error) {
-	return service.prepare(ctx, http.MethodPatch, environmentEditRoute, id, idempotentintent.Object(
-		idempotentintent.Field{Name: "network_pool", Value: idempotentintent.String(input.NetworkPool)},
+	return service.prepare(ctx, http.MethodPatch, environmentEditRoute, id, requestidempotency.Object(
+		requestidempotency.Field{Name: "network_pool", Value: requestidempotency.String(input.NetworkPool)},
 	))
 }
 
@@ -81,8 +81,8 @@ func (service *durableEnvironmentChangeIdempotency) PrepareRename(
 	id string,
 	input RenameEnvironmentInput,
 ) (environmentChangeEvidence, error) {
-	return service.prepare(ctx, http.MethodPost, environmentRenameRoute, id, idempotentintent.Object(
-		idempotentintent.Field{Name: "name", Value: idempotentintent.String(input.Name)},
+	return service.prepare(ctx, http.MethodPost, environmentRenameRoute, id, requestidempotency.Object(
+		requestidempotency.Field{Name: "name", Value: requestidempotency.String(input.Name)},
 	))
 }
 
@@ -91,13 +91,13 @@ func (service *durableEnvironmentChangeIdempotency) prepare(
 	method string,
 	route string,
 	id string,
-	body idempotentintent.Value,
+	body requestidempotency.Value,
 ) (environmentChangeEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: method, Route: route,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: id},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: id}},
-		Query: idempotentintent.Object(), Body: idempotentintent.JSONBody(body),
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: id},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: id}},
+		Query: requestidempotency.Object(), Body: requestidempotency.JSONBody(body),
 	})
 	if err != nil {
 		return environmentChangeEvidence{}, err
@@ -118,7 +118,7 @@ func (service *durableEnvironmentChangeIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence environmentChangeEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -126,7 +126,7 @@ func (service *durableEnvironmentChangeIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence environmentChangeEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -135,7 +135,7 @@ func (service *durableEnvironmentChangeIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence environmentChangeEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
@@ -286,7 +286,7 @@ func (service *environmentChangeService) changeEnvironmentOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Environment change replay resolution is invalid",
@@ -339,9 +339,9 @@ func (service *environmentChangeService) changeEnvironmentOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
+	case requestidempotency.ResolutionApplied:
 		return cloneIdempotencyResponse(response), nil
-	case idempotentintent.ResolutionReplay:
+	case requestidempotency.ResolutionReplay:
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(

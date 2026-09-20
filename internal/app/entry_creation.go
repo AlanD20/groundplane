@@ -13,7 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -52,7 +52,7 @@ type entryCreationGenerator interface {
 }
 
 type entryCreationEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -63,18 +63,18 @@ type entryCreationIdempotency interface {
 		context.Context,
 		etcd.IdempotencyLocator,
 		entryCreationEvidence,
-	) (idempotentintent.Resolution, bool, error)
+	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
 		context.Context,
 		entryCreationEvidence,
 		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
 		etcd.IdempotencyLocator,
 		entryCreationEvidence,
 		error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 }
 
 func (service *durableEntryCreationIdempotency) MatchesStaged(
@@ -86,12 +86,12 @@ func (service *durableEntryCreationIdempotency) MatchesStaged(
 }
 
 type durableEntryCreationIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func newDurableEntryCreationIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableEntryCreationIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -105,21 +105,21 @@ func (service *durableEntryCreationIdempotency) Prepare(
 	environmentID string,
 	entry core.EnvEntry,
 ) (entryCreationEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost,
 		Route:  entryCreationRoute,
-		Scope:  idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Query:  idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "environment_id", Value: idempotentintent.String(environmentID)},
-			idempotentintent.Field{Name: "exposure", Value: canonicalEntryExposure(entry.Exposure)},
-			idempotentintent.Field{Name: "gid", Value: canonicalEntryNumericID(entry.GID)},
-			idempotentintent.Field{Name: "key", Value: idempotentintent.String(entry.Key)},
-			idempotentintent.Field{Name: "path", Value: idempotentintent.String(entry.Path)},
-			idempotentintent.Field{Name: "secret", Value: idempotentintent.Bool(entry.Secret)},
-			idempotentintent.Field{Name: "source", Value: canonicalEntrySource(entry)},
-			idempotentintent.Field{Name: "type", Value: idempotentintent.String(string(entry.Kind))},
-			idempotentintent.Field{Name: "uid", Value: canonicalEntryNumericID(entry.UID)},
+		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Query:  requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(environmentID)},
+			requestidempotency.Field{Name: "exposure", Value: canonicalEntryExposure(entry.Exposure)},
+			requestidempotency.Field{Name: "gid", Value: canonicalEntryNumericID(entry.GID)},
+			requestidempotency.Field{Name: "key", Value: requestidempotency.String(entry.Key)},
+			requestidempotency.Field{Name: "path", Value: requestidempotency.String(entry.Path)},
+			requestidempotency.Field{Name: "secret", Value: requestidempotency.Bool(entry.Secret)},
+			requestidempotency.Field{Name: "source", Value: canonicalEntrySource(entry)},
+			requestidempotency.Field{Name: "type", Value: requestidempotency.String(string(entry.Kind))},
+			requestidempotency.Field{Name: "uid", Value: canonicalEntryNumericID(entry.UID)},
 		)),
 	})
 	if err != nil {
@@ -141,7 +141,7 @@ func (service *durableEntryCreationIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence entryCreationEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -149,7 +149,7 @@ func (service *durableEntryCreationIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence entryCreationEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -158,7 +158,7 @@ func (service *durableEntryCreationIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence entryCreationEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
@@ -226,13 +226,13 @@ func (service *entryCreationService) createEntryOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Entry creation replay resolution is invalid",
 			)
 		}
-		return cloneIdempotencyResponse(resolution.Response), nil
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 
 	environment, err := service.repository.GetEnvironment(ctx, input.EnvironmentID)
@@ -297,10 +297,10 @@ func (service *entryCreationService) createEntryOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
-		return cloneIdempotencyResponse(response), nil
-	case idempotentintent.ResolutionReplay:
-		return cloneIdempotencyResponse(resolution.Response), nil
+	case requestidempotency.ResolutionApplied:
+		return requestidempotency.CloneResponse(response), nil
+	case requestidempotency.ResolutionReplay:
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation resolution is invalid")
 	}
@@ -453,53 +453,53 @@ func entryCreationNumericID(value *int64, field string) (*uint32, error) {
 	return &converted, nil
 }
 
-func canonicalEntryNumericID(value *uint32) idempotentintent.Value {
+func canonicalEntryNumericID(value *uint32) requestidempotency.Value {
 	if value == nil {
-		return idempotentintent.Null()
+		return requestidempotency.Null()
 	}
-	return idempotentintent.UnsignedInteger(uint64(*value))
+	return requestidempotency.UnsignedInteger(uint64(*value))
 }
 
-func canonicalEntryExposure(exposure []string) idempotentintent.Value {
-	values := make([]idempotentintent.Value, len(exposure))
+func canonicalEntryExposure(exposure []string) requestidempotency.Value {
+	values := make([]requestidempotency.Value, len(exposure))
 	for index, value := range exposure {
-		values[index] = idempotentintent.String(value)
+		values[index] = requestidempotency.String(value)
 	}
-	return idempotentintent.List(values...)
+	return requestidempotency.List(values...)
 }
 
-func canonicalEntrySource(entry core.EnvEntry) idempotentintent.Value {
+func canonicalEntrySource(entry core.EnvEntry) requestidempotency.Value {
 	source := entry.Source
 	switch source.Kind {
 	case core.SourceLiteral:
 		if entry.Secret {
 			digest := sha256.Sum256([]byte(source.Literal))
-			return idempotentintent.Object(
-				idempotentintent.Field{Name: "kind", Value: idempotentintent.String(string(source.Kind))},
-				idempotentintent.Field{
+			return requestidempotency.Object(
+				requestidempotency.Field{Name: "kind", Value: requestidempotency.String(string(source.Kind))},
+				requestidempotency.Field{
 					Name:  "literal_sha256",
-					Value: idempotentintent.String(hex.EncodeToString(digest[:])),
+					Value: requestidempotency.String(hex.EncodeToString(digest[:])),
 				},
 			)
 		}
-		return idempotentintent.Object(
-			idempotentintent.Field{Name: "kind", Value: idempotentintent.String(string(source.Kind))},
-			idempotentintent.Field{Name: "literal", Value: idempotentintent.String(source.Literal)},
+		return requestidempotency.Object(
+			requestidempotency.Field{Name: "kind", Value: requestidempotency.String(string(source.Kind))},
+			requestidempotency.Field{Name: "literal", Value: requestidempotency.String(source.Literal)},
 		)
 	case core.SourceSecretRef:
-		return idempotentintent.Object(
-			idempotentintent.Field{Name: "kind", Value: idempotentintent.String(string(source.Kind))},
-			idempotentintent.Field{Name: "secret_ref", Value: idempotentintent.String(source.SecretRef)},
+		return requestidempotency.Object(
+			requestidempotency.Field{Name: "kind", Value: requestidempotency.String(string(source.Kind))},
+			requestidempotency.Field{Name: "secret_ref", Value: requestidempotency.String(source.SecretRef)},
 		)
 	case core.SourceFact:
-		return idempotentintent.Object(
-			idempotentintent.Field{Name: "attach_id", Value: idempotentintent.String(source.Fact.Attach)},
-			idempotentintent.Field{Name: "fact", Value: idempotentintent.String(source.Fact.Key)},
-			idempotentintent.Field{Name: "grant_attach_id", Value: idempotentintent.String(source.Fact.Grant)},
-			idempotentintent.Field{Name: "kind", Value: idempotentintent.String(string(source.Kind))},
+		return requestidempotency.Object(
+			requestidempotency.Field{Name: "attach_id", Value: requestidempotency.String(source.Fact.Attach)},
+			requestidempotency.Field{Name: "fact", Value: requestidempotency.String(source.Fact.Key)},
+			requestidempotency.Field{Name: "grant_attach_id", Value: requestidempotency.String(source.Fact.Grant)},
+			requestidempotency.Field{Name: "kind", Value: requestidempotency.String(string(source.Kind))},
 		)
 	default:
-		return idempotentintent.Object()
+		return requestidempotency.Object()
 	}
 }
 

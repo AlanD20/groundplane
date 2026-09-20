@@ -4,6 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/controller/connectors"
+	scriptoperations "github.com/AlanD20/groundplane/internal/controller/scripts"
+	"github.com/AlanD20/groundplane/internal/controller/secrets"
+	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	serviceoperations "github.com/AlanD20/groundplane/internal/controller/services"
+	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	"log/slog"
 	"os"
 	"time"
@@ -25,7 +31,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
 	releaseoperation "github.com/AlanD20/groundplane/internal/controller/releaseoperation"
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
@@ -241,12 +247,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: load Controller age key: %w", err)
 	}
-	intentProtector, err := newSecretValueProtector(controllerKey)
+	intentProtector, err := secretvalue.NewControllerKeyProtector(controllerKey)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent protector: %w", err)
 	}
-	intentCoordinator, err := idempotentintent.NewCoordinator(intentProtector)
+	intentCoordinator, err := requestidempotency.NewCoordinator(intentProtector)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
@@ -286,12 +292,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script repository: %w", err)
 	}
-	scriptReadRepository, err := newDurableScriptReadRepository(hierarchyRecords, serviceRecords, scriptRecords)
+	scriptReadRepository, err := scriptoperations.NewReadRepository(hierarchyRecords, serviceRecords, scriptRecords)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script read repositories: %w", err)
 	}
-	scriptReads, err := newScriptReadService(scriptReadRepository)
+	scriptReads, err := scriptoperations.NewReadService(scriptReadRepository)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script reads: %w", err)
@@ -306,14 +312,14 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service desired revision repository: %w", err)
 	}
-	serviceMutationRepository, err := newDurableServiceMutationRepository(
+	serviceMutationRepository, err := serviceoperations.NewMutationRepository(
 		hierarchyRecords, serviceRecords, zoneRecords, serviceDesiredRevisionRecords, releaseLedger,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service mutation repositories: %w", err)
 	}
-	scriptMutationRepository, err := newDurableScriptMutationRepository(
+	scriptMutationRepository, err := scriptoperations.NewMutationRepository(
 		hierarchyRecords, serviceRecords, scriptRecords, releaseLedger,
 	)
 	if err != nil {
@@ -349,12 +355,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret repository: %w", err)
 	}
-	secretReadRepository, err := newDurableSecretReadRepository(hierarchyRecords, secretRecords)
+	secretReadRepository, err := secrets.NewReadRepository(hierarchyRecords, secretRecords)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret read repositories: %w", err)
 	}
-	secretReads, err := newSecretReadService(secretReadRepository, intentProtector)
+	secretReads, err := secrets.NewReadService(secretReadRepository, intentProtector)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret reads: %w", err)
@@ -364,12 +370,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector repository: %w", err)
 	}
-	connectorReadRepository, err := newDurableConnectorReadRepository(hierarchyRecords, connectorRecords)
+	connectorReadRepository, err := connectors.NewReadRepository(hierarchyRecords, connectorRecords)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector read repositories: %w", err)
 	}
-	connectorReads, err := newConnectorReadService(connectorReadRepository)
+	connectorReads, err := connectors.NewReadService(connectorReadRepository)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector reads: %w", err)
@@ -655,7 +661,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	backupPointReads, err := controller.NewRecoveryPointReadService(
 		hierarchyRecords,
 		backupRuntimeRecords,
-		&secretValueCipher{key: controllerKey},
+		secretvalue.NewControllerKeyCipher(controllerKey),
 	)
 	if err != nil {
 		closeErr := store.Close()
@@ -733,22 +739,17 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Network capability: %w", err)
 	}
-	serviceMutationIdempotency, err := newDurableServiceMutationIdempotency(intentCoordinator, idempotency)
+	serviceMutationIdempotency, err := serviceoperations.NewMutationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service mutation idempotency: %w", err)
 	}
-	serviceMutations, err := newServiceMutationService(serviceMutationRepository, serviceMutationIdempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Service mutation service: %w", err)
-	}
-	serviceLifecycleIdempotency, err := newDurableServiceLifecycleIdempotency(intentCoordinator, idempotency)
+	serviceLifecycleIdempotency, err := serviceoperations.NewLifecycleIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service lifecycle idempotency: %w", err)
 	}
-	serviceMutations.lifecycle, err = newServiceLifecycleService(
+	serviceLifecycle, err := serviceoperations.NewLifecycleService(
 		serviceMutationRepository,
 		planResolver,
 		serviceLifecycleIdempotency,
@@ -758,7 +759,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service lifecycle service: %w", err)
 	}
-	scriptMutationIdempotency, err := newDurableScriptMutationIdempotency(intentCoordinator, idempotency)
+	serviceMutations, err := serviceoperations.NewMutationService(serviceMutationRepository, serviceMutationIdempotency, serviceLifecycle)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Service mutation service: %w", err)
+	}
+	scriptMutationIdempotency, err := scriptoperations.NewMutationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script mutation idempotency: %w", err)
@@ -772,24 +778,23 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script runner preparation: %w", err)
 	}
-	scriptMutations, err := newScriptMutationService(
-		scriptMutationRepository, scriptMutationIdempotency, scriptPreparation,
+	scriptDeletionIdempotency, err := scriptoperations.NewDeletionIdempotency(intentCoordinator, idempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script deletion idempotency: %w", err)
+	}
+	scriptDeletions, err := scriptoperations.NewDeletionService(scriptMutationRepository, scriptDeletionIdempotency)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize Script deletion service: %w", err)
+	}
+	scriptMutations, err := scriptoperations.NewMutationService(
+		scriptMutationRepository, scriptMutationIdempotency, scriptPreparation, scriptDeletions,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script mutation service: %w", err)
 	}
-	scriptDeletionIdempotency, err := newDurableScriptDeletionIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Script deletion idempotency: %w", err)
-	}
-	scriptDeletions, err := newScriptDeletionService(scriptMutationRepository, scriptDeletionIdempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize Script deletion service: %w", err)
-	}
-	scriptMutations.deletions = scriptDeletions
 	entryGeneration, err := entrygeneration.NewEntryGenerationService(secretRecords, attachFactValues, intentProtector)
 	if err != nil {
 		_ = store.Close()
@@ -815,12 +820,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry removal idempotency: %w", err)
 	}
-	secretCreationIdempotency, err := newDurableSecretCreationIdempotency(intentCoordinator, idempotency)
+	secretCreationIdempotency, err := secrets.NewCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret creation idempotency: %w", err)
 	}
-	secretMutations, err := newSecretCreationService(
+	secretMutations, err := secrets.NewCreationService(
 		secretReadRepository,
 		intentProtector,
 		secretCreationIdempotency,
@@ -829,7 +834,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret creation service: %w", err)
 	}
-	connectorCreationRepository, err := newDurableConnectorCreationRepository(
+	connectorCreationRepository, err := connectors.NewCreationRepository(
 		hierarchyRecords,
 		secretRecords,
 		connectorRecords,
@@ -838,12 +843,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector creation repositories: %w", err)
 	}
-	connectorCreationIdempotency, err := newDurableConnectorCreationIdempotency(intentCoordinator, idempotency)
+	connectorCreationIdempotency, err := connectors.NewCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector creation idempotency: %w", err)
 	}
-	connectorMutations, err := newConnectorCreationService(
+	connectorMutations, err := connectors.NewCreationService(
 		connectorCreationRepository,
 		intentProtector,
 		connectorCreationIdempotency,
@@ -852,7 +857,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Connector creation service: %w", err)
 	}
-	connectorDeletionRepository, err := newDurableConnectorDeletionRepository(hierarchyRecords, connectorRecords)
+	connectorDeletionRepository, err := connectors.NewDeletionRepository(hierarchyRecords, connectorRecords)
 	if err != nil {
 		closeErr := store.Close()
 		return nil, errs.Wrap(errs.KindInternal, errors.Join(
@@ -860,7 +865,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	connectorDeletionIdempotency, err := newDurableConnectorDeletionIdempotency(intentCoordinator, idempotency)
+	connectorDeletionIdempotency, err := connectors.NewDeletionIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		closeErr := store.Close()
 		return nil, errs.Wrap(errs.KindInternal, errors.Join(
@@ -868,7 +873,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	connectorDeletions, err := newConnectorDeletionService(
+	connectorDeletions, err := connectors.NewDeletionService(
 		connectorDeletionRepository,
 		connectorDeletionIdempotency,
 	)
@@ -879,12 +884,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	secretDeletionIdempotency, err := newDurableSecretDeletionIdempotency(intentCoordinator, idempotency)
+	secretDeletionIdempotency, err := secrets.NewDeletionIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret deletion idempotency: %w", err)
 	}
-	secretDeletions, err := newSecretDeletionService(secretReadRepository, secretDeletionIdempotency)
+	secretDeletions, err := secrets.NewDeletionService(secretReadRepository, secretDeletionIdempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Secret deletion service: %w", err)
@@ -914,12 +919,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach mutation service: %w", err)
 	}
-	taskRetryIdempotency, err := newDurableTaskRetryIdempotency(intentCoordinator, idempotency)
+	taskRetryIdempotency, err := taskoperations.NewRetryIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry idempotency: %w", err)
 	}
-	taskMutations, err := newTaskRetryService(tasks, taskRetryIdempotency, backupRuns)
+	taskMutations, err := taskoperations.NewRetryService(tasks, taskRetryIdempotency, backupRuns)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry service: %w", err)
@@ -1054,42 +1059,42 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Volume mutations: %w", err)
 	}
-	tenantCreationIdempotency, err := newDurableTenantCreationIdempotency(intentCoordinator, idempotency)
+	tenantCreationIdempotency, err := hierarchycontroller.NewTenantCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Tenant creation idempotency: %w", err)
 	}
-	tenantMutations, err := newTenantCreationService(hierarchyRecords, tenantCreationIdempotency)
+	tenantMutations, err := hierarchycontroller.NewTenantCreationService(hierarchyRecords, tenantCreationIdempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Tenant creation service: %w", err)
 	}
-	tenantChangeIdempotency, err := newDurableTenantChangeIdempotency(intentCoordinator, idempotency)
+	tenantChangeIdempotency, err := hierarchycontroller.NewTenantChangeIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Tenant change idempotency: %w", err)
 	}
-	tenantChanges, err := newTenantChangeService(hierarchyRecords, tenantChangeIdempotency)
+	tenantChanges, err := hierarchycontroller.NewTenantChangeService(hierarchyRecords, tenantChangeIdempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Tenant change service: %w", err)
 	}
-	projectCreationIdempotency, err := newDurableProjectCreationIdempotency(intentCoordinator, idempotency)
+	projectCreationIdempotency, err := hierarchycontroller.NewProjectCreationIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Project creation idempotency: %w", err)
 	}
-	projectMutations, err := newProjectCreationService(hierarchyRecords, projectCreationIdempotency)
+	projectMutations, err := hierarchycontroller.NewProjectCreationService(hierarchyRecords, projectCreationIdempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Project creation service: %w", err)
 	}
-	projectChangeIdempotency, err := newDurableProjectChangeIdempotency(intentCoordinator, idempotency)
+	projectChangeIdempotency, err := hierarchycontroller.NewProjectChangeIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Project change idempotency: %w", err)
 	}
-	projectChanges, err := newProjectChangeService(hierarchyRecords, projectChangeIdempotency)
+	projectChanges, err := hierarchycontroller.NewProjectChangeService(hierarchyRecords, projectChangeIdempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Project change service: %w", err)
@@ -1165,7 +1170,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller Task runner: %w", err)
 	}
-	taskAborts, err := newTaskAbortService(tasks, agentRuntime.registry, controllerTaskRunner)
+	taskAborts, err := taskoperations.NewAbortService(tasks, agentRuntime.registry, controllerTaskRunner)
 	if err != nil {
 		_ = platform.Close()
 		_ = store.Close()

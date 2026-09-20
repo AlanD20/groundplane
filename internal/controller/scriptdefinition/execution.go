@@ -1,7 +1,7 @@
 package scriptdefinition
 
 import (
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
@@ -38,28 +38,28 @@ func executionResponse(execution *core.ScriptExecution) apiTypes.ScriptExecution
 	return response
 }
 
-func executionIntent(execution apiTypes.ScriptExecution) idempotentintent.Value {
-	fields := []idempotentintent.Field{{Name: "mode", Value: idempotentintent.String(execution.Mode)}}
+func executionIntent(execution apiTypes.ScriptExecution) requestidempotency.Value {
+	fields := []requestidempotency.Field{{Name: "mode", Value: requestidempotency.String(execution.Mode)}}
 	if execution.Mode == "inherited" {
-		return idempotentintent.Object(fields...)
+		return requestidempotency.Object(fields...)
 	}
-	volumes := make([]idempotentintent.Value, 0, len(execution.Volumes))
+	volumes := make([]requestidempotency.Value, 0, len(execution.Volumes))
 	for _, grant := range execution.Volumes {
-		volumes = append(volumes, idempotentintent.Object(
-			idempotentintent.Field{Name: "volume_id", Value: idempotentintent.String(grant.VolumeID)},
-			idempotentintent.Field{Name: "target", Value: idempotentintent.String(grant.Target)},
-			idempotentintent.Field{Name: "read_only", Value: idempotentintent.Bool(grant.ReadOnly)},
+		volumes = append(volumes, requestidempotency.Object(
+			requestidempotency.Field{Name: "volume_id", Value: requestidempotency.String(grant.VolumeID)},
+			requestidempotency.Field{Name: "target", Value: requestidempotency.String(grant.Target)},
+			requestidempotency.Field{Name: "read_only", Value: requestidempotency.Bool(grant.ReadOnly)},
 		))
 	}
-	entries := make([]idempotentintent.Value, 0, len(execution.EntryIDs))
+	entries := make([]requestidempotency.Value, 0, len(execution.EntryIDs))
 	for _, id := range execution.EntryIDs {
-		entries = append(entries, idempotentintent.String(id))
+		entries = append(entries, requestidempotency.String(id))
 	}
 	fields = append(fields,
-		idempotentintent.Field{Name: "image", Value: idempotentintent.String(execution.Image)},
-		idempotentintent.Field{Name: "user", Value: idempotentintent.String(execution.User)},
-		idempotentintent.Field{Name: "volumes", Value: idempotentintent.List(volumes...)},
-		idempotentintent.Field{Name: "entry_ids", Value: idempotentintent.List(entries...)},
+		requestidempotency.Field{Name: "image", Value: requestidempotency.String(execution.Image)},
+		requestidempotency.Field{Name: "user", Value: requestidempotency.String(execution.User)},
+		requestidempotency.Field{Name: "volumes", Value: requestidempotency.List(volumes...)},
+		requestidempotency.Field{Name: "entry_ids", Value: requestidempotency.List(entries...)},
 	)
-	return idempotentintent.Object(fields...)
+	return requestidempotency.Object(fields...)
 }

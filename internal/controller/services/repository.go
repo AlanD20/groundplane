@@ -1,0 +1,168 @@
+package services
+
+import (
+	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+type serviceMutationRepository interface {
+	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	GetEnvironmentComposeProjection(
+		context.Context,
+		string,
+	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
+	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
+	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
+	ClaimEnvironmentBlueprintStage(
+		context.Context,
+		etcd.EnvironmentBlueprintStageClaimRequest,
+	) (etcd.EnvironmentBlueprintStageClaim, error)
+	StageEnvironmentBlueprintRevision(
+		context.Context,
+		etcd.EnvironmentBlueprintStageRequest,
+	) (etcd.EnvironmentBlueprintSeal, error)
+	PublishEnvironmentServiceDesiredRevisionDirect(
+		context.Context,
+		etcd.EnvironmentServiceDesiredPublication,
+	) (etcd.IdempotencyTransactionResult, error)
+	ValidateServiceRemovalReferences(
+		context.Context,
+		etcd.Versioned[etcd.ServiceRecord],
+		etcd.Versioned[etcd.EnvironmentComposeProjection],
+	) error
+	BeginServiceRemovalWithTask(
+		context.Context,
+		etcd.Versioned[etcd.TenantRecord],
+		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[etcd.EnvironmentRecord],
+		etcd.Versioned[etcd.ServiceRecord],
+		etcd.Versioned[etcd.EnvironmentComposeProjection],
+		etcd.DeletionTombstoneRecord,
+		etcd.ServiceRemovalIntent,
+		etcd.TaskRecord,
+		etcd.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
+}
+
+type durableServiceMutationRepository struct {
+	hierarchy *etcd.HierarchyRepository
+	services  *etcd.ServiceRepository
+	zones     *etcd.ZoneRepository
+	desired   *desiredrevisionstore.Repository
+	releases  *etcd.ReleaseLedger
+}
+
+func NewMutationRepository(
+	hierarchy *etcd.HierarchyRepository,
+	services *etcd.ServiceRepository,
+	zones *etcd.ZoneRepository,
+	desired *desiredrevisionstore.Repository,
+	releases *etcd.ReleaseLedger,
+) (*durableServiceMutationRepository, error) {
+	if hierarchy == nil || services == nil || zones == nil || desired == nil || releases == nil {
+		return nil, errs.New(errs.KindInternal, "Service mutation repositories are not configured")
+	}
+	return &durableServiceMutationRepository{
+		hierarchy: hierarchy,
+		services:  services,
+		zones:     zones,
+		desired:   desired,
+		releases:  releases,
+	}, nil
+}
+
+func (repository *durableServiceMutationRepository) GetEnvironment(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+	return repository.hierarchy.GetEnvironment(ctx, id)
+}
+
+func (repository *durableServiceMutationRepository) GetProject(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.ProjectRecord], error) {
+	return repository.hierarchy.GetProject(ctx, id)
+}
+
+func (repository *durableServiceMutationRepository) GetEnvironmentBlueprintHead(
+	ctx context.Context,
+	environmentID string,
+) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error) {
+	return repository.hierarchy.GetEnvironmentBlueprintHead(ctx, environmentID)
+}
+
+func (repository *durableServiceMutationRepository) GetService(
+	ctx context.Context,
+	id string,
+) (etcd.Versioned[etcd.ServiceRecord], error) {
+	return repository.services.GetService(ctx, id)
+}
+
+func (repository *durableServiceMutationRepository) ListServices(
+	ctx context.Context,
+	environmentID string,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.ServiceRecord], error) {
+	return repository.services.ListServices(ctx, environmentID, request)
+}
+
+func (repository *durableServiceMutationRepository) ListZones(
+	ctx context.Context,
+	environmentID string,
+	request etcd.PageRequest,
+) (etcd.Page[etcd.ZoneRecord], error) {
+	return repository.zones.ListZones(ctx, environmentID, request)
+}
+
+func (repository *durableServiceMutationRepository) ClaimEnvironmentBlueprintStage(
+	ctx context.Context,
+	request etcd.EnvironmentBlueprintStageClaimRequest,
+) (etcd.EnvironmentBlueprintStageClaim, error) {
+	return repository.desired.ClaimEnvironmentBlueprintStage(ctx, request)
+}
+
+func (repository *durableServiceMutationRepository) StageEnvironmentBlueprintRevision(
+	ctx context.Context,
+	request etcd.EnvironmentBlueprintStageRequest,
+) (etcd.EnvironmentBlueprintSeal, error) {
+	return repository.desired.StageEnvironmentBlueprintRevision(ctx, request)
+}
+
+func (repository *durableServiceMutationRepository) PublishEnvironmentServiceDesiredRevisionDirect(
+	ctx context.Context,
+	input etcd.EnvironmentServiceDesiredPublication,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.hierarchy.PublishEnvironmentServiceDesiredRevisionDirect(ctx, input)
+}
+
+func (repository *durableServiceMutationRepository) ValidateServiceRemovalReferences(
+	ctx context.Context,
+	current etcd.Versioned[etcd.ServiceRecord],
+	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+) error {
+	return repository.services.ValidateServiceRemovalReferences(ctx, current, projection)
+}
+
+func (repository *durableServiceMutationRepository) BeginServiceRemovalWithTask(
+	ctx context.Context,
+	tenant etcd.Versioned[etcd.TenantRecord],
+	project etcd.Versioned[etcd.ProjectRecord],
+	environment etcd.Versioned[etcd.EnvironmentRecord],
+	current etcd.Versioned[etcd.ServiceRecord],
+	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+	tombstone etcd.DeletionTombstoneRecord,
+	intent etcd.ServiceRemovalIntent,
+	task etcd.TaskRecord,
+	marker etcd.IdempotencyMarker,
+) (etcd.IdempotencyTransactionResult, error) {
+	return repository.services.BeginServiceRemovalWithTask(
+		ctx, tenant, project, environment, current, projection, tombstone, intent, task, marker,
+	)
+}

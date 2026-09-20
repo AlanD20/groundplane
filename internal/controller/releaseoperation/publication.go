@@ -11,7 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -30,7 +30,7 @@ func (service *Service) publish(
 	candidates []releaseCandidateInput,
 	locator etcd.IdempotencyLocator,
 	durable etcd.ProtectedIntentRecord,
-	protected idempotentintent.ProtectedEvidence,
+	protected requestidempotency.ProtectedEvidence,
 ) (etcd.IdempotencyResponse, error) {
 	if err := service.sealCandidates(ctx, candidates); err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -371,13 +371,13 @@ func releaseAcceptedResponse(
 }
 
 func releaseOperationResolution(
-	resolution idempotentintent.Resolution,
+	resolution requestidempotency.Resolution,
 	applied etcd.IdempotencyResponse,
 ) (etcd.IdempotencyResponse, error) {
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
+	case requestidempotency.ResolutionApplied:
 		return cloneIdempotencyResponse(applied), nil
-	case idempotentintent.ResolutionReplay:
+	case requestidempotency.ResolutionReplay:
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release idempotency resolution is invalid")

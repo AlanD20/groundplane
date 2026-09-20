@@ -15,7 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -143,7 +143,7 @@ type attachDraftPlanSealer interface {
 }
 
 type attachMutationEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -155,18 +155,18 @@ type attachMutationIdempotency interface {
 		context.Context,
 		etcd.IdempotencyLocator,
 		attachMutationEvidence,
-	) (idempotentintent.Resolution, bool, error)
+	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
 		context.Context,
 		attachMutationEvidence,
 		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
 		etcd.IdempotencyLocator,
 		attachMutationEvidence,
 		error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveReplayLocator(
 		context.Context,
 		etcd.IdempotencyReplayTarget,
@@ -177,12 +177,12 @@ type attachMutationIdempotency interface {
 }
 
 type durableAttachMutationIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func newDurableAttachMutationIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableAttachMutationIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -196,35 +196,35 @@ func (service *durableAttachMutationIdempotency) PrepareCreate(
 	environmentID string,
 	request apiTypes.AttachRequest,
 ) (attachMutationEvidence, error) {
-	grants := make([]idempotentintent.Value, len(request.GrantAttachIDs))
+	grants := make([]requestidempotency.Value, len(request.GrantAttachIDs))
 	for index, grantID := range request.GrantAttachIDs {
-		grants[index] = idempotentintent.String(grantID)
+		grants[index] = requestidempotency.String(grantID)
 	}
-	return service.protect(ctx, idempotentintent.CanonicalIntentV1{
+	return service.protect(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost, Route: attachCreationRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Query: idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Query: requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{
 				Name:  "backing_service_id",
-				Value: idempotentintent.String(request.BackingServiceID),
+				Value: requestidempotency.String(request.BackingServiceID),
 			},
-			idempotentintent.Field{
+			requestidempotency.Field{
 				Name: "credential",
-				Value: idempotentintent.Object(
-					idempotentintent.Field{
+				Value: requestidempotency.Object(
+					requestidempotency.Field{
 						Name:  "attach_id",
-						Value: idempotentintent.String(request.Credential.AttachID),
+						Value: requestidempotency.String(request.Credential.AttachID),
 					},
-					idempotentintent.Field{
+					requestidempotency.Field{
 						Name:  "mode",
-						Value: idempotentintent.String(string(request.Credential.Mode)),
+						Value: requestidempotency.String(string(request.Credential.Mode)),
 					},
 				),
 			},
-			idempotentintent.Field{Name: "grant_attach_ids", Value: idempotentintent.List(grants...)},
-			idempotentintent.Field{Name: "name", Value: idempotentintent.String(request.Name)},
-			idempotentintent.Field{Name: "service_id", Value: idempotentintent.String(request.ServiceID)},
+			requestidempotency.Field{Name: "grant_attach_ids", Value: requestidempotency.List(grants...)},
+			requestidempotency.Field{Name: "name", Value: requestidempotency.String(request.Name)},
+			requestidempotency.Field{Name: "service_id", Value: requestidempotency.String(request.ServiceID)},
 		)),
 	})
 }
@@ -234,11 +234,11 @@ func (service *durableAttachMutationIdempotency) PrepareDetach(
 	environmentID string,
 	attachID string,
 ) (attachMutationEvidence, error) {
-	return service.protect(ctx, idempotentintent.CanonicalIntentV1{
+	return service.protect(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodDelete, Route: attachDeletionRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: attachID}},
-		Query: idempotentintent.Object(), Body: idempotentintent.NoBody(),
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: attachID}},
+		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
 	})
 }
 
@@ -248,22 +248,22 @@ func (service *durableAttachMutationIdempotency) PrepareRename(
 	attachID string,
 	request apiTypes.AttachRenameRequest,
 ) (attachMutationEvidence, error) {
-	return service.protect(ctx, idempotentintent.CanonicalIntentV1{
+	return service.protect(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost, Route: attachRenameRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: attachID}},
-		Query: idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "name", Value: idempotentintent.String(request.Name)},
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: attachID}},
+		Query: requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "name", Value: requestidempotency.String(request.Name)},
 		)),
 	})
 }
 
 func (service *durableAttachMutationIdempotency) protect(
 	ctx context.Context,
-	intent idempotentintent.CanonicalIntentV1,
+	intent requestidempotency.CanonicalIntentV1,
 ) (attachMutationEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, intent)
+	version, digest, err := requestidempotency.Canonicalize(ctx, intent)
 	if err != nil {
 		return attachMutationEvidence{}, err
 	}
@@ -283,7 +283,7 @@ func (service *durableAttachMutationIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence attachMutationEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -291,7 +291,7 @@ func (service *durableAttachMutationIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence attachMutationEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -300,7 +300,7 @@ func (service *durableAttachMutationIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence attachMutationEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
@@ -389,13 +389,13 @@ func (service *attachMutationService) createAttachOnce(
 	if replay, exists, resolveErr := service.idempotency.ResolveExisting(ctx, locator, evidence); resolveErr != nil {
 		return etcd.IdempotencyResponse{}, resolveErr
 	} else if exists {
-		if replay.Kind != idempotentintent.ResolutionReplay {
+		if replay.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Attach creation replay resolution is invalid",
 			)
 		}
-		return cloneIdempotencyResponse(replay.Response), nil
+		return requestidempotency.CloneResponse(replay.Response), nil
 	}
 
 	scope, currentAttaches, adapter, err := service.resolveAttachScope(
@@ -580,10 +580,10 @@ func (service *attachMutationService) detachAttachOnce(
 		if resolveErr != nil {
 			return etcd.IdempotencyResponse{}, resolveErr
 		}
-		if !exists || resolution.Kind != idempotentintent.ResolutionReplay {
+		if !exists || resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach replay index is inconsistent")
 		}
-		return cloneIdempotencyResponse(resolution.Response), nil
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 
 	current, err := service.repository.GetAttach(ctx, attachID)
@@ -602,10 +602,10 @@ func (service *attachMutationService) detachAttachOnce(
 	if replay, exists, resolveErr := service.idempotency.ResolveExisting(ctx, locator, evidence); resolveErr != nil {
 		return etcd.IdempotencyResponse{}, resolveErr
 	} else if exists {
-		if replay.Kind != idempotentintent.ResolutionReplay {
+		if replay.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach replay resolution is invalid")
 		}
-		return cloneIdempotencyResponse(replay.Response), nil
+		return requestidempotency.CloneResponse(replay.Response), nil
 	}
 	consumer, err := service.repository.GetService(ctx, current.Record.ServiceID)
 	if err != nil {
@@ -709,7 +709,7 @@ func (service *attachMutationService) resolveMutationResult(
 	mutationErr error,
 	response etcd.IdempotencyResponse,
 ) (etcd.IdempotencyResponse, error) {
-	var resolution idempotentintent.Resolution
+	var resolution requestidempotency.Resolution
 	var err error
 	if mutationErr != nil {
 		if !isUnknownAttachMutationOutcome(mutationErr) {
@@ -722,13 +722,13 @@ func (service *attachMutationService) resolveMutationResult(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if resolution.Kind == idempotentintent.ResolutionReplay {
-		return cloneIdempotencyResponse(resolution.Response), nil
+	if resolution.Kind == requestidempotency.ResolutionReplay {
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
-	if resolution.Kind != idempotentintent.ResolutionApplied {
+	if resolution.Kind != requestidempotency.ResolutionApplied {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach mutation resolution is invalid")
 	}
-	return cloneIdempotencyResponse(response), nil
+	return requestidempotency.CloneResponse(response), nil
 }
 
 func (service *attachMutationService) resolveAttachScope(

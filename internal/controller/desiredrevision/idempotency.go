@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"sort"
 
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -14,24 +14,24 @@ import (
 const blueprintRoute = "/environments/{id}/blueprint"
 
 type Evidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	Durable   etcd.ProtectedIntentRecord
 }
 
 type IntentAddress struct {
 	Method string
 	Route  string
-	Scope  idempotentintent.Scope
-	Path   []idempotentintent.PathBinding
+	Scope  requestidempotency.Scope
+	Path   []requestidempotency.PathBinding
 }
 
 type Idempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func NewIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*Idempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -57,13 +57,13 @@ func (service *Idempotency) Prepare(
 	if err != nil {
 		return Evidence{}, err
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: address.Method,
 		Route:  address.Route,
 		Scope:  address.Scope,
-		Path:   append([]idempotentintent.PathBinding(nil), address.Path...),
-		Query:  idempotentintent.Object(),
-		Body:   idempotentintent.BlueprintBody(manifest),
+		Path:   append([]requestidempotency.PathBinding(nil), address.Path...),
+		Query:  requestidempotency.Object(),
+		Body:   requestidempotency.BlueprintBody(manifest),
 	})
 	if err != nil {
 		return Evidence{}, err
@@ -84,7 +84,7 @@ func (service *Idempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence Evidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -92,7 +92,7 @@ func (service *Idempotency) ResolveKnown(
 	ctx context.Context,
 	evidence Evidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -101,13 +101,13 @@ func (service *Idempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence Evidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
-func IntentManifest(bundle core.BlueprintBundle) (idempotentintent.BlueprintManifestV1, error) {
+func IntentManifest(bundle core.BlueprintBundle) (requestidempotency.BlueprintManifestV1, error) {
 	if err := bundle.Validate(); err != nil {
-		return idempotentintent.BlueprintManifestV1{}, errs.New(
+		return requestidempotency.BlueprintManifestV1{}, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint bundle is invalid",
 		)
@@ -117,18 +117,18 @@ func IntentManifest(bundle core.BlueprintBundle) (idempotentintent.BlueprintMani
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	manifest := idempotentintent.BlueprintManifestV1{
+	manifest := requestidempotency.BlueprintManifestV1{
 		FormatVersion:  1,
 		RootPath:       bundle.RootPath,
 		ComposeSources: append([]string(nil), bundle.ComposeSources...),
-		Interpolation:  make([]idempotentintent.Interpolation, len(keys)),
-		Files:          make([]idempotentintent.BlueprintFile, len(bundle.Files)),
+		Interpolation:  make([]requestidempotency.Interpolation, len(keys)),
+		Files:          make([]requestidempotency.BlueprintFile, len(bundle.Files)),
 	}
 	for index, key := range keys {
-		manifest.Interpolation[index] = idempotentintent.Interpolation{Name: key, Value: bundle.Interpolation[key]}
+		manifest.Interpolation[index] = requestidempotency.Interpolation{Name: key, Value: bundle.Interpolation[key]}
 	}
 	for index, file := range bundle.Files {
-		manifest.Files[index] = idempotentintent.BlueprintFile{
+		manifest.Files[index] = requestidempotency.BlueprintFile{
 			Path: file.Path, Part: "file-" + leftPadPart(index+1),
 			Size: uint64(len(file.Content)), SHA256: sha256.Sum256(file.Content),
 		}

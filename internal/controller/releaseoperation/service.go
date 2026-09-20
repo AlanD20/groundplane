@@ -8,7 +8,7 @@ import (
 	"time"
 
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -35,7 +35,7 @@ type Service struct {
 	services    *etcd.ServiceRepository
 	groups      *etcdrg.Store
 	idempotency *etcd.IdempotencyRepository
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	plans       *controllerpkg.TaskPlanResolver
 	scripts     *etcd.ScriptRepository
 	preparation *controllerpkg.ScriptRunnerPreparationService
@@ -62,7 +62,7 @@ func NewService(
 	services *etcd.ServiceRepository,
 	groups *etcdrg.Store,
 	idempotency *etcd.IdempotencyRepository,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	plans *controllerpkg.TaskPlanResolver,
 	scripts *etcd.ScriptRepository,
 	artifacts *controllerpkg.ScriptArtifactService,
@@ -105,10 +105,10 @@ func (service *Service) DeployService(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	body := idempotentintent.JSONBody(idempotentintent.Object(
-		idempotentintent.Field{Name: "tag", Value: idempotentintent.String(request.Tag)},
-		idempotentintent.Field{Name: "strategy", Value: idempotentintent.String(string(request.Strategy))},
-		idempotentintent.Field{Name: "on_failure", Value: idempotentintent.String(string(request.OnFailure))},
+	body := requestidempotency.JSONBody(requestidempotency.Object(
+		requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)},
+		requestidempotency.Field{Name: "strategy", Value: requestidempotency.String(string(request.Strategy))},
+		requestidempotency.Field{Name: "on_failure", Value: requestidempotency.String(string(request.OnFailure))},
 	))
 	locator, protected, durable, replay, err := service.begin(
 		ctx, current.Record.EnvironmentID, http.MethodPost, serviceDeployRoute, serviceID,
@@ -194,8 +194,8 @@ func (service *Service) DeployReleaseGroup(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	body := idempotentintent.JSONBody(idempotentintent.Object(
-		idempotentintent.Field{Name: "tag", Value: idempotentintent.String(request.Tag)},
+	body := requestidempotency.JSONBody(requestidempotency.Object(
+		requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)},
 	))
 	locator, protected, durable, replay, err := service.begin(
 		ctx, current.Group.EnvironmentID, http.MethodPost, releaseGroupDeployRoute, groupID,
@@ -355,27 +355,27 @@ func (service *Service) selectGroupRollback(
 	return groupRollbackSelection{scope: scope, group: group, candidates: candidates}, nil
 }
 
-func releaseRollbackRequestBody(request domain.ServiceRollbackInput) idempotentintent.Body {
-	return idempotentintent.JSONBody(
-		idempotentintent.Object(idempotentintent.Field{Name: "tag", Value: idempotentintent.String(request.Tag)}),
+func releaseRollbackRequestBody(request domain.ServiceRollbackInput) requestidempotency.Body {
+	return requestidempotency.JSONBody(
+		requestidempotency.Object(requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)}),
 	)
 }
 
-func groupRollbackRequestBody(request domain.GroupRollbackInput) idempotentintent.Body {
-	fields := make([]idempotentintent.Field, 0, 2)
+func groupRollbackRequestBody(request domain.GroupRollbackInput) requestidempotency.Body {
+	fields := make([]requestidempotency.Field, 0, 2)
 	if request.Tag != nil {
-		fields = append(fields, idempotentintent.Field{Name: "tag", Value: idempotentintent.String(*request.Tag)})
+		fields = append(fields, requestidempotency.Field{Name: "tag", Value: requestidempotency.String(*request.Tag)})
 	}
 	if request.PreviewRevision != nil {
 		fields = append(
 			fields,
-			idempotentintent.Field{
+			requestidempotency.Field{
 				Name:  "preview_revision",
-				Value: idempotentintent.String(strconv.FormatInt(*request.PreviewRevision, 10)),
+				Value: requestidempotency.String(strconv.FormatInt(*request.PreviewRevision, 10)),
 			},
 		)
 	}
-	return idempotentintent.JSONBody(idempotentintent.Object(fields...))
+	return requestidempotency.JSONBody(requestidempotency.Object(fields...))
 }
 
 func (service *Service) begin(
@@ -385,46 +385,46 @@ func (service *Service) begin(
 	route string,
 	targetID string,
 	key string,
-	body idempotentintent.Body,
-) (etcd.IdempotencyLocator, idempotentintent.ProtectedEvidence, etcd.ProtectedIntentRecord, *etcd.IdempotencyResponse, error) {
+	body requestidempotency.Body,
+) (etcd.IdempotencyLocator, requestidempotency.ProtectedEvidence, etcd.ProtectedIntentRecord, *etcd.IdempotencyResponse, error) {
 	locator := etcd.IdempotencyLocator{
 		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
 		Method: method, Route: route, Key: key,
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: method, Route: route,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: targetID}},
-		Query: idempotentintent.Object(), Body: body,
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: targetID}},
+		Query: requestidempotency.Object(), Body: body,
 	})
 	if err != nil {
-		return locator, idempotentintent.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
+		return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
 	}
 	defer digest.Destroy()
 	protected, err := service.coordinator.ProtectIntent(ctx, version, digest)
 	if err != nil {
-		return locator, idempotentintent.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
+		return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
 	}
 	durable, err := protected.DurableRecord()
 	if err != nil {
 		protected.Destroy()
-		return locator, idempotentintent.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
+		return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
 	}
 	resolution, exists, err := service.coordinator.ResolveExisting(ctx, service.idempotency, locator, protected)
 	if err != nil {
 		clear(durable.Ciphertext)
 		protected.Destroy()
-		return locator, idempotentintent.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
+		return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
 	}
 	if exists {
 		clear(durable.Ciphertext)
 		protected.Destroy()
-		if resolution.Kind != idempotentintent.ResolutionReplay {
-			return locator, idempotentintent.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil,
+		if resolution.Kind != requestidempotency.ResolutionReplay {
+			return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil,
 				errs.New(errs.KindInternal, "release idempotency resolution is invalid")
 		}
 		response := cloneIdempotencyResponse(resolution.Response)
-		return locator, idempotentintent.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, &response, nil
+		return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, &response, nil
 	}
 	return locator, protected, durable, nil, nil
 }

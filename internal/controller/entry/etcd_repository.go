@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -21,14 +21,14 @@ const entryDeletionRoute = "/entries/{id}"
 type EtcdRepository struct {
 	hierarchy   *etcd.HierarchyRepository
 	entries     *etcd.EntryRepository
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	idempotency *etcd.IdempotencyRepository
 }
 
 func NewEtcdRepository(
 	hierarchy *etcd.HierarchyRepository,
 	entries *etcd.EntryRepository,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	idempotency *etcd.IdempotencyRepository,
 ) (*EtcdRepository, error) {
 	if hierarchy == nil || entries == nil || coordinator == nil || idempotency == nil {
@@ -49,7 +49,7 @@ type etcdRemovalState struct {
 }
 
 type etcdRemovalEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -137,7 +137,7 @@ func (repository *EtcdRepository) PublishRemoval(
 		return RemovalOutcome{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return RemovalOutcome{}, errs.New(errs.KindInternal, "entry deletion replay resolution is invalid")
 		}
 		return removalOutcome(resolution.Response)
@@ -206,9 +206,9 @@ func (repository *EtcdRepository) PublishRemoval(
 		return RemovalOutcome{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
+	case requestidempotency.ResolutionApplied:
 		return removalOutcome(response)
-	case idempotentintent.ResolutionReplay:
+	case requestidempotency.ResolutionReplay:
 		return removalOutcome(resolution.Response)
 	default:
 		return RemovalOutcome{}, errs.New(errs.KindInternal, "entry deletion resolution is invalid")
@@ -322,11 +322,11 @@ func (repository *EtcdRepository) prepareEvidence(
 		ids.Validate(ids.KindEnvironment, locator.ScopeID) != nil {
 		return etcdRemovalEvidence{}, errs.New(errs.KindInternal, "entry deletion replay scope is invalid")
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodDelete, Route: entryDeletionRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: locator.ScopeID},
-		Path:  []idempotentintent.PathBinding{{Name: "id", Value: entryID}},
-		Query: idempotentintent.Object(), Body: idempotentintent.NoBody(),
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: locator.ScopeID},
+		Path:  []requestidempotency.PathBinding{{Name: "id", Value: entryID}},
+		Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
 	})
 	if err != nil {
 		return etcdRemovalEvidence{}, err
@@ -359,7 +359,7 @@ func (repository *EtcdRepository) resolveExisting(
 	if err != nil || !found {
 		return RemovalOutcome{}, found, err
 	}
-	if resolution.Kind != idempotentintent.ResolutionReplay {
+	if resolution.Kind != requestidempotency.ResolutionReplay {
 		return RemovalOutcome{}, false, errs.New(errs.KindInternal, "entry deletion replay resolution is invalid")
 	}
 	outcome, err := removalOutcome(resolution.Response)

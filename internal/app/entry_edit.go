@@ -11,7 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -46,7 +46,7 @@ type entryEditRepository interface {
 }
 
 type entryEditEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -64,18 +64,18 @@ type entryEditIdempotency interface {
 		context.Context,
 		etcd.IdempotencyLocator,
 		entryEditEvidence,
-	) (idempotentintent.Resolution, bool, error)
+	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
 		context.Context,
 		entryEditEvidence,
 		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
 		etcd.IdempotencyLocator,
 		entryEditEvidence,
 		error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 }
 
 func (service *durableEntryEditIdempotency) MatchesStaged(
@@ -87,12 +87,12 @@ func (service *durableEntryEditIdempotency) MatchesStaged(
 }
 
 type durableEntryEditIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func newDurableEntryEditIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableEntryEditIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -107,15 +107,15 @@ func (service *durableEntryEditIdempotency) Prepare(
 	entryID string,
 	input entryEditInput,
 ) (entryEditEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPatch,
 		Route:  entryEditRoute,
-		Scope:  idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Path:   []idempotentintent.PathBinding{{Name: "id", Value: entryID}},
-		Query:  idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{Name: "exposure", Value: canonicalEntryExposure(input.Exposure)},
-			idempotentintent.Field{Name: "source", Value: canonicalEntryEditSource(input.Source)},
+		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path:   []requestidempotency.PathBinding{{Name: "id", Value: entryID}},
+		Query:  requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{Name: "exposure", Value: canonicalEntryExposure(input.Exposure)},
+			requestidempotency.Field{Name: "source", Value: canonicalEntryEditSource(input.Source)},
 		)),
 	})
 	if err != nil {
@@ -147,7 +147,7 @@ func (service *durableEntryEditIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence entryEditEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -155,7 +155,7 @@ func (service *durableEntryEditIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence entryEditEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -164,7 +164,7 @@ func (service *durableEntryEditIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence entryEditEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(
 		ctx,
 		service.repository,
@@ -323,13 +323,13 @@ func (service *entryEditService) editEntryOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	if existing {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return etcd.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Entry edit replay resolution is invalid",
 			)
 		}
-		return cloneIdempotencyResponse(resolution.Response), nil
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	desired := current.Record.Entry
 	desired.Source = input.Source
@@ -406,10 +406,10 @@ func (service *entryEditService) editEntryOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
-		return cloneIdempotencyResponse(response), nil
-	case idempotentintent.ResolutionReplay:
-		return cloneIdempotencyResponse(resolution.Response), nil
+	case requestidempotency.ResolutionApplied:
+		return requestidempotency.CloneResponse(response), nil
+	case requestidempotency.ResolutionReplay:
+		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
@@ -433,13 +433,13 @@ func (service *entryEditService) replayEntryEdit(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if !existing || resolution.Kind != idempotentintent.ResolutionReplay {
+	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Entry edit replay index is inconsistent",
 		)
 	}
-	return cloneIdempotencyResponse(resolution.Response), nil
+	return requestidempotency.CloneResponse(resolution.Response), nil
 }
 
 func (service *entryEditService) validateExposure(
@@ -554,48 +554,48 @@ func prepareEntryEdit(
 	return desired, nil
 }
 
-func canonicalEntryEditSource(source core.EntrySource) idempotentintent.Value {
+func canonicalEntryEditSource(source core.EntrySource) requestidempotency.Value {
 	switch source.Kind {
 	case core.SourceLiteral:
 		digest := sha256.Sum256([]byte(source.Literal))
-		return idempotentintent.Object(
-			idempotentintent.Field{
+		return requestidempotency.Object(
+			requestidempotency.Field{
 				Name:  "kind",
-				Value: idempotentintent.String(string(source.Kind)),
+				Value: requestidempotency.String(string(source.Kind)),
 			},
-			idempotentintent.Field{
+			requestidempotency.Field{
 				Name:  "literal_sha256",
-				Value: idempotentintent.String(hex.EncodeToString(digest[:])),
+				Value: requestidempotency.String(hex.EncodeToString(digest[:])),
 			},
 		)
 	case core.SourceSecretRef:
-		return idempotentintent.Object(
-			idempotentintent.Field{
+		return requestidempotency.Object(
+			requestidempotency.Field{
 				Name:  "kind",
-				Value: idempotentintent.String(string(source.Kind)),
+				Value: requestidempotency.String(string(source.Kind)),
 			},
-			idempotentintent.Field{
+			requestidempotency.Field{
 				Name:  "secret_ref",
-				Value: idempotentintent.String(source.SecretRef),
+				Value: requestidempotency.String(source.SecretRef),
 			},
 		)
 	case core.SourceFact:
-		return idempotentintent.Object(
-			idempotentintent.Field{
+		return requestidempotency.Object(
+			requestidempotency.Field{
 				Name:  "attach_id",
-				Value: idempotentintent.String(source.Fact.Attach),
+				Value: requestidempotency.String(source.Fact.Attach),
 			},
-			idempotentintent.Field{Name: "fact", Value: idempotentintent.String(source.Fact.Key)},
-			idempotentintent.Field{
+			requestidempotency.Field{Name: "fact", Value: requestidempotency.String(source.Fact.Key)},
+			requestidempotency.Field{
 				Name:  "grant_attach_id",
-				Value: idempotentintent.String(source.Fact.Grant),
+				Value: requestidempotency.String(source.Fact.Grant),
 			},
-			idempotentintent.Field{
+			requestidempotency.Field{
 				Name:  "kind",
-				Value: idempotentintent.String(string(source.Kind)),
+				Value: requestidempotency.String(string(source.Kind)),
 			},
 		)
 	default:
-		return idempotentintent.Object()
+		return requestidempotency.Object()
 	}
 }

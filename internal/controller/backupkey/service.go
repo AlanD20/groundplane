@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	corebackup "github.com/AlanD20/groundplane/internal/core/backup"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -42,14 +42,14 @@ type Repository interface {
 }
 
 type backupKeyRotationIdempotency interface {
-	Prepare(context.Context, string) (idempotentintent.ProtectedEvidence, error)
+	Prepare(context.Context, string) (requestidempotency.ProtectedEvidence, error)
 	ResolveExisting(
 		context.Context,
 		etcd.IdempotencyLocator,
-		idempotentintent.ProtectedEvidence,
-	) (idempotentintent.Resolution, bool, error)
+		requestidempotency.ProtectedEvidence,
+	) (requestidempotency.Resolution, bool, error)
 	NewMarker(
-		idempotentintent.ProtectedEvidence,
+		requestidempotency.ProtectedEvidence,
 		etcd.IdempotencyLocator,
 		etcd.IdempotencyResponse,
 		string,
@@ -57,24 +57,24 @@ type backupKeyRotationIdempotency interface {
 	) (etcd.IdempotencyMarker, error)
 	ResolveKnown(
 		context.Context,
-		idempotentintent.ProtectedEvidence,
+		requestidempotency.ProtectedEvidence,
 		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
 		etcd.IdempotencyLocator,
-		idempotentintent.ProtectedEvidence,
+		requestidempotency.ProtectedEvidence,
 		error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 }
 
 type durableBackupKeyRotationIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func newDurableBackupKeyRotationIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableBackupKeyRotationIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -86,16 +86,16 @@ func newDurableBackupKeyRotationIdempotency(
 func (service *durableBackupKeyRotationIdempotency) Prepare(
 	ctx context.Context,
 	environmentID string,
-) (idempotentintent.ProtectedEvidence, error) {
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+) (requestidempotency.ProtectedEvidence, error) {
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPost, Route: backupKeyRotationRoute,
-		Scope: idempotentintent.Scope{Kind: idempotentintent.ScopeEnvironment, ID: environmentID},
-		Path: []idempotentintent.PathBinding{
+		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
+		Path: []requestidempotency.PathBinding{
 			{Name: "id", Value: environmentID},
-		}, Query: idempotentintent.Object(), Body: idempotentintent.NoBody(),
+		}, Query: requestidempotency.Object(), Body: requestidempotency.NoBody(),
 	})
 	if err != nil {
-		return idempotentintent.ProtectedEvidence{}, err
+		return requestidempotency.ProtectedEvidence{}, err
 	}
 	defer digest.Destroy()
 	return service.coordinator.ProtectIntent(ctx, version, digest)
@@ -104,13 +104,13 @@ func (service *durableBackupKeyRotationIdempotency) Prepare(
 func (service *durableBackupKeyRotationIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
-	evidence idempotentintent.ProtectedEvidence,
-) (idempotentintent.Resolution, bool, error) {
+	evidence requestidempotency.ProtectedEvidence,
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence)
 }
 
 func (*durableBackupKeyRotationIdempotency) NewMarker(
-	evidence idempotentintent.ProtectedEvidence,
+	evidence requestidempotency.ProtectedEvidence,
 	locator etcd.IdempotencyLocator,
 	response etcd.IdempotencyResponse,
 	taskID string,
@@ -126,18 +126,18 @@ func (*durableBackupKeyRotationIdempotency) NewMarker(
 
 func (service *durableBackupKeyRotationIdempotency) ResolveKnown(
 	ctx context.Context,
-	evidence idempotentintent.ProtectedEvidence,
+	evidence requestidempotency.ProtectedEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence, result)
 }
 
 func (service *durableBackupKeyRotationIdempotency) ResolveUnknown(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
-	evidence idempotentintent.ProtectedEvidence,
+	evidence requestidempotency.ProtectedEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence, original)
 }
 
@@ -156,7 +156,7 @@ type Service struct {
 func NewService(
 	repository Repository,
 	keys KeyFactory,
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	markers *etcd.IdempotencyRepository,
 	protector *secretvalue.Protector,
 ) (*Service, error) {
@@ -255,10 +255,10 @@ func (service *Service) RotateBackupKey(
 		return etcd.IdempotencyResponse{}, err
 	}
 	defer clear(resolution.Response.Body)
-	if resolution.Kind == idempotentintent.ResolutionApplied {
+	if resolution.Kind == requestidempotency.ResolutionApplied {
 		return cloneIdempotencyResponse(response), nil
 	}
-	if resolution.Kind == idempotentintent.ResolutionReplay {
+	if resolution.Kind == requestidempotency.ResolutionReplay {
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
 	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "backup key rotation resolution is invalid")

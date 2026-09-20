@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -20,7 +20,7 @@ const (
 )
 
 type localAgentConfigEvidence struct {
-	candidate idempotentintent.ProtectedEvidence
+	candidate requestidempotency.ProtectedEvidence
 	durable   etcd.ProtectedIntentRecord
 }
 
@@ -30,27 +30,27 @@ type localAgentConfigIdempotency interface {
 		context.Context,
 		etcd.IdempotencyLocator,
 		localAgentConfigEvidence,
-	) (idempotentintent.Resolution, bool, error)
+	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
 		context.Context,
 		localAgentConfigEvidence,
 		etcd.IdempotencyTransactionResult,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
 		etcd.IdempotencyLocator,
 		localAgentConfigEvidence,
 		error,
-	) (idempotentintent.Resolution, error)
+	) (requestidempotency.Resolution, error)
 }
 
 type durableLocalAgentConfigIdempotency struct {
-	coordinator *idempotentintent.Coordinator
+	coordinator *requestidempotency.Coordinator
 	repository  *etcd.IdempotencyRepository
 }
 
 func newDurableLocalAgentConfigIdempotency(
-	coordinator *idempotentintent.Coordinator,
+	coordinator *requestidempotency.Coordinator,
 	repository *etcd.IdempotencyRepository,
 ) (*durableLocalAgentConfigIdempotency, error) {
 	if coordinator == nil || repository == nil {
@@ -69,26 +69,26 @@ func (service *durableLocalAgentConfigIdempotency) Prepare(
 		labelKeys = append(labelKeys, key)
 	}
 	sort.Strings(labelKeys)
-	labelFields := make([]idempotentintent.Field, 0, len(labelKeys))
+	labelFields := make([]requestidempotency.Field, 0, len(labelKeys))
 	for _, key := range labelKeys {
-		labelFields = append(labelFields, idempotentintent.Field{
-			Name: key, Value: idempotentintent.String(config.Labels[key]),
+		labelFields = append(labelFields, requestidempotency.Field{
+			Name: key, Value: requestidempotency.String(config.Labels[key]),
 		})
 	}
-	version, digest, err := idempotentintent.Canonicalize(ctx, idempotentintent.CanonicalIntentV1{
+	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: http.MethodPut,
 		Route:  localAgentConfigRoute,
-		Scope:  idempotentintent.Scope{Kind: idempotentintent.ScopePlatform},
-		Path:   []idempotentintent.PathBinding{{Name: "id", Value: agentID}},
-		Query:  idempotentintent.Object(),
-		Body: idempotentintent.JSONBody(idempotentintent.Object(
-			idempotentintent.Field{
-				Name: "pull_interval_seconds", Value: idempotentintent.Integer(int64(config.PullIntervalSeconds)),
+		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopePlatform},
+		Path:   []requestidempotency.PathBinding{{Name: "id", Value: agentID}},
+		Query:  requestidempotency.Object(),
+		Body: requestidempotency.JSONBody(requestidempotency.Object(
+			requestidempotency.Field{
+				Name: "pull_interval_seconds", Value: requestidempotency.Integer(int64(config.PullIntervalSeconds)),
 			},
-			idempotentintent.Field{
-				Name: "max_concurrent_tasks", Value: idempotentintent.Integer(int64(config.MaxConcurrentTasks)),
+			requestidempotency.Field{
+				Name: "max_concurrent_tasks", Value: requestidempotency.Integer(int64(config.MaxConcurrentTasks)),
 			},
-			idempotentintent.Field{Name: "labels", Value: idempotentintent.Object(labelFields...)},
+			requestidempotency.Field{Name: "labels", Value: requestidempotency.Object(labelFields...)},
 		)),
 	})
 	if err != nil {
@@ -110,7 +110,7 @@ func (service *durableLocalAgentConfigIdempotency) ResolveExisting(
 	ctx context.Context,
 	locator etcd.IdempotencyLocator,
 	evidence localAgentConfigEvidence,
-) (idempotentintent.Resolution, bool, error) {
+) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
 }
 
@@ -118,7 +118,7 @@ func (service *durableLocalAgentConfigIdempotency) ResolveKnown(
 	ctx context.Context,
 	evidence localAgentConfigEvidence,
 	result etcd.IdempotencyTransactionResult,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
 }
 
@@ -127,7 +127,7 @@ func (service *durableLocalAgentConfigIdempotency) ResolveUnknown(
 	locator etcd.IdempotencyLocator,
 	evidence localAgentConfigEvidence,
 	original error,
-) (idempotentintent.Resolution, error) {
+) (requestidempotency.Resolution, error) {
 	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
 }
 
@@ -176,7 +176,7 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 		return localagent.ConfigUpdateResult{}, err
 	}
 	if found {
-		if resolution.Kind != idempotentintent.ResolutionReplay {
+		if resolution.Kind != requestidempotency.ResolutionReplay {
 			return localagent.ConfigUpdateResult{}, errs.New(
 				errs.KindInternal,
 				"Agent config replay resolution is invalid",
@@ -239,7 +239,7 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 		return localagent.ConfigUpdateResult{}, err
 	}
 	switch resolution.Kind {
-	case idempotentintent.ResolutionApplied:
+	case requestidempotency.ResolutionApplied:
 		stored, err := localAgentRecordFromDurable(updated)
 		if err != nil {
 			return localagent.ConfigUpdateResult{}, err
@@ -247,7 +247,7 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 		return localagent.ConfigUpdateResult{
 			Applied: true, Stored: stored, ResponseBody: append([]byte(nil), responseBody...),
 		}, nil
-	case idempotentintent.ResolutionReplay:
+	case requestidempotency.ResolutionReplay:
 		return localagent.ConfigUpdateResult{
 			ResponseBody: append([]byte(nil), resolution.Response.Body...),
 		}, nil
