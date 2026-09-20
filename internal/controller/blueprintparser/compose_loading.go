@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/compose-spec/compose-go/v2/loader"
 	"github.com/compose-spec/compose-go/v2/types"
+	"gopkg.in/yaml.v3"
 )
 
 func (p *parsePlan) sanitizedCompose(ctx context.Context, filename string) ([]byte, error) {
