@@ -63,6 +63,14 @@ after destructive descendant work merely because its current attempt failed.
 These are task-routed technical contracts; storage mechanisms do not authorize
 deleting a host, production data or anything outside the user's requested scope.
 
+Before publishing a parent deletion, admission checks descendant Projects and
+Environments at the same fixed revision as the parent. A descendant with a
+`deletion_task_id` blocks publication with `resource.in_use`, including failed
+attempts retained for Retry. Publication compares the existing ancestor
+coordination revisions, so a child deletion starting after that read also
+prevents the parent from committing. This prevents overlapping deletion owners;
+it does not repair previously accepted conflicting plans.
+
 ## Acceptance
 
 Prove slug boundaries and immediate old-label failure; no-op rename without

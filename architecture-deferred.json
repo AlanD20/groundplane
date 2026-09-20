@@ -117,7 +117,7 @@
   {
     "path": "internal/infra/etcd",
     "rule": "frozen-total-drift",
-    "message": "frozen total is 60604 lines but current direct production Go total is 105483"
+    "message": "frozen total is 60604 lines but current direct production Go total is 105575"
   },
   {
     "path": "internal/infra/etcd/attach_repository.go",

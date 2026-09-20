@@ -169,6 +169,10 @@ in [the debt record](issues/deferred-architecture-cleanup.md#custom-backing-hook
 The strict baseline, checker, unrelated findings and non-structural gates are
 unchanged. This exception is not runtime or production qualification.
 
+The owner separately approved the descendant deletion guard's 92 production
+lines on 2026-09-20, recorded in the same debt record. Only its exact etcd total
+changes; all other allowances and gates remain unchanged.
+
 `make architecture-check` remains the unmodified strict check; its original
 baseline and architecture requirements are unchanged. A passing release gate
 does not mean this debt is fixed or architecture compliance is qualified.

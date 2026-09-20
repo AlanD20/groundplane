@@ -44,12 +44,21 @@ entries are updated for this feature's code only. The now-under-limit app
 backing creation entry is removed; its replacement Attach mutation finding keeps
 the snapshot at 105 entries. All test-import allowances remain unchanged.
 
-Unrelated pending hierarchy-admission changes are excluded from this exception
-and the deployment source. The exact etcd total is therefore checked against
-the selected integration snapshot, not a dirty worktree containing those edits.
+Hierarchy-admission changes were excluded from the Custom hooks exception and
+its deployment source; the separate approval below covers their integration.
 `architecture-baseline.json` and both checker implementations remain unchanged.
 Build, behavior, secret safety and operator-journey checks remain required.
 Structural compliance remains deferred, not qualified.
+
+### Descendant deletion admission exception
+
+On 2026-09-20 the owner separately approved exactly 92 production lines for the
+descendant deletion guard: 83 in
+`internal/infra/etcd/hierarchy_deletion_descendant_admission.go` and nine in
+`internal/infra/etcd/hierarchy_deletion_publication.go`. The direct etcd total
+changes from 105483 to 105575. No other allowance, checker or baseline changes.
+This safety correction rejects overlapping parent/child deletion; it does not
+authorize recovery redesign, broad cleanup or repair of existing Task history.
 
 ### Historical accounting
 

@@ -111,6 +111,15 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 			Record: record, Revision: value.ModRevision, ReadRevision: result.ReadRevision,
 		}
 	}
+	if err := repository.requireHierarchyDeletionDescendantsAvailable(
+		ctx,
+		result.ReadRevision,
+		targetKind,
+		targetID,
+	); err != nil {
+		clear(root.targetValue)
+		return hierarchyDeletionRoot{}, 0, err
+	}
 	if err := repository.requireHierarchyVolumeRemovalAbsent(ctx, result.ReadRevision, targetKind, targetID); err != nil {
 		clear(root.targetValue)
 		return hierarchyDeletionRoot{}, 0, err
