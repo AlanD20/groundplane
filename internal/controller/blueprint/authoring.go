@@ -1,4 +1,4 @@
-package app
+package blueprint
 
 import (
 	"context"
@@ -26,14 +26,14 @@ type environmentBlueprintSnapshot struct {
 	hasHead     bool
 }
 
-func (repository *durableEnvironmentBlueprintRepository) GetService(
+func (repository *durableRepository) GetService(
 	ctx context.Context,
 	id string,
 ) (etcd.Versioned[etcd.ServiceRecord], error) {
 	return repository.services.GetService(ctx, id)
 }
 
-func (service *environmentBlueprintService) GetBlueprint(
+func (service *Service) GetBlueprint(
 	ctx context.Context,
 	environmentID string,
 ) (apiTypes.EnvironmentBlueprintDocument, error) {
@@ -56,7 +56,7 @@ func (service *environmentBlueprintService) GetBlueprint(
 	}, nil
 }
 
-func (service *environmentBlueprintService) ValidateBlueprint(
+func (service *Service) ValidateBlueprint(
 	ctx context.Context,
 	environmentID string,
 	bundle core.BlueprintBundle,
@@ -125,7 +125,7 @@ func (service *environmentBlueprintService) ValidateBlueprint(
 	}, nil
 }
 
-func (service *environmentBlueprintService) loadEnvironmentBlueprintSnapshot(
+func (service *Service) loadEnvironmentBlueprintSnapshot(
 	ctx context.Context,
 	environmentID string,
 ) (environmentBlueprintSnapshot, error) {
@@ -183,7 +183,7 @@ func environmentBlueprintRevision(
 	return head.Record.RevisionID
 }
 
-func (service *environmentBlueprintService) environmentBlueprintAuthoringDocument(
+func (service *Service) environmentBlueprintAuthoringDocument(
 	ctx context.Context,
 	snapshot environmentBlueprintSnapshot,
 ) (blueprintparser.AuthoringDocument, error) {
@@ -322,7 +322,7 @@ func environmentBlueprintAuthoringComponents(
 	return result, nil
 }
 
-func (service *environmentBlueprintService) environmentBlueprintAuthoringAttachments(
+func (service *Service) environmentBlueprintAuthoringAttachments(
 	ctx context.Context,
 	records []etcd.Versioned[etcd.AttachRecord],
 	serviceNames map[string]string,

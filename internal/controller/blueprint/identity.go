@@ -1,0 +1,126 @@
+package blueprint
+
+import (
+	"context"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"math"
+)
+
+func environmentBlueprintState(
+	environmentID string,
+	head etcd.Versioned[etcd.EnvironmentBlueprintHead],
+	hasHead bool,
+	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+	hasProjection bool,
+) (int64, controller.ComposeIdentitySnapshot, uint64, error) {
+	if hasHead != hasProjection {
+		return 0, controller.ComposeIdentitySnapshot{}, 0, errs.New(
+			errs.KindInternal,
+			"Environment desired-state pointers are inconsistent",
+		)
+	}
+	if !hasHead {
+		return 0, controller.ComposeIdentitySnapshot{}, 1, nil
+	}
+	if head.Record.EnvironmentID != environmentID || projection.Record.EnvironmentID != environmentID ||
+		head.Record.RevisionID != projection.Record.RevisionID || head.Revision <= 0 ||
+		projection.Revision != head.Revision || projection.Record.RenderGeneration == math.MaxUint64 {
+		return 0, controller.ComposeIdentitySnapshot{}, 0, errs.New(
+			errs.KindInternal,
+			"Environment desired-state pointers are corrupt",
+		)
+	}
+	snapshot, err := authoredComposeIdentitySnapshot(projection.Record)
+	if err != nil {
+		return 0, controller.ComposeIdentitySnapshot{}, 0, err
+	}
+	return head.Revision, snapshot, projection.Record.RenderGeneration + 1, nil
+}
+
+func authoredComposeIdentitySnapshot(
+	projection etcd.EnvironmentComposeProjection,
+) (controller.ComposeIdentitySnapshot, error) {
+	project, err := controller.LoadNormalizedEnvironmentProject(context.Background(), projection)
+	if err != nil {
+		return controller.ComposeIdentitySnapshot{}, err
+	}
+	authoredNames := make(map[string]struct{}, len(project.Services)+len(project.DisabledServices))
+	for name := range project.Services {
+		authoredNames[name] = struct{}{}
+	}
+	for name := range project.DisabledServices {
+		authoredNames[name] = struct{}{}
+	}
+	snapshot := controller.ComposeIdentitySnapshot{
+		Services: make([]controller.ComposeResourceIdentity, len(projection.DesiredServices)),
+		Networks: make([]controller.ComposeResourceIdentity, len(projection.DesiredZones)),
+		Volumes:  make([]controller.ComposeResourceIdentity, len(projection.Volumes)),
+	}
+	seenServiceIDs := make(map[string]string, len(projection.DesiredServices))
+	seenServiceNames := make(map[string]string, len(projection.DesiredServices))
+	for index, service := range projection.DesiredServices {
+		if service.EnvironmentID != projection.EnvironmentID ||
+			ids.Validate(ids.KindService, service.Desired.ID) != nil ||
+			service.Desired.Name == "" {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment desired projection has an invalid authored Service identity",
+			)
+		}
+		if name, duplicate := seenServiceIDs[service.Desired.ID]; duplicate && name != service.Desired.Name {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment desired projection repeats an authored Service id",
+			)
+		}
+		if serviceID, duplicate := seenServiceNames[service.Desired.Name]; duplicate &&
+			serviceID != service.Desired.ID {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment desired projection repeats an authored Service name",
+			)
+		}
+		if _, authored := authoredNames[service.Desired.Name]; !authored {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment desired Service is absent from normalized Compose",
+			)
+		}
+		delete(authoredNames, service.Desired.Name)
+		seenServiceIDs[service.Desired.ID] = service.Desired.Name
+		seenServiceNames[service.Desired.Name] = service.Desired.ID
+		snapshot.Services[index] = controller.ComposeResourceIdentity{
+			ID:   service.Desired.ID,
+			Name: service.Desired.Name,
+		}
+	}
+	if len(authoredNames) != 0 {
+		return controller.ComposeIdentitySnapshot{}, errs.New(
+			errs.KindInternal,
+			"Environment normalized Compose has no desired Service identity",
+		)
+	}
+	for index, zone := range projection.DesiredZones {
+		if zone.EnvironmentID != projection.EnvironmentID || ids.Validate(ids.KindNetwork, zone.Desired.ID) != nil ||
+			zone.Desired.Name == "" {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment desired projection has an invalid Zone identity",
+			)
+		}
+		snapshot.Networks[index] = controller.ComposeResourceIdentity{ID: zone.Desired.ID, Name: zone.Desired.Name}
+	}
+	for index, volume := range projection.Volumes {
+		if ids.Validate(ids.KindVolume, volume.ID) != nil || volume.Key == "" {
+			return controller.ComposeIdentitySnapshot{}, errs.New(
+				errs.KindInternal,
+				"Environment desired projection has an invalid Volume identity",
+			)
+		}
+		snapshot.Volumes[index] = controller.ComposeResourceIdentity{ID: volume.ID, Name: volume.Key}
+	}
+	return snapshot, nil
+}

@@ -1,4 +1,4 @@
-package app
+package blueprint
 
 import (
 	"context"
@@ -56,21 +56,21 @@ func (snapshot environmentBlueprintBackupPolicySnapshot) projection() *etcd.Envi
 	return result
 }
 
-func (repository *durableEnvironmentBlueprintRepository) PrepareEnvironmentBlueprintBackupPolicy(
+func (repository *durableRepository) PrepareEnvironmentBlueprintBackupPolicy(
 	ctx context.Context,
 	input etcd.EnvironmentBlueprintBackupPolicyInput,
 ) (etcd.BlueprintBackupPolicyPreparation, error) {
 	return repository.backups.PrepareEnvironmentBlueprintBackupPolicy(ctx, input)
 }
 
-func (repository *durableEnvironmentBlueprintRepository) ValidateEnvironmentBlueprintBackupPolicy(
+func (repository *durableRepository) ValidateEnvironmentBlueprintBackupPolicy(
 	ctx context.Context,
 	input etcd.EnvironmentBlueprintBackupPolicyInput,
 ) error {
 	return repository.backups.ValidateEnvironmentBlueprintBackupPolicy(ctx, input)
 }
 
-func (repository *durableEnvironmentBlueprintRepository) GetEnvironmentBlueprintBackupPolicySnapshot(
+func (repository *durableRepository) GetEnvironmentBlueprintBackupPolicySnapshot(
 	ctx context.Context,
 	environmentID string,
 	revision int64,
@@ -85,7 +85,7 @@ func (repository *durableEnvironmentBlueprintRepository) GetEnvironmentBlueprint
 	}, nil
 }
 
-func (service *environmentBlueprintService) prepareEnvironmentBlueprintBackup(
+func (service *Service) prepareEnvironmentBlueprintBackup(
 	ctx context.Context,
 	environmentID string,
 	taskID string,
@@ -166,7 +166,7 @@ func (service *environmentBlueprintService) prepareEnvironmentBlueprintBackup(
 	return prepared.Projection(), prepared, nil
 }
 
-func (service *environmentBlueprintService) validateEnvironmentBlueprintBackup(
+func (service *Service) validateEnvironmentBlueprintBackup(
 	ctx context.Context,
 	environmentID string,
 	readRevision int64,
@@ -231,7 +231,7 @@ func resolveEnvironmentBlueprintBackupTarget(
 	return "", errs.New(errs.KindValidationFailed, "Blueprint Backup source label was not found")
 }
 
-func (service *environmentBlueprintService) environmentBlueprintAuthoringBackup(
+func (service *Service) environmentBlueprintAuthoringBackup(
 	ctx context.Context,
 	snapshot environmentBlueprintSnapshot,
 	attaches []etcd.Versioned[etcd.AttachRecord],

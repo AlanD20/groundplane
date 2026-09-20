@@ -1,4 +1,4 @@
-package app
+package blueprint
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 )
 
-func (service *environmentBlueprintService) prepareBlueprintEntryValues(
+func (service *Service) prepareBlueprintEntryValues(
 	ctx context.Context,
 	generationService *entrygeneration.EntryGenerationService,
 	projectID string,

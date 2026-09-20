@@ -1,4 +1,4 @@
-package app
+package blueprint
 
 import (
 	"context"
@@ -56,7 +56,7 @@ func (prepared *preparedBlueprintAttaches) clear() {
 	etcd.ClearBlueprintAttachTaskPreparation(&prepared.publication)
 }
 
-func (service *environmentBlueprintService) prepareBlueprintAttaches(
+func (service *Service) prepareBlueprintAttaches(
 	ctx context.Context,
 	environmentID string,
 	taskID string,

@@ -20,6 +20,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/attachplanning"
 	"github.com/AlanD20/groundplane/internal/controller/backingservices"
 	"github.com/AlanD20/groundplane/internal/controller/backupkey"
+	"github.com/AlanD20/groundplane/internal/controller/blueprint"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
 	"github.com/AlanD20/groundplane/internal/controller/connectors"
@@ -951,7 +952,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize desired revision repository: %w", err)
 	}
-	environmentBlueprintRepository, err := newDurableEnvironmentBlueprintRepository(
+	environmentBlueprintRepository, err := blueprint.NewRepository(
 		environmentBlueprintRecords,
 		desiredRevisionRecords,
 		zoneRecords,
@@ -962,12 +963,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		attachRecords,
 		componentRecords,
 		scriptRecords,
+		backupPolicyRecords,
+		connectorRecords,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint repositories: %w", err)
 	}
-	environmentBlueprintRepository.backups, environmentBlueprintRepository.connectors = backupPolicyRecords, connectorRecords
 	entryDesiredMutations, err := entryoperations.NewDesiredMutationService(
 		cfg.Storage.VolumeRoot, environmentBlueprintRepository, entryGeneration, materializationResolver,
 		entryCreationIdempotency, entryEditIdempotency, entryRemovalIdempotency, planResolver, hierarchyRecords,
@@ -994,16 +996,16 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Release Group Blueprint planner: %w", err)
 	}
-	environmentBlueprints, err := newEnvironmentBlueprintService(
+	environmentBlueprints, err := blueprint.NewService(
 		cfg.Storage.VolumeRoot, cfg.EnvironmentPool,
 		environmentBlueprintRepository, environmentBlueprintIdempotency, materializationResolver,
 		releaseGroupBlueprints, blueprintReleases, entryGeneration, attachFactValues, componentCatalog,
+		environmentBlueprintRepository, backupPolicyKeys,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Environment Blueprint service: %w", err)
 	}
-	environmentBlueprints.backups, environmentBlueprints.backupKeys = environmentBlueprintRepository, backupPolicyKeys
 	backingServiceCreations, err := backingservices.NewCreationService(
 		cfg.Storage.VolumeRoot,
 		runnerPools.Environment,
