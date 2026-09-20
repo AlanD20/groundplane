@@ -67,6 +67,16 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionIndexedDe
 	primary *KeyValue,
 	indexKeys []string,
 ) (hierarchyDeletionControllerEffects, error) {
+	conditions := []Condition{{Key: primary.Key, ModRevision: primary.ModRevision}}
+	mutations := make([]Mutation, 0, len(indexKeys)+1)
+	if len(indexKeys) == 0 {
+		mutations = append(mutations, Mutation{Type: MutationDelete, Key: primary.Key})
+		return hierarchyDeletionControllerEffects{
+			fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value),
+			conditions:       conditions,
+			mutations:        mutations,
+		}, nil
+	}
 	indexes, err := repository.store.GetMany(ctx, GetManyRequest{Keys: indexKeys})
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
@@ -78,8 +88,6 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionIndexedDe
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
 	defer clearKeyValues(indexes.Values)
-	conditions := []Condition{{Key: primary.Key, ModRevision: primary.ModRevision}}
-	mutations := make([]Mutation, 0, len(indexKeys)+1)
 	for index, key := range indexKeys {
 		value := indexes.Values[index]
 		if value == nil || value.Key != key || (index < 2 && string(value.Value) != action.TargetID) {

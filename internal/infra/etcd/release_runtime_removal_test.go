@@ -3,11 +3,26 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 )
+
+type rejectEmptyHierarchyMultiGetStore struct {
+	hierarchyDeletionStore
+}
+
+func (store rejectEmptyHierarchyMultiGetStore) GetMany(
+	ctx context.Context,
+	request GetManyRequest,
+) (*GetManyResult, error) {
+	if len(request.Keys) == 0 {
+		return nil, errors.New("empty multi-get")
+	}
+	return store.hierarchyDeletionStore.GetMany(ctx, request)
+}
 
 // Rationale: ancestor deletion uses a separate Service finalizer. Removing its
 // runtime metadata must remove the new current receipt in the same transaction
@@ -39,7 +54,9 @@ func TestReleaseRuntimeReceiptRemovedWithHierarchyService(t *testing.T) {
 	if err != nil || !seed.Succeeded {
 		t.Fatal("seed Service runtime")
 	}
-	repository := &HierarchyDeletionRepository{store: f.store}
+	repository := &HierarchyDeletionRepository{store: rejectEmptyHierarchyMultiGetStore{
+		hierarchyDeletionStore: f.store,
+	}}
 	effects, err := repository.prepareHierarchyDeletionServiceFinalizer(ctx, HierarchyDeletionAction{
 		TargetID: member.ServiceID, TargetRevision: seed.Revision, ActionKind: HierarchyDeletionServiceRemove,
 	})
