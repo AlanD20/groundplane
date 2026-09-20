@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/AlanD20/groundplane/internal/controller"
+	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -17,7 +18,7 @@ type volumeEvidenceStore interface {
 func configureVolumeMutationPlans(
 	volumeRoot string, repository volume.MutationRepository, coordinator *requestidempotency.Coordinator,
 	idempotency *etcd.IdempotencyRepository, reads *volume.ReadService, policies *etcd.BackupPolicyRepository,
-	store volumeEvidenceStore, plans *controller.TaskPlanResolver, channel *agentChannelRuntime,
+	store volumeEvidenceStore, plans *controller.TaskPlanResolver, channel *channeltransport.Runtime,
 ) (*volume.MutationService, error) {
 	evidence, err := volumeremoval.NewEvidenceRepository(store)
 	if err != nil {
@@ -34,6 +35,6 @@ func configureVolumeMutationPlans(
 	if err != nil {
 		return nil, err
 	}
-	channel.volumeCheckpoints = checkpoints
+	channel.VolumeCheckpoints = checkpoints
 	return volume.NewMutationService(volumeRoot, repository, coordinator, idempotency, reads, policies, evidence)
 }

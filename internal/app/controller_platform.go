@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	"github.com/AlanD20/groundplane/internal/controller/agentmanagement"
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -36,7 +37,7 @@ type controllerPlatformDependencies struct {
 	Tasks         *etcd.TaskRepository
 	Intents       *requestidempotency.Coordinator
 	Idempotency   *etcd.IdempotencyRepository
-	Channel       *agentChannelRuntime
+	Channel       *channeltransport.Runtime
 	EtcdEndpoints []string
 	Tick          time.Duration
 	Logger        *slog.Logger
@@ -78,11 +79,11 @@ func newControllerPlatform(
 	if err != nil {
 		return nil, err
 	}
-	sessions, err := agentruntime.NewSessions(dependencies.Channel.registry)
+	sessions, err := agentruntime.NewSessions(dependencies.Channel.Registry)
 	if err != nil {
 		return nil, err
 	}
-	work, err := agentruntime.NewTasks(dependencies.Tasks, dependencies.Channel.registry)
+	work, err := agentruntime.NewTasks(dependencies.Tasks, dependencies.Channel.Registry)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +142,7 @@ func newControllerPlatform(
 		catalog = releases
 		native, err := controllerupgrade.NewCoordinator(controllerupgrade.Dependencies{
 			Journal: releases, Unit: unit, Agents: platform.agents, Work: work,
-			Sessions: dependencies.Channel.registry, Readiness: platform.readiness,
+			Sessions: dependencies.Channel.Registry, Readiness: platform.readiness,
 			ProcessDigest: process, Logger: dependencies.Logger,
 		})
 		if err != nil {
@@ -217,6 +218,6 @@ func newControllerPlatform(
 	if err != nil {
 		return nil, err
 	}
-	dependencies.Channel.onReady = platform.readiness.MarkChannelReady
+	dependencies.Channel.OnReady = platform.readiness.MarkChannelReady
 	return platform, nil
 }

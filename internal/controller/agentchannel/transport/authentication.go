@@ -1,4 +1,4 @@
-package app
+package transport
 
 import (
 	"context"
@@ -23,7 +23,7 @@ type agentChannelAuthenticator struct {
 	resolver agentChannelCredentialResolver
 }
 
-func newAgentChannelAuthenticator(
+func NewAuthenticator(
 	resolver agentChannelCredentialResolver,
 ) (*agentChannelAuthenticator, error) {
 	if resolver == nil {

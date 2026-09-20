@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	taskdispatch "github.com/AlanD20/groundplane/internal/controller/controllertask/dispatch"
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
 	"log/slog"
@@ -244,7 +245,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize local Agent repository: %w", err)
 	}
-	authenticator, err := newAgentChannelAuthenticator(agents)
+	authenticator, err := channeltransport.NewAuthenticator(agents)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Agent channel authenticator: %w", err)
@@ -570,19 +571,19 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Platform Component plan resolver: %w", err)
 	}
-	agentRuntime := newAgentChannelRuntimeWithManagedConfigAndScripts(
+	agentRuntime := channeltransport.New(
 		authenticator, tasks, planResolver, materializationResolver, backupSecrets, backupCheckpoints,
 		platformComponentExecution, scriptArtifacts, scriptCheckpoints, backingHookCheckpoints,
 	)
 	blueprintReleases, err := blueprintrelease.NewService(
 		releaseLedger, scriptRecords, planResolver, scriptArtifacts, scriptSourceReferences,
-		agents, agentRuntime.registry,
+		agents, agentRuntime.Registry,
 	)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Blueprint candidate-release service: %w", err)
 	}
-	staleTasks, err := agentruntime.NewStaleTaskMaintenance(agents, agentRuntime.registry, tasks)
+	staleTasks, err := agentruntime.NewStaleTaskMaintenance(agents, agentRuntime.Registry, tasks)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize stale Agent task maintenance: %w", err)
@@ -626,7 +627,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	releaseOperations, err := releaseoperation.NewService(
 		releaseLedger, serviceRecords, releaseGroups, idempotency, intentCoordinator,
 		planResolver, scriptRecords, scriptArtifacts, releaseExecutionTimeout,
-		agents, agentRuntime.registry,
+		agents, agentRuntime.Registry,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -779,7 +780,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	scriptPreparation, err := controller.NewScriptRunnerPreparationService(
 		scriptArtifacts,
 		agents,
-		agentRuntime.registry,
+		agentRuntime.Registry,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -1171,21 +1172,21 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	controllerTaskRunner, err := newControllerTaskRuntime(
 		ctx, tasks, controllerTaskHandler, backupKeys, hierarchyDeletions,
-		platform.agents, agentRuntime.registry, platform.native, tick, logger,
+		platform.agents, agentRuntime.Registry, platform.native, tick, logger,
 	)
 	if err != nil {
 		_ = platform.Close()
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Controller Task runner: %w", err)
 	}
-	taskAborts, err := taskoperations.NewAbortService(tasks, agentRuntime.registry, controllerTaskRunner)
+	taskAborts, err := taskoperations.NewAbortService(tasks, agentRuntime.Registry, controllerTaskRunner)
 	if err != nil {
 		_ = platform.Close()
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task abort service: %w", err)
 	}
 	serviceReads, err := newServiceReadResources(
-		hierarchyRecords, serviceRecords, zoneRecords, releaseLedger, agents, agentRuntime.registry,
+		hierarchyRecords, serviceRecords, zoneRecords, releaseLedger, agents, agentRuntime.Registry,
 	)
 	if err != nil {
 		// Preserve the initialization error; cleanup is best-effort.
@@ -1246,7 +1247,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		TaskMutations:         taskMutations,
 		TaskAborts:            taskAborts,
 		ControllerTaskWake:    controllerTaskRunner.Wake,
-		AgentTaskWake:         agentRuntime.registry.WakeTaskDispatch,
+		AgentTaskWake:         agentRuntime.Registry.WakeTaskDispatch,
 		TenantMutations:       tenantMutations,
 		TenantChanges:         tenantChanges,
 		Console:               consoleAssets, Tasks: tasks, Logs: serviceReads.logs,

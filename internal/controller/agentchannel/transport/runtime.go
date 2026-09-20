@@ -1,4 +1,4 @@
-package app
+package transport
 
 import (
 	"context"
@@ -19,12 +19,12 @@ const (
 	agentChannelControllerMaximumSendMessageBytes    = 5 * 1024 * 1024
 )
 
-type agentChannelRuntime struct {
-	registry          *agentchannel.Registry
+type Runtime struct {
+	Registry          *agentchannel.Registry
 	listen            func(context.Context) (net.Listener, error)
 	newServer         func(*agentchannel.Registry) agentChannelGRPCServer
-	volumeCheckpoints agentchannel.VolumeRemovalCheckpointer
-	onReady           func()
+	VolumeCheckpoints agentchannel.VolumeRemovalCheckpointer
+	OnReady           func()
 }
 
 type agentChannelGRPCServer interface {
@@ -32,34 +32,7 @@ type agentChannelGRPCServer interface {
 	Stop()
 }
 
-func newAgentChannelRuntime(
-	authenticator agentchannel.Authenticator,
-	tasks agentchannel.TaskStore,
-	plans agentchannel.PlanResolver,
-	materials agentchannel.MaterializationResolver,
-	secrets agentchannel.BackupSecretSlotResolver,
-	checkpoints agentchannel.BackupCheckpointer,
-) *agentChannelRuntime {
-	return newAgentChannelRuntimeWithManagedConfig(
-		authenticator, tasks, plans, materials, secrets, checkpoints, nil,
-	)
-}
-
-func newAgentChannelRuntimeWithManagedConfig(
-	authenticator agentchannel.Authenticator,
-	tasks agentchannel.TaskStore,
-	plans agentchannel.PlanResolver,
-	materials agentchannel.MaterializationResolver,
-	secrets agentchannel.BackupSecretSlotResolver,
-	checkpoints agentchannel.BackupCheckpointer,
-	managed agentchannel.ManagedConfigResolver,
-) *agentChannelRuntime {
-	return newAgentChannelRuntimeWithManagedConfigAndScripts(
-		authenticator, tasks, plans, materials, secrets, checkpoints, managed, nil, nil, nil,
-	)
-}
-
-func newAgentChannelRuntimeWithManagedConfigAndScripts(
+func New(
 	authenticator agentchannel.Authenticator,
 	tasks agentchannel.TaskStore,
 	plans agentchannel.PlanResolver,
@@ -70,8 +43,8 @@ func newAgentChannelRuntimeWithManagedConfigAndScripts(
 	scripts agentchannel.ScriptArtifactResolver,
 	scriptCheckpoints agentchannel.ScriptCheckpointer,
 	backingHookCheckpoints agentchannel.BackingHookCheckpointer,
-) *agentChannelRuntime {
-	runtime := &agentChannelRuntime{registry: agentchannel.NewRegistry(), listen: agentlistener.Listen}
+) *Runtime {
+	runtime := &Runtime{Registry: agentchannel.NewRegistry(), listen: agentlistener.Listen}
 	runtime.newServer = func(registry *agentchannel.Registry) agentChannelGRPCServer {
 		server := grpc.NewServer(
 			grpc.MaxRecvMsgSize(agentChannelControllerMaximumReceiveMessageBytes),
@@ -79,7 +52,7 @@ func newAgentChannelRuntimeWithManagedConfigAndScripts(
 		)
 		channel := agentchannel.NewWithScriptRuntimeServices(
 			authenticator, registry, tasks, plans, materials, secrets, checkpoints, managed,
-			scripts, scriptCheckpoints, runtime.volumeCheckpoints,
+			scripts, scriptCheckpoints, runtime.VolumeCheckpoints,
 		)
 		if backingHookCheckpoints != nil {
 			_ = channel.EnableBackingHookCheckpoints(backingHookCheckpoints)
@@ -90,14 +63,14 @@ func newAgentChannelRuntimeWithManagedConfigAndScripts(
 	return runtime
 }
 
-func (runtime *agentChannelRuntime) Run(ctx context.Context) (resultErr error) {
+func (runtime *Runtime) Run(ctx context.Context) (resultErr error) {
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "agent channel context is required")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil
 	}
-	if runtime == nil || runtime.registry == nil || runtime.listen == nil || runtime.newServer == nil {
+	if runtime == nil || runtime.Registry == nil || runtime.listen == nil || runtime.newServer == nil {
 		return errs.New(errs.KindInternal, "agent channel runtime is not configured")
 	}
 
@@ -105,14 +78,14 @@ func (runtime *agentChannelRuntime) Run(ctx context.Context) (resultErr error) {
 	if err != nil {
 		return agentChannelRuntimeError(ctx, "listen", err)
 	}
-	owned := &ownedAgentListener{Listener: listener, onReady: runtime.onReady}
+	owned := &ownedAgentListener{Listener: listener, onReady: runtime.OnReady}
 	defer func() {
 		if closeErr := owned.Close(); closeErr != nil {
 			resultErr = preferAgentChannelCleanup(resultErr, closeErr)
 		}
 	}()
 
-	server := runtime.newServer(runtime.registry)
+	server := runtime.newServer(runtime.Registry)
 	if server == nil {
 		return errs.New(errs.KindInternal, "agent channel gRPC server is not configured")
 	}
