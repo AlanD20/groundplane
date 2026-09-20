@@ -1,4 +1,4 @@
-package app
+package host
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/localdiag"
 	"github.com/AlanD20/groundplane/internal/controller"
+	"github.com/AlanD20/groundplane/internal/controller/agentmanagement"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -21,7 +22,7 @@ import (
 const (
 	hostEtcdNodeLabel   = "single-node"
 	hostUnavailable     = "unavailable"
-	hostControllerUnit  = "groundplane-controller.service"
+	ControllerUnit      = "groundplane-controller.service"
 	hostMaximumPercent  = 100
 	hostBinaryUnitScale = 1024
 )
@@ -30,12 +31,16 @@ type hostDockerVersionSource interface {
 	DockerVersion(ctx context.Context) (string, error)
 }
 
-type hostSystemSnapshotSource struct {
+type SystemSource struct {
 	system hoststats.Source
 	docker hostDockerVersionSource
 }
 
-func (source *hostSystemSnapshotSource) SystemSnapshot(ctx context.Context) (controller.SystemSnapshot, error) {
+func NewSystemSource(system hoststats.Source, docker hostDockerVersionSource) *SystemSource {
+	return &SystemSource{system: system, docker: docker}
+}
+
+func (source *SystemSource) SystemSnapshot(ctx context.Context) (controller.SystemSnapshot, error) {
 	if source == nil || source.system == nil || source.docker == nil {
 		return controller.SystemSnapshot{}, errs.New(errs.KindInternal, "host system source is incomplete")
 	}
@@ -69,12 +74,16 @@ func (source *hostSystemSnapshotSource) SystemSnapshot(ctx context.Context) (con
 
 type hostEtcdProbe func(context.Context, []string) ([]localdiag.EtcdEndpoint, error)
 
-type hostEtcdSnapshotSource struct {
+type EtcdSource struct {
 	endpoints []string
 	probe     hostEtcdProbe
 }
 
-func (source *hostEtcdSnapshotSource) EtcdSnapshot(ctx context.Context) (controller.EtcdSnapshot, error) {
+func NewEtcdSource(endpoints []string, probe hostEtcdProbe) *EtcdSource {
+	return &EtcdSource{endpoints: append([]string(nil), endpoints...), probe: probe}
+}
+
+func (source *EtcdSource) EtcdSnapshot(ctx context.Context) (controller.EtcdSnapshot, error) {
 	if source == nil || len(source.endpoints) == 0 || source.probe == nil {
 		return controller.EtcdSnapshot{}, errs.New(errs.KindInternal, "host etcd source is incomplete")
 	}
@@ -121,12 +130,16 @@ type hostAgentHealthSource interface {
 	ListHealth(ctx context.Context) ([]localagent.Health, error)
 }
 
-type hostAgentSnapshotSource struct {
+type AgentSource struct {
 	health   hostAgentHealthSource
 	fallback localagent.Config
 }
 
-func (source *hostAgentSnapshotSource) AgentSnapshot(ctx context.Context) (controller.AgentSnapshot, error) {
+func NewAgentSource(health hostAgentHealthSource, fallback localagent.Config) *AgentSource {
+	return &AgentSource{health: health, fallback: fallback}
+}
+
+func (source *AgentSource) AgentSnapshot(ctx context.Context) (controller.AgentSnapshot, error) {
 	if source == nil || source.health == nil {
 		return controller.AgentSnapshot{}, errs.New(errs.KindInternal, "host Agent source is incomplete")
 	}
@@ -140,7 +153,7 @@ func (source *hostAgentSnapshotSource) AgentSnapshot(ctx context.Context) (contr
 	if len(health) == 0 {
 		return hostAgentConfigSnapshot(apiTypes.HealthStopped, source.fallback), nil
 	}
-	status, err := projectAgentStatus(health[0])
+	status, err := agentmanagement.ProjectStatus(health[0])
 	if err != nil {
 		return controller.AgentSnapshot{}, err
 	}

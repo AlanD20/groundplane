@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	taskdispatch "github.com/AlanD20/groundplane/internal/controller/controllertask/dispatch"
 	"log/slog"
 	"os"
 	"time"
@@ -32,6 +33,7 @@ import (
 	hierarchycontroller "github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	networkcontroller "github.com/AlanD20/groundplane/internal/controller/network"
+	"github.com/AlanD20/groundplane/internal/controller/releasegroup"
 	releaseoperation "github.com/AlanD20/groundplane/internal/controller/releaseoperation"
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
 	scriptoperations "github.com/AlanD20/groundplane/internal/controller/scripts"
@@ -608,7 +610,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Runner removal service: %w", err)
 	}
-	releaseGroupMutations, err := newReleaseGroupMutationService(
+	releaseGroupMutations, err := releasegroup.NewMutationService(
 		releaseGroups, hierarchyRecords, tasks, idempotency, intentCoordinator,
 	)
 	if err != nil {
@@ -1155,7 +1157,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Runner lifecycle: %w", err)
 	}
-	controllerTaskHandler, err := newControllerTaskHandler(
+	controllerTaskHandler, err := taskdispatch.NewResourceHandler(
 		platform.agents,
 		backingZoneCascades,
 		runnerRecords,

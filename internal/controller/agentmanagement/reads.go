@@ -98,7 +98,7 @@ func (service *ReadService) projectAgent(
 	ctx context.Context,
 	health localagent.Health,
 ) (apiTypes.Agent, error) {
-	status, err := projectAgentStatus(health)
+	status, err := ProjectStatus(health)
 	if err != nil {
 		return apiTypes.Agent{}, err
 	}
@@ -134,7 +134,7 @@ func (service *ReadService) projectAgent(
 	return agent, nil
 }
 
-func projectAgentStatus(health localagent.Health) (apiTypes.AgentStatus, error) {
+func ProjectStatus(health localagent.Health) (apiTypes.AgentStatus, error) {
 	switch health.Agent.Phase {
 	case localagent.PhaseProvisioning, localagent.PhaseUpdating:
 		return apiTypes.AgentPending, nil

@@ -15,6 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/controllerupgrade"
+	"github.com/AlanD20/groundplane/internal/controller/host"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
@@ -205,14 +206,11 @@ func newControllerPlatform(
 		return nil, err
 	}
 	platform.host, err = controller.NewHostService(controller.HostDependencies{
-		System: &hostSystemSnapshotSource{system: hoststats.New(), docker: container},
-		Etcd: &hostEtcdSnapshotSource{
-			endpoints: append([]string(nil), dependencies.EtcdEndpoints...),
-			probe:     etcd.ProbeEndpoints,
-		},
-		Agent:             &hostAgentSnapshotSource{health: platform.agents, fallback: defaults},
+		System:            host.NewSystemSource(hoststats.New(), container),
+		Etcd:              host.NewEtcdSource(dependencies.EtcdEndpoints, etcd.ProbeEndpoints),
+		Agent:             host.NewAgentSource(platform.agents, defaults),
 		Updates:           platform.upgrades,
-		ControllerService: hostControllerUnit, ControllerVersion: version.Value,
+		ControllerService: host.ControllerUnit, ControllerVersion: version.Value,
 	})
 	if err != nil {
 		return nil, err

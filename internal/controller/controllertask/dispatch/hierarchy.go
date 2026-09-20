@@ -1,4 +1,4 @@
-package app
+package dispatch
 
 import (
 	"context"
@@ -13,26 +13,26 @@ type controllerTaskExecutor interface {
 	Execute(context.Context, etcd.TaskRecord) error
 }
 
-type hierarchyDeletionTaskExecutor interface {
+type HierarchyExecutor interface {
 	Execute(context.Context, string) error
 }
 
-type hierarchyDeletionTaskDispatcher struct {
+type HierarchyDispatcher struct {
 	fallback  controllerTaskExecutor
-	deletions hierarchyDeletionTaskExecutor
+	deletions HierarchyExecutor
 }
 
-func newHierarchyDeletionTaskDispatcher(
+func NewHierarchyDispatcher(
 	fallback controllerTaskExecutor,
-	deletions hierarchyDeletionTaskExecutor,
-) (*hierarchyDeletionTaskDispatcher, error) {
+	deletions HierarchyExecutor,
+) (*HierarchyDispatcher, error) {
 	if fallback == nil || deletions == nil {
 		return nil, errs.New(errs.KindInternal, "hierarchy deletion Task dispatcher dependencies are required")
 	}
-	return &hierarchyDeletionTaskDispatcher{fallback: fallback, deletions: deletions}, nil
+	return &HierarchyDispatcher{fallback: fallback, deletions: deletions}, nil
 }
 
-func (dispatcher *hierarchyDeletionTaskDispatcher) Execute(
+func (dispatcher *HierarchyDispatcher) Execute(
 	ctx context.Context,
 	task etcd.TaskRecord,
 ) error {

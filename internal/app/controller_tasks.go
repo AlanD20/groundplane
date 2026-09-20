@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	taskdispatch "github.com/AlanD20/groundplane/internal/controller/controllertask/dispatch"
 	"log/slog"
 	"time"
 
@@ -17,9 +18,9 @@ import (
 func newControllerTaskRuntime(
 	ctx context.Context,
 	tasks *etcd.TaskRepository,
-	handler *controllerTaskHandler,
+	handler *taskdispatch.ResourceHandler,
 	keys *backupkey.Service,
-	hierarchy hierarchyDeletionTaskExecutor,
+	hierarchy taskdispatch.HierarchyExecutor,
 	agents *localagent.Manager,
 	sessions *agentchannel.Registry,
 	native controllertask.UpdateExecutor,
@@ -38,7 +39,7 @@ func newControllerTaskRuntime(
 	if err != nil {
 		return nil, err
 	}
-	deletions, err := newHierarchyDeletionTaskDispatcher(rotations, hierarchy)
+	deletions, err := taskdispatch.NewHierarchyDispatcher(rotations, hierarchy)
 	if err != nil {
 		return nil, err
 	}

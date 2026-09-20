@@ -1,4 +1,4 @@
-package app
+package releasegroup
 
 import (
 	"context"
@@ -27,7 +27,7 @@ const (
 	releaseGroupMutationTries = 3
 )
 
-type releaseGroupMutationService struct {
+type MutationService struct {
 	groups      *etcdreleasegroup.Store
 	hierarchy   *etcd.HierarchyRepository
 	tasks       *etcd.TaskRepository
@@ -36,23 +36,23 @@ type releaseGroupMutationService struct {
 	now         func() time.Time
 }
 
-func newReleaseGroupMutationService(
+func NewMutationService(
 	groups *etcdreleasegroup.Store,
 	hierarchy *etcd.HierarchyRepository,
 	tasks *etcd.TaskRepository,
 	idempotency *etcd.IdempotencyRepository,
 	coordinator *requestidempotency.Coordinator,
-) (*releaseGroupMutationService, error) {
+) (*MutationService, error) {
 	if groups == nil || hierarchy == nil || tasks == nil || idempotency == nil || coordinator == nil {
 		return nil, errs.New(errs.KindInternal, "release group mutation dependencies are not configured")
 	}
-	return &releaseGroupMutationService{
+	return &MutationService{
 		groups: groups, hierarchy: hierarchy, tasks: tasks, idempotency: idempotency,
 		coordinator: coordinator, now: time.Now,
 	}, nil
 }
 
-func (service *releaseGroupMutationService) AddReleaseGroup(
+func (service *MutationService) AddReleaseGroup(
 	ctx context.Context, request apiTypes.ReleaseGroupAddRequest, key string,
 ) (etcd.IdempotencyResponse, error) {
 	group, err := domain.New(domain.Input{
@@ -67,7 +67,7 @@ func (service *releaseGroupMutationService) AddReleaseGroup(
 	return service.apply(ctx, key, http.MethodPost, releaseGroupAddRoute, group.EnvironmentID, nil, group, body)
 }
 
-func (service *releaseGroupMutationService) EditReleaseGroup(
+func (service *MutationService) EditReleaseGroup(
 	ctx context.Context, groupID string, request apiTypes.ReleaseGroupEditRequest, key string,
 ) (etcd.IdempotencyResponse, error) {
 	if ids.Validate(ids.KindReleaseGroup, groupID) != nil {
@@ -142,7 +142,7 @@ func (service *releaseGroupMutationService) EditReleaseGroup(
 	)
 }
 
-func (service *releaseGroupMutationService) RemoveReleaseGroup(
+func (service *MutationService) RemoveReleaseGroup(
 	ctx context.Context, groupID string, key string,
 ) (etcd.IdempotencyResponse, error) {
 	if ids.Validate(ids.KindReleaseGroup, groupID) != nil {
@@ -178,7 +178,7 @@ func (service *releaseGroupMutationService) RemoveReleaseGroup(
 	)
 }
 
-func (service *releaseGroupMutationService) apply(
+func (service *MutationService) apply(
 	ctx context.Context, key, method, route, environmentID string,
 	current *etcdreleasegroup.Versioned, desired domain.Group, body requestidempotency.Body,
 ) (etcd.IdempotencyResponse, error) {
@@ -346,7 +346,7 @@ func releaseGroupAPIResponse(group domain.Group) apiTypes.ReleaseGroup {
 	}
 }
 
-func (service *releaseGroupMutationService) replay(
+func (service *MutationService) replay(
 	ctx context.Context, locator etcd.IdempotencyLocator, groupID string, body requestidempotency.Body,
 ) (etcd.IdempotencyResponse, error) {
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
