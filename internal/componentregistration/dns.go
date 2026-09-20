@@ -1,4 +1,4 @@
-package app
+package componentregistration
 
 import (
 	"github.com/AlanD20/groundplane-component-sdk/dnsresolver"
@@ -18,7 +18,7 @@ func registeredCoreDNSRenderer() (dnsresolver.Renderer, error) {
 	return registeredcoredns.Renderer{}, nil
 }
 
-func newRegisteredCoreDNSManagedConfigProjector(
+func NewDNSManagedConfigProjector(
 	projections controllerdns.PlatformProjectionReader,
 	baselines controllerdns.ResolverBaselineReader,
 ) (*controllerdns.ManagedConfigProjector, error) {

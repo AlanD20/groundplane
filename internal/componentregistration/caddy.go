@@ -1,4 +1,4 @@
-package app
+package componentregistration
 
 import (
 	"net/netip"
@@ -13,7 +13,7 @@ import (
 )
 
 func registeredCaddyEnvironmentComponent(
-	actionCatalog registeredActionCatalog,
+	actionCatalog Catalog,
 ) (controller.EnvironmentComponentRegistration, error) {
 	definition, err := registeredcaddy.Definition()
 	if err != nil {

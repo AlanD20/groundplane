@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/componentregistration"
 	"io"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"
@@ -17,7 +18,7 @@ func RunComposeHelper(ctx context.Context, input io.Reader, output io.Writer) er
 	if err != nil {
 		return err
 	}
-	catalog, err := newRegisteredActionCatalog()
+	catalog, err := componentregistration.NewCatalog()
 	if err != nil {
 		return err
 	}

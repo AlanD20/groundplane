@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/componentregistration"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	taskdispatch "github.com/AlanD20/groundplane/internal/controller/controllertask/dispatch"
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
@@ -121,7 +122,7 @@ type controllerEtcdLifecycle interface {
 // NewController constructs the Controller composition root.
 func NewController(ctx context.Context, configPath string) (*Controller, error) {
 	registerAdapters()
-	componentCatalog, err := registeredEnvironmentComponentCatalog()
+	componentCatalog, err := componentregistration.EnvironmentCatalog()
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize registered Components: %w", err)
 	}
@@ -458,7 +459,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize execution plan resolver: %w", err)
 	}
-	if err := configureReleasePlans(planResolver, releaseLedger); err != nil {
+	if err := componentregistration.ConfigureReleasePlans(planResolver, releaseLedger); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize release plan resolver: %w", err)
 	}
@@ -513,7 +514,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize CoreDNS renderer: %w", err)
 	}
-	actionCatalog, err := newRegisteredActionCatalog()
+	actionCatalog, err := componentregistration.NewCatalog()
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize registered Component action catalog: %w", err)
@@ -526,7 +527,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		coreDNSRenderer,
 		actionCatalog,
 		actionCatalog,
-		managedConfigActivateAction,
+		componentregistration.ManagedConfigActivateAction,
 	)
 	if err != nil {
 		_ = store.Close()

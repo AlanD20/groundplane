@@ -1,4 +1,4 @@
-package app
+package componentregistration
 
 import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -12,43 +12,43 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const managedConfigActivateAction = componentsdk.ActionID("activate-config")
+const ManagedConfigActivateAction = componentsdk.ActionID("activate-config")
 
-func configureReleasePlans(resolver *controller.TaskPlanResolver, ledger *etcd.ReleaseLedger) error {
+func ConfigureReleasePlans(resolver *controller.TaskPlanResolver, ledger *etcd.ReleaseLedger) error {
 	if err := resolver.EnableServiceProxyImage(registeredcaddy.Image); err != nil {
 		return err
 	}
 	return resolver.EnableReleasePlans(ledger)
 }
 
-type registeredActionCatalog struct {
+type Catalog struct {
 	catalog  registeredcatalog.Catalog
 	planners map[componentsdk.ImplementationKey]registeredComponentPlanner
 }
 
 type registeredComponentPlanner func(string, componentdns.RenderInput) (componentsdk.EnvironmentPlan, error)
 
-func newRegisteredActionCatalog() (registeredActionCatalog, error) {
+func NewCatalog() (Catalog, error) {
 	caddy, err := registeredcaddy.Definition()
 	if err != nil {
-		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
+		return Catalog{}, errs.Wrap(errs.KindInternal, err)
 	}
 	tunnel, err := registeredtunnel.Definition()
 	if err != nil {
-		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
+		return Catalog{}, errs.Wrap(errs.KindInternal, err)
 	}
 	coreDNS, err := registeredcoredns.Definition()
 	if err != nil {
-		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
+		return Catalog{}, errs.Wrap(errs.KindInternal, err)
 	}
 	coreDNSActivate, err := registeredcatalog.NewManagedConfigActionRecipe(
-		managedConfigActivateAction,
+		ManagedConfigActivateAction,
 		registeredcoredns.CorefileSource,
 		registeredcoredns.ValidateConfigCommand(),
 		registeredcoredns.Image,
 	)
 	if err != nil {
-		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
+		return Catalog{}, errs.Wrap(errs.KindInternal, err)
 	}
 	coreDNSObservation, err := registeredcatalog.NewDNSResolverObservationRecipe(
 		registeredcoredns.ObserveServingAction,
@@ -60,7 +60,7 @@ func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 		"coredns_reload_version_info",
 	)
 	if err != nil {
-		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
+		return Catalog{}, errs.Wrap(errs.KindInternal, err)
 	}
 	caddyActivate, err := registeredcatalog.NewContainerConfigActionRecipe(
 		registeredcaddy.ActivateConfigAction,
@@ -72,7 +72,7 @@ func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 		registeredcaddy.Image,
 	)
 	if err != nil {
-		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
+		return Catalog{}, errs.Wrap(errs.KindInternal, err)
 	}
 	compiled, err := registeredcatalog.NewRegistered(
 		registeredcatalog.Registration{
@@ -89,9 +89,9 @@ func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 		},
 	)
 	if err != nil {
-		return registeredActionCatalog{}, errs.Wrap(errs.KindInternal, err)
+		return Catalog{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return registeredActionCatalog{
+	return Catalog{
 		catalog: compiled,
 		planners: map[componentsdk.ImplementationKey]registeredComponentPlanner{
 			coreDNS.Implementation(): func(serviceID string, input componentdns.RenderInput) (componentsdk.EnvironmentPlan, error) {
@@ -103,16 +103,16 @@ func newRegisteredActionCatalog() (registeredActionCatalog, error) {
 	}, nil
 }
 
-func (catalog registeredActionCatalog) Digest() [32]byte { return catalog.catalog.Digest() }
+func (catalog Catalog) Digest() [32]byte { return catalog.catalog.Digest() }
 
-func (catalog registeredActionCatalog) FindAction(
+func (catalog Catalog) FindAction(
 	implementation componentsdk.ImplementationKey,
 	action componentsdk.ActionID,
 ) (componentsdk.Definition, componentsdk.ActionDefinition, bool) {
 	return catalog.catalog.FindAction(implementation, action)
 }
 
-func (catalog registeredActionCatalog) FindActionByCapability(
+func (catalog Catalog) FindActionByCapability(
 	capability componentsdk.Capability,
 	actionID componentsdk.ActionID,
 ) (componentsdk.Definition, componentsdk.ActionDefinition, bool) {
@@ -132,7 +132,7 @@ func (catalog registeredActionCatalog) FindActionByCapability(
 	return componentsdk.Definition{}, componentsdk.ActionDefinition{}, false
 }
 
-func (catalog registeredActionCatalog) Plan(
+func (catalog Catalog) Plan(
 	implementation componentsdk.ImplementationKey,
 	serviceID string,
 	input componentdns.RenderInput,
@@ -154,7 +154,7 @@ func (catalog registeredActionCatalog) Plan(
 	return plan, nil
 }
 
-func (catalog registeredActionCatalog) ResolveManagedConfigActionEnvelope(
+func (catalog Catalog) ResolveManagedConfigActionEnvelope(
 	envelope componentsdk.ActionEnvelope,
 ) (
 	componentsdk.Definition,
@@ -170,7 +170,7 @@ func (catalog registeredActionCatalog) ResolveManagedConfigActionEnvelope(
 	return definition, action, recipe, nil
 }
 
-func (catalog registeredActionCatalog) ResolveActionEnvelope(
+func (catalog Catalog) ResolveActionEnvelope(
 	envelope componentsdk.ActionEnvelope,
 ) (componentsdk.Definition, componentsdk.ActionDefinition, error) {
 	definition, action, err := catalog.catalog.ResolveActionEnvelope(envelope)
@@ -180,7 +180,7 @@ func (catalog registeredActionCatalog) ResolveActionEnvelope(
 	return definition, action, nil
 }
 
-func (catalog registeredActionCatalog) ResolveContainerConfigActionEnvelope(
+func (catalog Catalog) ResolveContainerConfigActionEnvelope(
 	envelope componentsdk.ActionEnvelope,
 ) (
 	componentsdk.Definition,
@@ -196,7 +196,7 @@ func (catalog registeredActionCatalog) ResolveContainerConfigActionEnvelope(
 	return definition, action, recipe, nil
 }
 
-func (catalog registeredActionCatalog) ResolveDNSResolverObservationActionEnvelope(
+func (catalog Catalog) ResolveDNSResolverObservationActionEnvelope(
 	envelope componentsdk.ActionEnvelope,
 ) (
 	componentsdk.Definition,
@@ -212,8 +212,8 @@ func (catalog registeredActionCatalog) ResolveDNSResolverObservationActionEnvelo
 	return definition, action, recipe, nil
 }
 
-func registeredEnvironmentComponentCatalog() ([]controller.EnvironmentComponentRegistration, error) {
-	actionCatalog, err := newRegisteredActionCatalog()
+func EnvironmentCatalog() ([]controller.EnvironmentComponentRegistration, error) {
+	actionCatalog, err := NewCatalog()
 	if err != nil {
 		return nil, err
 	}

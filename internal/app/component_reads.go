@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/AlanD20/groundplane/internal/componentregistration"
 	"github.com/AlanD20/groundplane/internal/controller"
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -12,7 +13,7 @@ func newComponentReadService(
 	network *networketcd.Repository,
 	catalog []controller.EnvironmentComponentRegistration,
 ) (*componentcapability.ReadService, error) {
-	platform, err := newRegisteredCoreDNSManagedConfigProjector(components, components)
+	platform, err := componentregistration.NewDNSManagedConfigProjector(components, components)
 	if err != nil {
 		return nil, err
 	}

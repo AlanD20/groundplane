@@ -1,4 +1,4 @@
-package app
+package componentregistration
 
 import (
 	"github.com/AlanD20/groundplane-component-sdk/component"
@@ -10,7 +10,7 @@ import (
 )
 
 func registeredCloudflareTunnelEnvironmentComponent(
-	actionCatalog registeredActionCatalog,
+	actionCatalog Catalog,
 ) (controller.EnvironmentComponentRegistration, error) {
 	definition, err := registeredtunnel.Definition()
 	if err != nil {

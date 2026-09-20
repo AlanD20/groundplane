@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/componentregistration"
 	"io"
 	"log/slog"
 	"os"
@@ -139,7 +140,7 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 			errors.Join(materializerHelper.Close(), directoryHelper.Close(), resources.Close()),
 		)
 	}
-	actionCatalog, err := newRegisteredActionCatalog()
+	actionCatalog, err := componentregistration.NewCatalog()
 	if err != nil {
 		return nil, preferAgentComposeCleanup(
 			err,

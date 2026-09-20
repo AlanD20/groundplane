@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/AlanD20/groundplane/internal/componentregistration"
 	"runtime"
 
 	"github.com/AlanD20/groundplane/internal/agent"
@@ -9,7 +10,7 @@ import (
 )
 
 type composeHelperComponentCatalog struct {
-	catalog registeredActionCatalog
+	catalog componentregistration.Catalog
 }
 
 func (catalog composeHelperComponentCatalog) ResolveContainerConfigAction(
