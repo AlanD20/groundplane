@@ -70,6 +70,7 @@ type Service struct {
 	BackingNetworkID           string                       `json:"backing_network_id,omitempty"`
 	ServingReleaseID           string                       `json:"serving_release_id,omitempty"`
 	CurrentSuccessfulReleaseID string                       `json:"current_successful_release_id,omitempty"`
+	Hooks                      *BackingHookConfiguration    `json:"hooks,omitempty"`
 }
 
 // ServiceDetail adds the lossless normalized native Compose source used by
@@ -96,15 +97,16 @@ type ServiceCreate struct {
 }
 
 type ServiceEdit struct {
-	Image       string             `json:"image"`
-	Zones       []string           `json:"zones"`
-	Strategy    string             `json:"strategy"`
-	OnFailure   OnFailure          `json:"on_failure"`
-	Healthcheck ServiceHealthcheck `json:"healthcheck"`
-	Resources   ServiceResources   `json:"resources"`
-	Expose      []string           `json:"expose"`
-	Restart     string             `json:"restart"`
-	Replicas    int                `json:"replicas"`
+	Image       string                    `json:"image"`
+	Zones       []string                  `json:"zones"`
+	Strategy    string                    `json:"strategy"`
+	OnFailure   OnFailure                 `json:"on_failure"`
+	Healthcheck ServiceHealthcheck        `json:"healthcheck"`
+	Resources   ServiceResources          `json:"resources"`
+	Expose      []string                  `json:"expose"`
+	Restart     string                    `json:"restart"`
+	Replicas    int                       `json:"replicas"`
+	Hooks       *BackingHookConfiguration `json:"hooks,omitempty"`
 }
 
 type ServiceObservationState string

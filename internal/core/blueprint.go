@@ -17,6 +17,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/dnsname"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 )
@@ -195,6 +196,14 @@ func (s Service) Validate() error {
 		}
 		if err := dependency.Validate(); err != nil {
 			return fmt.Errorf("dependency %q: %w", name, err)
+		}
+	}
+	if s.Hooks != nil {
+		if s.Adapter != "custom" {
+			return fmt.Errorf("backing hooks require the custom adapter")
+		}
+		if err := backinghook.ValidateConfiguration(*s.Hooks); err != nil {
+			return fmt.Errorf("backing hooks: %w", err)
 		}
 	}
 	return nil

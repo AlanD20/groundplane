@@ -75,7 +75,7 @@ func (resolver *TaskPlanResolver) blueprintAttachPlanCandidates(
 			}
 			candidate.adapterKey = adapter.Key()
 			candidate.authentication = authentication
-			if !adapter.Manual() && authentication != core.BackingAuthenticationNone {
+			if !adapter.Custom() && authentication != core.BackingAuthenticationNone {
 				candidate.stepCount = len(current.Record.GrantAttachIDs) + 1
 				totalSteps += candidate.stepCount
 			}
@@ -94,7 +94,7 @@ func blueprintAttachRecordEqual(left etcd.AttachRecord, right etcd.AttachRecord)
 		left.CreatedAt != right.CreatedAt ||
 		(left.GrantAttachIDs == nil) != (right.GrantAttachIDs == nil) ||
 		!slices.Equal(left.GrantAttachIDs, right.GrantAttachIDs) ||
-		(left.FactSets == nil) != (right.FactSets == nil) ||
+		left.HookBundle != right.HookBundle || (left.FactSets == nil) != (right.FactSets == nil) ||
 		len(left.FactSets) != len(right.FactSets) {
 		return false
 	}

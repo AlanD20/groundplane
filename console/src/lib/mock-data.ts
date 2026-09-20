@@ -86,14 +86,14 @@ export const adapters: Adapter[] = [
     ],
   },
   {
-    key: 'manual',
-    label: 'Manual',
+    key: 'custom',
+    label: 'Custom',
     prefix: '',
     urlScheme: '',
     requires: { database: false, role: false },
     envVars: [],
     provision: [],
-    manual: true,
+    custom: true,
   },
 ]
 

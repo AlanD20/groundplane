@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
@@ -68,18 +69,21 @@ type Step struct {
 	Stdin    []byte
 }
 
-// ProvisionParams contains the Controller-resolved identity transported by a
-// typed Agent procedure. The Agent passes it to the same compiled adapter.
-type ProvisionParams struct {
+// Input is the resolved provisioning context shared by built-in adapters and
+// operator hooks. Secrets are caller-owned mutable bytes.
+type Input struct {
+	Context        backinghook.Context
+	Values         []backinghook.Value
+	Facts          []backinghook.Value
 	Authentication core.BackingAuthentication
-	Database       string // <service-name>_<first-6-of-attach-id>
-	Role           string // same as Database in the MVP (one role per attach)
-	Password       []byte // Controller-generated, URL-safe; caller-owned and mutable
-	GrantOn        string // set only for grant steps: the OTHER attach's database
+	Database       string
+	Role           string
+	Password       []byte
+	GrantOn        string
+	Host           string
+	Port           string
 }
 
-// BackupStrategy names the dump/restore commands the adapter's steps
-// wrap. Advisory metadata; the actual Step sequence is what executes.
 type BackupStrategy struct {
 	Dump    string
 	Restore string
@@ -103,41 +107,23 @@ type FactDefinition struct {
 	Secret bool
 }
 
-// FactParams is the complete resolved identity used to render one own or
-// granted Attach fact set. Password remains caller-owned mutable bytes.
-type FactParams struct {
-	Authentication core.BackingAuthentication
-	Host           string
-	Port           string
-	Database       string
-	Role           string
-	Password       []byte
-}
-
-// Fact owns its Value. Callers must ClearFacts after encryption or consumption.
-type Fact struct {
-	Key    string
-	Value  []byte
-	Secret bool
-}
-
 // Adapter is the contract every backing-service kind implements.
 type Adapter interface {
 	Key() string          // e.g. "postgres:16" — looked up by core.Service.Adapter
 	Label() string        // display only
 	DefaultImage() string // e.g. "postgres:16-alpine"
-	FactsPrefix() string  // e.g. "pg16_" — empty for Manual()
-	URLScheme() string    // e.g. "pgsql://" — empty for Manual()
-	Port() string         // e.g. "5432" — empty for Manual()
+	FactsPrefix() string  // e.g. "pg16_" — empty for Custom()
+	URLScheme() string    // e.g. "pgsql://" — empty for Custom()
+	Port() string         // e.g. "5432" — empty for Custom()
 	FactSchema(core.BackingAuthentication) []FactDefinition
 	SupportsAuthenticationModes() bool
-	Manual() bool // true => network-only attach, no facts, no backups (see mvp.md, "The manual adapter")
+	Custom() bool // true => network-only attach, no facts, no backups (see mvp.md, "The custom adapter")
 	SupportsGrants() bool
 
-	ProvisionSteps(p ProvisionParams) []Step
-	GrantSteps(p ProvisionParams) []Step // p.GrantOn set — access to another attach's database
-	RevokeSteps(p ProvisionParams) []Step
-	DetachSteps(p ProvisionParams) []Step
+	ProvisionSteps(p Input) []Step
+	GrantSteps(p Input) []Step // p.GrantOn set — access to another attach's database
+	RevokeSteps(p Input) []Step
+	DetachSteps(p Input) []Step
 
 	BackupStrategy() BackupStrategy
 }
@@ -153,7 +139,7 @@ func ClearSteps(steps []Step) {
 
 // BuildFacts renders one adapter-declared fact set without converting the
 // generated password or URL to immutable strings.
-func BuildFacts(adapter Adapter, params FactParams) ([]Fact, error) {
+func BuildFacts(adapter Adapter, params Input) ([]backinghook.Fact, error) {
 	if adapter == nil {
 		return nil, fmt.Errorf("adapter is required")
 	}
@@ -166,18 +152,19 @@ func BuildFacts(adapter Adapter, params FactParams) ([]Fact, error) {
 	}
 	params.Authentication = authentication
 	schema := adapter.FactSchema(authentication)
-	if adapter.Manual() {
+	if adapter.Custom() {
 		if len(schema) != 0 || adapter.FactsPrefix() != "" || adapter.URLScheme() != "" {
-			return nil, fmt.Errorf("manual adapter must not declare facts")
+			return nil, fmt.Errorf("custom adapter must not declare facts")
 		}
-		return []Fact{}, nil
+		return []backinghook.Fact{}, nil
 	}
 	if len(schema) == 0 || !validFactPrefix(adapter.FactsPrefix()) ||
 		!validFactAtom(params.Host) || !validFactAtom(params.Port) || !validFactAuthentication(params) {
 		return nil, fmt.Errorf("adapter fact input is invalid")
 	}
 
-	facts := make([]Fact, 0, len(schema))
+	facts := make([]backinghook.Fact, 0, len(schema))
+	declarations := make([]backinghook.FactDefinition, 0, len(schema))
 	seen := make(map[FactField]struct{}, len(schema))
 	failed := true
 	defer func() {
@@ -194,23 +181,29 @@ func BuildFacts(adapter Adapter, params FactParams) ([]Fact, error) {
 		if err != nil {
 			return nil, err
 		}
-		facts = append(facts, Fact{
+		facts = append(facts, backinghook.Fact{
 			Key: adapter.FactsPrefix() + string(definition.Field), Value: value, Secret: definition.Secret,
 		})
+		declarations = append(declarations, backinghook.FactDefinition{
+			Key: adapter.FactsPrefix() + string(definition.Field), Secret: definition.Secret,
+		})
+	}
+	if err := backinghook.ValidateOutput(declarations, backinghook.Output{Facts: facts}); err != nil {
+		return nil, err
 	}
 	failed = false
 	return facts, nil
 }
 
 // ClearFacts clears and releases every fact value buffer.
-func ClearFacts(facts []Fact) {
+func ClearFacts(facts []backinghook.Fact) {
 	for index := range facts {
 		clear(facts[index].Value)
 		facts[index].Value = nil
 	}
 }
 
-func renderFactValue(scheme string, field FactField, params FactParams) ([]byte, error) {
+func renderFactValue(scheme string, field FactField, params Input) ([]byte, error) {
 	switch field {
 	case FactHost:
 		return []byte(params.Host), nil
@@ -232,7 +225,7 @@ func renderFactValue(scheme string, field FactField, params FactParams) ([]byte,
 	}
 }
 
-func renderFactURL(scheme string, params FactParams) ([]byte, error) {
+func renderFactURL(scheme string, params Input) ([]byte, error) {
 	if scheme != "pgsql://" && scheme != "redis://" {
 		return nil, fmt.Errorf("adapter fact URL scheme is invalid")
 	}
@@ -261,7 +254,7 @@ func renderFactURL(scheme string, params FactParams) ([]byte, error) {
 	return output.Bytes(), nil
 }
 
-func validFactAuthentication(params FactParams) bool {
+func validFactAuthentication(params Input) bool {
 	if params.Authentication == core.BackingAuthenticationNone {
 		return params.Role == "" && len(params.Password) == 0
 	}

@@ -1,5 +1,7 @@
 'use client'
 
+import { ZoneFormDialog } from './zone-form-dialog'
+import { AttachFormDialog } from './attach-form-dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -73,7 +75,6 @@ import { routeSummaryHint } from './route-summary'
 import { ComponentZonePicker } from './component-zone-picker'
 import { CaddyTemplateEditor } from './caddy-template-editor'
 import { cn, newId } from '@/lib/utils'
-import { valkeyAuthenticationDetails } from '@/lib/valkey-authentication'
 import type { ActivityEntry, Attach, BackupPolicyReplacement, BackupPolicySourceInput, BackupPolicySourceRecord, Environment, EnvironmentEntry, Route, Service, TaskJournalScope, TaskStep, Zone } from '@/lib/types'
 import { Checkbox } from '@/components/ui/checkbox'
 
@@ -956,7 +957,7 @@ function AttachesCard({ env }: { env: Environment }) {
         ))}
         {env.attaches.length === 0 && (
           <div className="text-xs text-muted-foreground">
-            no backing service attached — attach a running backing service to a service to provision its own database + role
+                    no backing service attached — connect a Service to a shared backing service; provisioning depends on its adapter
           </div>
         )}
       </CardContent>
@@ -1306,7 +1307,8 @@ function DetachAttach({ env, attach }: { env: Environment; attach: Attach }) {
   const params = useRequiredParams('tenant')
   const [open, setOpen] = useState(false)
   const g = store.getBackingProject(attach.projectId)
-  const manual = g ? store.adapters.find((a) => a.key === g.environments?.[0]?.services[0]?.adapter)?.manual : false
+  const custom = g ? store.adapters.find((a) => a.key === g.environments?.[0]?.services[0]?.adapter)?.custom : false
+  const detachHook = custom && attach.credential.mode === 'new' && !!g?.environments?.[0]?.services[0]?.hooks?.detach
   return (
     <>
       <Button variant="ghost" size="content"
@@ -1323,8 +1325,8 @@ function DetachAttach({ env, attach }: { env: Environment; attach: Attach }) {
         onOpenChange={setOpen}
         title={`Detach ${g?.name ?? attach.projectId}`}
         description={
-          manual
-            ? 'Manual adapter: detaching only removes the network join — there is nothing to deprovision.'
+          custom
+            ? detachHook ? 'Runs the custom detach hook with the saved consumer facts, then removes the network attachment. A hook failure blocks detachment.' : 'Removes this consumer’s network attachment. No deprovisioning hook runs.'
             : "Runs the adapter's deprovision: revoke grants → drop role → optionally drop database. The desired-state record is removed as part of the task, never by a plain delete."
         }
         type="detach"
@@ -1334,8 +1336,8 @@ function DetachAttach({ env, attach }: { env: Environment; attach: Attach }) {
         confirmText={g?.name ?? 'detach'}
         startLabel="Detach"
         steps={
-          manual
-            ? [{ label: 'remove network join', state: 'pending' }]
+          custom
+            ? [...(detachHook ? [{ label: 'run custom detach hook', state: 'pending' as const }] : []), { label: 'remove network join', state: 'pending' }]
             : [
                 { label: `revoke grants on ${attach.database}`, state: 'pending' },
                 { label: `drop role ${attach.role}`, state: 'pending' },
@@ -2922,80 +2924,6 @@ function FactRow({
 
 // ---- Forms ----
 
-function ZoneFormDialog({ env, open, onOpenChange }: { env: Environment; open: boolean; onOpenChange: (v: boolean) => void }) {
-  const store = useStore()
-  const [name, setName] = useState('')
-  const [subnet, setSubnet] = useState('')
-  const [internal, setInternal] = useState(false)
-	const [submitting, setSubmitting] = useState(false)
-	const [submitError, setSubmitError] = useState<string | null>(null)
-	const normalizedName = name.trim()
-	const nameError = normalizedName !== '' && !/^[A-Za-z0-9._-]+$/.test(normalizedName)
-		? 'Use only letters, numbers, dot, underscore, and hyphen.'
-		: null
-	const subnetError = subnet.trim() ? null : 'Subnet is required.'
-	const submit = async () => {
-		setSubmitting(true)
-		setSubmitError(null)
-		try {
-			await store.addZone(env.id, {
-				name: normalizedName,
-				subnet: subnet.trim(),
-				internal,
-			})
-			onOpenChange(false)
-			setName('')
-			setSubnet('')
-			setInternal(false)
-		} catch (error) {
-			setSubmitError(error instanceof Error ? error.message : 'Unable to create Zone')
-		} finally {
-			setSubmitting(false)
-		}
-	}
-  return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DialogHeader>
-          <DialogTitle>Add zone · {env.name}</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="z-name">Zone name</Label>
-            <Input id="z-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="backend" autoFocus />
-			<p className={nameError ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
-			  {nameError ?? 'Must be a valid Docker Compose network key.'}
-			</p>
-          </div>
-		  <div className="flex flex-col gap-1.5">
-			<Label htmlFor="z-subnet">Subnet</Label>
-			<Input id="z-subnet" value={subnet} onChange={(e) => setSubnet(e.target.value)} placeholder="10.200.20.0/24" />
-			<p className={subnetError ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
-			  {subnetError ?? `Must be inside ${env.networkPool} and disjoint from every existing Zone.`}
-			</p>
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <Switch checked={internal} onCheckedChange={setInternal} />
-            <span className="text-muted-foreground">internal network — no egress, no published ports</span>
-          </label>
-		  {submitError && <p className="text-sm text-destructive" role="alert">{submitError}</p>}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button
-			disabled={!normalizedName || nameError !== null || subnetError !== null || submitting}
-            onClick={() => void submit()}
-          >
-            {submitting ? 'Creating…' : 'Create zone'}
-          </Button>
-        </DialogFooter>
-      </DrawerContent>
-    </Drawer>
-  )
-}
-
 function ServiceFormDialog({ env }: { env: Environment }) {
   const params = useRequiredParams('tenant')
   const [open, setOpen] = useState(false)
@@ -3154,292 +3082,6 @@ function RouteFormDialog({ env, open, onOpenChange }: { env: Environment; open: 
   )
 }
 
-function AttachFormDialog({ env, open, onOpenChange }: { env: Environment; open: boolean; onOpenChange: (v: boolean) => void }) {
-  const store = useStore()
-  const available = store.backingProjects.filter((g) => {
-    const service = g.environments?.[0]?.services[0]
-    return service?.runtimeIntent === 'running'
-  })
-  const [gid, setGid] = useState(available[0]?.id ?? '')
-  const [service, setService] = useState(env.services[0]?.name ?? '')
-  const [credentialMode, setCredentialMode] = useState<'new' | 'existing'>('new')
-  const [credentialAttachId, setCredentialAttachId] = useState('')
-  const [grants, setGrants] = useState<string[]>([])
-  const [name, setName] = useState('')
-  const [saveError, setSaveError] = useState<string>()
-  const [saving, setSaving] = useState(false)
-  const g = store.getBackingProject(gid)
-  const svc = g?.environments?.[0]?.services[0]
-  const adapter = store.adapters.find((a) => a.key === svc?.adapter)
-  const manual = !!adapter?.manual
-  const authenticationDetails = valkeyAuthenticationDetails(svc?.authentication)
-  const authenticationUnavailable = svc?.adapter === 'valkey:9' && !authenticationDetails
-  const needsDatabase = adapter?.requires.database ?? true
-  const attachName = name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-')
-  const alreadyAttached = env.attaches.filter((a) => a.projectId === gid)
-  const credentialOwners = alreadyAttached.filter(
-    (attach) => attach.backingServiceId === svc?.id && attach.credential.mode === 'new' && attach.status === 'healthy',
-  )
-  const grantOptions = env.attaches.filter((a) => a.projectId === gid && a.database !== '—')
-  const factRows = manual
-    ? []
-    : authenticationDetails
-      ? authenticationDetails.factSuffixes.map((suffix) => `${adapter?.prefix ?? 'service'}_${suffix}`)
-      : authenticationUnavailable
-        ? []
-        : [
-            `${adapter?.prefix ?? 'service'}_HOST`,
-            `${adapter?.prefix ?? 'service'}_PORT`,
-            ...(needsDatabase ? [`${adapter?.prefix ?? 'service'}_DATABASE`] : []),
-            `${adapter?.prefix ?? 'service'}_ROLE`,
-            `${adapter?.prefix ?? 'service'}_PASSWORD`,
-            `${adapter?.prefix ?? 'service'}_URL`,
-          ]
-
-  return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DialogHeader>
-          <DialogTitle>Attach backing · {env.name}</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col gap-4">
-          <p className="text-xs text-muted-foreground">
-            {manual ? (
-              <>
-                Attaching grants a <span className="font-medium text-foreground">specific service</span> network access to{' '}
-                <span className="font-mono">{g?.name}</span> — the service joins its network (zone{' '}
-                <span className="font-mono">{svc?.serviceName}</span>) and that&apos;s all: this is a{' '}
-                <span className="font-medium text-foreground">manual</span> adapter, no auto-provisioning, no facts, no
-                credentials. Reach the service at <span className="font-mono">{svc?.serviceName}</span> from the joining
-                service.
-              </>
-            ) : authenticationDetails ? (
-              <>
-                Attaching grants a <span className="font-medium text-foreground">specific service</span> access to{' '}
-                <span className="font-mono">{g?.name}</span> and inherits the backing instance&apos;s immutable{' '}
-                <span className="font-medium text-foreground">{authenticationDetails.label.toLowerCase()}</span> authentication mode.{' '}
-                {authenticationDetails.summary} The attach name below is only the spec key; the mode cannot be changed here.
-              </>
-            ) : (
-              <>
-                Attaching grants a <span className="font-medium text-foreground">specific service</span> access to a backing
-                service and provisions its own database + role on the shared instance — named{' '}
-                <span className="font-mono">&lt;service&gt;_&lt;first-6-of-attach-id&gt;</span> (the attach id&apos;s random
-                tail, so every database on this shared instance stays unique — millions of attaches, no collisions). The
-                attach name below is only the spec key (unique per environment, e.g. <span className="font-mono">api-db</span>).
-                You may attach the same backing service multiple times.
-              </>
-            )}
-          </p>
-          <div className="flex flex-col gap-1.5">
-            <Label>Attach name (the spec key, unique per environment)</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={service ? `${service}-db` : 'api-db'}
-              className="font-mono"
-            />
-            {attachName && !manual && needsDatabase && (
-              <p className="text-xs text-muted-foreground">
-                the Controller generates the collision-resistant database, role, password, and URL
-              </p>
-            )}
-            {attachName && authenticationDetails && (
-              <p className="text-xs text-muted-foreground">
-                {svc?.authentication === 'none'
-                  ? 'the Controller creates a self-owned fact binding; it generates no credential'
-                  : `the Controller provisions the ${authenticationDetails.label.toLowerCase()} identity and mode-appropriate facts`}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Backing service</Label>
-            <Select
-              value={gid}
-              onValueChange={(v) => {
-                setGid(v)
-                setGrants([])
-                setCredentialMode('new')
-                setCredentialAttachId('')
-              }}
-              options={
-                available.length > 0
-                  ? available.map((p) => ({ value: p.id, label: `${p.name} (${p.environments?.[0]?.services[0]?.adapter ?? '—'})` }))
-                  : [{ value: '', label: '— no backing services running —' }]
-              }
-            />
-            {alreadyAttached.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                already attached as{' '}
-                {alreadyAttached.map((a) => a.name).join(', ')} —{' '}
-                {manual
-                  ? 'attaching again joins the network again (still no provisioning)'
-                  : authenticationDetails
-                    ? svc?.authentication === 'none'
-                      ? 'attaching again creates another fact owner and network membership, with no credential'
-                      : `attaching again provisions another ${authenticationDetails.label.toLowerCase()} identity`
-                  : 'attaching again provisions another database + role'}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>Service that gains access</Label>
-            {env.services.length === 0 && <p className="text-xs text-muted-foreground">no services yet — add a service first</p>}
-            <Select
-              value={service}
-              onValueChange={setService}
-              options={env.services.length > 0
-                ? env.services.map((candidate) => ({ value: candidate.name, label: candidate.name }))
-                : [{ value: '', label: '— no services yet —' }]}
-            />
-          </div>
-          {!manual && (
-            <div className="flex flex-col gap-1.5">
-              <Label>{authenticationDetails?.credentialLabel ?? 'Credential'}</Label>
-              <Select
-                value={credentialMode}
-                onValueChange={(value) => {
-                  const mode = value as 'new' | 'existing'
-                  setCredentialMode(mode)
-                  setGrants([])
-                  if (mode === 'new') setCredentialAttachId('')
-                }}
-                options={[
-                  { value: 'new', label: authenticationDetails?.newOwnerLabel ?? 'Create new credential' },
-                  { value: 'existing', label: authenticationDetails?.existingOwnerLabel ?? 'Use existing credential' },
-                ]}
-              />
-              {credentialMode === 'existing' && (
-                <Select
-                  value={credentialAttachId}
-                  onValueChange={setCredentialAttachId}
-                  options={credentialOwners.length > 0
-                    ? credentialOwners.map((attach) => ({ value: attach.id, label: `${attach.name} (${attach.service})` }))
-                    : [{ value: '', label: '— no ready credential owner —' }]}
-                />
-              )}
-            </div>
-          )}
-          {credentialMode === 'new' && grantOptions.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <Label>Also grant access to (other attaches' databases, same role)</Label>
-              <div className="flex flex-wrap gap-2">
-                {grantOptions.map((grant) => (
-                  <label key={grant.id} className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs">
-                    <Checkbox
-
-                      checked={grants.includes(grant.id)}
-                      onChange={(e) =>
-                        setGrants((prev) => (e.target.checked ? [...prev, grant.id] : prev.filter((x) => x !== grant.id)))
-                      }
-                      className="accent-primary"
-                    />
-                    <span className="font-mono">{grant.name}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-          {authenticationDetails && (
-            <div className="flex flex-col gap-1.5">
-              <Label>{credentialMode === 'new' ? 'Provisioning for this mode' : 'Existing owner behavior'}</Label>
-              <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
-                {credentialMode === 'existing' ? (
-                  <p className="text-xs text-muted-foreground">
-                    Reuses the selected owner&apos;s facts and only reconciles this Service&apos;s network membership. It provisions no new identity.
-                  </p>
-                ) : authenticationDetails.provision.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    No credential is generated and no ACL identity is provisioned. The Attach creates the self-owned fact binding and joins the network.
-                  </p>
-                ) : (
-                  authenticationDetails.provision.map((operation) => (
-                    <div key={operation.op} className="flex items-baseline gap-2.5 text-xs">
-                      <span className="w-36 shrink-0 font-mono text-primary">{operation.op}</span>
-                      <span className="break-all font-mono text-muted-foreground">{operation.detail}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-          {manual ? (
-            <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-muted-foreground">
-              <span>
-                <span className="font-medium text-foreground">Network-only attach.</span> No facts, no credentials, no
-                provisioning steps — the service simply joins the zone{' '}
-                <span className="font-mono">{svc?.serviceName}</span> and can reach{' '}
-                <span className="font-mono">{svc?.serviceName}</span> directly. The operator runs and manages this
-                service themselves.
-              </span>
-            </div>
-          ) : authenticationUnavailable ? (
-            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              The Controller did not return this Valkey backing instance&apos;s authentication mode. Refresh before attaching.
-            </p>
-          ) : (
-            (
-              <div className="flex flex-col gap-1.5">
-                <Label>Facts you will see immediately after attaching (create env vars from these — names are yours)</Label>
-                <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface px-3 py-2">
-                  {factRows.map((key) => (
-                    <div key={key} className="flex items-center justify-between gap-2 font-mono text-[11px]">
-                      <span className="text-muted-foreground">{key}</span>
-                      <span className="text-foreground">resolved by Controller</span>
-                    </div>
-                  ))}
-                </div>
-                {grants.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {grants.length} additional grant fact set{grants.length === 1 ? '' : 's'}
-                  </p>
-                )}
-              </div>
-            )
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          {saveError ? <p className="text-xs text-destructive">{saveError}</p> : null}
-          <Button
-            disabled={saving || authenticationUnavailable || !gid || !attachName || !svc?.id || !service || (credentialMode === 'existing' && !credentialAttachId)}
-            onClick={() => {
-              if (!svc?.id) return
-              setSaving(true)
-              setSaveError(undefined)
-              void store
-                .addAttach(env.id, {
-                  serviceId: env.services.find((candidate) => candidate.name === service)?.id ?? service,
-                  backingServiceId: svc.id,
-                  name: attachName,
-                  credential: credentialMode === 'new'
-                    ? { mode: 'new' }
-                    : { mode: 'existing', attachId: credentialAttachId },
-                  grantAttachIds: credentialMode === 'new' && grants.length > 0 ? grants : undefined,
-                })
-                .then(() => {
-                  onOpenChange(false)
-                  setService(env.services[0]?.name ?? '')
-                  setCredentialMode('new')
-                  setCredentialAttachId('')
-                  setGrants([])
-                  setName('')
-                })
-                .catch((cause: unknown) => {
-                  setSaveError(cause instanceof Error ? cause.message : 'Unable to attach backing service')
-                })
-                .finally(() => setSaving(false))
-            }}
-          >
-            {saving ? 'Dispatching…' : 'Attach'}
-          </Button>
-        </DialogFooter>
-      </DrawerContent>
-    </Drawer>
-  )
-}
 
 const BACKUP_FREQUENCY = /^(?:\*-\*-\*|(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) \*-\*-\*) (?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/
 const MAX_BACKUP_POLICY_SOURCES = 12

@@ -828,6 +828,12 @@ func (repository *TaskRepository) claimNextTask(
 			{Type: MutationPut, Key: assignmentIndexKey, Value: assignmentValue},
 			{Type: MutationPut, Key: timeoutIndexKey, Value: assignmentValue},
 		}
+		hookInputConditions, err := repository.backingHookInputClaimConditions(ctx, task, candidate.readRevision)
+		if err != nil {
+			clearMutationValues(mutations)
+			return TaskAssignment{}, false, err
+		}
+		conditions = append(conditions, hookInputConditions...)
 		scriptSource, scriptSourceReady, err :=
 			repository.prepareScriptTaskClaimSourceAuthority(
 				ctx, task, taskValue.ModRevision, candidate.readRevision,
@@ -2147,8 +2153,8 @@ func (repository *TaskRepository) acknowledgeTask(
 			conditions = append(conditions, routeChange.conditions...)
 			mutations = append(mutations, routeChange.mutations...)
 		}
-		serviceChange, err := repository.prepareServiceTaskAcknowledgement(
-			ctx, task, primaryAndAssignment.ReadRevision,
+		serviceChange, err := repository.prepareAcknowledgedServiceTask(
+			ctx, terminal, assignment, terminalStatus, primaryAndAssignment.ReadRevision,
 		)
 		if err != nil {
 			clear(terminalValue)

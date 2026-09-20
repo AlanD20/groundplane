@@ -450,7 +450,7 @@ func taskPruningAttachRenderInput(now time.Time, planID string) AttachTaskRender
 		AuthorizedVolumeDir:      "/srv/groundplane/env",
 		BackingServiceID:         ids.NewAt(ids.KindService, now, 1714),
 		BackingProjectID:         ids.NewAt(ids.KindProject, now, 1718),
-		AdapterKey:               "manual",
+		AdapterKey:               "custom",
 		DesiredRevisionID:        revisionID,
 		ArtifactID:               ids.NewAt(ids.KindConfig, now, 1716),
 		RenderGeneration:         1,

@@ -788,6 +788,8 @@ func validateStep(
 		return validateMaterializeFile(renderGeneration, payload.MaterializeFile, artifacts)
 	case *agentpb.ExecutionStep_AdapterProcedure:
 		return validateAdapterProcedure(operation, payload.AdapterProcedure)
+	case *agentpb.ExecutionStep_BackingHookProcedure:
+		return validateBackingHookProcedure(operation, payload.BackingHookProcedure)
 	case *agentpb.ExecutionStep_ManagedNetworkEnsure:
 		return validateManagedNetworkEnsure(operation, payload.ManagedNetworkEnsure, artifacts)
 	case *agentpb.ExecutionStep_ManagedNetworkRemove:

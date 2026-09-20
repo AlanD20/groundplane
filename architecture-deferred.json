@@ -2,22 +2,22 @@
   {
     "path": "internal/agent/worker.go",
     "rule": "missing-oversized-baseline",
-    "message": "file has 1325 lines, over the 600-line limit, but is not in oversized_files"
+    "message": "file has 1342 lines, over the 600-line limit, but is not in oversized_files"
   },
   {
     "path": "internal/app",
     "rule": "frozen-total-drift",
-    "message": "frozen total is 16804 lines but current direct production Go total is 24490"
+    "message": "frozen total is 16804 lines but current direct production Go total is 25530"
   },
   {
-    "path": "internal/app/backing_service_creation.go",
-    "rule": "missing-oversized-baseline",
-    "message": "file has 692 lines, over the 600-line limit, but is not in oversized_files"
+    "path": "internal/app/attach_mutations.go",
+    "rule": "oversized-file-growth",
+    "message": "baseline allows 1178 lines but file has 1244"
   },
   {
     "path": "internal/app/controller.go",
     "rule": "oversized-file-growth",
-    "message": "baseline allows 1223 lines but file has 1343"
+    "message": "baseline allows 1223 lines but file has 1357"
   },
   {
     "path": "internal/app/entry_bulk_upsert.go",
@@ -42,12 +42,12 @@
   {
     "path": "internal/app/service_mutations.go",
     "rule": "oversized-file-growth",
-    "message": "baseline allows 861 lines but file has 1148"
+    "message": "baseline allows 861 lines but file has 1203"
   },
   {
     "path": "internal/common/executionplan/plan.go",
     "rule": "oversized-file-growth",
-    "message": "baseline allows 1186 lines but file has 1535"
+    "message": "baseline allows 1186 lines but file has 1537"
   },
   {
     "path": "internal/controller/agentchannel/registry.go",
@@ -57,7 +57,7 @@
   {
     "path": "internal/controller/agentchannel/server.go",
     "rule": "oversized-file-growth",
-    "message": "baseline allows 1000 lines but file has 1066"
+    "message": "baseline allows 1000 lines but file has 1086"
   },
   {
     "path": "internal/controller/agentchannel/server_test.go",
@@ -97,7 +97,7 @@
   {
     "path": "internal/controller/plan.go",
     "rule": "missing-oversized-baseline",
-    "message": "file has 1080 lines, over the 600-line limit, but is not in oversized_files"
+    "message": "file has 1074 lines, over the 600-line limit, but is not in oversized_files"
   },
   {
     "path": "internal/controller/release_plan.go",
@@ -117,12 +117,12 @@
   {
     "path": "internal/infra/etcd",
     "rule": "frozen-total-drift",
-    "message": "frozen total is 60604 lines but current direct production Go total is 104167"
+    "message": "frozen total is 60604 lines but current direct production Go total is 105483"
   },
   {
     "path": "internal/infra/etcd/attach_repository.go",
     "rule": "oversized-file-growth",
-    "message": "baseline allows 1521 lines but file has 1662"
+    "message": "baseline allows 1521 lines but file has 1741"
   },
   {
     "path": "internal/infra/etcd/attach_repository_test.go",
@@ -132,7 +132,7 @@
   {
     "path": "internal/infra/etcd/backing_service_creation.go",
     "rule": "missing-oversized-baseline",
-    "message": "file has 650 lines, over the 600-line limit, but is not in oversized_files"
+    "message": "file has 641 lines, over the 600-line limit, but is not in oversized_files"
   },
   {
     "path": "internal/infra/etcd/backup_artifact_repository.go",
@@ -487,12 +487,12 @@
   {
     "path": "internal/infra/etcd/task_lifecycle.go",
     "rule": "oversized-file-growth",
-    "message": "baseline allows 3124 lines but file has 3874"
+    "message": "baseline allows 3124 lines but file has 3880"
   },
   {
     "path": "internal/infra/etcd/task_pruning.go",
     "rule": "oversized-file-growth",
-    "message": "baseline allows 844 lines but file has 917"
+    "message": "baseline allows 844 lines but file has 918"
   },
   {
     "path": "internal/infra/etcd/volume_agent_production_external_test.go",

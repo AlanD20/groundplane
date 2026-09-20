@@ -1,5 +1,8 @@
 'use client'
 
+import { FormSection } from '@/components/ui/form-section'
+import { BackingHookFields } from '@/features/backing-service/hook-fields'
+import type { BackingHooks } from '@/features/backing-service/api'
 import { useState } from 'react'
 import { DrawerContent } from '@/components/ui/drawer'
 import { DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -31,6 +34,7 @@ export type ServicePatch = {
   expose: string[]
   restart: Service['restart']
   replicas: number
+  hooks?: BackingHooks
 }
 
 type BackingFields = {
@@ -87,6 +91,8 @@ export function ServiceFormBody({
   const [exposeEdited, setExposeEdited] = useState((initial?.expose ?? []).length > 0)
   const [restart, setRestart] = useState<Service['restart']>(initial?.restart ?? 'unless-stopped')
   const [replicas, setReplicas] = useState(String(initial?.replicas ?? 1))
+  const [hooks, setHooks] = useState<BackingHooks>(initial?.hooks ?? {})
+  const [hookError, setHookError] = useState<string | null>(null)
   // A backing service owns its own network: the zone named after it is
   // created with it, and consumers join it as `external` when they attach —
   // the operator never picks a zone for a backing service.
@@ -120,6 +126,7 @@ export function ServiceFormBody({
       expose: expose.split(',').map((s) => s.trim()).filter(Boolean),
       restart,
       replicas: Math.max(1, parseInt(replicas, 10) || 1),
+      hooks: initial?.adapter === 'custom' ? hooks : undefined,
     }
   }
 
@@ -127,6 +134,7 @@ export function ServiceFormBody({
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   async function save() {
+    if (hookError) return
     if (isBacking && onCreateBacking) {
       onCreateBacking(buildPatch(), backing.adapterKey, backing.prefix)
       return
@@ -156,10 +164,11 @@ export function ServiceFormBody({
         <p className="text-xs text-muted-foreground">
           {isBacking
             ? `A backing service is a service plus the adapter that knows how to provision, connect, and back it up. The adapter resolves its immutable managed workload release; operators do not select an image. It follows the same hierarchy: backing project → one environment ("main") → this service. It owns its own network: the zone "${backingZone}" is created with it, and consumers join it as external when they attach. It stays running even with zero consumers; only an explicit Destroy removes it.`
-            : 'A service is one container. Pick which zones it joins (join = can talk there). Saving updates desired state; deploy the service again to apply spec changes.'}
+            : 'Define the container workload, its network and runtime settings. Saving changes desired configuration; deploy the service to apply it.'}
         </p>
+        <FormSection title="Service" description="Name the service and choose its container image."><div className="flex flex-col gap-4 sm:col-span-2">
         {isBacking && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="bs-adapter">Adapter</Label>
               <Select
@@ -204,26 +213,8 @@ export function ServiceFormBody({
           <Label htmlFor="sv-role">Note</Label>
           <Input id="sv-role" value={role} onChange={(e) => setRole(e.target.value)} />
         </div>}
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="sv-strategy">Strategy (default — chosen per deployment)</Label>
-          <Select
-            id="sv-strategy"
-            value={strategy}
-            onValueChange={(v) => setStrategy(v as Service['strategy'])}
-            options={[
-              { value: 'blue-green', label: 'blue-green' },
-              { value: 'recreate', label: 'recreate' },
-              { value: 'rolling', label: 'rolling (deferred)' },
-            ]}
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="sv-on-failure">Failure policy (default)</Label>
-          <Select id="sv-on-failure" value={onFailure} onValueChange={(value) => setOnFailure(value as 'switch_back' | 'leave_active')} options={[
-            { value: 'switch_back', label: 'switch_back' },
-            { value: 'leave_active', label: 'leave_active' },
-          ]} />
-        </div>
+        </div></FormSection>
+        <FormSection title="Network" description="Choose network memberships and the ports other services can reach."><div className="flex flex-col gap-4 sm:col-span-2">
         {!isBacking &&
           env &&
           env.zones.length > 0 && (
@@ -249,7 +240,71 @@ export function ServiceFormBody({
               </div>
             </div>
           )}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="sv-expose">Expose ports (comma list)</Label>
+          <Input
+            id="sv-expose"
+            value={expose}
+            onChange={(event) => {
+              setExpose(event.target.value)
+              setExposeEdited(true)
+            }}
+          />
+        </div>
+        </div></FormSection>
+        <FormSection title="Runtime and resources" description="Set deployment behavior, replicas and resource limits."><div className="flex flex-col gap-4 sm:col-span-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="sv-strategy">Strategy (default — chosen per deployment)</Label>
+          <Select
+            id="sv-strategy"
+            value={strategy}
+            onValueChange={(v) => setStrategy(v as Service['strategy'])}
+            options={[
+              { value: 'blue-green', label: 'blue-green' },
+              { value: 'recreate', label: 'recreate' },
+              { value: 'rolling', label: 'rolling (deferred)' },
+            ]}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="sv-on-failure">Failure policy (default)</Label>
+          <Select id="sv-on-failure" value={onFailure} onValueChange={(value) => setOnFailure(value as 'switch_back' | 'leave_active')} options={[
+            { value: 'switch_back', label: 'switch_back' },
+            { value: 'leave_active', label: 'leave_active' },
+          ]} />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="sv-restart">Restart</Label>
+            <Select
+              id="sv-restart"
+              value={restart}
+              onValueChange={(v) => setRestart(v as Service['restart'])}
+              options={[
+                { value: 'unless-stopped', label: 'unless-stopped' },
+                { value: 'always', label: 'always' },
+                { value: 'no', label: 'no' },
+              ]}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="sv-replicas">Replicas</Label>
+            <Input id="sv-replicas" value={replicas} onChange={(e) => setReplicas(e.target.value)} placeholder="1" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="sv-mem">Memory limit</Label>
+            <Input id="sv-mem" value={mem} onChange={(e) => setMem(e.target.value)} placeholder="512m" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="sv-cpu">CPU limit (cores)</Label>
+            <Input id="sv-cpu" value={cpus} onChange={(e) => setCpus(e.target.value)} placeholder="0.5" />
+          </div>
+        </div>
+        </div></FormSection>
+        <FormSection title="Health check" description="Choose how Groundplane checks whether the service is ready."><div className="flex flex-col gap-4 sm:col-span-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="sv-healthcheck-kind">Healthcheck</Label>
             <Select
@@ -264,7 +319,7 @@ export function ServiceFormBody({
               ]}
             />
           </div>
-          <div className="col-span-2 flex flex-col gap-1.5">
+          <div className="sm:col-span-2 flex flex-col gap-1.5">
             <Label htmlFor="sv-healthcheck-target">
               {hcKind === 'http' ? 'Healthcheck path' : hcKind === 'tcp' ? 'Healthcheck host:port' : hcKind === 'pgrep' ? 'Healthcheck cmd' : '—'}
             </Label>
@@ -288,54 +343,17 @@ export function ServiceFormBody({
             <Input id="sv-healthcheck-start" value={hcStart} onChange={(e) => setHcStart(e.target.value)} disabled={hcKind === 'none'} />
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="sv-mem">Memory</Label>
-            <Input id="sv-mem" value={mem} onChange={(e) => setMem(e.target.value)} placeholder="512m" />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="sv-cpu">CPU</Label>
-            <Input id="sv-cpu" value={cpus} onChange={(e) => setCpus(e.target.value)} placeholder="0.5" />
-          </div>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="sv-expose">Expose ports (comma list)</Label>
-          <Input
-            id="sv-expose"
-            value={expose}
-            onChange={(event) => {
-              setExpose(event.target.value)
-              setExposeEdited(true)
-            }}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="sv-restart">Restart</Label>
-            <Select
-              id="sv-restart"
-              value={restart}
-              onValueChange={(v) => setRestart(v as Service['restart'])}
-              options={[
-                { value: 'unless-stopped', label: 'unless-stopped' },
-                { value: 'always', label: 'always' },
-                { value: 'no', label: 'no' },
-              ]}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="sv-replicas">Replicas</Label>
-            <Input id="sv-replicas" value={replicas} onChange={(e) => setReplicas(e.target.value)} placeholder="1" />
-          </div>
-        </div>
+        </div></FormSection>
       </div>
+      {initial?.adapter === 'custom' && <BackingHookFields value={hooks} onChange={setHooks} onError={setHookError} />}
+      {hookError && <p className="text-sm text-destructive" role="alert">{hookError}</p>}
       {submitError && <p className="text-sm text-destructive" role="alert">{submitError}</p>}
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>
           Cancel
         </Button>
         <Button
-          disabled={!name.trim() || (!isBacking && !image.trim()) || (isBacking && !backing.adapterKey) || submitting}
+          disabled={!name.trim() || (!isBacking && !image.trim()) || (isBacking && !backing.adapterKey) || submitting || !!hookError}
           onClick={() => void save()}
         >
           {submitting ? 'Saving…' : isBacking ? 'Create + deploy' : editing ? 'Save' : 'Create service'}

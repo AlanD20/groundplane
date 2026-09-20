@@ -164,6 +164,13 @@ func (c *Client) runSession(
 				receiveNext(streamCtx, stream, received)
 				continue
 			}
+			if acknowledgement := result.message.GetBackingHookCheckpointAck(); acknowledgement != nil {
+				if err := c.pool.AcceptBackingHookCheckpointAck(acknowledgement); err != nil {
+					return false, err
+				}
+				receiveNext(streamCtx, stream, received)
+				continue
+			}
 			if acknowledgement := result.message.GetVolumeRemovalCheckpointAck(); acknowledgement != nil {
 				if err := c.pool.AcceptVolumeRemovalCheckpointAck(acknowledgement); err != nil {
 					return false, err
@@ -180,8 +187,18 @@ func (c *Client) runSession(
 			}
 			receiveNext(streamCtx, stream, received)
 		case output := <-c.pool.Outputs():
+			if output.BackingHookCheckpoint != nil {
+				if output.VolumeCheckpoint != nil || output.ScriptCheckpoint != nil || output.BackupCheckpoint != nil ||
+					output.Progress != nil || output.Result != nil {
+					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
+				}
+				if err := c.sendBackingHookCheckpoint(stream, output.BackingHookCheckpoint); err != nil {
+					return agentChannelTransportResult(ctx, err, "agent: send backing hook checkpoint", false)
+				}
+				continue
+			}
 			if output.VolumeCheckpoint != nil {
-				if output.ScriptCheckpoint != nil || output.BackupCheckpoint != nil || output.Progress != nil ||
+				if output.BackingHookCheckpoint != nil || output.ScriptCheckpoint != nil || output.BackupCheckpoint != nil || output.Progress != nil ||
 					output.Result != nil {
 					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
 				}

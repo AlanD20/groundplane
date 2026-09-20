@@ -11,6 +11,7 @@ package core
 import (
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 )
 
@@ -185,10 +186,11 @@ type Service struct {
 	Replicas int `yaml:"replicas,omitempty" json:"replicas,omitempty"` // native Compose deploy.replicas
 
 	// For a backing project's single service only — see x-gp-adapter:
-	Adapter        string                `yaml:"adapter,omitempty"      json:"adapter,omitempty"` // e.g. "postgres:16" — looks up internal/adapters
-	Authentication BackingAuthentication `yaml:"authentication,omitempty" json:"authentication,omitempty"`
-	FactsPrefix    string                `yaml:"facts_prefix,omitempty" json:"facts_prefix,omitempty"` // optional override; adapter supplies a default
-	Label          string                `yaml:"label,omitempty"        json:"label,omitempty"`        // display only
+	Adapter        string                     `yaml:"adapter,omitempty"        json:"adapter,omitempty"` // e.g. "postgres:16" — looks up internal/adapters
+	Authentication BackingAuthentication      `yaml:"authentication,omitempty" json:"authentication,omitempty"`
+	FactsPrefix    string                     `yaml:"facts_prefix,omitempty"   json:"facts_prefix,omitempty"` // optional override; adapter supplies a default
+	Label          string                     `yaml:"label,omitempty"          json:"label,omitempty"`        // display only
+	Hooks          *backinghook.Configuration `yaml:"hooks,omitempty"          json:"hooks,omitempty"`
 }
 
 // EntryKind and EntrySourceKind implement the unified environment-entry

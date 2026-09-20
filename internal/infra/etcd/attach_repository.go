@@ -52,6 +52,19 @@ func (repository *AttachRepository) CreateAttachWithTask(
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
+	return repository.CreateAttachWithTaskHookInputs(ctx, scope, record, facts, nil, renderInput, task, marker)
+}
+
+func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
+	ctx context.Context,
+	scope AttachCreateScope,
+	record AttachRecord,
+	facts *AttachEncryptedFacts,
+	hookInputs *BackingHookEncryptedInputs,
+	renderInput AttachTaskRenderInput,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) (_ IdempotencyTransactionResult, returnErr error) {
 	if err := validateAttachCreateScope(ctx, scope, record, facts); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -100,6 +113,13 @@ func (repository *AttachRepository) CreateAttachWithTask(
 		task.IdempotencyKey = marker.Locator.Key
 	}
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	publication, err := prepareBackingHookTaskPublication(ctx, repository.store, task, hookInputs)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer publication.clear()
+	defer func() { returnErr = publication.finish(ctx, repository.store, returnErr) }()
+	task = publication.task
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -278,8 +298,14 @@ func (repository *AttachRepository) CreateAttachWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
+	conditions, mutations, classify, err := publication.bind(
+		conditions, mutations, classifyAttachTaskCreateConflict,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	return repository.publishAttachRuntimeTask(ctx, task, renderInput, initiation, marker,
-		mutationContext, conditions, mutations, classifyAttachTaskCreateConflict)
+		mutationContext, conditions, mutations, classify)
 }
 
 func (repository *AttachRepository) BeginAttachDetachWithTask(
@@ -290,7 +316,19 @@ func (repository *AttachRepository) BeginAttachDetachWithTask(
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	return repository.beginAttachDetachWithTask(ctx, scope, current, renderInput, task, marker, nil)
+	return repository.BeginAttachDetachWithTaskHookInputs(ctx, scope, current, nil, renderInput, task, marker)
+}
+
+func (repository *AttachRepository) BeginAttachDetachWithTaskHookInputs(
+	ctx context.Context,
+	scope AttachCreateScope,
+	current Versioned[AttachRecord],
+	hookInputs *BackingHookEncryptedInputs,
+	renderInput AttachTaskRenderInput,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) (IdempotencyTransactionResult, error) {
+	return repository.beginAttachDetachWithTask(ctx, scope, current, hookInputs, renderInput, task, marker, nil)
 }
 
 func (repository *AttachRepository) BeginAttachDetachWithTaskInitiation(
@@ -302,18 +340,34 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskInitiation(
 	marker IdempotencyMarker,
 	initiation TaskInitiation,
 ) (IdempotencyTransactionResult, error) {
-	return repository.beginAttachDetachWithTask(ctx, scope, current, renderInput, task, marker, &initiation)
+	return repository.BeginAttachDetachWithTaskInitiationHookInputs(
+		ctx, scope, current, nil, renderInput, task, marker, initiation,
+	)
+}
+
+func (repository *AttachRepository) BeginAttachDetachWithTaskInitiationHookInputs(
+	ctx context.Context,
+	scope AttachCreateScope,
+	current Versioned[AttachRecord],
+	hookInputs *BackingHookEncryptedInputs,
+	renderInput AttachTaskRenderInput,
+	task TaskRecord,
+	marker IdempotencyMarker,
+	initiation TaskInitiation,
+) (IdempotencyTransactionResult, error) {
+	return repository.beginAttachDetachWithTask(ctx, scope, current, hookInputs, renderInput, task, marker, &initiation)
 }
 
 func (repository *AttachRepository) beginAttachDetachWithTask(
 	ctx context.Context,
 	scope AttachCreateScope,
 	current Versioned[AttachRecord],
+	hookInputs *BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
 	marker IdempotencyMarker,
 	provided *TaskInitiation,
-) (IdempotencyTransactionResult, error) {
+) (_ IdempotencyTransactionResult, returnErr error) {
 	if err := validateAttachDetachScope(ctx, scope, current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -426,6 +480,13 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		task.IdempotencyKey = marker.Locator.Key
 	}
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	publication, err := prepareBackingHookTaskPublication(ctx, repository.store, task, hookInputs)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer publication.clear()
+	defer func() { returnErr = publication.finish(ctx, repository.store, returnErr) }()
+	task = publication.task
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -548,8 +609,14 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 			)
 		}
 	}
+	conditions, mutations, classify, err := publication.bind(
+		conditions, mutations, classifyAttachDetachTaskConflict,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	return repository.publishAttachRuntimeTask(ctx, task, renderInput, initiation, marker,
-		mutationContext, conditions, mutations, classifyAttachDetachTaskConflict)
+		mutationContext, conditions, mutations, classify)
 }
 
 func (repository *AttachRepository) GetAttach(ctx context.Context, id string) (Versioned[AttachRecord], error) {
@@ -668,7 +735,7 @@ func (repository *AttachRepository) GetAttachFacts(
 		return AttachEncryptedFacts{}, false, err
 	}
 	if result == nil || len(result.Values) != 1 || result.Values[0] == nil {
-		if len(current.Record.FactSets) == 0 {
+		if len(current.Record.FactSets) == 0 && !current.Record.HookBundle {
 			return AttachEncryptedFacts{}, false, nil
 		}
 		return AttachEncryptedFacts{}, false, errs.New(errs.KindInternal, "Attach encrypted facts are missing")
@@ -1216,13 +1283,24 @@ func validateAttachCreateScope(
 			return errs.New(errs.KindScopeUnauthorized, "Attach existing credential owner is invalid")
 		}
 	}
-	manual := scope.BackingService.Record.Desired.Adapter == "manual"
-	if manual {
-		if facts != nil || len(record.FactSets) != 0 || len(record.GrantAttachIDs) != 0 {
+	custom := scope.BackingService.Record.Desired.Adapter == "custom"
+	if custom {
+		hooks := scope.BackingService.Record.Desired.Hooks
+		hooked := record.OwnsCredential() && hooks != nil && (hooks.Attach != nil || hooks.Detach != nil)
+		if record.HookBundle != hooked || (facts != nil) != hooked || len(record.GrantAttachIDs) != 0 {
 			return errs.New(
-				errs.KindAdapterManualOnly,
-				"Manual Attach is network-only and cannot publish facts or grants",
+				errs.KindAdapterCustomOnly,
+				"Custom Attach hook bundle does not match its backing Service",
 			)
+		}
+		if hooked && facts.AttachID != record.ID {
+			return errs.New(errs.KindValidationFailed, "Custom Attach hook bundle belongs to another Attach")
+		}
+		if !hooked && len(record.FactSets) != 0 {
+			return errs.New(errs.KindAdapterCustomOnly, "Custom Attach without hooks cannot publish facts")
+		}
+		if hooked {
+			return validateAttachEncryptedFacts(*facts)
 		}
 		return nil
 	}
@@ -1423,6 +1501,7 @@ func attachImmutableEqual(left AttachRecord, right AttachRecord) bool {
 		left.BackingProjectID != right.BackingProjectID || left.BackingEnvironmentID != right.BackingEnvironmentID ||
 		left.BackingServiceID != right.BackingServiceID || left.BackingNetworkID != right.BackingNetworkID ||
 		left.ServiceID != right.ServiceID || left.CredentialAttachID != right.CredentialAttachID ||
+		left.HookBundle != right.HookBundle ||
 		!left.CreatedAt.Equal(right.CreatedAt) ||
 		!slices.Equal(left.GrantAttachIDs, right.GrantAttachIDs) ||
 		len(left.FactSets) != len(right.FactSets) {

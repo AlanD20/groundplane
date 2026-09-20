@@ -2,11 +2,14 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"io"
 	"slices"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -15,9 +18,9 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type AttachGrantFactParams struct {
+type AttachGrantInput struct {
 	AttachID string
-	Params   adapters.FactParams
+	Params   adapters.Input
 }
 
 type AttachFactRepository interface {
@@ -31,6 +34,8 @@ type AttachFactRepository interface {
 type AttachFactService struct {
 	repository AttachFactRepository
 	protector  *secretvalue.Protector
+	secrets    backingHookSecretRepository
+	random     io.Reader
 }
 
 func NewAttachFactService(
@@ -40,17 +45,17 @@ func NewAttachFactService(
 	if repository == nil || protector == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach fact repository and protector are required")
 	}
-	return &AttachFactService{repository: repository, protector: protector}, nil
+	return &AttachFactService{repository: repository, protector: protector, random: rand.Reader}, nil
 }
 
 // SealFactSets renders and seals the complete immutable fact bundle before an
-// Attach is published. The caller retains ownership of FactParams.Password.
+// Attach is published. The caller retains ownership of Input.Password.
 func (service *AttachFactService) SealFactSets(
 	ctx context.Context,
 	attachID string,
 	adapter adapters.Adapter,
-	own adapters.FactParams,
-	grants []AttachGrantFactParams,
+	own adapters.Input,
+	grants []AttachGrantInput,
 ) ([]etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, error) {
 	if ctx == nil {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Attach fact context is required")
@@ -61,9 +66,9 @@ func (service *AttachFactService) SealFactSets(
 	if adapter == nil {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Attach adapter is required")
 	}
-	if adapter.Manual() {
+	if adapter.Custom() {
 		if len(grants) != 0 {
-			return nil, nil, errs.New(errs.KindAdapterManualOnly, "Manual Attach cannot publish grant facts")
+			return nil, nil, errs.New(errs.KindAdapterCustomOnly, "Custom Attach cannot publish grant facts")
 		}
 		return nil, nil, nil
 	}
@@ -73,8 +78,8 @@ func (service *AttachFactService) SealFactSets(
 	if err != nil || authentication != own.Authentication {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Attach fact authentication mode is invalid")
 	}
-	canonicalGrants := append([]AttachGrantFactParams(nil), grants...)
-	slices.SortFunc(canonicalGrants, func(left AttachGrantFactParams, right AttachGrantFactParams) int {
+	canonicalGrants := append([]AttachGrantInput(nil), grants...)
+	slices.SortFunc(canonicalGrants, func(left AttachGrantInput, right AttachGrantInput) int {
 		return strings.Compare(left.AttachID, right.AttachID)
 	})
 	priorGrantID := ""
@@ -88,19 +93,19 @@ func (service *AttachFactService) SealFactSets(
 
 	sets := make([]attachFactValueSet, 0, len(canonicalGrants)+1)
 	metadata := make([]etcd.AttachFactSetMetadata, 0, len(canonicalGrants)+1)
-	ownedFacts := make([][]adapters.Fact, 0, len(canonicalGrants)+1)
+	ownedFacts := make([][]backinghook.Fact, 0, len(canonicalGrants)+1)
 	defer func() {
 		for _, facts := range ownedFacts {
 			adapters.ClearFacts(facts)
 		}
 	}()
-	appendSet := func(grantAttachID string, params adapters.FactParams) error {
+	appendSet := func(grantAttachID string, params adapters.Input) error {
 		facts, err := adapters.BuildFacts(adapter, params)
 		if err != nil {
 			return errs.Wrap(errs.KindValidationFailed, err)
 		}
 		ownedFacts = append(ownedFacts, facts)
-		slices.SortFunc(facts, func(left adapters.Fact, right adapters.Fact) int {
+		slices.SortFunc(facts, func(left backinghook.Fact, right backinghook.Fact) int {
 			return strings.Compare(left.Key, right.Key)
 		})
 		factMetadata := make([]etcd.AttachFactDefinition, 0, len(facts))
@@ -384,10 +389,11 @@ func (service *AttachFactService) openStoredBundle(
 }
 
 type attachFactBundle struct {
-	Version  uint8                `json:"version"`
-	AttachID string               `json:"attach_id"`
-	Identity attachTaskIdentity   `json:"identity"`
-	Sets     []attachFactValueSet `json:"sets"`
+	Version    uint8                `json:"version"`
+	AttachID   string               `json:"attach_id"`
+	Identity   attachTaskIdentity   `json:"identity"`
+	Sets       []attachFactValueSet `json:"sets"`
+	HookInputs []attachFactValue    `json:"hook_inputs,omitempty"`
 }
 
 type attachTaskIdentity struct {
@@ -433,11 +439,19 @@ func attachFactMetadataDefinition(
 }
 
 func validAttachFactBundle(bundle attachFactBundle, record etcd.AttachRecord) bool {
-	if bundle.Version != 3 || bundle.AttachID != record.ID ||
-		!validAttachTaskIdentityAuthentication(bundle.Identity) ||
+	if (bundle.Version != 3 && bundle.Version != 4) || bundle.AttachID != record.ID ||
+		(bundle.Version == 3 && !validAttachTaskIdentityAuthentication(bundle.Identity)) ||
+		(bundle.Version == 4 && !record.HookBundle) ||
 		len(bundle.Identity.Grants) != len(record.GrantAttachIDs) ||
 		len(bundle.Sets) != len(record.FactSets) {
 		return false
+	}
+	previousInput := ""
+	for _, input := range bundle.HookInputs {
+		if !backinghook.ValidKey(input.Key) || input.Key <= previousInput {
+			return false
+		}
+		previousInput = input.Key
 	}
 	for index, grant := range bundle.Identity.Grants {
 		if grant.AttachID != record.GrantAttachIDs[index] || grant.Database == "" {
@@ -449,8 +463,14 @@ func validAttachFactBundle(bundle attachFactBundle, record etcd.AttachRecord) bo
 		if set.GrantAttachID != metadata.GrantAttachID || len(set.Facts) != len(metadata.Facts) {
 			return false
 		}
+		if record.Status == core.AttachReady && len(set.Facts) != len(metadata.Facts) {
+			return false
+		}
+		if record.Status != core.AttachReady && len(set.Facts) != 0 && len(set.Facts) != len(metadata.Facts) {
+			return false
+		}
 		for factIndex, fact := range set.Facts {
-			if fact.Key != metadata.Facts[factIndex].Key || len(fact.Value) == 0 {
+			if fact.Key != metadata.Facts[factIndex].Key {
 				return false
 			}
 		}
@@ -483,6 +503,11 @@ func (bundle *attachFactBundle) clear() {
 		bundle.Sets[setIndex].Facts = nil
 	}
 	bundle.Sets = nil
+	for index := range bundle.HookInputs {
+		clearAttachBytes(bundle.HookInputs[index].Value)
+		bundle.HookInputs[index].Value = nil
+	}
+	bundle.HookInputs = nil
 }
 
 func clearAttachBytes(value []byte) {

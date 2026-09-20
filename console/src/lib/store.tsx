@@ -20,8 +20,7 @@ import {
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { operations } from './api.generated'
 import { watchTransientLogs, type LogTarget, type TransientLogEvent } from './transient-logs'
-type BackingServiceCreateRequest = operations['backing-service.create']['requestBody']['content']['application/json']
-type BackingServiceCreatedResponse = operations['backing-service.create']['responses'][201]['content']['application/json']
+import type { BackingServiceCreateRequest, BackingServiceCreatedResponse } from '@/features/backing-service/api'
 import { hydratePlatformComponents } from './platform-component-hydration'
 import { useControllerPlatform } from '@/features/platform-controller/use-controller-platform'
 import type { ConnectorMutationIntent } from './connector-intent'

@@ -42,7 +42,7 @@ func TestAttachFactServiceSealsExplicitValkeyAuthenticationIdentity(t *testing.T
 			attachID := ids.New(ids.KindAttach)
 			metadata, encrypted, sealErr := service.SealFactSets(
 				context.Background(), attachID, attachFactModeTestAdapter{},
-				adapters.FactParams{
+				adapters.Input{
 					Authentication: test.authentication, Host: "valkey", Port: "6379",
 					Role: test.role, Password: test.password,
 				}, nil,
@@ -107,13 +107,13 @@ func TestAttachFactServiceSealsAndResolvesGrantFacts(t *testing.T) {
 		ctx,
 		ownerID,
 		attachFactTestAdapter{},
-		adapters.FactParams{
+		adapters.Input{
 			Authentication: "",
 			Host:           "postgres", Port: "5432", Database: "appdb", Role: "app", Password: password,
 		},
-		[]AttachGrantFactParams{{
+		[]AttachGrantInput{{
 			AttachID: grantID,
-			Params: adapters.FactParams{
+			Params: adapters.Input{
 				Host:     "postgres",
 				Port:     "5432",
 				Database: "reporting",
@@ -345,7 +345,7 @@ func (attachFactTestAdapter) DefaultImage() string              { return "test:1
 func (attachFactTestAdapter) FactsPrefix() string               { return "test_" }
 func (attachFactTestAdapter) URLScheme() string                 { return "pgsql://" }
 func (attachFactTestAdapter) Port() string                      { return "5432" }
-func (attachFactTestAdapter) Manual() bool                      { return false }
+func (attachFactTestAdapter) Custom() bool                      { return false }
 func (attachFactTestAdapter) SupportsGrants() bool              { return true }
 func (attachFactTestAdapter) SupportsAuthenticationModes() bool { return false }
 func (attachFactTestAdapter) FactSchema(core.BackingAuthentication) []adapters.FactDefinition {
@@ -372,10 +372,10 @@ func (attachFactModeTestAdapter) FactSchema(authentication core.BackingAuthentic
 	}
 	return append(facts, adapters.FactDefinition{Field: adapters.FactPassword, Secret: true})
 }
-func (attachFactTestAdapter) ProvisionSteps(adapters.ProvisionParams) []adapters.Step { return nil }
-func (attachFactTestAdapter) GrantSteps(adapters.ProvisionParams) []adapters.Step     { return nil }
-func (attachFactTestAdapter) RevokeSteps(adapters.ProvisionParams) []adapters.Step    { return nil }
-func (attachFactTestAdapter) DetachSteps(adapters.ProvisionParams) []adapters.Step    { return nil }
+func (attachFactTestAdapter) ProvisionSteps(adapters.Input) []adapters.Step { return nil }
+func (attachFactTestAdapter) GrantSteps(adapters.Input) []adapters.Step     { return nil }
+func (attachFactTestAdapter) RevokeSteps(adapters.Input) []adapters.Step    { return nil }
+func (attachFactTestAdapter) DetachSteps(adapters.Input) []adapters.Step    { return nil }
 func (attachFactTestAdapter) BackupStrategy() adapters.BackupStrategy {
 	return adapters.BackupStrategy{}
 }

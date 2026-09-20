@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -62,8 +63,15 @@ func attachTaskStepCount(
 	authentication core.BackingAuthentication,
 	grantCount int,
 	ownsCredential bool,
+	hookBundle bool,
 ) int {
-	if adapter.Manual() || !ownsCredential || authentication == core.BackingAuthenticationNone {
+	if adapter.Custom() {
+		if hookBundle {
+			return 2
+		}
+		return 1
+	}
+	if !ownsCredential || authentication == core.BackingAuthenticationNone {
 		return 1
 	}
 	return grantCount + 2
@@ -176,6 +184,7 @@ func buildAttachTaskRenderInput(
 		BackingProjectID:         record.BackingProjectID,
 		AdapterKey:               scope.BackingService.Record.Desired.Adapter,
 		Authentication:           scope.BackingService.Record.Desired.Authentication,
+		HookConfiguration:        backinghook.CloneConfiguration(scope.BackingService.Record.Desired.Hooks),
 		DesiredRevisionID:        scope.DesiredHead.Record.RevisionID,
 		ArtifactID:               artifactID,
 		RenderGeneration:         scope.ComposeProjection.Record.RenderGeneration,

@@ -1030,8 +1030,56 @@ services:
 ```
 
 The adapter registry, not the Blueprint, supplies `requires`, provision and
-detach operations, fact templates, and backup/restore strategy. `manual` is a
-registry adapter with network-only attach behavior.
+detach operations, fact templates, and backup/restore strategy for built-in
+adapters. `custom` runs the operator's native image and provides network-only
+attachment unless optional provisioning hooks are configured. The unified hook
+input/output contract is defined in [Backing services](features/backing-services.md#unified-provisioning-and-optional-custom-hooks).
+
+Only `custom` accepts `hooks` inside `x-gp-adapter`. For example:
+
+```yaml
+services:
+  shared:
+    image: registry.example/shared-service:1.0
+    networks: [shared_net]
+    x-gp-adapter:
+      key: custom
+      hooks:
+        attach:
+          command: [/opt/provision-consumer]
+          timeout_seconds: 60
+        detach:
+          command: [/opt/remove-consumer]
+          timeout_seconds: 60
+        inputs:
+          - key: PORT
+            value: "8080"
+          - key: ADMIN_TOKEN
+            secret_ref: sec_example
+          - key: PASSWORD
+            generate: password
+        facts:
+          - key: USERNAME
+            secret: false
+          - key: PASSWORD
+            secret: true
+```
+
+`attach`, `detach`, `before_stop`, and `after_start` each accept an explicit
+nonempty argument array and `timeout_seconds` from 1 through 900. Commands are
+not implicitly shell scripts; use `/bin/sh`, `-c`, and a script argument when a
+shell is needed. Each input chooses exactly one of `value`, `secret_ref`, or
+`generate: password`. `HOST` is reserved for GP's stable backing endpoint.
+Generated passwords belong to an Attach and are not lifecycle-hook inputs.
+Fact keys are the exact output keys; sensitivity comes from their declarations.
+Fact declarations require an attach hook. No hooks means network-only attachment.
+
+Create new custom hook credential owners through standalone Attach before
+referencing their facts or reusing their credentials in Blueprint. Blueprint
+creation of a new custom owner requiring an attach or detach hook is deferred;
+admission rejects it before publication. Referencing facts from an already-ready Attach remains
+supported. GP does not rewrite a sealed plan or reread newer desired state to
+fill missing hook output.
 
 Valkey authentication is immutable backing-instance policy explicitly required at
 backing creation (`username_password`, `password`, or `none`, with no default), not a consumer

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -28,6 +29,24 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
+	return repository.BeginServiceLifecycleWithTaskHookInputs(
+		ctx, &tenant, project, environment, current, replacement, projection, renderInput, nil, task, marker,
+	)
+}
+
+func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
+	ctx context.Context,
+	tenant *Versioned[TenantRecord],
+	project Versioned[ProjectRecord],
+	environment Versioned[EnvironmentRecord],
+	current Versioned[ServiceRecord],
+	replacement ServiceRecord,
+	projection *Versioned[EnvironmentComposeProjection],
+	renderInput *ServiceLifecycleRenderInput,
+	hookInputs *BackingHookEncryptedInputs,
+	task TaskRecord,
+	marker IdempotencyMarker,
+) (_ IdempotencyTransactionResult, returnErr error) {
 	if err := validateServiceLifecycleHierarchy(tenant, project, environment, current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -36,6 +55,16 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	}
 	if err := validateServiceLifecycleProjection(projection, renderInput, task); err != nil {
 		return IdempotencyTransactionResult{}, err
+	}
+	if renderInput != nil {
+		expectedHooks := serviceLifecycleHooks(current.Record.Desired.Hooks, task.Type)
+		if !backinghook.EqualConfiguration(renderInput.HookConfiguration, expectedHooks) ||
+			renderInput.HookConfiguration != nil && renderInput.AdapterKey != current.Record.Desired.Adapter {
+			return IdempotencyTransactionResult{}, errs.New(
+				errs.KindValidationFailed,
+				"Service lifecycle hook configuration changed before publication",
+			)
+		}
 	}
 	wantReplayTarget := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetService, ID: current.Record.Desired.ID}
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
@@ -66,7 +95,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	versionedTenant, versionedProject, versionedEnvironment, err := mutationContext.versionHierarchy(
-		&tenant,
+		tenant,
 		project,
 		environment,
 	)
@@ -79,6 +108,13 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 		task.IdempotencyKey = marker.Locator.Key
 	}
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
+	publication, err := prepareBackingHookTaskPublication(ctx, repository.store, task, hookInputs)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer publication.clear()
+	defer func() { returnErr = publication.finish(ctx, repository.store, returnErr) }()
+	task = publication.task
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -108,11 +144,17 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: tenantKey(tenant.Record.ID), ModRevision: tenant.Revision},
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
-		{Key: deletionTombstoneKey(string(DeletionTargetTenant), tenant.Record.ID)},
 		{Key: deletionTombstoneKey("service", current.Record.Desired.ID)},
+	}
+	if tenant != nil {
+		conditions = append(conditions[:9], append([]Condition{
+			{Key: tenantKey(tenant.Record.ID), ModRevision: tenant.Revision},
+		}, conditions[9:]...)...)
+		conditions = append(conditions[:12], append([]Condition{
+			{Key: deletionTombstoneKey(string(DeletionTargetTenant), tenant.Record.ID)},
+		}, conditions[12:]...)...)
 	}
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskKey(task.ID), Value: taskValue},
@@ -185,11 +227,19 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	classify := func(revision int64, values []*KeyValue) error {
 		return binding.classify(revision, values, originalClassify)
 	}
+	conditions, mutations, classify, err = publication.bind(binding.conditions, binding.mutations, classify)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearMutationValues(mutations)
+	if err := validateEnvironmentMutationTransactionBudget(conditions, mutations); err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,
 		initiation,
-		binding.conditions,
-		binding.mutations,
+		conditions,
+		mutations,
 		classify,
 	)
 	if err != nil {
@@ -226,18 +276,30 @@ func serviceLifecycleProjectionFenceKey(environmentID string) string {
 }
 
 func validateServiceLifecycleHierarchy(
-	tenant Versioned[TenantRecord],
+	tenant *Versioned[TenantRecord],
 	project Versioned[ProjectRecord],
 	environment Versioned[EnvironmentRecord],
 	service Versioned[ServiceRecord],
 ) error {
-	if tenant.Revision <= 0 || project.Revision <= 0 || environment.Revision <= 0 || service.Revision <= 0 ||
-		tenant.ReadRevision < tenant.Revision || project.ReadRevision < project.Revision ||
+	if project.Revision <= 0 || environment.Revision <= 0 || service.Revision <= 0 ||
+		project.ReadRevision < project.Revision ||
 		environment.ReadRevision < environment.Revision || service.ReadRevision < service.Revision ||
 		validateServiceRecord(service.Record) != nil ||
-		project.Record.Kind != ProjectKindTenant || project.Record.TenantID != tenant.Record.ID ||
 		environment.Record.ProjectID != project.Record.ID || service.Record.EnvironmentID != environment.Record.ID {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle hierarchy is invalid")
+	}
+	switch project.Record.Kind {
+	case ProjectKindTenant:
+		if tenant == nil || tenant.Revision <= 0 || tenant.ReadRevision < tenant.Revision ||
+			project.Record.TenantID != tenant.Record.ID {
+			return errs.New(errs.KindValidationFailed, "Service lifecycle Tenant hierarchy is invalid")
+		}
+	case ProjectKindBacking:
+		if tenant != nil || project.Record.TenantID != "" {
+			return errs.New(errs.KindValidationFailed, "Service lifecycle backing hierarchy is invalid")
+		}
+	default:
+		return errs.New(errs.KindValidationFailed, "Service lifecycle Project kind is invalid")
 	}
 	return nil
 }
@@ -248,7 +310,7 @@ func validateServiceLifecycleReplacement(current ServiceRecord, replacement Serv
 		replacement.BackingNetworkID != current.BackingNetworkID ||
 		!sameServiceRemovalDesired(replacement.Desired, current.Desired) ||
 		replacement.Runtime.ServiceID != current.Runtime.ServiceID || task.Target != current.Desired.ID ||
-		task.Status != TaskStatusPending || task.NextEventSequence != 1 || len(task.Steps) < 1 || len(task.Steps) > 2 {
+		task.Status != TaskStatusPending || task.NextEventSequence != 1 || len(task.Steps) < 1 || len(task.Steps) > 3 {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle replacement is invalid")
 	}
 	want := core.ServiceRuntimeIntent("")
@@ -294,14 +356,35 @@ func validateServiceLifecycleProjection(
 	if input.Release.RetainedPrior != nil {
 		wantSteps = 2
 	}
+	if serviceLifecycleHookConfigured(*input, task.Type) {
+		wantSteps++
+	} else if input.HookConfiguration != nil {
+		return errs.New(errs.KindValidationFailed, "Service lifecycle hook does not match Task type")
+	}
 	if len(task.Steps) != wantSteps {
 		return errs.New(errs.KindValidationFailed, "applied Service lifecycle Task steps are invalid")
 	}
 	return validateServiceLifecycleRenderInput(*input)
 }
 
+func serviceLifecycleHooks(configuration *backinghook.Configuration, taskType TaskType) *backinghook.Configuration {
+	if configuration == nil {
+		return nil
+	}
+	configured := taskType == TaskStart && configuration.AfterStart != nil ||
+		(taskType == TaskStop || taskType == TaskDestroy) && configuration.BeforeStop != nil
+	if !configured {
+		return nil
+	}
+	return configuration
+}
+
+func serviceLifecycleHookConfigured(input ServiceLifecycleRenderInput, taskType TaskType) bool {
+	return serviceLifecycleHooks(input.HookConfiguration, taskType) != nil
+}
+
 func classifyServiceLifecycleStartConflict(
-	tenant Versioned[TenantRecord],
+	tenant *Versioned[TenantRecord],
 	project Versioned[ProjectRecord],
 	environment Versioned[EnvironmentRecord],
 	service Versioned[ServiceRecord],
@@ -309,7 +392,17 @@ func classifyServiceLifecycleStartConflict(
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*KeyValue) error {
-		expected := 14
+		hierarchyEnd := 9
+		deletionStart := hierarchyEnd
+		if tenant != nil {
+			hierarchyEnd++
+			deletionStart++
+		}
+		deletionEnd := deletionStart + 3
+		if tenant != nil {
+			deletionEnd++
+		}
+		expected := deletionEnd
 		applied := input != nil
 		if applied {
 			expected += 5
@@ -349,22 +442,26 @@ func classifyServiceLifecycleStartConflict(
 		if values[6] != nil {
 			return errs.New(errs.KindResourceInUse, "Service already has an active lifecycle Task")
 		}
-		for index, revision := range []int64{environment.Revision, project.Revision, tenant.Revision} {
+		revisions := []int64{environment.Revision, project.Revision}
+		if tenant != nil {
+			revisions = append(revisions, tenant.Revision)
+		}
+		for index, revision := range revisions {
 			value := values[7+index]
 			if value == nil || value.ModRevision != revision {
 				return errs.New(errs.KindStateConflict, "Service lifecycle hierarchy changed")
 			}
 		}
-		for index := 10; index < 14; index++ {
+		for index := deletionStart; index < deletionEnd; index++ {
 			if values[index] != nil {
 				return errs.New(errs.KindResourceInUse, "Service hierarchy deletion is in progress")
 			}
 		}
 		if applied {
-			if values[14] != nil {
+			if values[deletionEnd] != nil {
 				return errs.New(errs.KindInternal, "Service lifecycle render input already exists")
 			}
-			for index := 15; index < len(values); index++ {
+			for index := deletionEnd + 1; index < len(values); index++ {
 				if values[index] == nil {
 					return errs.New(errs.KindStateConflict, "Service lifecycle immutable runtime authority changed")
 				}

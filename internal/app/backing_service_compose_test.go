@@ -40,7 +40,7 @@ func TestBackingServiceComposePreservesRuntimeShell(t *testing.T) {
 			}
 			zone := core.Zone{ID: "net_" + suffix, Name: "data", Subnet: "10.92.1.0/24"}
 			volume := core.Volume{ID: "vol_" + suffix, Key: spec.VolumeKey, Slug: spec.VolumeSlug}
-			project := backingComposeProject(spec, "svc_"+suffix, "valkey:9", zone, volume, environment)
+			project := backingComposeProject(spec, "svc_"+suffix, zone, &volume, environment)
 			artifact, err := controller.RenderCompose(controller.ComposeRenderInput{
 				Project: project, ProjectOwnerKind: controller.ComposeProjectOwnerBacking,
 				ProjectID: "prj_" + suffix, EnvironmentID: environment.ID,
@@ -96,7 +96,7 @@ func TestBackingServiceComposePublishesStableEndpointAlias(t *testing.T) {
 	}
 	zone := core.Zone{ID: "net_" + suffix, Name: "data", Subnet: "10.92.1.0/24"}
 	volume := core.Volume{ID: "vol_" + suffix, Key: spec.VolumeKey, Slug: spec.VolumeSlug}
-	project := backingComposeProject(spec, "svc_"+suffix, "valkey:9", zone, volume, environment)
+	project := backingComposeProject(spec, "svc_"+suffix, zone, &volume, environment)
 	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{
 		Project: project, ProjectOwnerKind: controller.ComposeProjectOwnerBacking,
 		ProjectID: "prj_" + suffix, EnvironmentID: environment.ID,

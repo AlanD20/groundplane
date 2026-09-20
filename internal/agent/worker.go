@@ -127,6 +127,7 @@ type WorkerPool struct {
 	backupSecrets          *backupSecretSlotInbox
 	backupCheckpoints      *backupCheckpointInbox
 	scriptCheckpoints      *scriptCheckpointInbox
+	backingHookCheckpoints *backingHookCheckpointInbox
 	volumeCheckpoints      *volumeCheckpointInbox
 	taskEventAcks          *taskEventAckInbox
 
@@ -138,21 +139,22 @@ type WorkerPool struct {
 
 func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger *slog.Logger) *WorkerPool {
 	pool := &WorkerPool{
-		size:              size,
-		volumeRoot:        volumeRoot,
-		runner:            taskRunner,
-		logger:            logger,
-		work:              make(chan *taskReservation, size),
-		outputs:           make(chan WorkerOutput, size),
-		reservations:      make(map[string]*taskReservation, size),
-		materializations:  newMaterializationInbox(),
-		managedConfigs:    newManagedConfigInbox(),
-		backupSecrets:     newBackupSecretSlotInbox(),
-		backupCheckpoints: newBackupCheckpointInbox(),
-		scriptCheckpoints: newScriptCheckpointInbox(),
-		volumeCheckpoints: &volumeCheckpointInbox{pending: make(map[string]*volumeCheckpointWaiter)},
-		taskEventAcks:     &taskEventAckInbox{receipts: make(map[taskEventAckKey]*taskEventReceipt)},
-		adapter:           NewAdapterRuntime(taskRunner),
+		size:                   size,
+		volumeRoot:             volumeRoot,
+		runner:                 taskRunner,
+		logger:                 logger,
+		work:                   make(chan *taskReservation, size),
+		outputs:                make(chan WorkerOutput, size),
+		reservations:           make(map[string]*taskReservation, size),
+		materializations:       newMaterializationInbox(),
+		managedConfigs:         newManagedConfigInbox(),
+		backupSecrets:          newBackupSecretSlotInbox(),
+		backupCheckpoints:      newBackupCheckpointInbox(),
+		scriptCheckpoints:      newScriptCheckpointInbox(),
+		backingHookCheckpoints: newBackingHookCheckpointInbox(),
+		volumeCheckpoints:      &volumeCheckpointInbox{pending: make(map[string]*volumeCheckpointWaiter)},
+		taskEventAcks:          &taskEventAckInbox{receipts: make(map[taskEventAckKey]*taskEventReceipt)},
+		adapter:                NewAdapterRuntime(taskRunner),
 	}
 	pool.executeStep = pool.runStep
 	return pool
@@ -292,6 +294,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			if stepResult.ExitCode != 0 {
 				exitCode = stepResult.ExitCode
 			}
+		} else if step.GetBackingHookProcedure() != nil {
+			err = p.executeBackingHookStep(stepCtx, reservation.assignment, step)
 		} else if (step.GetEnvironmentDirectoryCreate() != nil || step.GetEnvironmentDirectoryRemove() != nil ||
 			step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetManagedVolumeDirectoryRemove() != nil) &&
 			p.environmentDirectories != nil {
@@ -1157,12 +1161,24 @@ func clearExecutionPlanSecrets(plan *agentpb.ExecutionPlan) {
 		return
 	}
 	for _, step := range plan.Steps {
+		if procedure := step.GetBackingHookProcedure(); procedure != nil {
+			clearBackingHookProcedureValues(procedure)
+		}
 		procedure := step.GetAdapterProcedure()
 		if procedure == nil {
 			continue
 		}
 		clear(procedure.Password)
 		procedure.Password = nil
+	}
+}
+
+func clearBackingHookProcedureValues(procedure *agentpb.BackingHookProcedure) {
+	for _, value := range append(procedure.GetInputs(), procedure.GetFacts()...) {
+		if value != nil {
+			clear(value.Value)
+			value.Value = nil
+		}
 	}
 }
 
@@ -1305,6 +1321,7 @@ func (p *WorkerPool) runStep(_ context.Context, step *agentpb.ExecutionStep) err
 		*agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure,
 		*agentpb.ExecutionStep_ManagedVolumeDirectoryRemove,
 		*agentpb.ExecutionStep_MaterializeFile, *agentpb.ExecutionStep_AdapterProcedure,
+		*agentpb.ExecutionStep_BackingHookProcedure,
 		*agentpb.ExecutionStep_BackupSourceCapture:
 		return errs.New(errs.KindNotImplemented, "agent: task procedure is not implemented")
 	default:

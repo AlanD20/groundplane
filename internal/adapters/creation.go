@@ -8,10 +8,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// CreationSpec is the compiled, platform-owned shape of a backing service.
-// Operator input selects an adapter; it cannot override these workload details.
+// CreationSpec is the resolved shape of a backing service. Managed adapters
+// compile every workload detail; custom creation supplies only its image and
+// canonical service name.
 type CreationSpec struct {
 	ServiceName   string
+	Image         string
 	VolumeSlug    string
 	VolumeKey     string
 	MountPath     string
@@ -35,16 +37,15 @@ type creationAdapter interface {
 	CreationSpec(core.BackingAuthentication) CreationSpec
 }
 
-// BackingCreationSpec resolves the immutable creation contract for one
-// registered adapter. Manual and attach-only adapters cannot be created as
-// managed backing services.
+// BackingCreationSpec resolves the immutable creation contract for one managed
+// adapter. Custom creation is resolved separately from its operator image.
 func BackingCreationSpec(key string, authentication core.BackingAuthentication) (CreationSpec, error) {
 	adapter, ok := Get(key)
 	if !ok {
 		return CreationSpec{}, errs.Newf(errs.KindValidationFailed, "unsupported backing-service adapter %q", key)
 	}
 	creator, ok := adapter.(creationAdapter)
-	if !ok || adapter.Manual() {
+	if !ok || adapter.Custom() {
 		return CreationSpec{}, errs.Newf(
 			errs.KindValidationFailed,
 			"adapter %q cannot create a managed backing service",
@@ -56,6 +57,7 @@ func BackingCreationSpec(key string, authentication core.BackingAuthentication) 
 		return CreationSpec{}, err
 	}
 	spec := creator.CreationSpec(authentication)
+	spec.Image = adapter.DefaultImage()
 	if err := validateCreationSpec(spec); err != nil {
 		return CreationSpec{}, err
 	}
@@ -63,7 +65,8 @@ func BackingCreationSpec(key string, authentication core.BackingAuthentication) 
 }
 
 func validateCreationSpec(spec CreationSpec) error {
-	if strings.TrimSpace(spec.ServiceName) == "" || strings.TrimSpace(spec.VolumeSlug) == "" ||
+	if strings.TrimSpace(spec.ServiceName) == "" || strings.TrimSpace(spec.Image) == "" ||
+		strings.TrimSpace(spec.VolumeSlug) == "" ||
 		strings.TrimSpace(spec.VolumeKey) == "" || strings.TrimSpace(spec.MountPath) == "" ||
 		strings.TrimSpace(
 			spec.HealthTCP,
@@ -95,6 +98,21 @@ func validateCreationSpec(spec CreationSpec) error {
 		return errs.New(errs.KindInternal, "backing-service adapter has no bootstrap credential")
 	}
 	return nil
+}
+
+// HasVolume reports whether creation owns a persistent managed Volume.
+func (spec CreationSpec) HasVolume() bool {
+	return spec.VolumeSlug != "" || spec.VolumeKey != "" || spec.MountPath != ""
+}
+
+// HasEnvironment reports whether creation materializes an Environment env file.
+func (spec CreationSpec) HasEnvironment() bool {
+	return len(spec.Environment) != 0
+}
+
+// HasHealthcheck reports whether creation can wait for native health.
+func (spec CreationSpec) HasHealthcheck() bool {
+	return spec.HealthTCP != "" || len(spec.HealthCommand) != 0
 }
 
 func cloneCreationSpec(spec CreationSpec) CreationSpec {

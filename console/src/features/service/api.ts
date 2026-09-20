@@ -8,7 +8,7 @@ type ReleasePageItem = NonNullable<ReleasePageResponse['items']>[number]
 
 export type ServiceMutationInput = Pick<
   Service,
-  'name' | 'image' | 'zones' | 'strategy' | 'onFailure' | 'healthcheck' | 'resources' | 'expose' | 'restart' | 'replicas'
+  'name' | 'image' | 'zones' | 'strategy' | 'onFailure' | 'healthcheck' | 'resources' | 'expose' | 'restart' | 'replicas' | 'hooks'
 >
 
 export function serviceFromAPI(service: ServiceDocument): Service {
@@ -57,6 +57,7 @@ export function serviceFromAPI(service: ServiceDocument): Service {
     runtimeIntent: service.runtime_intent,
     observation: serviceObservationFromAPI(service.observation),
     adapter: service.adapter,
+    hooks: service.hooks,
     serviceName: service.name,
     prefix: service.facts_prefix,
     nativeCompose: 'native_compose' in service ? service.native_compose : undefined,
@@ -86,6 +87,7 @@ export function serviceMutationBody(input: ServiceMutationInput) {
     expose: input.expose,
     restart: input.restart,
     replicas: input.replicas,
+    hooks: input.hooks,
   }
 }
 

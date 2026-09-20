@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"sort"
 
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -25,14 +26,55 @@ type serviceLifecyclePlanReader interface {
 	) (etcd.Versioned[etcd.ServiceLifecycleRenderInput], bool, error)
 }
 
+type serviceLifecycleHookInputResolver interface {
+	ResolveLifecycleHookInput(
+		context.Context,
+		etcd.TaskRecord,
+		string,
+		backinghook.Event,
+		BackingHookInputConsumer,
+	) error
+	ResolveDraftLifecycleHookInput(
+		context.Context,
+		etcd.TaskRecord,
+		*etcd.BackingHookEncryptedInputs,
+		string,
+		backinghook.Event,
+		BackingHookInputConsumer,
+	) error
+}
+
 func (resolver *TaskPlanResolver) PrepareServiceLifecycleTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
 	input etcd.ServiceLifecycleRenderInput,
 	stepIDs []string,
 ) (etcd.TaskRecord, error) {
+	return resolver.prepareServiceLifecycleTask(ctx, task, input, nil, stepIDs)
+}
+
+func (resolver *TaskPlanResolver) PrepareServiceLifecycleHookTask(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	input etcd.ServiceLifecycleRenderInput,
+	hookInputs *etcd.BackingHookEncryptedInputs,
+	stepIDs []string,
+) (etcd.TaskRecord, error) {
+	return resolver.prepareServiceLifecycleTask(ctx, task, input, hookInputs, stepIDs)
+}
+
+func (resolver *TaskPlanResolver) prepareServiceLifecycleTask(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	input etcd.ServiceLifecycleRenderInput,
+	hookInputs *etcd.BackingHookEncryptedInputs,
+	stepIDs []string,
+) (etcd.TaskRecord, error) {
 	wantSteps := 1
 	if input.Release.RetainedPrior != nil {
+		wantSteps++
+	}
+	if _, definition := serviceLifecycleHook(input, task.Type); definition != nil {
 		wantSteps++
 	}
 	if resolver == nil || ctx == nil || len(stepIDs) != wantSteps ||
@@ -57,7 +99,7 @@ func (resolver *TaskPlanResolver) PrepareServiceLifecycleTask(
 	for index, stepID := range stepIDs {
 		prepared.Steps[index] = etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: stepID}
 	}
-	plan, err := resolver.buildServiceLifecyclePlan(ctx, prepared, input)
+	plan, err := resolver.buildServiceLifecyclePlanWithHookInputs(ctx, prepared, input, hookInputs)
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}
@@ -89,7 +131,24 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlan(
 	task etcd.TaskRecord,
 	input etcd.ServiceLifecycleRenderInput,
 ) (*agentpb.ExecutionPlan, error) {
-	if len(task.Steps) < 1 || len(task.Steps) > 2 ||
+	return resolver.buildServiceLifecyclePlanWithHookInputs(ctx, task, input, nil)
+}
+
+func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	input etcd.ServiceLifecycleRenderInput,
+	hookInputs *etcd.BackingHookEncryptedInputs,
+) (*agentpb.ExecutionPlan, error) {
+	event, definition := serviceLifecycleHook(input, task.Type)
+	wantSteps := 1
+	if input.Release.RetainedPrior != nil {
+		wantSteps++
+	}
+	if definition != nil {
+		wantSteps++
+	}
+	if len(task.Steps) != wantSteps ||
 		task.Params[etcd.TaskServiceEnvironmentParam] != input.EnvironmentID ||
 		task.Params[etcd.TaskComposeArtifactParam] != input.ArtifactID {
 		return nil, errs.New(errs.KindInternal, "Service lifecycle Task procedure changed")
@@ -102,9 +161,56 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlan(
 	if err != nil {
 		return nil, err
 	}
-	operation, steps, err := serviceLifecycleProcedure(task, artifacts)
+	composeTask := task
+	composeTask.Steps = task.Steps
+	if definition != nil {
+		if task.Type == etcd.TaskStart {
+			composeTask.Steps = task.Steps[:len(task.Steps)-1]
+		} else {
+			composeTask.Steps = task.Steps[1:]
+		}
+	}
+	operation, composeSteps, err := serviceLifecycleProcedure(composeTask, artifacts)
 	if err != nil {
 		return nil, err
+	}
+	steps := composeSteps
+	if definition != nil {
+		inputs, ok := resolver.attachIdentities.(serviceLifecycleHookInputResolver)
+		if !ok || inputs == nil {
+			return nil, errs.New(errs.KindInternal, "Service lifecycle hook input resolver is not configured")
+		}
+		hookRecord := task.Steps[0]
+		if task.Type == etcd.TaskStart {
+			hookRecord = task.Steps[len(task.Steps)-1]
+		}
+		consume := func(resolved backinghook.Input) error {
+			hookStep, buildErr := backingHookStep(hookRecord, *definition, resolved, nil)
+			if buildErr != nil {
+				return buildErr
+			}
+			if task.Type == etcd.TaskStart {
+				hookStep.PrerequisiteStepId = composeSteps[len(composeSteps)-1].StepId
+				steps = append(composeSteps, hookStep)
+			} else {
+				composeSteps[0].PrerequisiteStepId = hookStep.StepId
+				steps = append([]*agentpb.ExecutionStep{hookStep}, composeSteps...)
+			}
+			return nil
+		}
+		if hookInputs != nil {
+			err = inputs.ResolveDraftLifecycleHookInput(ctx, task, hookInputs, task.Target, event, consume)
+		} else {
+			err = inputs.ResolveLifecycleHookInput(ctx, task, task.Target, event, consume)
+		}
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			for _, step := range steps {
+				ClearBackingHookProcedure(step.GetBackingHookProcedure())
+			}
+		}()
 	}
 	sources := make([]*agentpb.ServiceLifecycleSource, len(artifacts))
 	renders := []etcd.ReleaseRenderInput{input.Release.Current}
@@ -129,6 +235,23 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlan(
 		TargetID: task.Target, Artifacts: artifacts, Steps: steps,
 		ServiceLifecycleProcedure: &agentpb.ServiceLifecycleProcedure{Sources: sources},
 	})
+}
+
+func serviceLifecycleHook(
+	input etcd.ServiceLifecycleRenderInput,
+	taskType etcd.TaskType,
+) (backinghook.Event, *backinghook.Definition) {
+	if input.HookConfiguration == nil {
+		return "", nil
+	}
+	switch taskType {
+	case etcd.TaskStart:
+		return backinghook.AfterStart, input.HookConfiguration.AfterStart
+	case etcd.TaskStop, etcd.TaskDestroy:
+		return backinghook.BeforeStop, input.HookConfiguration.BeforeStop
+	default:
+		return "", nil
+	}
 }
 
 func (resolver *TaskPlanResolver) renderServiceLifecycleArtifacts(

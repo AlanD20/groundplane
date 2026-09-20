@@ -158,6 +158,18 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 	if err := validateExistingBlueprintAttaches(names, resolved, currentByName); err != nil {
 		return preparedBlueprintAttaches{}, err
 	}
+	for _, name := range names {
+		item := resolved[name]
+		hooks := item.backingService.Record.Desired.Hooks
+		_, existing := currentByName[name]
+		if !existing && item.spec.Credential.Mode == "new" && item.adapter.Custom() &&
+			hooks != nil && (hooks.Attach != nil || hooks.Detach != nil) {
+			return preparedBlueprintAttaches{}, errs.New(
+				errs.KindValidationFailed,
+				"create the custom Attach directly and wait until ready before referencing its facts or credential owner in Blueprint",
+			)
+		}
+	}
 	newCount := 0
 	for _, name := range names {
 		if _, exists := currentByName[name]; !exists {
@@ -179,7 +191,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 	identities := make(map[string]*controllerpkg.AttachPlanIdentity)
 	for _, name := range names {
 		item := resolved[name]
-		if _, exists := currentByName[name]; exists || item.spec.Credential.Mode != "new" || item.adapter.Manual() {
+		if _, exists := currentByName[name]; exists || item.spec.Credential.Mode != "new" || item.adapter.Custom() {
 			continue
 		}
 		identityName, err := attachProvisionIdentity(attachIDs[name], item.consumer.Desired.Name)
@@ -225,7 +237,7 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 			return attachIDs[grantNames[left]] < attachIDs[grantNames[right]]
 		})
 		grantIDs := make([]string, 0, len(grantNames))
-		grantFacts := make([]AttachGrantFactParams, 0, len(grantNames))
+		grantFacts := make([]AttachGrantInput, 0, len(grantNames))
 		retainedGrants := make([]etcd.Versioned[etcd.AttachRecord], 0, len(grantNames))
 		identity := identities[name]
 		for _, grantName := range grantNames {
@@ -254,9 +266,9 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 				database = grantIdentity.Database
 			}
 			grantIDs = append(grantIDs, grantID)
-			grantFacts = append(grantFacts, AttachGrantFactParams{
+			grantFacts = append(grantFacts, AttachGrantInput{
 				AttachID: grantID,
-				Params: adapters.FactParams{
+				Params: adapters.Input{
 					Authentication: item.authentication,
 					Host: backingendpoint.New(
 						item.backingService.Record.Desired.ID,
@@ -268,9 +280,9 @@ func (service *environmentBlueprintService) prepareBlueprintAttaches(
 				AttachID: grantID, Database: database,
 			})
 		}
-		var own adapters.FactParams
+		var own adapters.Input
 		if identity != nil {
-			own = adapters.FactParams{
+			own = adapters.Input{
 				Authentication: item.authentication,
 				Host:           backingendpoint.New(item.backingService.Record.Desired.ID), Port: item.adapter.Port(),
 				Database: identity.Database, Role: identity.Role, Password: identity.Password,
@@ -484,9 +496,9 @@ func newBlueprintAttachFactOverlay(fallback entrygeneration.EntryFactResolver) *
 
 func (overlay *blueprintAttachFactOverlay) addOwner(
 	name string,
-	own adapters.FactParams,
+	own adapters.Input,
 	grantNames []string,
-	grants []AttachGrantFactParams,
+	grants []AttachGrantInput,
 	adapter adapters.Adapter,
 ) error {
 	overlay.aliases[name] = name
@@ -510,7 +522,7 @@ func (overlay *blueprintAttachFactOverlay) addSet(
 	owner string,
 	grant string,
 	adapter adapters.Adapter,
-	params adapters.FactParams,
+	params adapters.Input,
 ) error {
 	facts, err := adapters.BuildFacts(adapter, params)
 	if err != nil {

@@ -10,14 +10,15 @@ hierarchy:
 backing Project -> Environment named main -> adapter-backed Service
 ```
 
-The MVP creates PostgreSQL 16 and Valkey 9 Backing Services. An Attach joins one
-consumer Service to one Backing Service network and, for a managed adapter,
-owns or reuses one provisioned credential and its facts. The `manual` adapter
-remains network-only where the authored backing-service contract permits it; it
-does not gain managed facts, grants, credentials, or Backup support.
+Backing Services run shared workloads. Built-in adapters add convenient
+provisioning; provisioning is not what makes a workload a Backing Service.
+The supported choices are PostgreSQL 16, Valkey 9, and Custom. Custom runs an
+operator-selected container image under GP. Without hooks, an Attach only
+connects its consumer Service to the backing network. It creates no credentials
+or facts. Custom does not inherit database grants or managed Backup support.
 
 Backing creation does not accept an uploaded Blueprint, an existing Zone, an
-operator-selected managed image, or runtime plugins. Existing-Zone selection
+operator-selected PostgreSQL image, or runtime plugins. Existing-Zone selection
 is deferred post-MVP; [ADR 0055](../decisions/0055-revision-bound-network-observation-and-backing-blueprint-scope.md)
 records the constraints that a future decision must resolve without making
 that path current behavior.
@@ -31,13 +32,16 @@ Blueprint contract](../blueprint.md).
 ### Creation and lifecycle
 
 Backing creation is one protected atomic operation. The operator supplies the
-Project slug, name and optional description, one compiled managed adapter key,
+Project slug, name and optional description, one adapter key,
 the `main` Environment network pool, and one new Zone's name, subnet, and
 `internal` decision. Valkey also requires an explicit immutable authentication mode.
+Custom requires an image. It does not invent a data Volume, credentials, exposed
+ports, or a healthcheck for an arbitrary image. Its Service name is the Project
+slug; the display name remains independent.
 
 The Controller publishes exactly one backing Project, one `main` Environment,
 one dedicated backing-owned Zone, one adapter Service, one adapter-defined data
-Volume, and one Agent Task. The Zone subnet must be canonical IPv4, inside the
+Volume for built-in database adapters, and one Agent Task. The Zone subnet must be canonical IPv4, inside the
 new Environment pool, and globally unreserved. A conflict commits none of the
 aggregate; protected replay returns the original ids and response.
 
@@ -52,6 +56,73 @@ A future permanent Delete needs a separate Console action, CLI command and API
 operation with impact preview, confirmation and explicit approval. The
 [deferred safeguards](../decisions/0053-durable-hierarchy-and-backing-facade-deletion.md#8-deferred-backing-service-permanent-deletion)
 do not authorize a route or a change to Destroy.
+
+### Unified provisioning and optional Custom hooks
+
+Built-in adapters and Custom hooks implement the same logical input/output
+contract. Compiled adapters consume typed inputs; commands receive their
+environment-variable representation. Results are declared string facts with
+sensitivity metadata, not text scraped from diagnostic logs.
+
+Custom hooks are optional: `attach`, `detach`, `before-stop`, and `after-start`.
+Restart uses before-stop followed by after-start. These belong to GP-requested
+operations, not autonomous container restarts or host boot. An omitted hook is
+a no-op. A hook failure blocks its operation. The operator owns command
+correctness and idempotency; GP owns targeting, time bounds, recording, and
+result validation. An interrupted custom command must not be silently executed
+again; retry is an explicit operator action.
+
+Configuration uses `attach`, `detach`, `before_stop`, and `after_start` fields,
+each with a literal `command` argument array and an explicit `timeout_seconds`
+from 1 to 900. The image must provide `/bin/sh`, `timeout` with kill-after
+support, `mktemp`, `chmod`, `cat`, and `rm` for bounded execution and private
+result-file handling. These requirements do not install software into the image.
+
+`inputs` declares keyed plain values, Secret references, or generated Attach
+passwords; exactly one source is required per key. GP supplies `HOST` as the
+stable backing endpoint, so operators cannot override it. Generated inputs are
+Attach-scoped; configurations with lifecycle hooks cannot declare them.
+`facts` declares the exact output keys and their `secret` classifications.
+There is no inferred custom port, username, database or connection URL.
+Secret references resolve in the backing Project's scope, not the consumer's.
+Their exact values follow the existing [Secret pin and deletion
+rules](secrets-and-connectors.md): a hook cannot introduce an untracked retained
+copy that survives permitted deletion of its source Secret.
+
+Inputs use `GP_EVENT` and `GP_BACKING_SERVICE_ID`. Attach/detach also receive
+`GP_ATTACH_ID`, `GP_TENANT_ID`, `GP_PROJECT_ID`, `GP_ENVIRONMENT_ID`, and
+`GP_SERVICE_ID`. These are stable consumer identities, not mutable slugs.
+Lifecycle hooks have no consumer context. Resolved provisioning inputs use
+`GP_INPUT_<KEY>`; previous facts use `GP_FACT_<KEY>`. GP must not inject the
+consumer's complete configuration or secrets. Values enter the process
+environment, never interpolated command source. Hook commands run inside the
+selected backing container, not on the host.
+
+The command writes its result to `GP_RESULT_FILE`. GP reads each line and
+splits at its first `=`. The key precedes it; every remaining character is the
+literal value. Blank lines are skipped, empty values are allowed, and quotes,
+comments, substitutions, and escapes have no special interpretation. Keys must
+be declared and unique; missing separators, missing declared facts, and
+undeclared keys fail the result. Values are single-line. Result size is bounded
+to 64 KiB. The result file is never sourced as shell code.
+
+Fact declarations, not command output, determine sensitivity. Only successful
+attach provisioning may publish new facts, after the complete result validates.
+Secret values remain outside public Task events and diagnostic output; the
+Controller encrypts stored fact values. Detach receives the saved provisioning
+facts. Lifecycle hooks cannot rotate consumer credentials by returning facts.
+GP removes its private temporary result files on success and failure.
+
+For this implementation, create new hook-based credential owners through
+standalone Attach, then reference their ready facts or reuse that owner from a
+Blueprint. Blueprint creation of a new custom Attach requiring an attach or
+detach hook is deferred. A single Blueprint apply cannot both produce new
+custom-hook facts and use them in configuration files:
+the files' contents are sealed before execution, while hook output is known
+only after execution. Reject that combination before publishing changes, with
+guidance to finish the Attach first. Existing ready Attach facts remain usable.
+Single-apply support is deferred; it requires a separately designed change to
+Task execution and interruption handling, not a mutable-plan workaround.
 
 ### Attach identity and credential reuse
 
@@ -176,6 +247,19 @@ detach against dependent creation. Creation publishes the primary, indexes,
 immutable render input, Task, operation locks, queue entry, and idempotency
 evidence atomically.
 
+Custom hook inputs are captured in an operation-owned encrypted record. The
+Task binds its ciphertext digest and exact Secret sources; publication activates
+the existing Secret pins in the same transaction. Explicit retry uses that
+capture, not newly edited Secret values. Successful completion deletes the
+private input record and releases its pins. Attach-owned generated values and
+returned facts remain with the credential owner; source Secret plaintext does
+not remain in its fact bundle.
+
+Each hook records STARTED before execution and RESULT before the Task can
+complete. A repeated result acknowledges the same validated result digest and
+preserves the first encrypted record. An interrupted STARTED hook requires
+explicit retry; reconnecting the Agent does not authorize another execution.
+
 Standalone Attach and Detach capture native runtime, current Entry bindings and
 running intent at one fixed revision. Their immutable input retains that capture;
 the Environment mutation epoch fences publication. Network changes target the
@@ -215,6 +299,14 @@ not pass Gate B until its unresolved safe source and restore contract is closed
 and proved.
 
 ## Current status
+
+Custom creation and the unified hook pipeline are implemented locally, including
+standalone Attach/Detach, initial after-start and explicit lifecycle hooks.
+Focused checks cover creation/admission, output validation, bounded executor
+behavior, checkpoint replay, creation ordering and terminal result gating.
+Live command execution, encrypted fact consumption, Secret input retry/release
+and expiry, and the complete operator journey are not yet qualified. These local
+checks are not a production-readiness claim.
 
 The [capability index](../capabilities.md) records qualification for PostgreSQL
 and Valkey creation plus the core Attach lifecycle, with focused isolated proof

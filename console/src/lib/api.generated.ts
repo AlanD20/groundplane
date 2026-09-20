@@ -1608,6 +1608,30 @@ export interface components {
             name?: string;
             service_id: string;
         };
+        BackingHookConfiguration: {
+            after_start?: components["schemas"]["BackingHookDefinition"];
+            attach?: components["schemas"]["BackingHookDefinition"];
+            before_stop?: components["schemas"]["BackingHookDefinition"];
+            detach?: components["schemas"]["BackingHookDefinition"];
+            facts?: components["schemas"]["BackingHookFactDefinition"][] | null;
+            inputs?: components["schemas"]["BackingHookInput"][] | null;
+        };
+        BackingHookDefinition: {
+            command: string[] | null;
+            /** Format: int32 */
+            timeout_seconds: number;
+        };
+        BackingHookFactDefinition: {
+            key: string;
+            secret: boolean;
+        };
+        BackingHookInput: {
+            /** @enum {string} */
+            generate?: "password";
+            key: string;
+            secret_ref?: string;
+            value?: string;
+        };
         BackingService: {
             /**
              * Format: uri
@@ -1635,6 +1659,9 @@ export interface components {
              */
             authentication?: "username_password" | "password" | "none";
             description?: string;
+            hooks?: components["schemas"]["BackingHookConfiguration"];
+            /** @description Required for the custom adapter and rejected for managed adapters. */
+            image?: string;
             name: string;
             network_pool: string;
             slug: string;
@@ -1650,6 +1677,10 @@ export interface components {
         } | {
             /** @enum {string} */
             adapter: "postgres:16";
+        } | {
+            /** @enum {string} */
+            adapter: "custom";
+            image: string;
         });
         BackingServiceCreated: {
             /**
@@ -2952,6 +2983,7 @@ export interface components {
             expose?: string[] | null;
             facts_prefix?: string;
             healthcheck?: components["schemas"]["ServiceHealthcheck"];
+            hooks?: components["schemas"]["BackingHookConfiguration"];
             id: string;
             image: string;
             label?: string;
@@ -3014,6 +3046,7 @@ export interface components {
             expose?: string[] | null;
             facts_prefix?: string;
             healthcheck?: components["schemas"]["ServiceHealthcheck"];
+            hooks?: components["schemas"]["BackingHookConfiguration"];
             id: string;
             image: string;
             label?: string;
@@ -3042,6 +3075,7 @@ export interface components {
             readonly $schema?: string;
             expose: string[] | null;
             healthcheck: components["schemas"]["ServiceHealthcheck"];
+            hooks?: components["schemas"]["BackingHookConfiguration"];
             image: string;
             on_failure: string;
             /** Format: int64 */

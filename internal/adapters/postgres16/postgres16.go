@@ -41,10 +41,10 @@ func (a *adapter) FactSchema(core.BackingAuthentication) []adapters.FactDefiniti
 		{Field: adapters.FactPassword, Secret: true},
 	}
 }
-func (a *adapter) Manual() bool         { return false }
+func (a *adapter) Custom() bool         { return false }
 func (a *adapter) SupportsGrants() bool { return true }
 
-func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step {
+func (a *adapter) ProvisionSteps(p adapters.Input) []adapters.Step {
 	role := quoteIdentifier(p.Role)
 	database := quoteIdentifier(p.Database)
 	roleStatement := sql(
@@ -68,7 +68,7 @@ func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step {
 	}
 }
 
-func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step {
+func (a *adapter) GrantSteps(p adapters.Input) []adapters.Step {
 	// p.GrantOn is the OTHER attach's database; the role already exists.
 	role := quoteIdentifier(p.Role)
 	owner := quoteIdentifier(p.GrantOn)
@@ -92,7 +92,7 @@ func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step {
 	}
 }
 
-func (a *adapter) RevokeSteps(p adapters.ProvisionParams) []adapters.Step {
+func (a *adapter) RevokeSteps(p adapters.Input) []adapters.Step {
 	role := quoteIdentifier(p.Role)
 	owner := quoteIdentifier(p.GrantOn)
 	privileges := sql(
@@ -115,7 +115,7 @@ func (a *adapter) RevokeSteps(p adapters.ProvisionParams) []adapters.Step {
 	}
 }
 
-func (a *adapter) DetachSteps(p adapters.ProvisionParams) []adapters.Step {
+func (a *adapter) DetachSteps(p adapters.Input) []adapters.Step {
 	return []adapters.Step{
 		{Op: adapters.StepSQL, Database: "postgres", Stdin: sql(
 			"REVOKE ALL PRIVILEGES ON DATABASE ", quoteIdentifier(p.Database), " FROM ", quoteIdentifier(p.Role),

@@ -37,7 +37,7 @@ implementation nor an old test result changes a requirement.
 | Revisioned desired-state editing and reconciliation | [Blueprints](features/blueprints.md) |
 | Workload lifecycle, Deploy, Rollback and recovery | [Services and Releases](features/services-and-releases.md) |
 | Policy, artifacts, source recovery and retention | [Backups](features/backups.md) |
-| Shared PostgreSQL/Valkey instances and consumer credentials | [Backing services and Attaches](features/backing-services.md) |
+| Shared services, built-in adapters, custom hooks and consumer facts | [Backing services and Attaches](features/backing-services.md) |
 | Reusable values and S3 credential configuration | [Secrets and Connectors](features/secrets-and-connectors.md) |
 | Isolated GitHub Actions execution | [Runners](features/runners.md) |
 | Controller and Agent updates | [Safe updates](features/upgrade-safety.md) |

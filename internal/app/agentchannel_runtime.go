@@ -55,7 +55,7 @@ func newAgentChannelRuntimeWithManagedConfig(
 	managed agentchannel.ManagedConfigResolver,
 ) *agentChannelRuntime {
 	return newAgentChannelRuntimeWithManagedConfigAndScripts(
-		authenticator, tasks, plans, materials, secrets, checkpoints, managed, nil, nil,
+		authenticator, tasks, plans, materials, secrets, checkpoints, managed, nil, nil, nil,
 	)
 }
 
@@ -69,6 +69,7 @@ func newAgentChannelRuntimeWithManagedConfigAndScripts(
 	managed agentchannel.ManagedConfigResolver,
 	scripts agentchannel.ScriptArtifactResolver,
 	scriptCheckpoints agentchannel.ScriptCheckpointer,
+	backingHookCheckpoints agentchannel.BackingHookCheckpointer,
 ) *agentChannelRuntime {
 	runtime := &agentChannelRuntime{registry: agentchannel.NewRegistry(), listen: agentlistener.Listen}
 	runtime.newServer = func(registry *agentchannel.Registry) agentChannelGRPCServer {
@@ -80,6 +81,9 @@ func newAgentChannelRuntimeWithManagedConfigAndScripts(
 			authenticator, registry, tasks, plans, materials, secrets, checkpoints, managed,
 			scripts, scriptCheckpoints, runtime.volumeCheckpoints,
 		)
+		if backingHookCheckpoints != nil {
+			_ = channel.EnableBackingHookCheckpoints(backingHookCheckpoints)
+		}
 		agentpb.RegisterAgentChannelServer(server, channel)
 		return server
 	}

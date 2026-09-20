@@ -100,7 +100,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateServiceLifecycleHierarchy(tenant, project, environment, current); err != nil {
+	if err := validateServiceLifecycleHierarchy(&tenant, project, environment, current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateDeletionTombstone(tombstone); err != nil {

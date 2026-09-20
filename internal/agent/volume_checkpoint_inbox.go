@@ -13,11 +13,12 @@ import (
 // WorkerOutput is a closed ordered union. Exactly one member is non-nil, and
 // each Task's terminal step progress is emitted before its final result.
 type WorkerOutput struct {
-	Progress         *TaskProgress
-	Result           *TaskResult
-	BackupCheckpoint *agentpb.BackupCheckpointRequest
-	ScriptCheckpoint *agentpb.ScriptCheckpointRequest
-	VolumeCheckpoint *agentpb.VolumeRemovalCheckpointRequest
+	Progress              *TaskProgress
+	Result                *TaskResult
+	BackupCheckpoint      *agentpb.BackupCheckpointRequest
+	ScriptCheckpoint      *agentpb.ScriptCheckpointRequest
+	BackingHookCheckpoint *agentpb.BackingHookCheckpointRequest
+	VolumeCheckpoint      *agentpb.VolumeRemovalCheckpointRequest
 }
 
 type volumeCheckpointWaiter struct {

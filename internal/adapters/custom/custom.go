@@ -1,9 +1,9 @@
-// Package manual is the "manual" adapter — no auto-provisioning.
+// Package custom is the "custom" adapter — no auto-provisioning.
 // Attaching only joins the network: no database/role, no facts, no
-// grants, no Groundplane-managed backups. See mvp.md, "The `manual`
+// grants, no Groundplane-managed backups. See mvp.md, "The `custom`
 // adapter (locked)". See postgres16's package comment for why Register()
 // is an explicit function rather than an init().
-package manual
+package custom
 
 import (
 	"github.com/AlanD20/groundplane/internal/adapters"
@@ -18,19 +18,19 @@ func Register() {
 
 type adapter struct{}
 
-func (a *adapter) Key() string                                                     { return "manual" }
-func (a *adapter) Label() string                                                   { return "Manual (network-only)" }
+func (a *adapter) Key() string                                                     { return "custom" }
+func (a *adapter) Label() string                                                   { return "Custom" }
 func (a *adapter) DefaultImage() string                                            { return "" }
 func (a *adapter) FactsPrefix() string                                             { return "" }
 func (a *adapter) URLScheme() string                                               { return "" }
 func (a *adapter) Port() string                                                    { return "" }
 func (a *adapter) FactSchema(core.BackingAuthentication) []adapters.FactDefinition { return nil }
 func (a *adapter) SupportsAuthenticationModes() bool                               { return false }
-func (a *adapter) Manual() bool                                                    { return true }
+func (a *adapter) Custom() bool                                                    { return true }
 func (a *adapter) SupportsGrants() bool                                            { return false }
 
-func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step { return nil }
-func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step     { return nil }
-func (a *adapter) RevokeSteps(p adapters.ProvisionParams) []adapters.Step    { return nil }
-func (a *adapter) DetachSteps(p adapters.ProvisionParams) []adapters.Step    { return nil }
-func (a *adapter) BackupStrategy() adapters.BackupStrategy                   { return adapters.BackupStrategy{} }
+func (a *adapter) ProvisionSteps(p adapters.Input) []adapters.Step { return nil }
+func (a *adapter) GrantSteps(p adapters.Input) []adapters.Step     { return nil }
+func (a *adapter) RevokeSteps(p adapters.Input) []adapters.Step    { return nil }
+func (a *adapter) DetachSteps(p adapters.Input) []adapters.Step    { return nil }
+func (a *adapter) BackupStrategy() adapters.BackupStrategy         { return adapters.BackupStrategy{} }

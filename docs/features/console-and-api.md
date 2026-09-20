@@ -55,6 +55,15 @@ Shell navigation and breadcrumbs preserve workspace and project context.
 Focus outlines are thin, transitions respect reduced motion, and clicking
 outside a dialog or drawer dismisses it.
 
+Multi-purpose forms group related fields with the shared `FormSection`: identity,
+runtime, network, credentials, resources and health checks as applicable. Keep
+labels above controls, optional fields explicit, and help beside the relevant
+input. Do not mix Zone allocation fields into identity or authentication groups.
+Simple forms with one purpose do not need empty or decorative sections.
+Zone creation shows the Environment pool's CIDR start/end and existing Zone
+subnets. These are reference bounds, not a claim that every address is available;
+the Controller still owns allocation validation.
+
 CodeMirror provides the shared document editor and read-only preview. YAML,
 JSON and shell have syntax highlighting. YAML/JSON formatting is an explicit,
 local action using lazily loaded Prettier parsers; it never saves or applies a

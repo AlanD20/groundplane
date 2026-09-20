@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -47,6 +48,7 @@ type AttachTaskRenderInput struct {
 	BackingProjectID         string                                  `json:"backing_project_id"`
 	AdapterKey               string                                  `json:"adapter_key"`
 	Authentication           core.BackingAuthentication              `json:"authentication,omitempty"`
+	HookConfiguration        *backinghook.Configuration              `json:"hook_configuration,omitempty"`
 	DesiredRevisionID        string                                  `json:"desired_revision_id"`
 	ArtifactID               string                                  `json:"artifact_id"`
 	RenderGeneration         uint64                                  `json:"render_generation"`
@@ -139,6 +141,14 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 		core.BackingAuthenticationPassword, core.BackingAuthenticationNone:
 	default:
 		return errs.New(errs.KindValidationFailed, "Attach Task authentication mode is invalid")
+	}
+	if input.HookConfiguration != nil {
+		if input.AdapterKey != "custom" {
+			return errs.New(errs.KindValidationFailed, "Attach Task hooks require the custom adapter")
+		}
+		if err := backinghook.ValidateConfiguration(*input.HookConfiguration); err != nil {
+			return err
+		}
 	}
 	if !validAttachTaskRenderLabel(input.TenantSlug) || !validAttachTaskRenderLabel(input.ProjectSlug) ||
 		!validAttachTaskRenderLabel(input.EnvironmentName) ||
@@ -255,6 +265,7 @@ func validateAttachTaskRenderInputScope(
 		input.BackingProjectID != record.BackingProjectID ||
 		input.AdapterKey != scope.BackingService.Record.Desired.Adapter ||
 		input.Authentication != scope.BackingService.Record.Desired.Authentication ||
+		!backinghook.EqualConfiguration(input.HookConfiguration, scope.BackingService.Record.Desired.Hooks) ||
 		input.DesiredRevisionID != scope.DesiredHead.Record.RevisionID ||
 		input.RenderGeneration != scope.ComposeProjection.Record.RenderGeneration ||
 		input.RenderGeneration != uint64(task.RenderGeneration) ||

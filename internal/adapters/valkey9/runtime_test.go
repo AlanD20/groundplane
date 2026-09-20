@@ -125,7 +125,7 @@ func testAuthenticationLifecycle(t *testing.T, mode core.BackingAuthentication) 
 	if (unauthenticated.ExitCode == 0) != (mode == core.BackingAuthenticationNone) {
 		t.Fatal("incorrect unauthenticated access policy")
 	}
-	owners := []adapters.ProvisionParams{
+	owners := []adapters.Input{
 		{Authentication: mode, Role: "owner_one", Password: []byte("owner-password-1")},
 		{Authentication: mode, Role: "owner_two", Password: []byte("owner-password-2")},
 	}
@@ -146,7 +146,7 @@ func testAuthenticationLifecycle(t *testing.T, mode core.BackingAuthentication) 
 			}
 		}
 	}
-	login := func(owner adapters.ProvisionParams) string {
+	login := func(owner adapters.Input) string {
 		if mode == core.BackingAuthenticationNone {
 			return ""
 		}

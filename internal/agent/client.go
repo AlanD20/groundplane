@@ -263,6 +263,15 @@ func (c *Client) sendScriptCheckpoint(
 	}})
 }
 
+func (c *Client) sendBackingHookCheckpoint(
+	stream agentStream,
+	request *agentpb.BackingHookCheckpointRequest,
+) error {
+	return stream.Send(&agentpb.AgentMessage{Payload: &agentpb.AgentMessage_BackingHookCheckpointRequest{
+		BackingHookCheckpointRequest: proto.Clone(request).(*agentpb.BackingHookCheckpointRequest),
+	}})
+}
+
 func (c *Client) startWorkerPool(ctx context.Context, size int) (context.CancelFunc, <-chan struct{}) {
 	poolCtx, cancel := context.WithCancel(ctx)
 	var pool *WorkerPool

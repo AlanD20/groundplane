@@ -15,38 +15,46 @@ import (
 func backingComposeProject(
 	spec adapters.CreationSpec,
 	serviceID string,
-	image string,
 	zone core.Zone,
-	volume core.Volume,
+	volume *core.Volume,
 	environment etcd.EnvironmentRecord,
 ) *composetypes.Project {
-	environmentFile := controller.EnvFileName(environment.ID)
-	return &composetypes.Project{
-		Name: "groundplane-backing",
-		Services: composetypes.Services{spec.ServiceName: {
-			Name: spec.ServiceName, Image: image, Command: composetypes.ShellCommand(backingComposeShell(spec.Command)),
-			Expose: composetypes.StringOrNumberList(spec.Expose), Restart: "unless-stopped",
-			Networks: map[string]*composetypes.ServiceNetworkConfig{
-				zone.Name: {Aliases: []string{backingendpoint.New(serviceID)}},
-			},
-			Volumes: []composetypes.ServiceVolumeConfig{
-				{Type: "volume", Source: volume.Key, Target: spec.MountPath},
-			},
-			EnvFiles: []composetypes.EnvFile{
-				{Path: filepath.Join(environment.VolumeDir, filepath.FromSlash(environmentFile)), Required: true},
-			},
-			HealthCheck: &composetypes.HealthCheckConfig{
-				Test: composetypes.HealthCheckTest(backingComposeShell(spec.HealthCommand)),
-			},
-		}},
+	service := composetypes.ServiceConfig{
+		Name: spec.ServiceName, Image: spec.Image, Command: composetypes.ShellCommand(backingComposeShell(spec.Command)),
+		Expose: composetypes.StringOrNumberList(spec.Expose), Restart: "unless-stopped",
+		Networks: map[string]*composetypes.ServiceNetworkConfig{
+			zone.Name: {Aliases: []string{backingendpoint.New(serviceID)}},
+		},
+	}
+	project := &composetypes.Project{
+		Name:     "groundplane-backing",
+		Services: composetypes.Services{spec.ServiceName: service},
 		Networks: composetypes.Networks{
 			zone.Name: {
 				Internal: zone.Internal,
 				Ipam:     composetypes.IPAMConfig{Config: []*composetypes.IPAMPool{{Subnet: zone.Subnet}}},
 			},
 		},
-		Volumes: composetypes.Volumes{volume.Key: {}},
 	}
+	if volume != nil {
+		service.Volumes = []composetypes.ServiceVolumeConfig{
+			{Type: "volume", Source: volume.Key, Target: spec.MountPath},
+		}
+		project.Volumes = composetypes.Volumes{volume.Key: {}}
+	}
+	if spec.HasEnvironment() {
+		environmentFile := controller.EnvFileName(environment.ID)
+		service.EnvFiles = []composetypes.EnvFile{
+			{Path: filepath.Join(environment.VolumeDir, filepath.FromSlash(environmentFile)), Required: true},
+		}
+	}
+	if spec.HasHealthcheck() {
+		service.HealthCheck = &composetypes.HealthCheckConfig{
+			Test: composetypes.HealthCheckTest(backingComposeShell(spec.HealthCommand)),
+		}
+	}
+	project.Services[spec.ServiceName] = service
+	return project
 }
 
 // Compiled adapter commands are runtime shell inputs, never Compose template

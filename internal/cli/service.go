@@ -100,7 +100,7 @@ func newServiceCmd() *cobra.Command {
 	_ = add.MarkFlagRequired("image")
 	cmd.AddCommand(add)
 
-	var editImage, editStrategy, editOnFailure, editMemory, editRestart string
+	var editImage, editStrategy, editOnFailure, editMemory, editRestart, editHooksFile string
 	var editZones, editExpose []string
 	var editCPUs float64
 	var editReplicas int
@@ -158,6 +158,12 @@ func newServiceCmd() *cobra.Command {
 			if cmd.Flags().Changed("replicas") {
 				input.Replicas = editReplicas
 			}
+			if cmd.Flags().Changed("hooks-file") {
+				input.Hooks, err = loadBackingHooks(cmd, editHooksFile)
+				if err != nil {
+					return err
+				}
+			}
 			edited, err := app.Client.EditService(cmd.Context(), id, input)
 			if err != nil {
 				return err
@@ -167,6 +173,8 @@ func newServiceCmd() *cobra.Command {
 		},
 	}
 	edit.Flags().StringVar(&editImage, "image", "", "container image")
+	edit.Flags().
+		StringVar(&editHooksFile, "hooks-file", "", "replacement custom hook configuration JSON; {} clears, omission preserves; - reads stdin")
 	edit.Flags().StringSliceVar(&editZones, "zone", nil, "replacement Zone names")
 	edit.Flags().StringVar(&editStrategy, "strategy", "", "blue-green | recreate")
 	edit.Flags().StringVar(&editOnFailure, "on-failure", "", "switch_back | leave_active")

@@ -46,7 +46,7 @@ const (
 	CodeBackupSourceNotFound        = errs.CodeBackupSourceNotFound
 	CodeStrategyNotImplemented      = errs.CodeStrategyNotImplemented
 	CodeRotationNotImplemented      = errs.CodeRotationNotImplemented
-	CodeAdapterManualOnly           = errs.CodeAdapterManualOnly
+	CodeAdapterCustomOnly           = errs.CodeAdapterCustomOnly
 	CodeValidationFailed            = errs.CodeValidationFailed
 	CodeScopeUnauthorized           = errs.CodeScopeUnauthorized
 	CodeConnectorScopeInvalid       = errs.CodeConnectorScopeInvalid

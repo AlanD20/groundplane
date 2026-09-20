@@ -62,7 +62,7 @@ const (
 	// --- declared-deferred / not-yet-implemented product surface ---
 	CodeStrategyNotImplemented Code = "strategy.not_implemented"
 	CodeRotationNotImplemented Code = "rotation.not_implemented"
-	CodeAdapterManualOnly      Code = "adapter.manual_only"
+	CodeAdapterCustomOnly      Code = "adapter.custom_only"
 
 	// --- validation / scope ---
 	CodeValidationFailed      Code = "validation.failed"
@@ -137,7 +137,7 @@ const (
 	KindBackupSourceNotFound
 	KindStrategyNotImplemented
 	KindRotationNotImplemented
-	KindAdapterManualOnly
+	KindAdapterCustomOnly
 	KindValidationFailed
 	KindMalformedRequest
 	KindScopeUnauthorized
@@ -207,7 +207,7 @@ var kindDescriptors = [kindLimit]descriptor{
 	KindBackupSourceNotFound:               {CodeBackupSourceNotFound, ClassNotFound, 404},
 	KindStrategyNotImplemented:             {CodeStrategyNotImplemented, ClassValidation, 422},
 	KindRotationNotImplemented:             {CodeRotationNotImplemented, ClassValidation, 422},
-	KindAdapterManualOnly:                  {CodeAdapterManualOnly, ClassValidation, 422},
+	KindAdapterCustomOnly:                  {CodeAdapterCustomOnly, ClassValidation, 422},
 	KindValidationFailed:                   {CodeValidationFailed, ClassValidation, 422},
 	KindMalformedRequest:                   {CodeValidationFailed, ClassBadRequest, 400},
 	KindScopeUnauthorized:                  {CodeScopeUnauthorized, ClassValidation, 422},

@@ -16,14 +16,23 @@ func TestBackingServiceAuthenticationRejectedBeforeDurableClaim(t *testing.T) {
 	service := &backingServiceCreationService{}
 	for _, input := range []apiTypes.BackingServiceCreate{
 		{Adapter: "postgres:16", Authentication: "none"},
+		{Adapter: "postgres:16", Image: "postgres:latest"},
 		{Adapter: "valkey:9"},
 		{Adapter: "valkey:9", Authentication: " "},
 		{Adapter: "valkey:9", Authentication: "invalid"},
+		{Adapter: "custom"},
+		{Adapter: "custom", Image: " "},
 	} {
 		_, err := service.CreateBackingService(context.Background(), input, "idempotency-key")
 		kind, _ := errs.KindOf(err)
 		if kind != errs.KindValidationFailed {
-			t.Fatalf("CreateBackingService(%s, %q) error = %v", input.Adapter, input.Authentication, err)
+			t.Fatalf(
+				"CreateBackingService(%s, authentication=%q, image=%q) error = %v",
+				input.Adapter,
+				input.Authentication,
+				input.Image,
+				err,
+			)
 		}
 	}
 }

@@ -8,16 +8,18 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/infra/runtimeconfiguration"
+	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // TaskConfiguration binds a candidate source set to its exact acknowledged
 // predecessor. A nil Prior with revision zero records acknowledged absence.
 type TaskConfiguration struct {
-	Current       runtimeconfiguration.Reference  `json:"current"`
-	Prior         *runtimeconfiguration.Reference `json:"prior"`
-	PriorRevision int64                           `json:"prior_revision"`
-	SecretPins    *TaskSecretPinSet               `json:"secret_pins,omitempty"`
+	Current           runtimeconfiguration.Reference  `json:"current,omitempty"`
+	Prior             *runtimeconfiguration.Reference `json:"prior"`
+	PriorRevision     int64                           `json:"prior_revision"`
+	SecretPins        *TaskSecretPinSet               `json:"secret_pins,omitempty"`
+	BackingHookInputs *TaskBackingHookInputSet        `json:"backing_hook_inputs,omitempty"`
 }
 
 func cloneTaskConfiguration(configuration *TaskConfiguration) *TaskConfiguration {
@@ -28,6 +30,11 @@ func cloneTaskConfiguration(configuration *TaskConfiguration) *TaskConfiguration
 	if configuration.SecretPins != nil {
 		pins := *configuration.SecretPins
 		cloned.SecretPins = &pins
+	}
+	if configuration.BackingHookInputs != nil {
+		inputs := *configuration.BackingHookInputs
+		inputs.SecretSources = append([]tasksecretpinrecord.Record(nil), inputs.SecretSources...)
+		cloned.BackingHookInputs = &inputs
 	}
 	if configuration.Prior != nil {
 		prior := *configuration.Prior
@@ -172,7 +179,17 @@ func taskRuntimeConfiguration(task TaskRecord) (*runtimeconfiguration.Reference,
 	if err := validateTaskSecretPinSet(task.Configuration.SecretPins); err != nil {
 		return nil, err
 	}
+	if err := validateTaskBackingHookInputSet(task); err != nil {
+		return nil, err
+	}
 	reference := task.Configuration.Current
+	if reference == (runtimeconfiguration.Reference{}) {
+		if task.Configuration.Prior != nil || task.Configuration.PriorRevision != 0 ||
+			task.Configuration.BackingHookInputs == nil {
+			return nil, errs.New(errs.KindStateConflict, "Task configuration authority is inconsistent")
+		}
+		return nil, nil
+	}
 	if runtimeconfiguration.ValidateReference(reference) != nil || task.RenderGeneration <= 0 ||
 		reference.EnvironmentID != task.Owner.EnvironmentID ||
 		reference.Generation > uint64(task.RenderGeneration) {

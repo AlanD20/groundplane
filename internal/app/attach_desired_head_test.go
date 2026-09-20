@@ -38,7 +38,7 @@ func TestResolveAttachScopeAcceptsSelectedDesiredProjectionWithoutBlueprintAudit
 	backing := etcd.Versioned[etcd.ServiceRecord]{
 		Record: etcd.ServiceRecord{
 			EnvironmentID: backingEnvironmentID, BackingNetworkID: backingNetworkID,
-			Desired: core.Service{ID: backingServiceID, Name: "postgres", Adapter: "manual"},
+			Desired: core.Service{ID: backingServiceID, Name: "postgres", Adapter: "custom"},
 			Runtime: core.ServiceRuntime{
 				ServiceID: backingServiceID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
 			},
@@ -101,7 +101,7 @@ func TestResolveAttachScopeAcceptsSelectedDesiredProjectionWithoutBlueprintAudit
 	if err != nil {
 		t.Fatalf("resolveAttachScope() error = %v", err)
 	}
-	if scope.ComposeProjection.Record.RevisionID != desiredRevisionID || adapter.Key() != "manual" ||
+	if scope.ComposeProjection.Record.RevisionID != desiredRevisionID || adapter.Key() != "custom" ||
 		len(attaches) != 0 {
 		t.Fatalf("resolveAttachScope() = %#v/%q/%#v", scope.ComposeProjection, adapter.Key(), attaches)
 	}

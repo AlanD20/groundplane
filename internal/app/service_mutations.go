@@ -933,6 +933,9 @@ func applyServiceEdit(current core.Service, input apiTypes.ServiceEdit) core.Ser
 	desired.Expose = append([]string(nil), input.Expose...)
 	desired.Restart = input.Restart
 	desired.Replicas = input.Replicas
+	if input.Hooks != nil {
+		desired.Hooks = backingHookConfigurationFromAPI(input.Hooks)
+	}
 	return desired
 }
 
@@ -987,7 +990,7 @@ func serviceCreateIntentValue(input apiTypes.ServiceCreate) idempotentintent.Val
 }
 
 func serviceEditIntentValue(input apiTypes.ServiceEdit) idempotentintent.Value {
-	return serviceIntentValue(
+	value := serviceIntentValue(
 		"",
 		"",
 		input.Image,
@@ -999,6 +1002,57 @@ func serviceEditIntentValue(input apiTypes.ServiceEdit) idempotentintent.Value {
 		input.Expose,
 		input.Restart,
 		input.Replicas,
+	)
+	if input.Hooks == nil {
+		return value
+	}
+	return idempotentintent.Object(
+		idempotentintent.Field{Name: "service", Value: value},
+		idempotentintent.Field{Name: "hooks", Value: backingHookIntentValue(input.Hooks)},
+	)
+}
+
+func backingHookIntentValue(configuration *apiTypes.BackingHookConfiguration) idempotentintent.Value {
+	definition := func(value *apiTypes.BackingHookDefinition) idempotentintent.Value {
+		if value == nil {
+			return idempotentintent.Null()
+		}
+		command := make([]idempotentintent.Value, len(value.Command))
+		for index, argument := range value.Command {
+			command[index] = idempotentintent.String(argument)
+		}
+		return idempotentintent.Object(
+			idempotentintent.Field{Name: "command", Value: idempotentintent.List(command...)},
+			idempotentintent.Field{Name: "timeout_seconds", Value: idempotentintent.Integer(int64(value.TimeoutSeconds))},
+		)
+	}
+	facts := make([]idempotentintent.Value, len(configuration.Facts))
+	for index, fact := range configuration.Facts {
+		facts[index] = idempotentintent.Object(
+			idempotentintent.Field{Name: "key", Value: idempotentintent.String(fact.Key)},
+			idempotentintent.Field{Name: "secret", Value: idempotentintent.Bool(fact.Secret)},
+		)
+	}
+	inputs := make([]idempotentintent.Value, len(configuration.Inputs))
+	for index, input := range configuration.Inputs {
+		literal := idempotentintent.Null()
+		if input.Value != nil {
+			literal = idempotentintent.String(*input.Value)
+		}
+		inputs[index] = idempotentintent.Object(
+			idempotentintent.Field{Name: "generate", Value: idempotentintent.String(input.Generate)},
+			idempotentintent.Field{Name: "key", Value: idempotentintent.String(input.Key)},
+			idempotentintent.Field{Name: "secret_ref", Value: idempotentintent.String(input.SecretRef)},
+			idempotentintent.Field{Name: "value", Value: literal},
+		)
+	}
+	return idempotentintent.Object(
+		idempotentintent.Field{Name: "after_start", Value: definition(configuration.AfterStart)},
+		idempotentintent.Field{Name: "attach", Value: definition(configuration.Attach)},
+		idempotentintent.Field{Name: "before_stop", Value: definition(configuration.BeforeStop)},
+		idempotentintent.Field{Name: "detach", Value: definition(configuration.Detach)},
+		idempotentintent.Field{Name: "facts", Value: idempotentintent.List(facts...)},
+		idempotentintent.Field{Name: "inputs", Value: idempotentintent.List(inputs...)},
 	)
 }
 
@@ -1088,6 +1142,7 @@ func serviceAPIResponse(record etcd.ServiceRecord) apiTypes.Service {
 		Expose:    append([]string(nil), record.Desired.Expose...), Restart: record.Desired.Restart,
 		Replicas: record.Desired.Replicas, Adapter: record.Desired.Adapter,
 		FactsPrefix: record.Desired.FactsPrefix, Label: record.Desired.Label, BackingNetworkID: record.BackingNetworkID,
+		Hooks: backingHookConfigurationToAPI(record.Desired.Hooks),
 	}
 	if record.Desired.Healthcheck != (core.Healthcheck{}) {
 		response.Healthcheck = &apiTypes.ServiceHealthcheck{

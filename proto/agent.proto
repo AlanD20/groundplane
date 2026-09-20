@@ -53,6 +53,7 @@ message AgentMessage {
     WorkloadImageResolutionResult workload_image_resolution_result = 11;
     VolumeRemovalCheckpointRequest volume_removal_checkpoint_request = 12;
     ServiceObservationResult service_observation_result = 13;
+    BackingHookCheckpointRequest backing_hook_checkpoint_request = 14;
   }
 }
 
@@ -400,6 +401,7 @@ message ControllerMessage {
     VolumeRemovalCheckpointAck volume_removal_checkpoint_ack = 13;
     ObserveServices observe_services = 14;
     CancelServiceObservation cancel_service_observation = 15;
+    BackingHookCheckpointAck backing_hook_checkpoint_ack = 16;
     TaskEventAck task_event_ack = 22;
   }
 }
@@ -715,6 +717,76 @@ message ScriptCheckpointAck {
   bytes control_payload_sha256 = 7;
 }
 
+enum BackingHookEvent {
+  BACKING_HOOK_EVENT_UNSPECIFIED = 0;
+  BACKING_HOOK_EVENT_ATTACH = 1;
+  BACKING_HOOK_EVENT_DETACH = 2;
+  BACKING_HOOK_EVENT_BEFORE_STOP = 3;
+  BACKING_HOOK_EVENT_AFTER_START = 4;
+}
+
+enum BackingHookCheckpointState {
+  BACKING_HOOK_CHECKPOINT_STATE_UNSPECIFIED = 0;
+  BACKING_HOOK_CHECKPOINT_STATE_STARTED = 1;
+  BACKING_HOOK_CHECKPOINT_STATE_RESULT = 2;
+}
+
+message BackingHookValue {
+  string key = 1;
+  bytes value = 2;
+}
+
+message BackingHookFactDefinition {
+  string key = 1;
+  bool secret = 2;
+}
+
+// BackingHookProcedure is a frozen, task-private execution instruction. Values
+// are transient on the authenticated Agent channel and are never persisted in
+// the Task plan record.
+message BackingHookProcedure {
+  BackingHookEvent event = 1;
+  repeated string command = 2;
+  uint32 timeout_seconds = 3;
+  string backing_service_id = 4;
+  string attach_id = 5;
+  string tenant_id = 6;
+  string project_id = 7;
+  string environment_id = 8;
+  string service_id = 9;
+  repeated BackingHookValue inputs = 10;
+  repeated BackingHookValue facts = 11;
+  repeated BackingHookFactDefinition fact_schema = 12;
+}
+
+// STARTED authorizes the irreversible hook execution. RESULT conveys the
+// complete validated result for Controller-side encryption and publication.
+message BackingHookCheckpointRequest {
+  string task_id = 1;
+  string operation_id = 2;
+  string assignment_id = 3;
+  uint32 execution_epoch = 4;
+  string step_id = 5;
+  bytes plan_hash = 6;
+  BackingHookEvent event = 7;
+  BackingHookCheckpointState state = 8;
+  bytes result_sha256 = 9;
+  repeated BackingHookValue facts = 10;
+}
+
+message BackingHookCheckpointAck {
+  string task_id = 1;
+  string operation_id = 2;
+  string assignment_id = 3;
+  uint32 execution_epoch = 4;
+  string step_id = 5;
+  bytes plan_hash = 6;
+  BackingHookEvent event = 7;
+  BackingHookCheckpointState state = 8;
+  bytes result_sha256 = 9;
+  bool existing = 10;
+}
+
 message ExecutionPlan {
   uint32 schema = 1; // exactly 1
   string plan_id = 2;
@@ -967,6 +1039,7 @@ message ExecutionStep {
     CandidateRestorationCompensate candidate_restoration_compensate = 33;
     ManagedNetworkEnsure managed_network_ensure = 34;
     ManagedVolumeEnsure managed_volume_ensure = 35;
+    BackingHookProcedure backing_hook_procedure = 36;
   }
   ExecutionStepPolicy policy = 30;
   string prerequisite_step_id = 31;

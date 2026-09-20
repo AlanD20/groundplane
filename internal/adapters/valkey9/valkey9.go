@@ -37,10 +37,10 @@ func (a *adapter) FactSchema(authentication core.BackingAuthentication) []adapte
 	}
 	return append(facts, adapters.FactDefinition{Field: adapters.FactPassword, Secret: true})
 }
-func (a *adapter) Manual() bool         { return false }
+func (a *adapter) Custom() bool         { return false }
 func (a *adapter) SupportsGrants() bool { return false }
 
-func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step {
+func (a *adapter) ProvisionSteps(p adapters.Input) []adapters.Step {
 	if p.Authentication == core.BackingAuthenticationNone {
 		return nil
 	}
@@ -50,7 +50,7 @@ func (a *adapter) ProvisionSteps(p adapters.ProvisionParams) []adapters.Step {
 	)
 }
 
-func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step {
+func (a *adapter) GrantSteps(p adapters.Input) []adapters.Step {
 	// Valkey has no per-database isolation the way postgres does; a
 	// "grant" here is declared-deferred until keyspace-prefix ACLs are
 	// designed. Returning no steps keeps the pipeline a no-op rather than
@@ -58,9 +58,9 @@ func (a *adapter) GrantSteps(p adapters.ProvisionParams) []adapters.Step {
 	return nil
 }
 
-func (a *adapter) RevokeSteps(p adapters.ProvisionParams) []adapters.Step { return nil }
+func (a *adapter) RevokeSteps(p adapters.Input) []adapters.Step { return nil }
 
-func (a *adapter) DetachSteps(p adapters.ProvisionParams) []adapters.Step {
+func (a *adapter) DetachSteps(p adapters.Input) []adapters.Step {
 	if p.Authentication == core.BackingAuthenticationNone {
 		return nil
 	}

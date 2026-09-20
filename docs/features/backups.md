@@ -19,7 +19,7 @@ order in one visible Task and fails fast. Each source has its own consistency
 boundary; a run is not a cross-source snapshot. Production Gate B still
 requires safe recovery for actual Valkey state, but its isolated source and
 artifact contract is unresolved. Groundplane does not advertise or run Valkey,
-manual Attach, or any other undefined source in the meantime: it fails before
+Custom Attach, or any other undefined source in the meantime: it fails before
 Task creation with `strategy.not_implemented`. Restore into another Environment
 or target, alternate restore targets, and target recreation remain outside the
 accepted behavior.

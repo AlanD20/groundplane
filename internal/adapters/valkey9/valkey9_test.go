@@ -11,7 +11,7 @@ import (
 
 // Rationale: clients need the actual named identity as well as its password.
 func TestNamedAuthenticationExposesRole(t *testing.T) {
-	facts, err := adapters.BuildFacts(&adapter{}, adapters.FactParams{
+	facts, err := adapters.BuildFacts(&adapter{}, adapters.Input{
 		Authentication: core.BackingAuthenticationUsernamePassword,
 		Host:           "valkey", Port: "6379", Role: "api_5d3f9a", Password: []byte("URL_safe-1"),
 	})
@@ -30,7 +30,7 @@ func TestNamedAuthenticationExposesRole(t *testing.T) {
 // Rationale: Valkey ACL credentials must be sent as mutable stdin to the
 // compiled binary, never exposed in Docker exec arguments.
 func TestProvisionStepsKeepPasswordOutOfArguments(t *testing.T) {
-	steps := (&adapter{}).ProvisionSteps(adapters.ProvisionParams{
+	steps := (&adapter{}).ProvisionSteps(adapters.Input{
 		Authentication: core.BackingAuthenticationUsernamePassword,
 		Role:           "api_5d3f9a", Password: []byte("URL_safe-1"),
 	})
@@ -72,7 +72,7 @@ func TestAuthenticationFactModes(t *testing.T) {
 		t.Run(string(tc.mode), func(t *testing.T) {
 			facts, err := adapters.BuildFacts(
 				&adapter{},
-				adapters.FactParams{
+				adapters.Input{
 					Authentication: tc.mode,
 					Host:           "valkey",
 					Port:           "6379",
@@ -94,7 +94,7 @@ func TestAuthenticationFactModes(t *testing.T) {
 // Rationale: default-user attachments must never revoke another owner's access.
 func TestPasswordDetachRevokesOnlyOwnerPassword(t *testing.T) {
 	steps := (&adapter{}).DetachSteps(
-		adapters.ProvisionParams{
+		adapters.Input{
 			Authentication: core.BackingAuthenticationPassword,
 			Role:           "default",
 			Password:       []byte("owner-1"),
@@ -110,13 +110,13 @@ func TestPasswordDetachRevokesOnlyOwnerPassword(t *testing.T) {
 
 // Rationale: joining an unauthenticated backing must not change instance policy.
 func TestNoAuthenticationNeverCompilesCredentialMutation(t *testing.T) {
-	params := adapters.ProvisionParams{Authentication: core.BackingAuthenticationNone}
+	params := adapters.Input{Authentication: core.BackingAuthenticationNone}
 	if len((&adapter{}).ProvisionSteps(params)) != 0 || len((&adapter{}).DetachSteps(params)) != 0 {
 		t.Fatal("no-auth attachment mutated instance authentication")
 	}
 	_, err := adapters.BuildFacts(
 		&adapter{},
-		adapters.FactParams{
+		adapters.Input{
 			Authentication: core.BackingAuthenticationNone,
 			Host:           "valkey",
 			Port:           "6379",

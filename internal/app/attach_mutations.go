@@ -12,6 +12,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
@@ -64,27 +65,30 @@ type attachMutationRepository interface {
 		string,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	CreateAttachWithTask(
+	CreateAttachWithTaskHookInputs(
 		context.Context,
 		etcd.AttachCreateScope,
 		etcd.AttachRecord,
 		*etcd.AttachEncryptedFacts,
+		*etcd.BackingHookEncryptedInputs,
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	BeginAttachDetachWithTask(
+	BeginAttachDetachWithTaskHookInputs(
 		context.Context,
 		etcd.AttachCreateScope,
 		etcd.Versioned[etcd.AttachRecord],
+		*etcd.BackingHookEncryptedInputs,
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	BeginAttachDetachWithTaskInitiation(
+	BeginAttachDetachWithTaskInitiationHookInputs(
 		context.Context,
 		etcd.AttachCreateScope,
 		etcd.Versioned[etcd.AttachRecord],
+		*etcd.BackingHookEncryptedInputs,
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
@@ -93,12 +97,25 @@ type attachMutationRepository interface {
 }
 
 type attachMutationFacts interface {
+	SealCustomHookBundle(
+		context.Context,
+		string,
+		string,
+		string,
+		backinghook.Configuration,
+	) ([]etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, *etcd.BackingHookEncryptedInputs, error)
+	SealBackingHookTaskInputs(
+		context.Context,
+		string,
+		string,
+		backinghook.Configuration,
+	) (*etcd.BackingHookEncryptedInputs, error)
 	SealFactSets(
 		context.Context,
 		string,
 		adapters.Adapter,
-		adapters.FactParams,
-		[]AttachGrantFactParams,
+		adapters.Input,
+		[]AttachGrantInput,
 	) ([]etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, error)
 	ResolveReadyDatabase(
 		context.Context,
@@ -120,6 +137,8 @@ type attachDraftPlanSealer interface {
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		*controllerpkg.AttachPlanIdentity,
+		*etcd.AttachEncryptedFacts,
+		*etcd.BackingHookEncryptedInputs,
 	) (serviceruntimerecord.AttachPreparation, error)
 }
 
@@ -408,13 +427,44 @@ func (service *attachMutationService) createAttachOnce(
 	attachID := ids.New(ids.KindAttach)
 	taskID := ids.New(ids.KindTask)
 	credentialAttachID := attachID
+	grantIDs := attachGrantIDs(scope.Grants)
+	ownsCredential := request.Credential.Mode == apiTypes.AttachCredentialNew
+	hooked := false
+	attachHook := false
+	if ownsCredential && adapter.Custom() && scope.BackingService.Record.Desired.Hooks != nil {
+		hooks := scope.BackingService.Record.Desired.Hooks
+		hooked = hooks.Attach != nil || hooks.Detach != nil
+		attachHook = hooks.Attach != nil
+	}
+	task, artifactID, err := newAttachMutationTask(
+		scope.Project.Record, scope.Environment.Record,
+		taskID, attachID, environmentID, etcd.TaskAttach,
+		scope.ComposeProjection.Record.RenderGeneration,
+		attachTaskStepCount(
+			adapter, scope.BackingService.Record.Desired.Authentication,
+			len(grantIDs), ownsCredential, attachHook,
+		),
+		idempotencyKey, now,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, err
+	}
 	var identity *controllerpkg.AttachPlanIdentity
 	var metadata []etcd.AttachFactSetMetadata
 	var encryptedFacts *etcd.AttachEncryptedFacts
-	if request.Credential.Mode == apiTypes.AttachCredentialNew {
-		identity, metadata, encryptedFacts, err = service.prepareAttachFacts(ctx, attachID, consumer, scope, adapter)
+	var hookInputs *etcd.BackingHookEncryptedInputs
+	if ownsCredential {
+		identity, metadata, encryptedFacts, hookInputs, err = service.prepareAttachFacts(
+			ctx, attachID, task.OperationID, consumer, scope, adapter,
+		)
 		if err != nil {
 			return etcd.IdempotencyResponse{}, err
+		}
+		if hookInputs != nil {
+			task, err = etcd.BindBackingHookTaskInputs(task, scope.BackingProject.Record.ID, *hookInputs)
+			if err != nil {
+				return etcd.IdempotencyResponse{}, err
+			}
 		}
 	} else {
 		credentialAttachID = request.Credential.AttachID
@@ -426,7 +476,9 @@ func (service *attachMutationService) createAttachOnce(
 	if encryptedFacts != nil {
 		defer clear(encryptedFacts.Ciphertext)
 	}
-	grantIDs := attachGrantIDs(scope.Grants)
+	if hookInputs != nil {
+		defer clear(hookInputs.Ciphertext)
+	}
 	record, err := etcd.NewPendingAttachRecord(
 		attachID, environmentID, name, scope.BackingProject.Record.ID, scope.BackingEnvironment.Record.ID,
 		scope.BackingService.Record.Desired.ID, scope.BackingService.Record.BackingNetworkID,
@@ -435,25 +487,19 @@ func (service *attachMutationService) createAttachOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	task, artifactID, err := newAttachMutationTask(
-		scope.Project.Record, scope.Environment.Record,
-		taskID, record.ID, record.EnvironmentID, etcd.TaskAttach,
-		scope.ComposeProjection.Record.RenderGeneration,
-		attachTaskStepCount(
-			adapter, scope.BackingService.Record.Desired.Authentication,
-			len(grantIDs), record.OwnsCredential(),
-		),
-		idempotencyKey, now,
-	)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+	record.HookBundle = hooked
+	if attachHook {
+		task.TimeoutSeconds = max(
+			task.TimeoutSeconds,
+			int64(scope.BackingService.Record.Desired.Hooks.Attach.TimeoutSeconds)+15,
+		)
 	}
 	renderInput, err := buildAttachTaskRenderInput(scope, runtime, record, currentAttaches, task, artifactID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	prepared, err := service.plans.SealDraft(
-		ctx, etcd.Versioned[etcd.AttachRecord]{Record: record}, renderInput, task, identity,
+		ctx, etcd.Versioned[etcd.AttachRecord]{Record: record}, renderInput, task, identity, encryptedFacts, hookInputs,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -463,8 +509,8 @@ func (service *attachMutationService) createAttachOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	result, createErr := service.repository.CreateAttachWithTask(
-		ctx, scope, record, encryptedFacts, renderInput, task, marker,
+	result, createErr := service.repository.CreateAttachWithTaskHookInputs(
+		ctx, scope, record, encryptedFacts, hookInputs, renderInput, task, marker,
 	)
 	return service.resolveMutationResult(ctx, locator, evidence, result, createErr, response)
 }
@@ -585,18 +631,42 @@ func (service *attachMutationService) detachAttachOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
+	detachHook := current.Record.HookBundle && scope.BackingService.Record.Desired.Hooks != nil &&
+		scope.BackingService.Record.Desired.Hooks.Detach != nil
 	task, artifactID, err := newAttachMutationTask(
 		scope.Project.Record, scope.Environment.Record,
 		taskID, current.Record.ID, current.Record.EnvironmentID, etcd.TaskDetach,
 		scope.ComposeProjection.Record.RenderGeneration,
 		attachTaskStepCount(
 			adapter, scope.BackingService.Record.Desired.Authentication,
-			len(current.Record.GrantAttachIDs), current.Record.OwnsCredential(),
+			len(current.Record.GrantAttachIDs), current.Record.OwnsCredential(), detachHook,
 		),
 		idempotencyKey, now,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
+	}
+	if detachHook {
+		task.TimeoutSeconds = max(
+			task.TimeoutSeconds,
+			int64(scope.BackingService.Record.Desired.Hooks.Detach.TimeoutSeconds)+15,
+		)
+	}
+	var hookInputs *etcd.BackingHookEncryptedInputs
+	if detachHook {
+		hookInputs, err = service.facts.SealBackingHookTaskInputs(
+			ctx, task.OperationID, scope.BackingProject.Record.ID, *scope.BackingService.Record.Desired.Hooks,
+		)
+		if err != nil {
+			return etcd.IdempotencyResponse{}, err
+		}
+		if hookInputs != nil {
+			defer clear(hookInputs.Ciphertext)
+			task, err = etcd.BindBackingHookTaskInputs(task, scope.BackingProject.Record.ID, *hookInputs)
+			if err != nil {
+				return etcd.IdempotencyResponse{}, err
+			}
+		}
 	}
 	if initiation != nil {
 		task.Owner = initiation.Owner()
@@ -608,7 +678,7 @@ func (service *attachMutationService) detachAttachOnce(
 	}
 	draft := current
 	draft.Record = detaching
-	prepared, err := service.plans.SealDraft(ctx, draft, renderInput, task, nil)
+	prepared, err := service.plans.SealDraft(ctx, draft, renderInput, task, nil, nil, hookInputs)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -620,12 +690,12 @@ func (service *attachMutationService) detachAttachOnce(
 	var result etcd.IdempotencyTransactionResult
 	var detachErr error
 	if initiation == nil {
-		result, detachErr = service.repository.BeginAttachDetachWithTask(
-			ctx, scope, current, renderInput, task, marker,
+		result, detachErr = service.repository.BeginAttachDetachWithTaskHookInputs(
+			ctx, scope, current, hookInputs, renderInput, task, marker,
 		)
 	} else {
-		result, detachErr = service.repository.BeginAttachDetachWithTaskInitiation(
-			ctx, scope, current, renderInput, task, marker, *initiation,
+		result, detachErr = service.repository.BeginAttachDetachWithTaskInitiationHookInputs(
+			ctx, scope, current, hookInputs, renderInput, task, marker, *initiation,
 		)
 	}
 	return service.resolveMutationResult(ctx, locator, evidence, result, detachErr, response)
@@ -830,21 +900,27 @@ func (service *attachMutationService) listAllAttaches(
 }
 
 func (service *attachMutationService) prepareAttachFacts(
-	ctx context.Context, attachID string,
+	ctx context.Context, attachID string, operationID string,
 	consumer etcd.Versioned[etcd.ServiceRecord],
 	scope etcd.AttachCreateScope,
 	adapter adapters.Adapter,
-) (*controllerpkg.AttachPlanIdentity, []etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, error) {
-	if adapter.Manual() {
-		metadata, encrypted, err := service.facts.SealFactSets(
-			ctx, attachID, adapter, adapters.FactParams{}, nil,
+) (*controllerpkg.AttachPlanIdentity, []etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts,
+	*etcd.BackingHookEncryptedInputs, error,
+) {
+	if adapter.Custom() {
+		hooks := scope.BackingService.Record.Desired.Hooks
+		if hooks == nil || hooks.Attach == nil && hooks.Detach == nil {
+			return nil, nil, nil, nil, nil
+		}
+		metadata, encrypted, hookInputs, err := service.facts.SealCustomHookBundle(
+			ctx, attachID, scope.BackingProject.Record.ID, operationID, *hooks,
 		)
-		return nil, metadata, encrypted, err
+		return nil, metadata, encrypted, hookInputs, err
 	}
 	authentication := scope.BackingService.Record.Desired.Authentication
 	identityName, err := attachProvisionIdentity(attachID, consumer.Record.Desired.Name)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	role := identityName
 	var password []byte
@@ -856,16 +932,16 @@ func (service *attachMutationService) prepareAttachFacts(
 	} else {
 		password, err = generateAttachPassword(service.random)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 	}
 	defer clear(password)
-	own := adapters.FactParams{
+	own := adapters.Input{
 		Authentication: authentication,
 		Host:           backingendpoint.New(scope.BackingService.Record.Desired.ID), Port: adapter.Port(),
 		Database: identityName, Role: role, Password: password,
 	}
-	grantFacts := make([]AttachGrantFactParams, 0, len(scope.Grants))
+	grantFacts := make([]AttachGrantInput, 0, len(scope.Grants))
 	planIdentity := &controllerpkg.AttachPlanIdentity{
 		Authentication: authentication,
 		Database:       identityName, Role: role, Password: append([]byte(nil), password...),
@@ -883,11 +959,11 @@ func (service *attachMutationService) prepareAttachFacts(
 			database = value
 			return nil
 		}); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
-		grantFacts = append(grantFacts, AttachGrantFactParams{
+		grantFacts = append(grantFacts, AttachGrantInput{
 			AttachID: grant.Record.ID,
-			Params: adapters.FactParams{
+			Params: adapters.Input{
 				Authentication: authentication,
 				Host:           backingendpoint.New(scope.BackingService.Record.Desired.ID), Port: adapter.Port(),
 				Database: database, Role: role, Password: password,
@@ -899,10 +975,10 @@ func (service *attachMutationService) prepareAttachFacts(
 	}
 	metadata, encrypted, err := service.facts.SealFactSets(ctx, attachID, adapter, own, grantFacts)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	failed = false
-	return planIdentity, metadata, encrypted, nil
+	return planIdentity, metadata, encrypted, nil, nil
 }
 
 func normalizeAttachRequest(request apiTypes.AttachRequest) (apiTypes.AttachRequest, error) {
@@ -1123,39 +1199,46 @@ func (repository *durableAttachMutationRepository) RenameAttachIdempotent(
 	return repository.attaches.RenameAttachIdempotent(ctx, environment, project, current, name, marker)
 }
 
-func (repository *durableAttachMutationRepository) CreateAttachWithTask(
+func (repository *durableAttachMutationRepository) CreateAttachWithTaskHookInputs(
 	ctx context.Context,
 	scope etcd.AttachCreateScope,
 	record etcd.AttachRecord,
 	facts *etcd.AttachEncryptedFacts,
+	hookInputs *etcd.BackingHookEncryptedInputs,
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.attaches.CreateAttachWithTask(ctx, scope, record, facts, renderInput, task, marker)
+	return repository.attaches.CreateAttachWithTaskHookInputs(
+		ctx, scope, record, facts, hookInputs, renderInput, task, marker,
+	)
 }
 
-func (repository *durableAttachMutationRepository) BeginAttachDetachWithTask(
+func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskHookInputs(
 	ctx context.Context,
 	scope etcd.AttachCreateScope,
 	current etcd.Versioned[etcd.AttachRecord],
+	hookInputs *etcd.BackingHookEncryptedInputs,
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.attaches.BeginAttachDetachWithTask(ctx, scope, current, renderInput, task, marker)
+	return repository.attaches.BeginAttachDetachWithTaskHookInputs(
+		ctx, scope, current, hookInputs, renderInput, task, marker,
+	)
 }
 
-func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskInitiation(
+func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskInitiationHookInputs(
 	ctx context.Context,
 	scope etcd.AttachCreateScope,
 	current etcd.Versioned[etcd.AttachRecord],
+	hookInputs *etcd.BackingHookEncryptedInputs,
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 	initiation etcd.TaskInitiation,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.attaches.BeginAttachDetachWithTaskInitiation(
-		ctx, scope, current, renderInput, task, marker, initiation,
+	return repository.attaches.BeginAttachDetachWithTaskInitiationHookInputs(
+		ctx, scope, current, hookInputs, renderInput, task, marker, initiation,
 	)
 }

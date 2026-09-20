@@ -38,18 +38,62 @@ func (repository *TaskRepository) ResumeTaskSourceReleases(ctx context.Context) 
 }
 
 func (repository *TaskRepository) prepareRecoverySecretPinTerminal(
-	ctx context.Context, task TaskRecord,
+	ctx context.Context, task TaskRecord, revision int64,
 ) (taskMaterializationProjectionChange, error) {
-	if task.Configuration == nil || task.Configuration.SecretPins == nil || task.Status != TaskStatusCompleted {
+	if task.Configuration == nil || task.Status != TaskStatusCompleted {
 		return taskMaterializationProjectionChange{}, nil
 	}
-	return repository.beginRecoverySecretPinRelease(ctx, task)
+	change := taskMaterializationProjectionChange{}
+	if task.Configuration.BackingHookInputs != nil {
+		key := backingHookTaskInputKey(task.OperationID)
+		read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: []string{key}, Revision: revision})
+		if err != nil {
+			return taskMaterializationProjectionChange{}, err
+		}
+		if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
+			if read != nil {
+				clearKeyValues(read.Values)
+			}
+			return taskMaterializationProjectionChange{}, errs.New(
+				errs.KindStateConflict,
+				"Backing hook Task inputs are unavailable at completion",
+			)
+		}
+		defer clearKeyValues(read.Values)
+		stored, err := decodeBackingHookEncryptedInputs(read.Values[0].Value)
+		if err != nil {
+			return taskMaterializationProjectionChange{}, err
+		}
+		defer clear(stored.Ciphertext)
+		if stored.OperationID != task.OperationID ||
+			stored.CiphertextSHA256 != task.Configuration.BackingHookInputs.CiphertextSHA256 {
+			return taskMaterializationProjectionChange{}, errs.New(
+				errs.KindStateConflict,
+				"Backing hook Task input authority changed before completion",
+			)
+		}
+		change.applies = true
+		change.conditions = append(change.conditions, Condition{Key: key, ModRevision: read.Values[0].ModRevision})
+		change.mutations = append(change.mutations, Mutation{Type: MutationDelete, Key: key})
+	}
+	if task.Configuration.SecretPins == nil {
+		return change, nil
+	}
+	pins, err := repository.beginRecoverySecretPinRelease(ctx, task)
+	if err != nil {
+		clearTaskMaterializationProjectionChange(change)
+		return taskMaterializationProjectionChange{}, err
+	}
+	change.applies = change.applies || pins.applies
+	change.conditions = append(change.conditions, pins.conditions...)
+	change.mutations = append(change.mutations, pins.mutations...)
+	return change, nil
 }
 
 func (repository *TaskRepository) beginRecoverySecretPinRelease(
 	ctx context.Context, task TaskRecord,
 ) (taskMaterializationProjectionChange, error) {
-	pins, err := recoverySecretPinRepository(repository.store, task.Owner.ProjectID)
+	pins, err := recoverySecretPinRepository(repository.store, taskSecretPinProjectID(task))
 	if err != nil {
 		return taskMaterializationProjectionChange{}, err
 	}
@@ -84,13 +128,16 @@ func (repository *TaskRepository) beginRecoverySecretPinRelease(
 func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	ctx context.Context, task TaskRecord, taskRevision int64, retention KeyValue, now time.Time,
 ) (bool, error) {
-	if task.Configuration == nil || task.Configuration.SecretPins == nil {
+	if task.Configuration == nil {
 		return false, nil
+	}
+	if task.Configuration.SecretPins == nil {
+		return repository.prepareBackingHookInputExpiry(ctx, task, taskRevision, retention, now)
 	}
 	if !isTerminalTaskStatus(task.Status) || task.RetainUntil == nil || task.RetainUntil.After(now) {
 		return true, errs.New(errs.KindStateConflict, "recovery Secret retry authority has not expired")
 	}
-	pins, err := recoverySecretPinRepository(repository.store, task.Owner.ProjectID)
+	pins, err := recoverySecretPinRepository(repository.store, taskSecretPinProjectID(task))
 	if err != nil {
 		return true, err
 	}
@@ -104,6 +151,11 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	}
 	keys := []string{taskActiveOperationKey(task.OperationID), taskAssignmentIndexKey(root.AttemptID()),
 		taskRecoveryProofRequiredKey(root.AttemptID()), releaseRecoveryKey(root.AttemptID()), taskKey(root.AttemptID())}
+	hookInputIndex := -1
+	if task.Configuration.BackingHookInputs != nil {
+		hookInputIndex = len(keys)
+		keys = append(keys, backingHookTaskInputKey(task.OperationID))
+	}
 	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
 	if err != nil {
 		return true, err
@@ -123,6 +175,24 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 		latest.Configuration == nil || latest.Configuration.SecretPins == nil ||
 		*latest.Configuration.SecretPins != *task.Configuration.SecretPins {
 		return true, corruptTaskPruneIntent()
+	}
+	if hookInputIndex >= 0 {
+		if read.Values[hookInputIndex] == nil || latest.Configuration.BackingHookInputs == nil ||
+			!sameTaskBackingHookInputSet(
+				latest.Configuration.BackingHookInputs,
+				task.Configuration.BackingHookInputs,
+			) {
+			return true, corruptTaskPruneIntent()
+		}
+		stored, decodeErr := decodeBackingHookEncryptedInputs(read.Values[hookInputIndex].Value)
+		if decodeErr != nil {
+			return true, decodeErr
+		}
+		clear(stored.Ciphertext)
+		if stored.OperationID != task.OperationID ||
+			stored.CiphertextSHA256 != task.Configuration.BackingHookInputs.CiphertextSHA256 {
+			return true, corruptTaskPruneIntent()
+		}
 	}
 	if !isTerminalTaskStatus(latest.Status) || latest.RetainUntil == nil || latest.RetainUntil.After(now) {
 		return true, nil
@@ -155,6 +225,11 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 			Condition{Key: key, ModRevision: keyValueRevision(read.Values[index])},
 		)
 	}
+	if hookInputIndex >= 0 {
+		change.mutations = append(change.mutations, Mutation{
+			Type: MutationDelete, Key: backingHookTaskInputKey(task.OperationID),
+		})
+	}
 	commit, err := repository.store.Transact(ctx, change.conditions, change.mutations)
 	clearKeyValues(commit.FailureReads)
 	if err != nil {
@@ -165,6 +240,63 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	}
 	_, err = pins.ResumeRelease(ctx)
 	return true, err
+}
+
+func (repository *TaskRepository) prepareBackingHookInputExpiry(
+	ctx context.Context,
+	task TaskRecord,
+	taskRevision int64,
+	retention KeyValue,
+	now time.Time,
+) (bool, error) {
+	if task.Configuration.BackingHookInputs == nil {
+		return false, nil
+	}
+	if !isTerminalTaskStatus(task.Status) || task.RetainUntil == nil || task.RetainUntil.After(now) {
+		return true, errs.New(errs.KindStateConflict, "Backing hook retry authority has not expired")
+	}
+	keys := []string{
+		taskActiveOperationKey(task.OperationID), taskAssignmentIndexKey(task.ID),
+		backingHookTaskInputKey(task.OperationID),
+	}
+	read, err := repository.store.GetMany(ctx, GetManyRequest{Keys: keys})
+	if err != nil {
+		return true, err
+	}
+	if read == nil || read.ReadRevision <= 0 || len(read.Values) != len(keys) {
+		return true, errs.New(errs.KindInternal, "Backing hook expiry evidence is incomplete")
+	}
+	defer clearKeyValues(read.Values)
+	if read.Values[0] != nil || read.Values[1] != nil {
+		return true, nil
+	}
+	if read.Values[2] == nil {
+		return false, nil
+	}
+	stored, err := decodeBackingHookEncryptedInputs(read.Values[2].Value)
+	if err != nil {
+		return true, err
+	}
+	defer clear(stored.Ciphertext)
+	if stored.OperationID != task.OperationID ||
+		stored.CiphertextSHA256 != task.Configuration.BackingHookInputs.CiphertextSHA256 {
+		return true, corruptTaskPruneIntent()
+	}
+	conditions := []Condition{
+		{Key: taskKey(task.ID), ModRevision: taskRevision},
+		{Key: retention.Key, ModRevision: retention.ModRevision},
+		{Key: keys[0]}, {Key: keys[1]},
+		{Key: keys[2], ModRevision: read.Values[2].ModRevision},
+	}
+	commit, err := repository.store.Transact(ctx, conditions, []Mutation{{Type: MutationDelete, Key: keys[2]}})
+	clearKeyValues(commit.FailureReads)
+	if err != nil {
+		return true, err
+	}
+	if !commit.Succeeded {
+		return true, errs.New(errs.KindStateConflict, "Backing hook expiry raced Task ownership")
+	}
+	return true, nil
 }
 
 func recoverySecretPinPruneConditions(task TaskRecord) []Condition {

@@ -7,8 +7,8 @@ import (
 )
 
 // backing-service (bs): list | show | create | start | stop | destroy.
-// Create accepts only operator decisions; the adapter owns image, command,
-// volume, bootstrap entries, and health defaults.
+// Create accepts only operator decisions. Managed adapters own their runtime
+// defaults; custom requires an image and adds no managed runtime defaults.
 func newBackingServiceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "backing-service",
@@ -51,19 +51,37 @@ func newBackingServiceCmd() *cobra.Command {
 		},
 	})
 
-	var adapter, authentication, name, description, networkPool, zoneName, zoneSubnet string
+	var adapter, image, authentication, name, description, networkPool, zoneName, zoneSubnet, hooksFile string
 	var zoneInternal bool
 	create := &cobra.Command{
 		Use:   "create <slug>",
 		Short: "Create a backing service",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if adapter == "custom" && image == "" {
+				return errs.New(errs.KindValidationFailed, "--image is required for custom")
+			}
+			if adapter != "custom" && image != "" {
+				return errs.New(errs.KindValidationFailed, "--image is accepted only for custom")
+			}
 			if adapter == "valkey:9" && authentication == "" {
 				return errs.New(errs.KindValidationFailed, "--authentication is required for valkey:9")
 			}
+			var hooks *apiTypes.BackingHookConfiguration
+			if cmd.Flags().Changed("hooks-file") {
+				if adapter != "custom" {
+					return errs.New(errs.KindValidationFailed, "--hooks-file is accepted only for custom")
+				}
+				var err error
+				hooks, err = loadBackingHooks(cmd, hooksFile)
+				if err != nil {
+					return err
+				}
+			}
 			created, err := fromContext(cmd).Client.CreateBackingService(cmd.Context(), apiTypes.BackingServiceCreate{
-				Slug: args[0], Name: name, Description: description, Adapter: adapter,
+				Slug: args[0], Name: name, Description: description, Adapter: adapter, Image: image,
 				Authentication: authentication,
+				Hooks:          hooks,
 				NetworkPool:    networkPool,
 				Zone: apiTypes.BackingServiceZoneCreate{
 					Name:     zoneName,
@@ -81,7 +99,9 @@ func newBackingServiceCmd() *cobra.Command {
 		},
 	}
 	create.Flags().
-		StringVar(&adapter, "adapter", "", "adapter key, e.g. postgres:16 (see `groundplane backing-service create --help` for the registry)")
+		StringVar(&adapter, "adapter", "", "adapter key: postgres:16, valkey:9, or custom")
+	create.Flags().StringVar(&image, "image", "", "container image (required only for custom)")
+	create.Flags().StringVar(&hooksFile, "hooks-file", "", "custom hook configuration JSON file; - reads stdin")
 	create.Flags().StringVar(
 		&authentication,
 		"authentication",

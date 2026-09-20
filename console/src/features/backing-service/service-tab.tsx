@@ -11,7 +11,7 @@ import { ServiceObservationDetails } from '@/features/service/service-runtime-ac
 export function ServiceTab({ env, svc, now }: { env: NonNullable<Project['environments']>[number]; svc: NonNullable<Project['environments']>[number]['services'][number]; now: number }) {
   const store = useStore()
   const adapter = store.adapters.find((a) => a.key === svc.adapter)
-  const port = adapter?.urlScheme === 'redis' ? 6379 : 5432
+  const port = adapter?.urlScheme === 'redis' ? 6379 : adapter?.urlScheme === 'pgsql' ? 5432 : undefined
   const volume = env.volumes[0]
   const authenticationDetails = valkeyAuthenticationDetails(svc.authentication)
   return (
@@ -24,7 +24,8 @@ export function ServiceTab({ env, svc, now }: { env: NonNullable<Project['enviro
         </CardHeader>
         <CardContent className="grid gap-x-8 gap-y-1.5 text-sm sm:grid-cols-2">
           <Row label="Image" value={svc.image} mono />
-          <Row label="Adapter" value={adapter ? `${adapter.label} · ${adapter.key}${adapter.manual ? ' · manual (no auto-provisioning)' : ''}` : svc.adapter ?? '—'} mono />
+          <Row label="Adapter" value={adapter ? `${adapter.label} · ${adapter.key}` : svc.adapter ?? '—'} mono />
+          {svc.adapter === 'custom' && <Row label="Hooks" value={(['attach', 'detach', 'before_stop', 'after_start'] as const).filter((event) => svc.hooks?.[event]).map((event) => event.replace('_', '-')).join(', ') || 'none (network-only)'} mono />}
           <Row label="Service name" value={svc.serviceName ?? svc.name} mono />
           <Row label="Prefix (facts keys)" value={svc.prefix ?? adapter?.prefix ?? '—'} mono />
           {svc.adapter === 'valkey:9' && (
@@ -43,7 +44,7 @@ export function ServiceTab({ env, svc, now }: { env: NonNullable<Project['enviro
           <Row label="Depends on" value={svc.dependsOn.join(', ') || '—'} mono />
           <Row label="Restart" value={svc.restart} mono />
           <Row label="Desired replicas" value={String(svc.replicas)} mono />
-          <Row label="Reachable at" value={`${svc.serviceName ?? svc.name}:${port}`} mono />
+          <Row label="Service endpoint" value={`${svc.serviceName ?? svc.name}${port ? `:${port}` : ''}`} mono />
         </CardContent>
       </Card>
 

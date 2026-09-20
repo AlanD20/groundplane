@@ -175,7 +175,7 @@ func TestEnvironmentBlueprintAttachPreparationUsesRetainedCredentialOwner(t *tes
 	backingService := etcd.Versioned[etcd.ServiceRecord]{
 		Record: etcd.ServiceRecord{
 			EnvironmentID: backingEnvironmentID, BackingNetworkID: backingNetworkID,
-			Desired: core.Service{ID: backingServiceID, Name: "postgres", Adapter: "manual"},
+			Desired: core.Service{ID: backingServiceID, Name: "postgres", Adapter: "custom"},
 			Runtime: core.ServiceRuntime{ServiceID: backingServiceID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
 		},
 		Revision: 23, ReadRevision: 41,
@@ -268,7 +268,7 @@ func TestEnvironmentBlueprintAttachPreparationUsesRetainedGrantTarget(t *testing
 		context.Background(),
 		grantID,
 		attachFactTestAdapter{},
-		adapters.FactParams{
+		adapters.Input{
 			Host: "postgres", Port: "5432", Database: "reporting", Role: "reporting", Password: []byte("retained-secret"),
 		},
 		nil,

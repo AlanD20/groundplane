@@ -1,6 +1,7 @@
 import type { EnvironmentNetworkCapacity } from './environment-types'
 import type { EnvironmentEntry } from './entry-types'
 import type { ServiceObservation } from '@/features/service/service-observation'
+import type { BackingHooks } from '@/features/backing-service/api'
 export type { EnvironmentEntry, EnvironmentEntrySource } from './entry-types'
 
 // Groundplane desired-state model (prototype). Mirrors the Blueprint contract.
@@ -65,6 +66,7 @@ export type Service = {
   group?: 'app' | 'workers' | 'identity' | 'web' | 'edge'
   // backing services only:
   adapter?: string // adapter registry key, e.g. "postgres:16"
+  hooks?: BackingHooks
   serviceName?: string // unique DNS name consumers connect to, e.g. "postgres"
   prefix?: string // fact prefix override (defaults to the adapter's)
   authentication?: string // raw immutable Valkey instance policy, projected from the backing facade and validated before use
@@ -357,18 +359,17 @@ export type ProvisionOp = {
 }
 
 export type Adapter = {
-  key: string // "postgres:16" / "valkey:9" / "manual"
-  label: string // "PostgreSQL" / "Valkey" / "Manual"
+  key: string // "postgres:16" / "valkey:9" / "custom"
+  label: string // "PostgreSQL" / "Valkey" / "Custom"
   prefix: string
   urlScheme: string // "pgsql" / "redis"
   requires: { database: boolean; role: boolean }
   envVars: string[]
   provision: ProvisionOp[]
-  // manual = network-only: attaching joins the service's network and that's
+  // custom = network-only: attaching joins the service's network and that's
   // all — no auto-provisioning, no facts, no credentials, no backups. The
-  // operator runs and manages the service themselves; Groundplane only wires
-  // connectivity.
-  manual?: boolean
+  // operator chooses the image; Groundplane runs it and wires connectivity.
+  custom?: boolean
 }
 
 // A consumer is the triple (environment, service, attach): the same

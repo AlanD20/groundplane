@@ -37,6 +37,9 @@ func (repository *TaskRepository) prepareTaskPruneBoundary(
 
 func taskSourcePruneConditions(task TaskRecord) []Condition {
 	pins := recoverySecretPinPruneConditions(task)
+	if task.Configuration != nil && task.Configuration.BackingHookInputs != nil {
+		pins = append(pins, Condition{Key: backingHookTaskInputKey(task.OperationID)})
+	}
 	if task.Type != TaskScript {
 		return pins
 	}

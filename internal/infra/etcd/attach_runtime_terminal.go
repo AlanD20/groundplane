@@ -27,6 +27,12 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 		change.conditions,
 		Condition{Key: attachTaskRenderInputKey(terminal.PlanID), ModRevision: inputRevision},
 	)
+	if err := repository.applyBackingHookTerminal(
+		ctx, terminal, assignment, input, revision, &change,
+	); err != nil {
+		clearAttachTaskChange(change)
+		return attachTaskChange{}, err
+	}
 	if len(prepared.Updates) == 0 {
 		return change, nil
 	}

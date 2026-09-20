@@ -381,6 +381,109 @@
         ],
         "type": "object"
       },
+      "BackingHookConfiguration": {
+        "additionalProperties": false,
+        "properties": {
+          "after_start": {
+            "$ref": "#/components/schemas/BackingHookDefinition"
+          },
+          "attach": {
+            "$ref": "#/components/schemas/BackingHookDefinition"
+          },
+          "before_stop": {
+            "$ref": "#/components/schemas/BackingHookDefinition"
+          },
+          "detach": {
+            "$ref": "#/components/schemas/BackingHookDefinition"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/BackingHookFactDefinition"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/BackingHookInput"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "BackingHookDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "timeout_seconds": {
+            "format": "int32",
+            "maximum": 900,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "command",
+          "timeout_seconds"
+        ],
+        "type": "object"
+      },
+      "BackingHookFactDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "secret"
+        ],
+        "type": "object"
+      },
+      "BackingHookInput": {
+        "additionalProperties": false,
+        "properties": {
+          "generate": {
+            "enum": [
+              "password"
+            ],
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "secret_ref": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
       "BackingService": {
         "additionalProperties": false,
         "properties": {
@@ -421,6 +524,22 @@
         "additionalProperties": false,
         "oneOf": [
           {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "image"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "required": [
+                    "hooks"
+                  ],
+                  "type": "object"
+                }
+              ]
+            },
             "properties": {
               "adapter": {
                 "enum": [
@@ -446,13 +565,26 @@
           },
           {
             "not": {
-              "properties": {
-                "authentication": {}
-              },
-              "required": [
-                "authentication"
-              ],
-              "type": "object"
+              "anyOf": [
+                {
+                  "required": [
+                    "authentication"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "required": [
+                    "image"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "required": [
+                    "hooks"
+                  ],
+                  "type": "object"
+                }
+              ]
             },
             "properties": {
               "adapter": {
@@ -464,6 +596,31 @@
             },
             "required": [
               "adapter"
+            ],
+            "type": "object"
+          },
+          {
+            "not": {
+              "required": [
+                "authentication"
+              ],
+              "type": "object"
+            },
+            "properties": {
+              "adapter": {
+                "enum": [
+                  "custom"
+                ],
+                "type": "string"
+              },
+              "image": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "adapter",
+              "image"
             ],
             "type": "object"
           }
@@ -491,6 +648,13 @@
             "type": "string"
           },
           "description": {
+            "type": "string"
+          },
+          "hooks": {
+            "$ref": "#/components/schemas/BackingHookConfiguration"
+          },
+          "image": {
+            "description": "Required for the custom adapter and rejected for managed adapters.",
             "type": "string"
           },
           "name": {
@@ -4743,6 +4907,9 @@
           "healthcheck": {
             "$ref": "#/components/schemas/ServiceHealthcheck"
           },
+          "hooks": {
+            "$ref": "#/components/schemas/BackingHookConfiguration"
+          },
           "id": {
             "type": "string"
           },
@@ -4972,6 +5139,9 @@
           "healthcheck": {
             "$ref": "#/components/schemas/ServiceHealthcheck"
           },
+          "hooks": {
+            "$ref": "#/components/schemas/BackingHookConfiguration"
+          },
           "id": {
             "type": "string"
           },
@@ -5070,6 +5240,9 @@
           },
           "healthcheck": {
             "$ref": "#/components/schemas/ServiceHealthcheck"
+          },
+          "hooks": {
+            "$ref": "#/components/schemas/BackingHookConfiguration"
           },
           "image": {
             "type": "string"

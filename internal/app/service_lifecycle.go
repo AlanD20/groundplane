@@ -11,7 +11,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
-	controllerlifecycle "github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -38,15 +37,16 @@ type serviceLifecycleRepository interface {
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	ResolveServing(context.Context, string, string, int64) (etcd.ServingRelease, error)
 	GetReleaseRenderInputAt(context.Context, string, int64) (etcd.Versioned[etcd.ReleaseRenderInput], error)
-	BeginServiceLifecycleWithTask(
+	BeginServiceLifecycleWithTaskHookInputs(
 		context.Context,
-		etcd.Versioned[etcd.TenantRecord],
+		*etcd.Versioned[etcd.TenantRecord],
 		etcd.Versioned[etcd.ProjectRecord],
 		etcd.Versioned[etcd.EnvironmentRecord],
 		etcd.Versioned[etcd.ServiceRecord],
 		etcd.ServiceRecord,
 		*etcd.Versioned[etcd.EnvironmentComposeProjection],
 		*etcd.ServiceLifecycleRenderInput,
+		*etcd.BackingHookEncryptedInputs,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -90,20 +90,21 @@ func (repository *durableServiceMutationRepository) GetReleaseRenderInputAt(
 	return repository.releases.GetReleaseRenderInputAt(ctx, releaseID, revision)
 }
 
-func (repository *durableServiceMutationRepository) BeginServiceLifecycleWithTask(
+func (repository *durableServiceMutationRepository) BeginServiceLifecycleWithTaskHookInputs(
 	ctx context.Context,
-	tenant etcd.Versioned[etcd.TenantRecord],
+	tenant *etcd.Versioned[etcd.TenantRecord],
 	project etcd.Versioned[etcd.ProjectRecord],
 	environment etcd.Versioned[etcd.EnvironmentRecord],
 	current etcd.Versioned[etcd.ServiceRecord],
 	replacement etcd.ServiceRecord,
 	projection *etcd.Versioned[etcd.EnvironmentComposeProjection],
 	renderInput *etcd.ServiceLifecycleRenderInput,
+	hookInputs *etcd.BackingHookEncryptedInputs,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
-	return repository.services.BeginServiceLifecycleWithTask(
-		ctx, tenant, project, environment, current, replacement, projection, renderInput, task, marker,
+	return repository.services.BeginServiceLifecycleWithTaskHookInputs(
+		ctx, tenant, project, environment, current, replacement, projection, renderInput, hookInputs, task, marker,
 	)
 }
 
@@ -233,10 +234,11 @@ func (service *durableServiceLifecycleIdempotency) ResolveUnknown(
 }
 
 type serviceLifecyclePlanResolver interface {
-	PrepareServiceLifecycleTask(
+	PrepareServiceLifecycleHookTask(
 		context.Context,
 		etcd.TaskRecord,
 		etcd.ServiceLifecycleRenderInput,
+		*etcd.BackingHookEncryptedInputs,
 		[]string,
 	) (etcd.TaskRecord, error)
 	PrepareServiceRemovalTask(
@@ -252,6 +254,7 @@ type serviceLifecycleService struct {
 	repository  serviceLifecycleRepository
 	plans       serviceLifecyclePlanResolver
 	idempotency serviceLifecycleIdempotency
+	hookInputs  serviceLifecycleHookInputs
 	now         func() time.Time
 }
 
@@ -259,12 +262,13 @@ func newServiceLifecycleService(
 	repository serviceLifecycleRepository,
 	plans serviceLifecyclePlanResolver,
 	idempotency serviceLifecycleIdempotency,
+	hookInputs serviceLifecycleHookInputs,
 ) (*serviceLifecycleService, error) {
-	if repository == nil || plans == nil || idempotency == nil {
+	if repository == nil || plans == nil || idempotency == nil || hookInputs == nil {
 		return nil, errs.New(errs.KindInternal, "Service lifecycle service is not configured")
 	}
 	return &serviceLifecycleService{
-		repository: repository, plans: plans, idempotency: idempotency, now: time.Now,
+		repository: repository, plans: plans, idempotency: idempotency, hookInputs: hookInputs, now: time.Now,
 	}, nil
 }
 
@@ -403,15 +407,23 @@ func (service *serviceLifecycleService) runOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if project.Record.Kind != etcd.ProjectKindTenant || project.Record.TenantID == "" {
-		return etcd.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict,
-			"backing Service lifecycle requires the backing runtime slice",
-		)
-	}
-	tenant, err := service.repository.GetTenant(ctx, project.Record.TenantID)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+	var tenant *etcd.Versioned[etcd.TenantRecord]
+	switch project.Record.Kind {
+	case etcd.ProjectKindTenant:
+		if project.Record.TenantID == "" {
+			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service Project Tenant is missing")
+		}
+		currentTenant, getErr := service.repository.GetTenant(ctx, project.Record.TenantID)
+		if getErr != nil {
+			return etcd.IdempotencyResponse{}, getErr
+		}
+		tenant = &currentTenant
+	case etcd.ProjectKindBacking:
+		if project.Record.TenantID != "" {
+			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Backing Project has a Tenant")
+		}
+	default:
+		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Service Project kind is invalid")
 	}
 	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
@@ -439,32 +451,18 @@ func (service *serviceLifecycleService) runOnce(
 		Status: etcd.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	var renderInput *etcd.ServiceLifecycleRenderInput
+	var sealedHookInputs *etcd.BackingHookEncryptedInputs
+	defer func() {
+		if sealedHookInputs != nil {
+			clear(sealedHookInputs.Ciphertext)
+		}
+	}()
 	if applied {
-		releaseAuthority, captureErr := controllerlifecycle.CaptureRelease(
-			ctx, service.repository, projection, environment.Record.ID, serviceID,
-		)
-		if captureErr != nil {
-			return etcd.IdempotencyResponse{}, captureErr
-		}
 		projectionInput = &projection
-		input := etcd.ServiceLifecycleRenderInput{
-			PlanID: task.PlanID, ServiceID: serviceID,
-			TenantID: tenant.Record.ID, TenantSlug: tenant.Record.Slug,
-			ProjectID: project.Record.ID, ProjectSlug: project.Record.Slug,
-			EnvironmentID: environment.Record.ID, EnvironmentName: environment.Record.Name,
-			AuthorizedVolumeDir:       environment.Record.VolumeDir,
-			ArtifactID:                releaseAuthority.Current.ArtifactID,
-			Projection:                projection.Record,
-			AppliedProjectionRevision: projection.Revision,
-			Release:                   releaseAuthority,
-		}
-		task.Executor = etcd.TaskExecutorAgent
-		task.TimeoutSeconds = serviceLifecycleAgentTimeoutSeconds
-		stepIDs := []string{ids.New(ids.KindStep)}
-		if input.Release.RetainedPrior != nil {
-			stepIDs = append(stepIDs, ids.New(ids.KindStep))
-		}
-		task, err = service.plans.PrepareServiceLifecycleTask(ctx, task, input, stepIDs)
+		var input etcd.ServiceLifecycleRenderInput
+		task, input, sealedHookInputs, err = service.prepareAppliedServiceLifecycle(
+			ctx, taskType, current, tenant, project, environment, projection, task,
+		)
 		if err != nil {
 			return etcd.IdempotencyResponse{}, err
 		}
@@ -489,8 +487,9 @@ func (service *serviceLifecycleService) runOnce(
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
-	result, mutationErr := service.repository.BeginServiceLifecycleWithTask(
-		ctx, tenant, project, environment, current, replacement, projectionInput, renderInput, task, marker,
+	result, mutationErr := service.repository.BeginServiceLifecycleWithTaskHookInputs(
+		ctx, tenant, project, environment, current, replacement, projectionInput, renderInput,
+		sealedHookInputs, task, marker,
 	)
 	if mutationErr != nil {
 		if !isUnknownServiceLifecycleMutationOutcome(mutationErr) {

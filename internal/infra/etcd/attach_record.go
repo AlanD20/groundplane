@@ -63,6 +63,7 @@ type AttachRecord struct {
 	CredentialAttachID   string                  `json:"credential_attach_id"`
 	GrantAttachIDs       []string                `json:"grant_attach_ids,omitempty"`
 	FactSets             []AttachFactSetMetadata `json:"fact_sets,omitempty"`
+	HookBundle           bool                    `json:"hook_bundle,omitempty"`
 	Status               core.AttachStatus       `json:"status"`
 	Operation            AttachOperation         `json:"operation"`
 	TaskID               string                  `json:"task_id"`
@@ -288,6 +289,9 @@ func validateAttachRecord(record AttachRecord) error {
 			return err
 		}
 	} else {
+		if record.HookBundle {
+			return errs.New(errs.KindValidationFailed, "Existing-credential Attach cannot own a hook bundle")
+		}
 		if len(record.GrantAttachIDs) != 0 {
 			return errs.New(errs.KindValidationFailed, "Existing-credential Attach cannot own grants")
 		}

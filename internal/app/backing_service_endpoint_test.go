@@ -31,9 +31,10 @@ func TestPrepareAttachFactsUsesStableBackingEndpoint(t *testing.T) {
 			capture := &backingEndpointFactCapture{}
 			defer capture.clear()
 			service := &attachMutationService{facts: capture, random: strings.NewReader(strings.Repeat("x", 64))}
-			identity, _, _, err := service.prepareAttachFacts(
+			identity, _, _, _, err := service.prepareAttachFacts(
 				context.Background(),
 				"att_01ARZ3NDEKTSV4RRFFQ69G5FAX",
+				"op_01ARZ3NDEKTSV4RRFFQ69G5FAZ",
 				etcd.Versioned[etcd.ServiceRecord]{Record: etcd.ServiceRecord{Desired: core.Service{Name: "api"}}},
 				etcd.AttachCreateScope{
 					BackingService: etcd.Versioned[etcd.ServiceRecord]{Record: etcd.ServiceRecord{Desired: core.Service{
@@ -52,7 +53,7 @@ func TestPrepareAttachFactsUsesStableBackingEndpoint(t *testing.T) {
 			if len(capture.grants) != 1 {
 				t.Fatalf("captured grant fact sets = %d, want 1", len(capture.grants))
 			}
-			for name, params := range map[string]adapters.FactParams{
+			for name, params := range map[string]adapters.Input{
 				"owner": capture.own,
 				"grant": capture.grants[0].Params,
 			} {
@@ -64,20 +65,20 @@ func TestPrepareAttachFactsUsesStableBackingEndpoint(t *testing.T) {
 
 type backingEndpointFactCapture struct {
 	attachMutationFacts
-	own    adapters.FactParams
-	grants []AttachGrantFactParams
+	own    adapters.Input
+	grants []AttachGrantInput
 }
 
 func (capture *backingEndpointFactCapture) SealFactSets(
 	_ context.Context,
 	_ string,
 	_ adapters.Adapter,
-	own adapters.FactParams,
-	grants []AttachGrantFactParams,
+	own adapters.Input,
+	grants []AttachGrantInput,
 ) ([]etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, error) {
 	own.Password = append([]byte(nil), own.Password...)
 	capture.own = own
-	capture.grants = append([]AttachGrantFactParams(nil), grants...)
+	capture.grants = append([]AttachGrantInput(nil), grants...)
 	for index := range capture.grants {
 		capture.grants[index].Params.Password = append([]byte(nil), capture.grants[index].Params.Password...)
 	}
@@ -103,7 +104,7 @@ func assertBackingEndpointFacts(
 	t *testing.T,
 	set string,
 	adapter adapters.Adapter,
-	params adapters.FactParams,
+	params adapters.Input,
 	wantHost string,
 ) {
 	t.Helper()

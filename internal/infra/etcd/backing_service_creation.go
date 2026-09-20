@@ -28,6 +28,7 @@ type BackingServiceCreation struct {
 	Revision     EnvironmentDesiredRevisionIdentity
 	Projection   EnvironmentComposeProjection
 	Task         TaskRecord
+	HookInputs   *BackingHookEncryptedInputs
 	Marker       IdempotencyMarker
 }
 
@@ -38,12 +39,21 @@ type BackingServiceCreation struct {
 func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	ctx context.Context,
 	creation BackingServiceCreation,
-) (IdempotencyTransactionResult, error) {
+) (_ IdempotencyTransactionResult, returnErr error) {
 	creation.Task = cloneTaskRecord(creation.Task)
 	if creation.Task.IdempotencyKey == "" {
 		creation.Task.IdempotencyKey = creation.Marker.Locator.Key
 	}
 	creation.Task.idempotencyMarker = cloneIdempotencyLocator(&creation.Marker.Locator)
+	hookPublication, err := prepareBackingHookTaskPublication(
+		ctx, repository.store, creation.Task, creation.HookInputs,
+	)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer hookPublication.clear()
+	defer func() { returnErr = hookPublication.finish(ctx, repository.store, returnErr) }()
+	creation.Task = hookPublication.task
 	if err := validateBackingServiceCreation(ctx, creation); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -261,6 +271,11 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		)
 	}
 	classifier := classifyBackingServiceCreation(creation, publication, len(conditions))
+	conditions, mutations, classifier, err = hookPublication.bind(conditions, mutations, classifier)
+	if err != nil {
+		return IdempotencyTransactionResult{}, err
+	}
+	defer clearMutationValues(mutations)
 	initiation, err := newTaskInitiation(creation.Task.Owner, TaskActorOperator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -374,7 +389,11 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		creation.Service.BackingNetworkID != creation.Zone.Desired.ID {
 		return errs.New(errs.KindValidationFailed, "Backing-service adapter Service is invalid")
 	}
-	if len(creation.Entries) == 0 || len(creation.Entries) != len(creation.EntryValues) {
+	customCreation := creation.Service.Desired.Adapter == "custom"
+	if err := validateBackingServiceAdapterCreationShape(creation.Service.Desired, customCreation); err != nil {
+		return err
+	}
+	if len(creation.Entries) != len(creation.EntryValues) || customCreation != (len(creation.Entries) == 0) {
 		return errs.New(errs.KindValidationFailed, "Backing-service bootstrap entries are invalid")
 	}
 	seenEntries := make(map[string]struct{}, len(creation.Entries))
@@ -392,7 +411,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		}
 		clear(value)
 	}
-	if len(creation.Secrets) == 0 || len(creation.Secrets) != len(creation.SecretValues) {
+	if len(creation.Secrets) != len(creation.SecretValues) || customCreation != (len(creation.Secrets) == 0) {
 		return errs.New(errs.KindValidationFailed, "Backing-service bootstrap Secrets are invalid")
 	}
 	seenSecrets := make(map[string]struct{}, len(creation.Secrets))
@@ -419,13 +438,22 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	if err != nil {
 		return err
 	}
+	healthServiceID, hasHealthStep := creation.Task.Params[TaskBackingServiceHealthParam]
+	desiredHealth := creation.Service.Desired.Healthcheck
+	hasDesiredHealth := desiredHealth.HTTP != "" || desiredHealth.TCP != "" || desiredHealth.Pgrep != ""
+	afterStartServiceID, hasAfterStartStep := creation.Task.Params[TaskBackingServiceAfterStartParam]
+	hasDesiredAfterStart := creation.Service.Desired.Hooks != nil &&
+		creation.Service.Desired.Hooks.AfterStart != nil
 	if creation.Task.Owner != wantOwner || creation.Task.Actor != TaskActorOperator ||
 		creation.Task.Executor != TaskExecutorAgent || creation.Task.Type != TaskUpdate ||
 		creation.Task.Target != creation.Environment.ID || creation.Task.Status != TaskStatusPending ||
 		creation.Task.RenderGeneration != 1 ||
 		creation.Task.Params[EnvironmentDesiredRevisionParam] != creation.Task.ID ||
 		creation.Task.Params[TaskMaterializationEnvironmentParam] != creation.Environment.ID ||
-		creation.Task.Params[TaskBackingServiceHealthParam] != creation.Service.Desired.ID ||
+		creation.Task.Params[TaskBackingServiceCreationParam] != creation.Service.Desired.ID ||
+		hasHealthStep != hasDesiredHealth || hasHealthStep && healthServiceID != creation.Service.Desired.ID ||
+		hasAfterStartStep != hasDesiredAfterStart ||
+		hasAfterStartStep && afterStartServiceID != creation.Service.Desired.ID ||
 		creation.Task.Params[TaskBackingServiceVolumeDirectoryParam] != creation.Environment.VolumeDir {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation Task is invalid")
 	}
@@ -441,43 +469,6 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	}
 	if err := validateIdempotencyMarker(creation.Marker); err != nil {
 		return err
-	}
-	return nil
-}
-
-func validateBackingServiceComponents(components []ComponentRecord) error {
-	if len(components) != 0 {
-		return errs.New(errs.KindValidationFailed, "Backing-service creation requires zero Environment Components")
-	}
-	return nil
-}
-
-func validateBackingServiceProjection(creation BackingServiceCreation) error {
-	projection := creation.Projection
-	if creation.Revision.EnvironmentID != creation.Environment.ID || creation.Revision.RevisionID != creation.Task.ID ||
-		creation.Claim.EnvironmentID != creation.Environment.ID || creation.Claim.RevisionID != creation.Task.ID ||
-		creation.Claim.TaskID != creation.Task.ID || creation.Claim.BaselineHeadRevision != 0 ||
-		creation.Claim.SourceKind != EnvironmentBlueprintSourceApply || creation.Claim.RenderGeneration != 1 ||
-		projection.EnvironmentID != creation.Environment.ID || projection.RevisionID != creation.Task.ID ||
-		projection.RenderGeneration != 1 || len(projection.ComposeArtifact) == 0 ||
-		len(projection.Volumes) != 1 ||
-		len(projection.DesiredZones) != 1 || len(projection.DesiredServices) != 1 ||
-		len(projection.VolumeMounts) != 1 || len(projection.Entries) != len(creation.Entries) ||
-		projection.DesiredZones[0].EnvironmentID != creation.Environment.ID ||
-		projection.DesiredZones[0].Desired != creation.Zone.Desired ||
-		projection.DesiredServices[0].EnvironmentID != creation.Environment.ID ||
-		projection.DesiredServices[0].BackingNetworkID != creation.Service.BackingNetworkID ||
-		!sameServiceRemovalDesired(projection.DesiredServices[0].Desired, creation.Service.Desired) ||
-		projection.VolumeMounts[0].ServiceID != creation.Service.Desired.ID ||
-		projection.VolumeMounts[0].VolumeID != projection.Volumes[0].ID {
-		return errs.New(errs.KindValidationFailed, "Backing-service desired projection is invalid")
-	}
-	for index, entry := range creation.Entries {
-		if projection.Entries[index].EnvironmentID != creation.Environment.ID ||
-			projection.Entries[index].Entry.ID != entry.Entry.ID ||
-			projection.Entries[index].CurrentValueGenerationID != entry.CurrentValueGenerationID {
-			return errs.New(errs.KindValidationFailed, "Backing-service desired Entry projection is invalid")
-		}
 	}
 	return nil
 }

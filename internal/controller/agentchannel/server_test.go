@@ -181,7 +181,7 @@ func TestOperationMatchesTaskAcceptsClosedPairingsAndRejectsCrossPairs(t *testin
 	backingCreation := etcd.TaskRecord{
 		Type: etcd.TaskUpdate,
 		Params: map[string]string{
-			etcd.TaskBackingServiceHealthParam: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+			etcd.TaskBackingServiceCreationParam: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 		},
 	}
 	if !operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE, backingCreation) {

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -111,6 +112,63 @@ func (repository *TaskRepository) prepareServiceTaskAcknowledgement(
 		},
 		mutations: []Mutation{{Type: MutationDelete, Key: serviceLifecycleActiveKey(task.Target)}},
 	}, nil
+}
+
+func (repository *TaskRepository) prepareAcknowledgedServiceTask(
+	ctx context.Context,
+	task TaskRecord,
+	assignment TaskAssignmentRecord,
+	terminalStatus TaskStatus,
+	readRevision int64,
+) (serviceTaskChange, error) {
+	change, err := repository.prepareServiceTaskAcknowledgement(ctx, task, readRevision)
+	if err != nil || !change.applies || terminalStatus != TaskStatusCompleted || task.Executor != TaskExecutorAgent {
+		return change, err
+	}
+	inputRead, err := repository.store.GetMany(ctx, GetManyRequest{
+		Keys: []string{serviceLifecycleRenderInputKey(task.ID)}, Revision: readRevision,
+	})
+	if err != nil {
+		return serviceTaskChange{}, err
+	}
+	if inputRead == nil || inputRead.ReadRevision != readRevision || len(inputRead.Values) != 1 ||
+		inputRead.Values[0] == nil {
+		if inputRead != nil {
+			clearKeyValues(inputRead.Values)
+		}
+		return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input is missing")
+	}
+	defer clearKeyValues(inputRead.Values)
+	input, err := decodeServiceLifecycleRenderInput(inputRead.Values[0].Value)
+	if err != nil || input.PlanID != task.PlanID || input.ServiceID != task.Target {
+		return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input changed")
+	}
+	event := backinghook.Event("")
+	stepID := ""
+	if task.Type == TaskStart && input.HookConfiguration != nil && input.HookConfiguration.AfterStart != nil {
+		event = backinghook.AfterStart
+		stepID = task.Steps[len(task.Steps)-1].ID
+	}
+	if (task.Type == TaskStop || task.Type == TaskDestroy) && input.HookConfiguration != nil &&
+		input.HookConfiguration.BeforeStop != nil {
+		event = backinghook.BeforeStop
+		stepID = task.Steps[0].ID
+	}
+	if event == "" {
+		return change, nil
+	}
+	checkpoint, condition, err := repository.requireBackingHookResultCheckpoint(
+		ctx, task, assignment, stepID, "", event, readRevision,
+	)
+	if err != nil {
+		return serviceTaskChange{}, err
+	}
+	if checkpoint.Facts != nil {
+		clear(checkpoint.Facts.Ciphertext)
+		return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle hook checkpoint contains facts")
+	}
+	change.conditions = append(change.conditions, condition)
+	return change, nil
 }
 
 func isServiceLifecycleTask(task TaskRecord) bool {

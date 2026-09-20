@@ -148,21 +148,39 @@ type BackupCheckpointer interface {
 	) (*agentpb.BackupCheckpointAck, error)
 }
 
+type BackingHookCheckpointer interface {
+	CheckpointBackingHook(
+		context.Context,
+		string,
+		uint64,
+		*agentpb.BackingHookCheckpointRequest,
+	) (*agentpb.BackingHookCheckpointAck, error)
+}
+
 // Server terminates the authenticated Controller side of AgentChannel.Connect.
 type Server struct {
 	agentpb.UnimplementedAgentChannelServer
-	auth              Authenticator
-	sessions          *Registry
-	tasks             TaskStore
-	plans             PlanResolver
-	materials         MaterializationResolver
-	managed           ManagedConfigResolver
-	secrets           BackupSecretSlotResolver
-	checkpoints       BackupCheckpointer
-	scriptCheckpoints ScriptCheckpointer
-	volumeCheckpoints VolumeRemovalCheckpointer
-	scriptArtifacts   ScriptArtifactResolver
-	now               func() time.Time
+	auth                   Authenticator
+	sessions               *Registry
+	tasks                  TaskStore
+	plans                  PlanResolver
+	materials              MaterializationResolver
+	managed                ManagedConfigResolver
+	secrets                BackupSecretSlotResolver
+	checkpoints            BackupCheckpointer
+	scriptCheckpoints      ScriptCheckpointer
+	backingHookCheckpoints BackingHookCheckpointer
+	volumeCheckpoints      VolumeRemovalCheckpointer
+	scriptArtifacts        ScriptArtifactResolver
+	now                    func() time.Time
+}
+
+func (s *Server) EnableBackingHookCheckpoints(checkpointer BackingHookCheckpointer) error {
+	if s == nil || checkpointer == nil || s.backingHookCheckpoints != nil {
+		return errs.New(errs.KindInternal, "backing hook checkpoint service is invalid")
+	}
+	s.backingHookCheckpoints = checkpointer
+	return nil
 }
 
 func (s *Server) EnableManagedConfigTransfers(resolver ManagedConfigResolver) error {
@@ -357,6 +375,7 @@ func (s *Server) sendTaskAssignment(
 		return err
 	}
 	defer clearScriptAssignmentArtifacts(assignment.GetScriptArtifacts())
+	defer clearBackingHookPlanSecrets(assignment.GetPlan())
 	return s.sendResolvedTaskAssignment(stream, claim, assignment)
 }
 
@@ -368,6 +387,7 @@ func (s *Server) dispatchResolvedTaskAssignment(
 	recovered bool,
 ) (bool, error) {
 	defer clearScriptAssignmentArtifacts(assignment.GetScriptArtifacts())
+	defer clearBackingHookPlanSecrets(assignment.GetPlan())
 	expired := false
 	sent, err := session.sendAssignment(func() error {
 		if recovered && claim.Assignment.Record.ExecutionMode == etcd.TaskExecutionModeForward &&

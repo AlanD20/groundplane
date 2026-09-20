@@ -17,7 +17,7 @@ func TestBuildFactsRendersTypedOwnAndGrantInputs(t *testing.T) {
 		{Field: FactRole},
 		{Field: FactPassword, Secret: true},
 	}}
-	facts, err := BuildFacts(adapter, FactParams{
+	facts, err := BuildFacts(adapter, Input{
 		Host: "postgres", Port: "5432", Database: "api_5d3f9a", Role: "api_5d3f9a",
 		Password: []byte("URL_safe-1"),
 	})
@@ -43,25 +43,25 @@ func TestBuildFactsRendersTypedOwnAndGrantInputs(t *testing.T) {
 	}
 }
 
-func TestBuildFactsRejectsDuplicateSchemaAndKeepsManualFactless(t *testing.T) {
+func TestBuildFactsRejectsDuplicateSchemaAndKeepsCustomFactless(t *testing.T) {
 	// Rationale: ambiguous duplicate keys cannot form a durable fact map, while
-	// the accepted manual adapter must remain a network-only no-facts operation.
+	// the accepted custom adapter must remain a network-only no-facts operation.
 	duplicate := factTestAdapter{schema: []FactDefinition{{Field: FactHost}, {Field: FactHost}}}
-	if _, err := BuildFacts(duplicate, FactParams{
+	if _, err := BuildFacts(duplicate, Input{
 		Host: "postgres", Port: "5432", Role: "api", Password: []byte("safe"),
 	}); err == nil {
 		t.Fatal("BuildFacts() accepted duplicate fields")
 	}
-	manual := factTestAdapter{manual: true, prefix: "", scheme: ""}
-	facts, err := BuildFacts(manual, FactParams{})
+	custom := factTestAdapter{custom: true, prefix: "", scheme: ""}
+	facts, err := BuildFacts(custom, Input{})
 	if err != nil || len(facts) != 0 {
-		t.Fatalf("BuildFacts(manual) = %#v, %v", facts, err)
+		t.Fatalf("BuildFacts(custom) = %#v, %v", facts, err)
 	}
 }
 
 type factTestAdapter struct {
 	schema []FactDefinition
-	manual bool
+	custom bool
 	prefix string
 	scheme string
 }
@@ -70,19 +70,19 @@ func (adapter factTestAdapter) Key() string          { return "test" }
 func (adapter factTestAdapter) Label() string        { return "Test" }
 func (adapter factTestAdapter) DefaultImage() string { return "test:latest" }
 func (adapter factTestAdapter) FactsPrefix() string {
-	if adapter.prefix != "" || adapter.manual {
+	if adapter.prefix != "" || adapter.custom {
 		return adapter.prefix
 	}
 	return "pg16_"
 }
 func (adapter factTestAdapter) URLScheme() string {
-	if adapter.scheme != "" || adapter.manual {
+	if adapter.scheme != "" || adapter.custom {
 		return adapter.scheme
 	}
 	return "pgsql://"
 }
 func (adapter factTestAdapter) Port() string {
-	if adapter.manual {
+	if adapter.custom {
 		return ""
 	}
 	return "5432"
@@ -91,12 +91,12 @@ func (adapter factTestAdapter) FactSchema(core.BackingAuthentication) []FactDefi
 	return adapter.schema
 }
 func (adapter factTestAdapter) SupportsAuthenticationModes() bool { return false }
-func (adapter factTestAdapter) Manual() bool                      { return adapter.manual }
+func (adapter factTestAdapter) Custom() bool                      { return adapter.custom }
 func (adapter factTestAdapter) SupportsGrants() bool              { return false }
-func (adapter factTestAdapter) ProvisionSteps(ProvisionParams) []Step {
+func (adapter factTestAdapter) ProvisionSteps(Input) []Step {
 	return nil
 }
-func (adapter factTestAdapter) GrantSteps(ProvisionParams) []Step  { return nil }
-func (adapter factTestAdapter) RevokeSteps(ProvisionParams) []Step { return nil }
-func (adapter factTestAdapter) DetachSteps(ProvisionParams) []Step { return nil }
-func (adapter factTestAdapter) BackupStrategy() BackupStrategy     { return BackupStrategy{} }
+func (adapter factTestAdapter) GrantSteps(Input) []Step        { return nil }
+func (adapter factTestAdapter) RevokeSteps(Input) []Step       { return nil }
+func (adapter factTestAdapter) DetachSteps(Input) []Step       { return nil }
+func (adapter factTestAdapter) BackupStrategy() BackupStrategy { return BackupStrategy{} }

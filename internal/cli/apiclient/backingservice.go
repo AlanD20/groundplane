@@ -29,6 +29,10 @@ func (c *Client) CreateBackingService(
 	if input.Description != "" {
 		body.Description = &input.Description
 	}
+	if input.Image != "" {
+		body.Image = &input.Image
+	}
+	body.Hooks = backingHooksToGenerated(input.Hooks)
 	if input.Authentication != "" {
 		authentication := generated.BackingServiceCreateAuthentication(input.Authentication)
 		body.Authentication = &authentication

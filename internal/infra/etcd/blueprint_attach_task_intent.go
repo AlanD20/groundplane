@@ -258,7 +258,7 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 			return errs.New(errs.KindValidationFailed, "Blueprint Attach backing scope is inconsistent")
 		}
 		if input.Record.OwnsCredential() {
-			if (input.Facts == nil) != (len(input.Record.FactSets) == 0) {
+			if (input.Facts == nil) != (!input.Record.HookBundle && len(input.Record.FactSets) == 0) {
 				return errs.New(errs.KindValidationFailed, "Blueprint Attach fact envelope is inconsistent")
 			}
 			if input.Facts != nil && input.Facts.AttachID != input.Record.ID {
@@ -366,7 +366,7 @@ func sameBlueprintAttachCandidateRecord(left, right AttachRecord) bool {
 		left.BackingServiceID == right.BackingServiceID && left.BackingNetworkID == right.BackingNetworkID &&
 		left.ServiceID == right.ServiceID && left.CredentialAttachID == right.CredentialAttachID &&
 		sameBlueprintAttachStrings(left.GrantAttachIDs, right.GrantAttachIDs) &&
-		sameBlueprintAttachFactSets(left.FactSets, right.FactSets) &&
+		left.HookBundle == right.HookBundle && sameBlueprintAttachFactSets(left.FactSets, right.FactSets) &&
 		left.Status == right.Status && left.Operation == right.Operation && left.TaskID == right.TaskID &&
 		left.CreatedAt == right.CreatedAt
 }

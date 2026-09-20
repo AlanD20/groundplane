@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -236,6 +237,7 @@ func sameServiceRemovalDesired(left, right core.Service) bool {
 		left.Healthcheck != right.Healthcheck || left.Resources != right.Resources ||
 		left.Restart != right.Restart || left.Logging != right.Logging || left.Replicas != right.Replicas ||
 		left.Adapter != right.Adapter || left.FactsPrefix != right.FactsPrefix || left.Label != right.Label ||
+		!backinghook.EqualConfiguration(left.Hooks, right.Hooks) ||
 		!sameServiceRemovalComparableSlices(left.Zones, right.Zones) ||
 		!sameServiceRemovalComparableSlices(left.Command, right.Command) ||
 		!sameServiceRemovalComparableSlices(left.Mounts, right.Mounts) ||

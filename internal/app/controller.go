@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
-	"github.com/AlanD20/groundplane/internal/adapters/manual"
+	"github.com/AlanD20/groundplane/internal/adapters/custom"
 	"github.com/AlanD20/groundplane/internal/adapters/postgres16"
 	"github.com/AlanD20/groundplane/internal/adapters/valkey9"
 	"github.com/AlanD20/groundplane/internal/common/config"
@@ -423,6 +423,10 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach fact service: %w", err)
 	}
+	if err := attachFactValues.EnableBackingHookInputs(secretRecords); err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize backing hook inputs: %w", err)
+	}
 	attachFactReads, err := newAttachFactReadService(attachRecords, attachFactValues)
 	if err != nil {
 		_ = store.Close()
@@ -451,6 +455,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	if err := planResolver.EnableBackupPlans(backupRuntimeRecords); err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup plan resolver: %w", err)
+	}
+	backingHookCheckpoints, err := controller.NewBackingHookCheckpointService(
+		tasks, planResolver, attachRecords, attachFactValues,
+	)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize backing hook checkpoint service: %w", err)
 	}
 	materializationResolver, err := initializeTaskMaterializationResolver(
 		store, hierarchyRecords, entryValues, secretRecords, planResolver, intentProtector,
@@ -548,7 +559,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	agentRuntime := newAgentChannelRuntimeWithManagedConfigAndScripts(
 		authenticator, tasks, planResolver, materializationResolver, backupSecrets, backupCheckpoints,
-		platformComponentExecution, scriptArtifacts, scriptCheckpoints,
+		platformComponentExecution, scriptArtifacts, scriptCheckpoints, backingHookCheckpoints,
 	)
 	blueprintReleases, err := blueprintrelease.NewService(
 		releaseLedger, scriptRecords, planResolver, scriptArtifacts, scriptSourceReferences,
@@ -741,6 +752,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		serviceMutationRepository,
 		planResolver,
 		serviceLifecycleIdempotency,
+		attachFactValues,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -990,6 +1002,8 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		environmentBlueprintRepository,
 		environmentBlueprintIdempotency,
 		intentProtector,
+		planResolver,
+		attachFactValues,
 		componentCatalog,
 	)
 	if err != nil {
@@ -1249,8 +1263,8 @@ func registerAdapters() {
 	if _, registered := adapters.Get("valkey:9"); !registered {
 		valkey9.Register()
 	}
-	if _, registered := adapters.Get("manual"); !registered {
-		manual.Register()
+	if _, registered := adapters.Get("custom"); !registered {
+		custom.Register()
 	}
 }
 

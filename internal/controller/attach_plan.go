@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -37,6 +38,7 @@ func (identity *AttachPlanIdentity) Clear() {
 }
 
 type AttachPlanIdentityConsumer func(AttachPlanIdentity) error
+type BackingHookInputConsumer func(backinghook.Input) error
 
 type attachPlanRecordReader interface {
 	GetAttach(context.Context, string) (etcd.Versioned[etcd.AttachRecord], error)
@@ -72,6 +74,13 @@ type attachPlanIdentityResolver interface {
 		etcd.Versioned[etcd.AttachRecord],
 		string,
 		AttachPlanIdentityConsumer,
+	) error
+	ResolveHookInput(
+		context.Context,
+		etcd.Versioned[etcd.AttachRecord],
+		etcd.TaskRecord,
+		backinghook.Context,
+		BackingHookInputConsumer,
 	) error
 }
 
@@ -195,9 +204,14 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 		return nil, err
 	}
 	applyRuntime := slices.Contains(renderInput.Record.RunningServiceIDs, current.Record.ServiceID)
-	if adapter.Manual() || !current.Record.OwnsCredential() {
+	if adapter.Custom() {
+		return resolver.resolveCustomAttachPlan(
+			ctx, task, current, renderInput.Record, operation, artifact, applyRuntime,
+		)
+	}
+	if !current.Record.OwnsCredential() {
 		if len(task.Steps) != 1 {
-			return nil, errs.New(errs.KindInternal, "manual Attach Task step count is invalid")
+			return nil, errs.New(errs.KindInternal, "custom Attach Task step count is invalid")
 		}
 		return BuildPlan(PlanBuildInput{
 			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,

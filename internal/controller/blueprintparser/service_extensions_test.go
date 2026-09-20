@@ -246,7 +246,7 @@ func TestParseRejectsSourceLocalServiceExtensionDefects(t *testing.T) {
 		},
 		"environment adapter": {
 			root: environmentRoot(`services:
-  api: {image: api, x-gp-adapter: {key: manual}}
+  api: {image: api, x-gp-adapter: {key: custom}}
 `),
 			want: `source "root.yaml": x-gp-adapter is allowed only on the sole Service of a backing Blueprint`,
 		},

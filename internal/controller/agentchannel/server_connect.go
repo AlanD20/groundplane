@@ -363,6 +363,25 @@ func (s *Server) Connect(stream agentpb.AgentChannel_ConnectServer) error {
 				}
 				continue
 			}
+			if request := result.message.GetBackingHookCheckpointRequest(); request != nil {
+				if s.backingHookCheckpoints == nil {
+					return status.Error(codes.Internal, "Backing hook checkpoint service is not configured")
+				}
+				acknowledgement, err := s.backingHookCheckpoints.CheckpointBackingHook(
+					stream.Context(), authenticate.AgentId, authorization.Generation, request,
+				)
+				if err != nil {
+					return taskStoreStatus(err)
+				}
+				if err := stream.Send(&agentpb.ControllerMessage{
+					Payload: &agentpb.ControllerMessage_BackingHookCheckpointAck{
+						BackingHookCheckpointAck: acknowledgement,
+					},
+				}); err != nil {
+					return err
+				}
+				continue
+			}
 			if request := result.message.GetVolumeRemovalCheckpointRequest(); request != nil {
 				ack, err := s.checkpointVolumeRemoval(
 					stream.Context(),

@@ -5,6 +5,7 @@ package attachplanning
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -42,6 +43,22 @@ type Facts interface {
 		string,
 		controllerpkg.AttachPlanIdentityConsumer,
 	) error
+	ResolveHookInput(
+		context.Context,
+		etcd.Versioned[etcd.AttachRecord],
+		etcd.TaskRecord,
+		backinghook.Context,
+		controllerpkg.BackingHookInputConsumer,
+	) error
+	ResolveDraftHookInput(
+		context.Context,
+		etcd.Versioned[etcd.AttachRecord],
+		*etcd.AttachEncryptedFacts,
+		etcd.TaskRecord,
+		*etcd.BackingHookEncryptedInputs,
+		backinghook.Context,
+		controllerpkg.BackingHookInputConsumer,
+	) error
 }
 
 type Sealer struct {
@@ -77,10 +94,12 @@ func (sealer *Sealer) SealDraft(
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	identity *controllerpkg.AttachPlanIdentity,
+	hookBundle *etcd.AttachEncryptedFacts,
+	hookInputs *etcd.BackingHookEncryptedInputs,
 ) (serviceruntimerecord.AttachPreparation, error) {
 	state := &draftAttachPlanState{
 		repository: sealer.repository, facts: sealer.facts, current: current,
-		renderInput: renderInput, identity: identity,
+		renderInput: renderInput, identity: identity, hookBundle: hookBundle, hookInputs: hookInputs,
 	}
 	resolver, err := controllerpkg.NewTaskPlanResolverWithAttachments(
 		sealer.volumeRoot, sealer.repository, state, sealer.repository, state,
@@ -103,6 +122,23 @@ type draftAttachPlanState struct {
 	current     etcd.Versioned[etcd.AttachRecord]
 	renderInput etcd.AttachTaskRenderInput
 	identity    *controllerpkg.AttachPlanIdentity
+	hookBundle  *etcd.AttachEncryptedFacts
+	hookInputs  *etcd.BackingHookEncryptedInputs
+}
+
+func (state *draftAttachPlanState) ResolveHookInput(
+	ctx context.Context,
+	current etcd.Versioned[etcd.AttachRecord],
+	task etcd.TaskRecord,
+	hookContext backinghook.Context,
+	consume controllerpkg.BackingHookInputConsumer,
+) error {
+	if current.Record.ID == state.current.Record.ID && (state.hookBundle != nil || state.hookInputs != nil) {
+		return state.facts.ResolveDraftHookInput(
+			ctx, current, state.hookBundle, task, state.hookInputs, hookContext, consume,
+		)
+	}
+	return state.facts.ResolveHookInput(ctx, current, task, hookContext, consume)
 }
 
 func (state *draftAttachPlanState) GetAttach(
@@ -155,6 +191,9 @@ func clearAttachPlanSecrets(plan *agentpb.ExecutionPlan) {
 		return
 	}
 	for _, step := range plan.Steps {
+		if procedure := step.GetBackingHookProcedure(); procedure != nil {
+			controllerpkg.ClearBackingHookProcedure(procedure)
+		}
 		procedure := step.GetAdapterProcedure()
 		if procedure == nil {
 			continue

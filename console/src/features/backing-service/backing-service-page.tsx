@@ -20,6 +20,8 @@ import { toYAML } from '@/lib/yaml'
 import type { ConsumerLink, Project } from '@/lib/types'
 import { valkeyAuthenticationDetails } from '@/lib/valkey-authentication'
 import { Row, ServiceTab } from './service-tab'
+import { Drawer } from '@/components/ui/drawer'
+import { ServiceFormBody } from '@/components/common/service-form-body'
 import { serviceObservationState } from '@/features/service/service-observation'
 import { useVisibleServiceObservations } from '@/features/service/use-service-observation-refresh'
 
@@ -34,6 +36,7 @@ export default function BackingServiceDetailPage() {
 	const [tab, setTab] = useState<PlatformTab>('service')
 	const [pendingAction, setPendingAction] = useState<'start' | 'stop' | 'destroy' | null>(null)
 	const [actionError, setActionError] = useState('')
+  const [editOpen, setEditOpen] = useState(false)
   const observationRefresh = useVisibleServiceObservations({
     environmentIds: env ? [env.id] : [],
     observations: svc ? [svc.observation] : [],
@@ -61,7 +64,7 @@ export default function BackingServiceDetailPage() {
   const runtimeState = serviceObservationState(svc.observation, observationRefresh.now)
   const adapter = store.adapters.find((a) => a.key === svc.adapter)
   const authenticationDetails = valkeyAuthenticationDetails(svc.authentication)
-  const port = adapter?.urlScheme === 'redis' ? 6379 : 5432
+  const port = adapter?.urlScheme === 'redis' ? 6379 : adapter?.urlScheme === 'pgsql' ? 5432 : undefined
   // Backups are per consumer: count the attach-backed sources across all
   // environments that attach this backing project.
   const consumerBackupCount = store.tenantProjects.reduce(
@@ -115,7 +118,7 @@ export default function BackingServiceDetailPage() {
               {adapter?.label ?? svc.adapter} · {svc.image}
             </MetaPill>
             <MetaPill icon={<Server />}>
-              {svc.serviceName}:{port}
+              {svc.serviceName}{port ? `:${port}` : ''}
             </MetaPill>
             {authenticationDetails && <MetaPill>{authenticationDetails.label} authentication</MetaPill>}
             <MetaPill icon={<Boxes />}>{env.name} environment</MetaPill>
@@ -123,6 +126,7 @@ export default function BackingServiceDetailPage() {
         }
 			actions={
 				<>
+					<Button variant="outline" onClick={() => setEditOpen(true)}>Edit service</Button>
 					{running ? (
 						<Button variant="outline" disabled={pendingAction !== null} onClick={() => void runLifecycle('stop')}>
 							<PowerOff className="size-4" /> Stop
@@ -139,12 +143,15 @@ export default function BackingServiceDetailPage() {
 			}
 		/>
 		{actionError && <p role="alert" className="text-sm text-destructive">{actionError}</p>}
+      <Drawer open={editOpen} onOpenChange={setEditOpen}>
+        {editOpen && <ServiceFormBody env={env} workspace="platform" initial={svc} onClose={() => setEditOpen(false)} />}
+      </Drawer>
 		{observationRefresh.refreshError && <p role="alert" className="text-sm text-destructive">Runtime refresh failed; evidence will expire locally. {observationRefresh.refreshError}</p>}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard icon={<Boxes />} label="Consumers" value={g.consumers?.length ?? 0} hint="environments attached" />
         <StatCard icon={<Database />} label="Adapter" value={adapter?.label ?? '—'} hint={`adapter ${svc.adapter}`} />
-        <StatCard icon={<Server />} label="Service" value={svc.serviceName ?? '—'} hint={`unique service name · ${svc.serviceName}:${port}`} />
+        <StatCard icon={<Server />} label="Service" value={svc.serviceName ?? '—'} hint={port ? `port ${port}` : 'operator-selected image'} />
         <StatCard icon={<RefreshCw />} label="Consumer backups" value={consumerBackupCount} hint="attach sources across all consumers" />
       </div>
 
@@ -196,13 +203,11 @@ function ConnectionsTab({ g, env, svc }: { g: Project; env: NonNullable<Project[
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
-            {adapter?.manual ? (
+            {adapter?.custom ? (
               <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Manual adapter — no auto-provisioning.</span> Attaching a
-                service joins this network and that&apos;s all: no facts, no credentials, no provisioning steps, no
-                Groundplane-managed backups. The operator runs and manages this service themselves; Groundplane only wires
-                connectivity. Consumers reach it at{' '}
-                <span className="font-mono">{svc.serviceName ?? svc.name}</span> on the zone.
+                <span className="font-medium text-foreground">Custom container managed by Groundplane.</span>{' '}
+                {svc.hooks?.attach ? 'Each new Attach runs your provisioning command and publishes its declared facts after success.' : 'Attaching connects a consumer to the backing network without provisioning.'}{' '}
+                Hooks are configured under Edit service. Custom services have no managed grants or backups.
               </p>
             ) : authenticationUnavailable ? (
               <p role="alert" className="text-xs text-destructive">
@@ -242,7 +247,7 @@ function ConnectionsTab({ g, env, svc }: { g: Project; env: NonNullable<Project[
                 </span>
               </div>
             </div>
-            {!adapter?.manual && (
+            {!adapter?.custom && (
               <>
                 <div className="flex flex-wrap gap-1.5">
                   {exposedFacts.map((v) => (
@@ -289,15 +294,16 @@ function ConnectionsTab({ g, env, svc }: { g: Project; env: NonNullable<Project[
                 <span className="font-mono text-sm">
                   {c.project} / {c.environment} <span className="text-muted-foreground">· {c.service}</span>
                 </span>
-                {!adapter?.manual && (
+                {!adapter?.custom && (
                   <div className="flex items-center gap-1">
                     <ConsumerConnectionActions consumer={c} authentication={svc.authentication} />
                   </div>
                 )}
               </div>
-              {adapter?.manual ? (
+              {adapter?.custom ? (
                 <div className="mt-2 flex flex-col gap-1.5 text-sm">
-                  <Row label="Access" value="network-only — joins the zone, no provisioning, no credentials" mono />
+                  <Row label="Access" value={svc.hooks?.attach ? 'network access and custom provisioning' : 'network-only, no provisioning'} mono />
+                  <Row label="Declared facts" value={svc.hooks?.facts?.map((fact) => fact.key).join(', ') || 'none'} mono />
                   <Row label="Reach at" value={`${svc.serviceName ?? svc.name} on the network`} mono />
                 </div>
               ) : (
@@ -314,7 +320,7 @@ function ConnectionsTab({ g, env, svc }: { g: Project; env: NonNullable<Project[
                   />
                 </div>
               )}
-              {!adapter?.manual && (
+              {!adapter?.custom && (
                 <details className="mt-2">
                   <summary className="cursor-pointer text-xs text-primary">
                     procedure the Agent runs · {provision.length} steps
@@ -366,15 +372,16 @@ function DesiredStateTab({ g, env, svc }: { g: Project; env: NonNullable<Project
       image: svc.image,
       prefix: svc.prefix ?? adapter?.prefix,
       host: svc.serviceName,
-      port: adapter?.urlScheme === 'redis' ? 6379 : 5432,
+      port: adapter?.urlScheme === 'redis' ? 6379 : adapter?.urlScheme === 'pgsql' ? 5432 : undefined,
       zones: env.zones.map((z) => ({ name: z.name, subnet: z.subnet, internal: z.internal })),
-      manual: adapter?.manual ?? false,
+      custom: adapter?.custom ?? false,
+      hooks: svc.hooks,
       provision: authenticationDetails?.provision ?? (authenticationUnavailable ? [] : adapter?.provision ?? []),
-      exposes: authenticationDetails
+      exposes: adapter?.custom ? (svc.hooks?.facts ?? []).map((fact) => fact.key) : authenticationDetails
         ? authenticationDetails.factSuffixes.map((suffix) => `${svc.prefix ?? adapter?.prefix}_${suffix}`)
         : authenticationUnavailable ? [] : adapter?.envVars ?? [],
       healthcheck: svc.healthcheck ? { kind: svc.healthcheck.kind, target: svc.healthcheck.target } : undefined,
-      volume: 'volumes/data',
+      volume: adapter?.custom ? undefined : 'volumes/data',
     },
     consumers: (g.consumers ?? []).map((c) => ({ project: c.project, environment: c.environment, service: c.service, database: c.database, role: c.role })),
   }
@@ -458,11 +465,10 @@ function BackupsTab({ g, env, svc }: { g: Project; env: NonNullable<Project['env
         <Badge variant={enabledCount > 0 ? 'success' : 'muted'}>{enabledCount} enabled</Badge>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        {adapter?.manual ? (
+        {adapter?.custom ? (
           <p className="text-xs text-muted-foreground">
-            This is a <span className="font-medium text-foreground">manual</span> adapter: attaching only joins the
-            network, so there is nothing Groundplane backs up — the operator manages the service and its backups
-            themselves.
+            Custom hooks do not provide a managed backup adapter. The operator is responsible for this
+            service&apos;s backups, whether or not provisioning hooks are configured.
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
@@ -474,7 +480,7 @@ function BackupsTab({ g, env, svc }: { g: Project; env: NonNullable<Project['env
           </p>
         )}
 
-        {!adapter?.manual && (
+        {!adapter?.custom && (
           <div className="grid grid-cols-3 gap-3">
             <div className="flex flex-col gap-1 rounded-lg border border-border bg-surface p-3">
               <span className="text-2xl font-semibold text-success">{enabledCount}</span>

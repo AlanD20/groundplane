@@ -37,6 +37,21 @@ func (e AttachCredentialMode) Valid() bool {
 	}
 }
 
+// Defines values for BackingHookInputGenerate.
+const (
+	BackingHookInputGeneratePassword BackingHookInputGenerate = "password"
+)
+
+// Valid indicates whether the value is a known member of the BackingHookInputGenerate enum.
+func (e BackingHookInputGenerate) Valid() bool {
+	switch e {
+	case BackingHookInputGeneratePassword:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for BackingServiceCreateAuthentication.
 const (
 	BackingServiceCreateAuthenticationNone             BackingServiceCreateAuthentication = "none"
@@ -103,6 +118,21 @@ const (
 func (e BackingServiceCreate1Adapter) Valid() bool {
 	switch e {
 	case Postgres16:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BackingServiceCreate2Adapter.
+const (
+	Custom BackingServiceCreate2Adapter = "custom"
+)
+
+// Valid indicates whether the value is a known member of the BackingServiceCreate2Adapter enum.
+func (e BackingServiceCreate2Adapter) Valid() bool {
+	switch e {
+	case Custom:
 		return true
 	default:
 		return false
@@ -894,6 +924,39 @@ type AttachRequest struct {
 	ServiceId        string           `json:"service_id"`
 }
 
+// BackingHookConfiguration defines model for BackingHookConfiguration.
+type BackingHookConfiguration struct {
+	AfterStart *BackingHookDefinition       `json:"after_start,omitempty"`
+	Attach     *BackingHookDefinition       `json:"attach,omitempty"`
+	BeforeStop *BackingHookDefinition       `json:"before_stop,omitempty"`
+	Detach     *BackingHookDefinition       `json:"detach,omitempty"`
+	Facts      *[]BackingHookFactDefinition `json:"facts,omitempty"`
+	Inputs     *[]BackingHookInput          `json:"inputs,omitempty"`
+}
+
+// BackingHookDefinition defines model for BackingHookDefinition.
+type BackingHookDefinition struct {
+	Command        *[]string `json:"command"`
+	TimeoutSeconds int32     `json:"timeout_seconds"`
+}
+
+// BackingHookFactDefinition defines model for BackingHookFactDefinition.
+type BackingHookFactDefinition struct {
+	Key    string `json:"key"`
+	Secret bool   `json:"secret"`
+}
+
+// BackingHookInput defines model for BackingHookInput.
+type BackingHookInput struct {
+	Generate  *BackingHookInputGenerate `json:"generate,omitempty"`
+	Key       string                    `json:"key"`
+	SecretRef *string                   `json:"secret_ref,omitempty"`
+	Value     *string                   `json:"value,omitempty"`
+}
+
+// BackingHookInputGenerate defines model for BackingHookInput.Generate.
+type BackingHookInputGenerate string
+
 // BackingService defines model for BackingService.
 type BackingService struct {
 	// Schema A URL to the JSON Schema for this object.
@@ -918,11 +981,15 @@ type BackingServiceCreate struct {
 	// Authentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
 	Authentication *BackingServiceCreateAuthentication `json:"authentication,omitempty"`
 	Description    *string                             `json:"description,omitempty"`
-	Name           string                              `json:"name"`
-	NetworkPool    string                              `json:"network_pool"`
-	Slug           string                              `json:"slug"`
-	Zone           BackingServiceZoneCreate            `json:"zone"`
-	union          json.RawMessage
+	Hooks          *BackingHookConfiguration           `json:"hooks,omitempty"`
+
+	// Image Required for the custom adapter and rejected for managed adapters.
+	Image       *string                  `json:"image,omitempty"`
+	Name        string                   `json:"name"`
+	NetworkPool string                   `json:"network_pool"`
+	Slug        string                   `json:"slug"`
+	Zone        BackingServiceZoneCreate `json:"zone"`
+	union       json.RawMessage
 }
 
 // BackingServiceCreateAuthentication Required explicit choice for Valkey: username_password, password, or none. No default. Immutable after creation; omitted for other adapters.
@@ -949,6 +1016,15 @@ type BackingServiceCreate1 struct {
 
 // BackingServiceCreate1Adapter defines model for BackingServiceCreate.1.Adapter.
 type BackingServiceCreate1Adapter string
+
+// BackingServiceCreate2 defines model for BackingServiceCreate.2.
+type BackingServiceCreate2 struct {
+	Adapter BackingServiceCreate2Adapter `json:"adapter"`
+	Image   string                       `json:"image"`
+}
+
+// BackingServiceCreate2Adapter defines model for BackingServiceCreate.2.Adapter.
+type BackingServiceCreate2Adapter string
 
 // BackingServiceCreated defines model for BackingServiceCreated.
 type BackingServiceCreated struct {
@@ -2383,6 +2459,7 @@ type Service struct {
 	Expose                     *[]string                     `json:"expose,omitempty"`
 	FactsPrefix                *string                       `json:"facts_prefix,omitempty"`
 	Healthcheck                *ServiceHealthcheck           `json:"healthcheck,omitempty"`
+	Hooks                      *BackingHookConfiguration     `json:"hooks,omitempty"`
 	Id                         string                        `json:"id"`
 	Image                      string                        `json:"image"`
 	Label                      *string                       `json:"label,omitempty"`
@@ -2441,6 +2518,7 @@ type ServiceDetail struct {
 	Expose                     *[]string                     `json:"expose,omitempty"`
 	FactsPrefix                *string                       `json:"facts_prefix,omitempty"`
 	Healthcheck                *ServiceHealthcheck           `json:"healthcheck,omitempty"`
+	Hooks                      *BackingHookConfiguration     `json:"hooks,omitempty"`
 	Id                         string                        `json:"id"`
 	Image                      string                        `json:"image"`
 	Label                      *string                       `json:"label,omitempty"`
@@ -2465,16 +2543,17 @@ type ServiceEdit struct {
 	// Schema A URL to the JSON Schema for this object.
 	//
 	// Examples: /api/v1/ServiceEdit.json
-	Schema      *string            `json:"$schema,omitempty"`
-	Expose      *[]string          `json:"expose"`
-	Healthcheck ServiceHealthcheck `json:"healthcheck"`
-	Image       string             `json:"image"`
-	OnFailure   string             `json:"on_failure"`
-	Replicas    int64              `json:"replicas"`
-	Resources   ServiceResources   `json:"resources"`
-	Restart     string             `json:"restart"`
-	Strategy    string             `json:"strategy"`
-	Zones       *[]string          `json:"zones"`
+	Schema      *string                   `json:"$schema,omitempty"`
+	Expose      *[]string                 `json:"expose"`
+	Healthcheck ServiceHealthcheck        `json:"healthcheck"`
+	Hooks       *BackingHookConfiguration `json:"hooks,omitempty"`
+	Image       string                    `json:"image"`
+	OnFailure   string                    `json:"on_failure"`
+	Replicas    int64                     `json:"replicas"`
+	Resources   ServiceResources          `json:"resources"`
+	Restart     string                    `json:"restart"`
+	Strategy    string                    `json:"strategy"`
+	Zones       *[]string                 `json:"zones"`
 }
 
 // ServiceHealthcheck defines model for ServiceHealthcheck.
@@ -3554,6 +3633,32 @@ func (t *BackingServiceCreate) MergeBackingServiceCreate1(v BackingServiceCreate
 	return err
 }
 
+// AsBackingServiceCreate2 returns the union data inside the BackingServiceCreate as a BackingServiceCreate2
+func (t BackingServiceCreate) AsBackingServiceCreate2() (BackingServiceCreate2, error) {
+	var body BackingServiceCreate2
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromBackingServiceCreate2 overwrites any union data inside the BackingServiceCreate as the provided BackingServiceCreate2
+func (t *BackingServiceCreate) FromBackingServiceCreate2(v BackingServiceCreate2) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeBackingServiceCreate2 performs a merge with any union data inside the BackingServiceCreate, using the provided BackingServiceCreate2
+func (t *BackingServiceCreate) MergeBackingServiceCreate2(v BackingServiceCreate2) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 func (t BackingServiceCreate) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	if err != nil {
@@ -3590,6 +3695,20 @@ func (t BackingServiceCreate) MarshalJSON() ([]byte, error) {
 		object["description"], err = json.Marshal(t.Description)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'description': %w", err)
+		}
+	}
+
+	if t.Hooks != nil {
+		object["hooks"], err = json.Marshal(t.Hooks)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'hooks': %w", err)
+		}
+	}
+
+	if t.Image != nil {
+		object["image"], err = json.Marshal(t.Image)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'image': %w", err)
 		}
 	}
 
@@ -3653,6 +3772,20 @@ func (t *BackingServiceCreate) UnmarshalJSON(b []byte) error {
 		err = json.Unmarshal(raw, &t.Description)
 		if err != nil {
 			return fmt.Errorf("error reading 'description': %w", err)
+		}
+	}
+
+	if raw, found := object["hooks"]; found {
+		err = json.Unmarshal(raw, &t.Hooks)
+		if err != nil {
+			return fmt.Errorf("error reading 'hooks': %w", err)
+		}
+	}
+
+	if raw, found := object["image"]; found {
+		err = json.Unmarshal(raw, &t.Image)
+		if err != nil {
+			return fmt.Errorf("error reading 'image': %w", err)
 		}
 	}
 

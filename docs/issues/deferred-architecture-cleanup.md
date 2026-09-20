@@ -30,6 +30,29 @@ release snapshot above. Baseline allowances must not be weakened to hide finding
 
 ## Snapshot accounting
 
+### Custom backing hooks exception
+
+On 2026-09-20 the owner approved a temporary exception limited to integrating
+Custom backing creation, hooks and their Task input/checkpoint lifecycle, then
+running QA. No general cleanup or checker change was authorized.
+
+The exact snapshot updates cover `internal/agent/worker.go`, app Attach,
+Controller composition and Service mutation files, execution-plan dispatch,
+Agent-channel dispatch, Controller plan composition, etcd Attach publication,
+backing creation, Task lifecycle and pruning. The app and etcd frozen-total
+entries are updated for this feature's code only. The now-under-limit app
+backing creation entry is removed; its replacement Attach mutation finding keeps
+the snapshot at 105 entries. All test-import allowances remain unchanged.
+
+Unrelated pending hierarchy-admission changes are excluded from this exception
+and the deployment source. The exact etcd total is therefore checked against
+the selected integration snapshot, not a dirty worktree containing those edits.
+`architecture-baseline.json` and both checker implementations remain unchanged.
+Build, behavior, secret safety and operator-journey checks remain required.
+Structural compliance remains deferred, not qualified.
+
+### Historical accounting
+
 | Group | Count | Classification |
 | --- | ---: | --- |
 | Imports | 25 | All test-only; absent on pre-consolidation `main` |

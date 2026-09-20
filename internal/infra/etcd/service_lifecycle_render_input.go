@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 
+	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -27,6 +28,8 @@ type ServiceLifecycleRenderInput struct {
 	EnvironmentName           string                       `json:"environment_name"`
 	AuthorizedVolumeDir       string                       `json:"authorized_volume_dir"`
 	ArtifactID                string                       `json:"artifact_id"`
+	AdapterKey                string                       `json:"adapter_key,omitempty"`
+	HookConfiguration         *backinghook.Configuration   `json:"hook_configuration,omitempty"`
 	Projection                EnvironmentComposeProjection `json:"projection"`
 	AppliedProjectionRevision int64                        `json:"applied_projection_revision"`
 	Release                   ServiceLifecycleRelease      `json:"release"`
@@ -110,12 +113,20 @@ func decodeServiceLifecycleRenderInput(value []byte) (ServiceLifecycleRenderInpu
 func validateServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) error {
 	if ids.Validate(ids.KindPlan, input.PlanID) != nil ||
 		ids.Validate(ids.KindService, input.ServiceID) != nil ||
-		ids.Validate(ids.KindTenant, input.TenantID) != nil ||
 		ids.Validate(ids.KindProject, input.ProjectID) != nil ||
 		ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
-		ids.Validate(ids.KindConfig, input.ArtifactID) != nil || input.TenantSlug == "" ||
+		ids.Validate(ids.KindConfig, input.ArtifactID) != nil ||
 		input.ProjectSlug == "" || input.EnvironmentName == "" || input.AuthorizedVolumeDir == "" {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle render input identity is invalid")
+	}
+	if (input.TenantID == "") != (input.TenantSlug == "") ||
+		input.TenantID != "" && ids.Validate(ids.KindTenant, input.TenantID) != nil {
+		return errs.New(errs.KindValidationFailed, "Service lifecycle render input Tenant identity is invalid")
+	}
+	if input.HookConfiguration != nil {
+		if input.AdapterKey != "custom" || backinghook.ValidateConfiguration(*input.HookConfiguration) != nil {
+			return errs.New(errs.KindValidationFailed, "Service lifecycle hook configuration is invalid")
+		}
 	}
 	if validateEnvironmentComposeProjection(input.Projection) != nil ||
 		input.Projection.EnvironmentID != input.EnvironmentID || input.AppliedProjectionRevision <= 0 {
@@ -166,6 +177,7 @@ func validateServiceLifecycleRelease(authority ServiceLifecycleRelease, input Se
 
 func cloneServiceLifecycleRenderInput(source ServiceLifecycleRenderInput) ServiceLifecycleRenderInput {
 	clone := source
+	clone.HookConfiguration = backinghook.CloneConfiguration(source.HookConfiguration)
 	clone.Projection = cloneEnvironmentComposeProjection(source.Projection)
 	clone.Release.Current = cloneReleaseRenderInput(source.Release.Current)
 	if source.Release.RetainedPrior != nil {

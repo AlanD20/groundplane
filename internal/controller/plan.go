@@ -175,10 +175,8 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	if task.Type == etcd.TaskAttach || task.Type == etcd.TaskDetach {
 		return resolver.resolveAttachPlan(ctx, task)
 	}
-	if task.Type == etcd.TaskCreate {
-		if _, backingCreation := task.Params[etcd.TaskBackingServiceHealthParam]; backingCreation {
-			return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
-		}
+	if _, backingCreation := task.Params[etcd.TaskBackingServiceCreationParam]; task.Type == etcd.TaskUpdate && backingCreation {
+		return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
 	}
 	if task.Type == etcd.TaskUpdate {
 		return resolver.resolveUpdatePlan(ctx, task)
@@ -344,15 +342,13 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if len(managedVolumeIDs) != 0 {
 		expectedParams += 2
 	}
-	healthServiceID, hasHealthStep := task.Params[etcd.TaskBackingServiceHealthParam]
-	backingVolumeDirectory := task.Params[etcd.TaskBackingServiceVolumeDirectoryParam]
-	if hasHealthStep {
-		expectedParams += 2
+	backingCreation, err := resolveBackingServiceCreationPlan(task, procedure)
+	if err != nil {
+		return nil, err
 	}
+	expectedParams += backingCreation.parameterCount()
 	if resolver.blueprints == nil || task.Executor != etcd.TaskExecutorAgent ||
 		ids.Validate(ids.KindEnvironment, task.Target) != nil || len(task.Params) != expectedParams ||
-		hasHealthStep && procedure != taskcontract.BlueprintComposeProcedureFullReconcile ||
-		hasHealthStep && (ids.Validate(ids.KindService, healthServiceID) != nil || backingVolumeDirectory == "") ||
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task shape is invalid")
 	}
@@ -421,9 +417,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if len(managedVolumeIDs) != 0 {
 		expectedSteps++
 	}
-	if hasHealthStep {
-		expectedSteps += 2
-	}
+	expectedSteps += backingCreation.stepCount()
 	if hasManagedConfigApply {
 		expectedSteps++
 	}
@@ -433,12 +427,12 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	}
 	steps := make([]*agentpb.ExecutionStep, 0, expectedSteps)
 	stepIndex := 0
-	if hasHealthStep {
+	if backingCreation.enabled {
 		steps = append(steps, &agentpb.ExecutionStep{
 			StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
 			Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
 				EnvironmentDirectoryCreate: &agentpb.EnvironmentDirectoryCreate{
-					EnvironmentId: task.Target, ExpectedVolumeDir: backingVolumeDirectory,
+					EnvironmentId: task.Target, ExpectedVolumeDir: backingCreation.volumeDirectory,
 				},
 			},
 		})
@@ -455,7 +449,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		})
 		stepIndex++
 	}
-	volumePrecedesMaterialization := hasHealthStep && len(managedVolumeIDs) != 0
+	volumePrecedesMaterialization := backingCreation.enabled && len(managedVolumeIDs) != 0
 	if volumePrecedesMaterialization {
 		appendVolumeStep()
 	}
@@ -577,14 +571,14 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		steps = append(steps, managedConfigStep)
 		stepIndex++
 	}
-	if hasHealthStep {
-		steps = append(steps, &agentpb.ExecutionStep{
-			StepId: task.Steps[stepIndex].ID, TimeoutSeconds: uint32(task.TimeoutSeconds),
-			Payload: &agentpb.ExecutionStep_WaitHealthy{WaitHealthy: &agentpb.WaitHealthy{
-				ArtifactId: artifactID, ServiceIds: []string{healthServiceID},
-			}},
-		})
-		stepIndex++
+	steps, stepIndex, err = resolver.appendBackingServiceCreationFinalSteps(
+		ctx, task, backingCreation, pinned.projection, artifactID, steps, stepIndex,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if backingCreation.hasAfterStart {
+		defer ClearBackingHookProcedure(steps[len(steps)-1].GetBackingHookProcedure())
 	}
 	if stepIndex != len(task.Steps) {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task step order is invalid")
@@ -593,7 +587,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if procedure == taskcontract.BlueprintComposeProcedureFullReconcile {
 		operation = agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
 	}
-	if hasHealthStep {
+	if backingCreation.enabled {
 		operation = agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
 	}
 	return BuildPlan(PlanBuildInput{

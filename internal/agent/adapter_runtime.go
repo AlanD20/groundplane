@@ -38,7 +38,7 @@ func (runtime *AdapterRuntime) executeStep(
 		return adapterStepResult{}, errs.New(errs.KindInternal, "agent: adapter procedure is required")
 	}
 	adapter, found := adapters.Get(procedure.AdapterKey)
-	if !found || adapter.Manual() {
+	if !found || adapter.Custom() {
 		return adapterStepResult{}, errs.New(errs.KindValidationFailed, "agent: adapter procedure is not registered")
 	}
 	authentication, err := decodeBackingAuthentication(
@@ -47,7 +47,7 @@ func (runtime *AdapterRuntime) executeStep(
 	if err != nil || authentication == core.BackingAuthenticationNone {
 		return adapterStepResult{}, errs.New(errs.KindValidationFailed, "agent: adapter authentication mode is invalid")
 	}
-	params := adapters.ProvisionParams{
+	params := adapters.Input{
 		Authentication: authentication,
 		Database:       procedure.Database,
 		Role:           procedure.Role,
@@ -91,7 +91,7 @@ func (runtime *AdapterRuntime) executeStep(
 func compileAdapterProcedure(
 	adapter adapters.Adapter,
 	phase agentpb.AdapterProcedurePhase,
-	params adapters.ProvisionParams,
+	params adapters.Input,
 ) []adapters.Step {
 	switch phase {
 	case agentpb.AdapterProcedurePhase_ADAPTER_PROCEDURE_PHASE_PROVISION:

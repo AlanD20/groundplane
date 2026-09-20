@@ -162,6 +162,13 @@ message, not source line positions. New or changed findings, extra occurrences,
 invalid reports and checker failures block CI. Resolved findings need not remain.
 The snapshot must not be regenerated to accept new debt without owner approval.
 
+On 2026-09-20 the owner approved a temporary extension limited to the Custom
+backing hooks change so it can be integrated and qualified on QA without a
+separate structural cleanup. The exact updated entries and scope are recorded
+in [the debt record](issues/deferred-architecture-cleanup.md#custom-backing-hooks-exception).
+The strict baseline, checker, unrelated findings and non-structural gates are
+unchanged. This exception is not runtime or production qualification.
+
 `make architecture-check` remains the unmodified strict check; its original
 baseline and architecture requirements are unchanged. A passing release gate
 does not mean this debt is fixed or architecture compliance is qualified.

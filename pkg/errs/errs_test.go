@@ -56,7 +56,7 @@ func expectedKindCatalog() map[Kind]descriptor {
 		KindBackupSourceNotFound:               {"backup_source.not_found", "not_found", 404},
 		KindStrategyNotImplemented:             {"strategy.not_implemented", "validation", 422},
 		KindRotationNotImplemented:             {"rotation.not_implemented", "validation", 422},
-		KindAdapterManualOnly:                  {"adapter.manual_only", "validation", 422},
+		KindAdapterCustomOnly:                  {"adapter.custom_only", "validation", 422},
 		KindValidationFailed:                   {"validation.failed", "validation", 422},
 		KindMalformedRequest:                   {"validation.failed", "bad_request", 400},
 		KindScopeUnauthorized:                  {"scope.unauthorized", "validation", 422},

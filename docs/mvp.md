@@ -50,11 +50,13 @@ services, attaches, backups) is shared — only a few adapter fields differ.
 Routes: `/platform/backing-services`.
 
 Backing-service creation is one protected atomic operation. The operator
-supplies the backing Project labels, one compiled adapter key (`postgres:16`
-or `valkey:9`), the `main` Environment network pool, and one new Zone name,
+supplies the backing Project labels, one adapter key (`postgres:16`,
+`valkey:9`, or `custom`), the `main` Environment network pool, and one new Zone name,
 subnet, and `internal` decision. The Controller creates exactly one backing
 Project, one `main` Environment, one dedicated backing-owned Zone, one
-adapter-backed Service, one adapter-defined data Volume, and one Agent Task.
+adapter-backed Service, one adapter-defined data Volume for built-in database
+adapters, and one Agent Task. Custom requires an operator-selected image and
+does not invent database storage, credentials, ports, or healthchecks.
 The Zone subnet must be inside the Environment pool and globally unreserved.
 There is no existing-Zone branch, uploaded backing Blueprint, plugin catalog,
 implicit subnet, or partial facade. Adapter defaults are versioned compiled
@@ -1001,7 +1003,7 @@ tenants and one database.
   plus a set for `api_abcdef` — the operator names the env vars they create,
   so the key overlap is harmless.
   Grant support is an explicit adapter capability: PostgreSQL 16 supports it;
-  Valkey 9 and `manual` reject grants before task publication.
+  Valkey 9 and `custom` reject grants before task publication.
 
   **Credential ownership.** The credential-owning Attach is the durable
   credential identity; no separate public Credential resource exists. A new
@@ -1043,16 +1045,26 @@ tenants and one database.
   the one task pipeline — a new kind is a package plus one registration
   line (see docs/architecture.md, "Extensibility").
 
-  **The `manual` adapter (locked).** `manual` is a first-class adapter with
-  **no auto-provisioning**: attaching a service to a manual backing service
-  only **joins the network** — no database/role creation, no facts, no
-  credentials, no grants, and no Groundplane-managed backups (the backing
-  project's backup policy starts off). The operator runs and manages the
-  service themselves; Groundplane only wires connectivity. Reachability is
-  purely the service name on the zone. The Console surfaces this everywhere
-  an adapter appears: the attach dialog explains network-only attach, the
-  backing page shows no provision operations and no connection/rotate for
-  consumers, and the Backups tab is marked "not applicable".
+  **Custom backing services.** `custom` runs an operator-selected image under
+  Groundplane. Sharing the service across tenants is its purpose; built-in
+  provisioning is optional convenience. Without hooks, Attach only joins the
+  network: no generated facts, credentials, grants, or managed backups. Custom
+  may declare operator-authored attach/detach and before-stop/after-start hooks.
+  Built-in adapters and hooks share one logical input/output contract: resolved
+  operation and consumer context in, declared string facts out. Shell commands
+  receive `GP_*` environment variables and write literal `KEY=value` lines to
+  `GP_RESULT_FILE`; GP never evaluates that file. Facts publish only after
+  successful, validated attach provisioning. Hook failures block the operation;
+  interrupted commands require explicit retry. The operator owns script
+  correctness and idempotency. See [Backing services](features/backing-services.md#unified-provisioning-and-optional-custom-hooks)
+  for inputs, output parsing, secrecy, lifecycle timing, and bounds. Custom
+  does not inherit PostgreSQL grants or database Backup support.
+
+  New custom credential owners requiring an attach or detach hook are created
+  through standalone Attach. Blueprint creation of those owners, including
+  producing and consuming their new facts in one apply, is deferred and must
+  be rejected before mutation. Existing ready facts and owner reuse remain
+  supported in Blueprint.
 
   Each adapter knows how to provision that kind, how to render its connection
   URL (`pgsql://` vs `redis://`), how to dump and restore it, and which env

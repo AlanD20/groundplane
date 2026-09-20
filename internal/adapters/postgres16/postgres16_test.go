@@ -10,7 +10,7 @@ import (
 // Rationale: PostgreSQL identity values must compile locally with explicit
 // database context and mutable secret input, never unresolved placeholders.
 func TestProvisionStepsCompileResolvedIdentity(t *testing.T) {
-	steps := (&adapter{}).ProvisionSteps(adapters.ProvisionParams{
+	steps := (&adapter{}).ProvisionSteps(adapters.Input{
 		Database: "api_5d3f9a", Role: "api_5d3f9a", Password: []byte("URL_safe-1"),
 	})
 	if len(steps) != 3 || steps[0].Database != "postgres" ||
@@ -31,7 +31,7 @@ func TestProvisionStepsCompileResolvedIdentity(t *testing.T) {
 // Rationale: task retry is repair, so replaying a partially completed Attach must converge the
 // existing role and database instead of failing on an unconditional CREATE statement.
 func TestProvisionStepsAreRetrySafe(t *testing.T) {
-	steps := (&adapter{}).ProvisionSteps(adapters.ProvisionParams{
+	steps := (&adapter{}).ProvisionSteps(adapters.Input{
 		Database: "api-web_5d3f9a", Role: "api-web_5d3f9a", Password: []byte("URL_safe-1"),
 	})
 	defer adapters.ClearSteps(steps)
@@ -48,8 +48,8 @@ func TestProvisionStepsAreRetrySafe(t *testing.T) {
 // Rationale: granted schema changes must run in the granted database, and
 // final detach must transfer database ownership before dropping the role.
 func TestGrantAndDetachStepsUseCorrectDatabaseContext(t *testing.T) {
-	grant := (&adapter{}).GrantSteps(adapters.ProvisionParams{Role: "api_5d3f9a", GrantOn: "other_4a1b2c"})
-	detach := (&adapter{}).DetachSteps(adapters.ProvisionParams{Role: "api_5d3f9a", Database: "api_5d3f9a"})
+	grant := (&adapter{}).GrantSteps(adapters.Input{Role: "api_5d3f9a", GrantOn: "other_4a1b2c"})
+	detach := (&adapter{}).DetachSteps(adapters.Input{Role: "api_5d3f9a", Database: "api_5d3f9a"})
 	defer adapters.ClearSteps(grant)
 	defer adapters.ClearSteps(detach)
 	if len(grant) != 2 || grant[1].Database != "other_4a1b2c" || len(detach) != 3 ||
@@ -59,7 +59,7 @@ func TestGrantAndDetachStepsUseCorrectDatabaseContext(t *testing.T) {
 }
 
 func TestGrantAndRevokeStepsCoverExistingAndFutureSchemaObjects(t *testing.T) {
-	params := adapters.ProvisionParams{Role: "identity_5d3f9a", GrantOn: "api_4a1b2c"}
+	params := adapters.Input{Role: "identity_5d3f9a", GrantOn: "api_4a1b2c"}
 	grant := (&adapter{}).GrantSteps(params)
 	revoke := (&adapter{}).RevokeSteps(params)
 	defer adapters.ClearSteps(grant)
@@ -91,7 +91,7 @@ func TestGrantAndRevokeStepsCoverExistingAndFutureSchemaObjects(t *testing.T) {
 // Rationale: service-derived identities may contain hyphens, so every PostgreSQL identifier must be
 // delimited without allowing a generated value to change the fixed statement structure.
 func TestPostgreSQLStepsQuoteServiceDerivedIdentifiers(t *testing.T) {
-	steps := (&adapter{}).ProvisionSteps(adapters.ProvisionParams{
+	steps := (&adapter{}).ProvisionSteps(adapters.Input{
 		Database: `api-web_5d3f9a`, Role: `api-web_5d3f9a`, Password: []byte("safe'password"),
 	})
 	defer adapters.ClearSteps(steps)

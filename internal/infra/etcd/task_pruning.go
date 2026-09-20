@@ -413,6 +413,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	mutations := []Mutation{
 		{Type: MutationPut, Key: taskPruneIntentKey(task.ID), Value: intentValue},
 		{Type: MutationDelete, Key: serviceLifecycleRenderInputKey(task.ID)},
+		{Type: MutationDelete, Key: backingHookCheckpointTaskPrefix(task.ID), Prefix: true},
 		{Type: MutationDelete, Key: retentionEntry.Key},
 		{Type: MutationDelete, Key: taskOperationIndexKey(task.OperationID, task.ID)},
 	}

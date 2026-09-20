@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/adapters/manual"
+	"github.com/AlanD20/groundplane/internal/adapters/custom"
 	"github.com/AlanD20/groundplane/internal/adapters/postgres16"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/runner"
@@ -23,7 +23,7 @@ import (
 
 var (
 	registerAttachPlanPostgres sync.Once
-	registerAttachPlanManual   sync.Once
+	registerAttachPlanCustom   sync.Once
 )
 
 // Rationale: a durable Attach task must rebuild its pinned external-network artifact and typed identity
@@ -50,33 +50,33 @@ func TestTaskPlanResolverBuildsAttachNetworkAndAdapterProcedure(t *testing.T) {
 }
 
 func TestTaskPlanResolverUsesDesiredAttachProjectionSnapshots(t *testing.T) {
-	registerAttachPlanManual.Do(manual.Register)
-	fixture := newAttachPlanFixture(t, "manual", false)
+	registerAttachPlanCustom.Do(custom.Register)
+	fixture := newAttachPlanFixture(t, "custom", false)
 	if _, err := fixture.resolver.ResolveExecutionPlan(context.Background(), fixture.task); err != nil {
 		t.Fatalf("ResolveExecutionPlan() error with desired projection snapshots = %v", err)
 	}
 }
 
-// Rationale: the locked manual adapter performs only the same pinned external-network reconciliation and
+// Rationale: the locked custom adapter performs only the same pinned external-network reconciliation and
 // must never resolve credentials or manufacture an empty adapter procedure.
-func TestTaskPlanResolverBuildsManualNetworkOnlyAttach(t *testing.T) {
-	registerAttachPlanManual.Do(manual.Register)
-	fixture := newAttachPlanFixture(t, "manual", false)
+func TestTaskPlanResolverBuildsCustomNetworkOnlyAttach(t *testing.T) {
+	registerAttachPlanCustom.Do(custom.Register)
+	fixture := newAttachPlanFixture(t, "custom", false)
 	plan, err := fixture.resolver.ResolveExecutionPlan(context.Background(), fixture.task)
 	if err != nil {
 		t.Fatalf("ResolveExecutionPlan() error = %v", err)
 	}
 	if len(plan.Artifacts) != 1 || len(plan.Steps) != 1 || plan.Steps[0].GetComposeApply() == nil ||
 		fixture.state.identityCalls != 0 {
-		t.Fatalf("manual ResolveExecutionPlan() = %#v, identity calls = %d", plan, fixture.state.identityCalls)
+		t.Fatalf("custom ResolveExecutionPlan() = %#v, identity calls = %d", plan, fixture.state.identityCalls)
 	}
 }
 
 // Rationale: live Attach mutates the captured serving native workload, keeps
 // current Entry bindings, and never starts its stable proxy or inactive slot.
 func TestTaskPlanResolverAttachesCapturedNativeWorkload(t *testing.T) {
-	registerAttachPlanManual.Do(manual.Register)
-	fixture := newAttachPlanFixture(t, "manual", false)
+	registerAttachPlanCustom.Do(custom.Register)
+	fixture := newAttachPlanFixture(t, "custom", false)
 	makeNativeAttachRuntime(t, &fixture)
 	plan, err := fixture.resolver.ResolveExecutionPlan(t.Context(), fixture.task)
 	if err != nil {
@@ -159,8 +159,8 @@ func makeNativeAttachRuntime(t *testing.T, fixture *attachPlanFixture) {
 }
 
 func TestTaskPlanResolverReconcilesInactiveAttachWithoutActivatingProfile(t *testing.T) {
-	registerAttachPlanManual.Do(manual.Register)
-	fixture := newAttachPlanFixture(t, "manual", false)
+	registerAttachPlanCustom.Do(custom.Register)
+	fixture := newAttachPlanFixture(t, "custom", false)
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(fixture.reader.projection.ComposeArtifact, artifact); err != nil {
 		t.Fatalf("unmarshal normalized Compose artifact: %v", err)
@@ -355,7 +355,7 @@ func newAttachPlanFixture(t *testing.T, adapterKey string, withGrant bool) attac
 		t.Fatalf("NewTaskPlanResolverWithAttachments() error = %v", err)
 	}
 	stepCount := len(identity.Grants) + 2
-	if adapterKey == "manual" {
+	if adapterKey == "custom" {
 		stepCount = 1
 	}
 	steps := make([]etcd.TaskStepRecord, stepCount)

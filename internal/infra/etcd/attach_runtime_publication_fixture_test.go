@@ -38,7 +38,7 @@ func createTestAttach(
 	seed := int64(binary.BigEndian.Uint64(recordDigest[:8]))
 	planDigest := sha256.Sum256([]byte("attach-plan-" + record.ID))
 	stepCount := len(record.GrantAttachIDs) + 2
-	if scope.BackingService.Record.Desired.Adapter == "manual" ||
+	if scope.BackingService.Record.Desired.Adapter == "custom" ||
 		scope.BackingService.Record.Desired.Authentication == core.BackingAuthenticationNone {
 		stepCount = 1
 	}

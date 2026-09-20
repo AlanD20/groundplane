@@ -56,7 +56,7 @@ what matters, and it exists to enforce three principles:
     internal/core        Pure capability domain values, Blueprint model, and
                          transition decisions; no transport or infra imports
     internal/adapters    The adapter registry — one package per kind
-                         (postgres:16, valkey:9, manual): provision ops,
+                         (postgres:16, valkey:9, custom): provision ops,
                          connection URL, facts prefix, backup/restore
                          strategy, connector kinds (s3-compatible → S3,
                          MinIO, B2 later). Each adapter is a CONTRACT
@@ -870,7 +870,7 @@ render generation, owned Compose identities, backing adapter, artifact id, and
 the complete external-network membership union. Provision and grant steps run
 before the targeted consumer Compose apply. Detach runs revokes, the targeted
 Compose apply without the removed membership, then adapter deprovisioning.
-The `manual` adapter produces only the targeted Compose apply. Retries retain
+A `custom` adapter without hooks produces only the targeted Compose apply. Retries retain
 the plan id and therefore reconstruct byte-identical plans.
 Each Attach also retains its resolved stable backing Network id independently
 of the Task snapshot. That long-lived binding is the source for computing a
@@ -1016,7 +1016,7 @@ the wrap point. Nothing is designed or built for it now.
 
 | Seam | How to add one | Cost |
 | --- | --- | --- |
-| **Backing-service adapters** (postgres:16, valkey:9, manual) | package in `internal/adapters` + one registration line | small — the design's cheapest seam |
+| **Backing-service adapters** (postgres:16, valkey:9, custom) | package in `internal/adapters` + one registration line | small — the design's cheapest seam |
 | **Connector kinds** (backup destinations) | `s3-compatible` today; new kind = package + registry entry | small |
 | **Registered Components** (Caddy, Cloudflare Tunnel, CoreDNS in the MVP) | typed implementation in `registered-components` using only existing Component Capabilities, plus one composition registration | medium — source-reviewed and rebuilt; no runtime loading or core implementation branch |
 
@@ -1030,13 +1030,23 @@ can *do*; they never reshape how the pipeline *runs*.
 
 ### The adapter seam (the contract shape)
 
+Built-in adapters and operator hooks share resolved provisioning input and
+declared string-fact output. `internal/adapters.Input` owns the typed built-in
+fields and consumer context; its hook projection supplies `GP_*` environment
+variables without constructing shell source. `internal/common/backinghook`
+owns the shared fact values, declarations, result-file parsing and validation.
+The Controller owns encrypted result publication and Attach readiness. The
+Agent executes the selected procedure and must not publish secrets as Task
+log output. See [Backing services](features/backing-services.md#unified-provisioning-and-optional-custom-hooks)
+for the operator contract and current implementation limits.
+
 An adapter is **declarative, typed knowledge** — a fixed shape to fill
 in, in one package:
 
 - metadata: key (`postgres:16`), label, image, facts prefix (`pg16_`),
   URL scheme (`pgsql://` vs `redis://`), connection port (`5432`),
   `requires {database, role}`,
-  exposed fact fields, `manual?`, and `supports_grants?`;
+  exposed fact fields, `custom?`, and `supports_grants?`;
 - provision/detach/rotate ops as typed parameterized steps
   (`create_database`, `create_role`, `grant`, …) with placeholders
   (`<db>`, `<role>`, `<generated>`) filled by the Controller;
@@ -1046,7 +1056,7 @@ in, in one package:
 Adding a kind = implement the shape + register it. The Console already
 models the shape exactly: `lib/types.ts` `Adapter` (key, image, prefix,
 urlScheme, requires, envVars, provision, backup/restore strategy,
-manual).
+custom).
 
 The durable Service record, rather than an Attach request or Docker discovery,
 owns the selected stable `backing_network_id` for every adapter-backed Service.

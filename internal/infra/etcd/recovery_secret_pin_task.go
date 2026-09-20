@@ -40,7 +40,8 @@ func validateTaskSecretPinSet(binding *TaskSecretPinSet) error {
 func prepareRecoverySecretPins(
 	ctx context.Context, store hierarchyStore, task TaskRecord,
 ) (TaskRecord, tasksecretpins.Prepared, error) {
-	if task.Configuration == nil || len(task.Materializations) == 0 {
+	if task.Configuration == nil || len(task.Materializations) == 0 &&
+		(task.Configuration.BackingHookInputs == nil || len(task.Configuration.BackingHookInputs.SecretSources) == 0) {
 		return task, tasksecretpins.Prepared{}, nil
 	}
 	if task.Configuration.SecretPins != nil {
@@ -48,6 +49,17 @@ func prepareRecoverySecretPins(
 			errs.KindStateConflict,
 			"Task Secret pins are already prepared",
 		)
+	}
+	bySecret := make(map[string]tasksecretpinrecord.Record)
+	if task.Configuration.BackingHookInputs != nil {
+		for _, pin := range task.Configuration.BackingHookInputs.SecretSources {
+			if err := addRecoverySecretPin(task.OperationID, pin, bySecret); err != nil {
+				return TaskRecord{}, tasksecretpins.Prepared{}, err
+			}
+		}
+	}
+	if len(task.Materializations) == 0 {
+		return prepareRecoverySecretPinSet(ctx, store, task, bySecret)
 	}
 	read, err := store.GetMany(
 		ctx,
@@ -67,7 +79,6 @@ func prepareRecoverySecretPins(
 	if err != nil {
 		return TaskRecord{}, tasksecretpins.Prepared{}, err
 	}
-	bySecret := make(map[string]tasksecretpinrecord.Record)
 	if err := collectRecoverySecretPins(task.OperationID, task.Materializations, bySecret); err != nil {
 		return TaskRecord{}, tasksecretpins.Prepared{}, err
 	}
@@ -90,6 +101,15 @@ func prepareRecoverySecretPins(
 			return TaskRecord{}, tasksecretpins.Prepared{}, err
 		}
 	}
+	return prepareRecoverySecretPinSet(ctx, store, task, bySecret)
+}
+
+func prepareRecoverySecretPinSet(
+	ctx context.Context,
+	store hierarchyStore,
+	task TaskRecord,
+	bySecret map[string]tasksecretpinrecord.Record,
+) (TaskRecord, tasksecretpins.Prepared, error) {
 	if len(bySecret) == 0 {
 		return task, tasksecretpins.Prepared{}, nil
 	}
@@ -101,7 +121,7 @@ func prepareRecoverySecretPins(
 		pins,
 		func(left, right tasksecretpinrecord.Record) int { return cmp.Compare(left.SecretID, right.SecretID) },
 	)
-	repository, err := recoverySecretPinRepository(store, task.Owner.ProjectID)
+	repository, err := recoverySecretPinRepository(store, taskSecretPinProjectID(task))
 	if err != nil {
 		return TaskRecord{}, tasksecretpins.Prepared{}, err
 	}
@@ -114,6 +134,24 @@ func prepareRecoverySecretPins(
 		TaskID: prepared.TaskID(), Count: prepared.MembershipCount(), SHA256: prepared.MembershipSHA256(),
 	}
 	return task, prepared, nil
+}
+
+func addRecoverySecretPin(
+	operationID string,
+	pin tasksecretpinrecord.Record,
+	selected map[string]tasksecretpinrecord.Record,
+) error {
+	if tasksecretpinrecord.Validate(pin) != nil || pin.OperationID != operationID {
+		return errs.New(errs.KindValidationFailed, "recovery Secret pin is invalid")
+	}
+	if previous, found := selected[pin.SecretID]; found && previous != pin {
+		return errs.New(errs.KindStateConflict, "recovery requires conflicting versions of one Secret")
+	}
+	selected[pin.SecretID] = pin
+	if len(selected) > tasksecretpins.MaximumPins {
+		return errs.New(errs.KindValidationFailed, "recovery Secret pin set exceeds its bound")
+	}
+	return nil
 }
 
 func collectRecoverySecretPins(
@@ -130,15 +168,8 @@ func collectRecoverySecretPins(
 			source := value.Secret
 			pin := tasksecretpinrecord.Record{OperationID: operationID, SecretID: source.SecretID,
 				MetadataRevision: source.Revision, CiphertextSHA256: source.CiphertextSHA256}
-			if err := tasksecretpinrecord.Validate(pin); err != nil {
+			if err := addRecoverySecretPin(operationID, pin, selected); err != nil {
 				return err
-			}
-			if previous, found := selected[pin.SecretID]; found && previous != pin {
-				return errs.New(errs.KindStateConflict, "recovery requires conflicting versions of one Secret")
-			}
-			selected[pin.SecretID] = pin
-			if len(selected) > tasksecretpins.MaximumPins {
-				return errs.New(errs.KindValidationFailed, "recovery Secret pin set exceeds its bound")
 			}
 		}
 	}
@@ -159,7 +190,7 @@ func finishRecoverySecretPreparation(ctx context.Context, store hierarchyStore, 
 		if read.Values[0] != nil {
 			return cause
 		}
-		repository, createErr := recoverySecretPinRepository(store, task.Owner.ProjectID)
+		repository, createErr := recoverySecretPinRepository(store, taskSecretPinProjectID(task))
 		if createErr != nil {
 			err = createErr
 		} else {
@@ -231,7 +262,7 @@ func (repository *TaskRepository) recoverySecretPinClaimConditions(
 func (repository *TaskRepository) loadTaskSecretPinRoot(
 	ctx context.Context, task TaskRecord,
 ) (tasksecretpins.ActiveRoot, error) {
-	pins, err := recoverySecretPinRepository(repository.store, task.Owner.ProjectID)
+	pins, err := recoverySecretPinRepository(repository.store, taskSecretPinProjectID(task))
 	if err != nil {
 		return tasksecretpins.ActiveRoot{}, err
 	}
@@ -248,4 +279,11 @@ func (repository *TaskRepository) loadTaskSecretPinRoot(
 		)
 	}
 	return root, nil
+}
+
+func taskSecretPinProjectID(task TaskRecord) string {
+	if task.Configuration != nil && task.Configuration.BackingHookInputs != nil {
+		return task.Configuration.BackingHookInputs.ProjectID
+	}
+	return task.Owner.ProjectID
 }

@@ -109,7 +109,7 @@ func capturedAttachRenderInputFixture(t *testing.T) AttachTaskRenderInput {
 		EnvironmentID: runtime.EnvironmentID, EnvironmentName: "main",
 		AuthorizedVolumeDir: "/var/lib/groundplane/vol/tenant/project/main",
 		BackingServiceID:    ids.NewAt(ids.KindService, now, 5),
-		BackingProjectID:    ids.NewAt(ids.KindProject, now, 6), AdapterKey: "manual",
+		BackingProjectID:    ids.NewAt(ids.KindProject, now, 6), AdapterKey: "custom",
 		DesiredRevisionID: runtime.RevisionID, ArtifactID: ids.NewAt(ids.KindConfig, now, 7),
 		RenderGeneration: runtime.RenderGeneration, EnvironmentEpochRevision: 1,
 		RuntimeProjection: runtime, RunningServiceIDs: []string{consumerID},

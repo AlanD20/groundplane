@@ -112,7 +112,7 @@ Secret store separately owns reusable Project and Platform credentials.
 Connector credentials follow ADR 0045: they either retain a reusable Secret
 key reference or store a direct value as encrypted Connector-subordinate state.
 
-Manual-adapter Attaches remain network-only. They own themselves but have no
+Custom-adapter Attaches without hooks remain network-only. They own themselves but have no
 facts, grants, provisioning steps, or managed database Backup source.
 
 ### Network and task behavior
