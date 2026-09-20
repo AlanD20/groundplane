@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -112,9 +113,9 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
 		primary,
-		{Key: scriptSetBodyGenerationKey(execution.EnvironmentID, execution.ScriptSetGeneration,
+		{Key: scriptrecord.ScriptSetBodyGenerationKey(execution.EnvironmentID, execution.ScriptSetGeneration,
 			execution.ScriptID, execution.ScriptGeneration), ModRevision: sources.BodyGeneration.Revision},
-		{Key: scriptSetActiveKey(execution.EnvironmentID), ModRevision: sources.ScriptSet.Revision},
+		{Key: scriptrecord.ScriptSetActiveKey(execution.EnvironmentID), ModRevision: sources.ScriptSet.Revision},
 		{Key: releaseProjectionKey(execution.ServiceID), ModRevision: sources.Release.ProjectionRevision},
 		{Key: releaseIntentStagingKey("", execution.ReleaseID), ModRevision: sources.Release.IntentRevision},
 		{Key: releaseRenderInputStagingKey("", execution.ReleaseID), ModRevision: sources.RenderInput.Revision},

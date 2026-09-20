@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"net/http"
 	"time"
 
@@ -28,13 +29,13 @@ type scriptMutationRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	GetScript(context.Context, string) (etcd.Versioned[etcd.ScriptRecord], error)
+	GetScript(context.Context, string) (etcd.Versioned[scriptrecord.Record], error)
 	CreateScriptIdempotent(
 		context.Context,
 		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		etcd.Versioned[etcd.ServiceRecord],
-		etcd.ScriptRecord,
+		scriptrecord.Record,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	ReplaceDesiredIdempotent(
@@ -42,7 +43,7 @@ type scriptMutationRepository interface {
 		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		etcd.Versioned[etcd.ServiceRecord],
-		etcd.Versioned[etcd.ScriptRecord],
+		etcd.Versioned[scriptrecord.Record],
 		core.Script,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -114,7 +115,7 @@ func (repository *durableScriptMutationRepository) GetService(
 
 func (repository *durableScriptMutationRepository) GetScript(
 	ctx context.Context, id string,
-) (etcd.Versioned[etcd.ScriptRecord], error) {
+) (etcd.Versioned[scriptrecord.Record], error) {
 	return repository.scripts.GetScript(ctx, id)
 }
 
@@ -123,7 +124,7 @@ func (repository *durableScriptMutationRepository) CreateScriptIdempotent(
 	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcd.Versioned[hierarchyrecord.ProjectRecord],
 	target etcd.Versioned[etcd.ServiceRecord],
-	record etcd.ScriptRecord,
+	record scriptrecord.Record,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.scripts.CreateScriptIdempotent(ctx, environment, project, target, record, marker)
@@ -134,7 +135,7 @@ func (repository *durableScriptMutationRepository) ReplaceDesiredIdempotent(
 	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcd.Versioned[hierarchyrecord.ProjectRecord],
 	target etcd.Versioned[etcd.ServiceRecord],
-	current etcd.Versioned[etcd.ScriptRecord],
+	current etcd.Versioned[scriptrecord.Record],
 	desired core.Script,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -321,7 +322,7 @@ func (service *scriptMutationService) createScriptOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	record, err := etcd.NewScriptRecord(
+	record, err := scriptrecord.NewRecord(
 		input.EnvironmentID,
 		input.ServiceID,
 		scriptdefinition.CreateDesired(input, ids.New(ids.KindScript), target.Record.Desired.Name),
@@ -403,7 +404,7 @@ func (service *scriptMutationService) editScriptOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	desired := scriptdefinition.EditDesired(current.Record.Desired, target.Record.Desired.Name, input)
-	replacement, err := etcd.ReplaceScriptDesired(current.Record, desired)
+	replacement, err := scriptrecord.ReplaceDesired(current.Record, desired)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -462,7 +463,7 @@ func (service *scriptMutationService) scriptHierarchy(
 func (service *scriptMutationService) scriptResponseMarker(
 	locator etcd.IdempotencyLocator,
 	evidence scriptMutationEvidence,
-	record etcd.ScriptRecord,
+	record scriptrecord.Record,
 	status int,
 ) (etcd.IdempotencyResponse, etcd.IdempotencyMarker, error) {
 	body, err := json.Marshal(scriptdefinition.Response(record))

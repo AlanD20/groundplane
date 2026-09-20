@@ -5,6 +5,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -123,7 +124,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(coordinationValue)
-	scriptSetValue, err := encodeScriptSetGeneration(ScriptSetGenerationRecord{
+	scriptSetValue, err := scriptrecord.EncodeScriptSetGeneration(scriptrecord.SetGenerationRecord{
 		EnvironmentID: record.ID, GenerationID: record.ID,
 	})
 	if err != nil {
@@ -131,7 +132,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	}
 	defer clear(scriptSetValue)
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), record.ID)
-	scriptSetKey := scriptSetActiveKey(record.ID)
+	scriptSetKey := scriptrecord.ScriptSetActiveKey(record.ID)
 
 	conditions := []etcdstore.Condition{
 		{Key: taskKey(task.ID)},

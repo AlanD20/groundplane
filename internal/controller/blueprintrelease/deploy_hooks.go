@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
 	"strconv"
@@ -150,9 +151,9 @@ func allocatedRawULID(allocate func(ids.Kind, string) string, name string) (stri
 }
 
 func deployScriptsByService(
-	scripts []etcd.ScriptRecord,
-) map[string][]etcd.ScriptRecord {
-	result := make(map[string][]etcd.ScriptRecord)
+	scripts []scriptrecord.Record,
+) map[string][]scriptrecord.Record {
+	result := make(map[string][]scriptrecord.Record)
 	for _, script := range scripts {
 		if script.Desired.When != core.ScriptPostDeploy && script.Desired.When != core.ScriptPreDeploy {
 			continue

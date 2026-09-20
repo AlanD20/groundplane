@@ -3,6 +3,7 @@ package etcd
 import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"math"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,7 +24,7 @@ func prepareReleaseHookPublicationFragment(
 	evidence ReleasePublicationEvidence,
 ) (releaseHookPublicationFragment, error) {
 	fragment := releaseHookPublicationFragment{}
-	updatedScripts := make(map[string]ScriptRecord)
+	updatedScripts := make(map[string]scriptrecord.Record)
 	scriptRevisions := make(map[string]int64)
 	conditionKeys := make(map[string]struct{})
 	appendRevision := func(key string, revision int64) {
@@ -102,8 +103,8 @@ func prepareReleaseHookPublicationFragment(
 			return releaseHookPublicationFragment{}, err
 		}
 		fragment.conditions = append(fragment.conditions, etcdstore.Condition{Key: scriptExecutionKey(execution.ID)})
-		appendRevision(scriptSetActiveKey(execution.EnvironmentID), sources.ScriptSet.Revision)
-		appendRevision(scriptSetBodyGenerationKey(
+		appendRevision(scriptrecord.ScriptSetActiveKey(execution.EnvironmentID), sources.ScriptSet.Revision)
+		appendRevision(scriptrecord.ScriptSetBodyGenerationKey(
 			execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration,
 		), sources.BodyGeneration.Revision)
 		fragment.conditions = append(fragment.conditions, serviceDesiredCondition(sources.Service))
@@ -129,15 +130,15 @@ func prepareReleaseHookPublicationFragment(
 		)
 	}
 	for scriptID, updated := range updatedScripts {
-		value, err := encodeScriptRecord(updated)
+		value, err := scriptrecord.EncodeRecord(updated)
 		if err != nil {
 			clearReleaseHookPublicationFragment(fragment)
 			return releaseHookPublicationFragment{}, err
 		}
-		appendRevision(scriptSetScriptKey(
+		appendRevision(scriptrecord.ScriptSetScriptKey(
 			updated.EnvironmentID, updated.ScriptSetGeneration, scriptID,
 		), scriptRevisions[scriptID])
-		fragment.mutations = append(fragment.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptSetScriptKey(
+		fragment.mutations = append(fragment.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetScriptKey(
 			updated.EnvironmentID, updated.ScriptSetGeneration, scriptID,
 		), Value: value})
 	}

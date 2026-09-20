@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
@@ -107,7 +108,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(environmentCoordinationValue)
-	scriptSetValue, err := encodeScriptSetGeneration(ScriptSetGenerationRecord{
+	scriptSetValue, err := scriptrecord.EncodeScriptSetGeneration(scriptrecord.SetGenerationRecord{
 		EnvironmentID: creation.Environment.ID, GenerationID: creation.Environment.ID,
 	})
 	if err != nil {
@@ -232,7 +233,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 			Key:   HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID),
 			Value: environmentCoordinationValue,
 		},
-		{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(creation.Environment.ID), Value: scriptSetValue},
+		{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(creation.Environment.ID), Value: scriptSetValue},
 		{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
 		{Type: etcdstore.MutationPut, Key: zonePoolRegistryKey(creation.Environment.ID), Value: zoneRegistryValue},
 		{Type: etcdstore.MutationPut, Key: serviceRuntimeKey(creation.Service.Desired.ID), Value: serviceValue},
@@ -508,7 +509,7 @@ func backingServiceCreationConditions(
 		{Key: deletionTombstoneKey("environment", creation.Environment.ID)},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(creation.Environment.ID)},
 		{Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID)},
-		{Key: scriptSetActiveKey(creation.Environment.ID)},
+		{Key: scriptrecord.ScriptSetActiveKey(creation.Environment.ID)},
 		{Key: environmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},
 		{Key: deletionTombstoneKey("zone", creation.Zone.Desired.ID)},
 		{Key: zonePoolRegistryKey(creation.Environment.ID)},

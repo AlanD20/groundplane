@@ -4,7 +4,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -28,7 +29,7 @@ func ValidateCreation(input apiTypes.ScriptCreate) error {
 }
 
 // Response projects the stored Script without changing ownership or generation.
-func Response(record etcd.ScriptRecord) apiTypes.Script {
+func Response(record scriptrecord.Record) apiTypes.Script {
 	return apiTypes.Script{
 		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Slug: record.Desired.Slug,
 		ServiceID: record.ServiceID, ServiceName: record.Desired.ServiceName,

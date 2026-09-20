@@ -5,6 +5,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -514,7 +515,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	if err != nil {
 		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
-	scriptSetValue, err := encodeScriptSetGeneration(ScriptSetGenerationRecord{
+	scriptSetValue, err := scriptrecord.EncodeScriptSetGeneration(scriptrecord.SetGenerationRecord{
 		EnvironmentID: record.ID, GenerationID: record.ID,
 	})
 	if err != nil {
@@ -526,7 +527,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	ownerIndex := hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID)
 	epochKey := hierarchyrecord.EnvironmentMutationEpochKey(record.ID)
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), record.ID)
-	scriptSetKey := scriptSetActiveKey(record.ID)
+	scriptSetKey := scriptrecord.ScriptSetActiveKey(record.ID)
 	result, err := repository.store.Transact(ctx,
 		[]etcdstore.Condition{
 			{Key: primary},

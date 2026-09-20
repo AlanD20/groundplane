@@ -5,6 +5,7 @@ import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"slices"
 	"strings"
 
@@ -296,7 +297,7 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 	if err != nil {
 		return err
 	}
-	prefix := scriptSetOwnerPrefix(scope.Environment.Record.ID, active.Record.GenerationID)
+	prefix := scriptrecord.ScriptSetOwnerPrefix(scope.Environment.Record.ID, active.Record.GenerationID)
 	start := ""
 	for {
 		page, err := ledger.store.Range(ctx, etcdstore.RangeRequest{
@@ -316,7 +317,7 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 					!bytes.Equal(value.Value, []byte(scriptID)) {
 					return corruptReleaseRecord()
 				}
-				keys[index] = scriptSetScriptKey(scope.Environment.Record.ID, active.Record.GenerationID, scriptID)
+				keys[index] = scriptrecord.ScriptSetScriptKey(scope.Environment.Record.ID, active.Record.GenerationID, scriptID)
 			}
 			records, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: scope.ReadRevision})
 			if err != nil {
@@ -329,7 +330,7 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 				if value == nil {
 					return corruptReleaseRecord()
 				}
-				record, err := decodeScriptRecord(value.Value)
+				record, err := scriptrecord.DecodeRecord(value.Value)
 				if err != nil || record.EnvironmentID != scope.Environment.Record.ID {
 					return corruptReleaseRecord()
 				}

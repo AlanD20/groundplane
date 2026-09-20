@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"net/http"
 	"time"
 
@@ -27,13 +28,13 @@ type scriptDeletionRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	GetScript(context.Context, string) (etcd.Versioned[etcd.ScriptRecord], error)
+	GetScript(context.Context, string) (etcd.Versioned[scriptrecord.Record], error)
 	BeginScriptDeletionWithTask(
 		context.Context,
 		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		etcd.Versioned[etcd.ServiceRecord],
-		etcd.Versioned[etcd.ScriptRecord],
+		etcd.Versioned[scriptrecord.Record],
 		etcd.DeletionTombstoneRecord,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
@@ -45,7 +46,7 @@ func (repository *durableScriptMutationRepository) BeginScriptDeletionWithTask(
 	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcd.Versioned[hierarchyrecord.ProjectRecord],
 	target etcd.Versioned[etcd.ServiceRecord],
-	current etcd.Versioned[etcd.ScriptRecord],
+	current etcd.Versioned[scriptrecord.Record],
 	tombstone etcd.DeletionTombstoneRecord,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,

@@ -13,6 +13,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"strings"
@@ -67,7 +68,7 @@ type PrepareInput struct {
 	Projection       etcd.EnvironmentComposeProjection
 	ServiceChanges   []etcd.EnvironmentBlueprintServiceChange
 	Memberships      NormalizedServiceMemberships
-	Scripts          []etcd.ScriptRecord
+	Scripts          []scriptrecord.Record
 	ReleaseGroups    map[string]core.ReleaseGroupSpec
 	Task             etcd.TaskRecord
 	PrefixSteps      []*agentpb.ExecutionStep

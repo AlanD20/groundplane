@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,8 +18,8 @@ import (
 )
 
 type ScriptReader interface {
-	GetScript(context.Context, string) (etcd.Versioned[etcd.ScriptRecord], error)
-	ListScripts(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ScriptRecord], error)
+	GetScript(context.Context, string) (etcd.Versioned[scriptrecord.Record], error)
+	ListScripts(context.Context, string, etcd.PageRequest) (etcd.Page[scriptrecord.Record], error)
 }
 
 type ScriptMutator interface {

@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -23,9 +24,9 @@ type ScriptExecutionSources struct {
 	Project           Versioned[hierarchyrecord.ProjectRecord]
 	Environment       Versioned[hierarchyrecord.EnvironmentRecord]
 	Service           Versioned[ServiceRecord]
-	ScriptSet         Versioned[ScriptSetGenerationRecord]
-	Script            Versioned[ScriptRecord]
-	BodyGeneration    Versioned[ScriptBodyGenerationRecord]
+	ScriptSet         Versioned[scriptrecord.SetGenerationRecord]
+	Script            Versioned[scriptrecord.Record]
+	BodyGeneration    Versioned[scriptrecord.BodyGenerationRecord]
 	Release           ServingRelease
 	RenderInput       Versioned[ReleaseRenderInput]
 	DesiredHead       Versioned[EnvironmentBlueprintHead]
@@ -40,7 +41,7 @@ type ScriptExecutionSources struct {
 func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 	ctx context.Context,
 	publicationID string,
-	script ScriptRecord,
+	script scriptrecord.Record,
 	service ServiceRecord,
 	member ReleaseTaskRenderMember,
 	tenant Versioned[hierarchyrecord.TenantRecord],
@@ -65,8 +66,8 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 	}
 	script.ScriptSetGeneration = projection.RevisionID
 	keys := []string{
-		scriptSetScriptKey(script.EnvironmentID, script.ScriptSetGeneration, script.Desired.ID),
-		scriptSetBodyGenerationKey(
+		scriptrecord.ScriptSetScriptKey(script.EnvironmentID, script.ScriptSetGeneration, script.Desired.ID),
+		scriptrecord.ScriptSetBodyGenerationKey(
 			script.EnvironmentID,
 			script.ScriptSetGeneration,
 			script.Desired.ID,
@@ -93,13 +94,13 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 			)
 		}
 	}
-	storedScript, err := decodeScriptRecord(read.Values[0].Value)
+	storedScript, err := scriptrecord.DecodeRecord(read.Values[0].Value)
 	if err != nil || storedScript.Desired.ID != script.Desired.ID ||
 		storedScript.ScriptSetGeneration != projection.RevisionID ||
 		storedScript.ActiveGeneration != script.ActiveGeneration {
 		return ScriptExecutionSources{}, recordcodec.CorruptRecord()
 	}
-	body, err := decodeScriptBodyGeneration(read.Values[1].Value)
+	body, err := scriptrecord.DecodeScriptBodyGeneration(read.Values[1].Value)
 	if err != nil || body.ScriptID != script.Desired.ID ||
 		body.Generation != script.ActiveGeneration {
 		return ScriptExecutionSources{}, recordcodec.CorruptRecord()
@@ -147,19 +148,19 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 			Record:       service,
 			ReadRevision: revision,
 		},
-		ScriptSet: Versioned[ScriptSetGenerationRecord]{
-			Record: ScriptSetGenerationRecord{
+		ScriptSet: Versioned[scriptrecord.SetGenerationRecord]{
+			Record: scriptrecord.SetGenerationRecord{
 				EnvironmentID: environment.Record.ID,
 				GenerationID:  projection.RevisionID,
 			},
 			ReadRevision: revision,
 		},
-		Script: Versioned[ScriptRecord]{
+		Script: Versioned[scriptrecord.Record]{
 			Record:       storedScript,
 			Revision:     read.Values[0].ModRevision,
 			ReadRevision: revision,
 		},
-		BodyGeneration: Versioned[ScriptBodyGenerationRecord]{
+		BodyGeneration: Versioned[scriptrecord.BodyGenerationRecord]{
 			Record:       body,
 			Revision:     read.Values[1].ModRevision,
 			ReadRevision: revision,
@@ -238,7 +239,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 	bodyValue, err := scriptExecutionValueAt(
 		ctx,
 		repository.store,
-		scriptSetBodyGenerationKey(
+		scriptrecord.ScriptSetBodyGenerationKey(
 			metadata.EnvironmentID,
 			metadata.ScriptSetGeneration,
 			scriptID,
@@ -249,7 +250,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	body, err := decodeScriptBodyGeneration(bodyValue.Value)
+	body, err := scriptrecord.DecodeScriptBodyGeneration(bodyValue.Value)
 	if err != nil || body.ScriptID != scriptID || body.Generation != metadata.ActiveGeneration {
 		return ScriptExecutionSources{}, recordcodec.CorruptRecord()
 	}
@@ -379,8 +380,8 @@ func (repository *ScriptRepository) loadExecutionSources(
 		},
 		Service:   service,
 		ScriptSet: stored.Active,
-		Script:    Versioned[ScriptRecord]{Record: metadata, Revision: stored.Script.Revision, ReadRevision: revision},
-		BodyGeneration: Versioned[ScriptBodyGenerationRecord]{
+		Script:    Versioned[scriptrecord.Record]{Record: metadata, Revision: stored.Script.Revision, ReadRevision: revision},
+		BodyGeneration: Versioned[scriptrecord.BodyGenerationRecord]{
 			Record: body, Revision: bodyValue.ModRevision, ReadRevision: revision,
 		},
 		Release: release, RenderInput: renderInput,

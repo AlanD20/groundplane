@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -66,9 +67,9 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 	environmentID string,
 	readRevision int64,
 	nextGenerationID string,
-	current []Versioned[ScriptRecord],
-	desired []ScriptRecord,
-	generations []ScriptBodyGenerationRecord,
+	current []Versioned[scriptrecord.Record],
+	desired []scriptrecord.Record,
+	generations []scriptrecord.BodyGenerationRecord,
 ) (BlueprintScriptPublication, error) {
 	if err := validateContext(ctx); err != nil {
 		return BlueprintScriptPublication{}, err
@@ -76,8 +77,8 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil || readRevision <= 0 {
 		return BlueprintScriptPublication{}, errs.New(errs.KindValidationFailed, "Blueprint Script snapshot is invalid")
 	}
-	next := ScriptSetGenerationRecord{EnvironmentID: environmentID, GenerationID: nextGenerationID}
-	if err := validateScriptSetGeneration(next); err != nil {
+	next := scriptrecord.SetGenerationRecord{EnvironmentID: environmentID, GenerationID: nextGenerationID}
+	if err := scriptrecord.ValidateScriptSetGeneration(next); err != nil {
 		return BlueprintScriptPublication{}, err
 	}
 	if len(current) > 64 || len(desired) > 64 {
@@ -97,7 +98,7 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 		)
 	}
 
-	currentByID := make(map[string]Versioned[ScriptRecord], len(current))
+	currentByID := make(map[string]Versioned[scriptrecord.Record], len(current))
 	for _, versioned := range current {
 		if versioned.ReadRevision != readRevision || versioned.Record.EnvironmentID != environmentID ||
 			versioned.Record.ScriptSetGeneration != active.Record.GenerationID {
@@ -121,12 +122,12 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 		currentByID[versioned.Record.Desired.ID] = versioned
 	}
 
-	ordered := append([]ScriptRecord(nil), desired...)
+	ordered := append([]scriptrecord.Record(nil), desired...)
 	sort.Slice(ordered, func(left, right int) bool { return ordered[left].Desired.ID < ordered[right].Desired.ID })
 	desiredByID := make(map[string]struct{}, len(ordered))
 	for index := range ordered {
 		record := &ordered[index]
-		if err := validateScriptRecord(*record); err != nil || record.EnvironmentID != environmentID {
+		if err := scriptrecord.ValidateRecord(*record); err != nil || record.EnvironmentID != environmentID {
 			return BlueprintScriptPublication{}, errs.New(
 				errs.KindValidationFailed,
 				"Blueprint Script publication record is invalid",
@@ -179,27 +180,27 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 			)
 		}
 	}
-	nextValue, err := encodeScriptSetGeneration(next)
+	nextValue, err := scriptrecord.EncodeScriptSetGeneration(next)
 	if err != nil {
 		return BlueprintScriptPublication{}, err
 	}
 	return BlueprintScriptPublication{
 		environmentID: environmentID,
-		conditions:    []etcdstore.Condition{{Key: scriptSetActiveKey(environmentID), ModRevision: active.Revision}},
-		mutations:     []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(environmentID), Value: nextValue}},
+		conditions:    []etcdstore.Condition{{Key: scriptrecord.ScriptSetActiveKey(environmentID), ModRevision: active.Revision}},
+		mutations:     []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(environmentID), Value: nextValue}},
 	}, nil
 }
 
 func validateBlueprintBodyGenerationInputs(
-	current map[string]Versioned[ScriptRecord],
-	desired []ScriptRecord,
-	generations []ScriptBodyGenerationRecord,
+	current map[string]Versioned[scriptrecord.Record],
+	desired []scriptrecord.Record,
+	generations []scriptrecord.BodyGenerationRecord,
 ) error {
-	want := make(map[string]ScriptBodyGenerationRecord)
+	want := make(map[string]scriptrecord.BodyGenerationRecord)
 	for _, record := range desired {
 		previous, exists := current[record.Desired.ID]
 		if !exists || previous.Record.ActiveGeneration != record.ActiveGeneration {
-			body, err := newScriptBodyGeneration(record)
+			body, err := scriptrecord.NewScriptBodyGeneration(record)
 			if err != nil {
 				return err
 			}
@@ -221,15 +222,15 @@ func validateBlueprintBodyGenerationInputs(
 
 func (repository *ScriptRepository) stageBlueprintScriptBatch(
 	ctx context.Context,
-	active Versioned[ScriptSetGenerationRecord],
-	records []ScriptRecord,
-	current map[string]Versioned[ScriptRecord],
+	active Versioned[scriptrecord.SetGenerationRecord],
+	records []scriptrecord.Record,
+	current map[string]Versioned[scriptrecord.Record],
 ) (bool, error) {
 	lookupKeys := make([]string, 0, len(records)*3)
 	for _, record := range records {
 		lookupKeys = append(lookupKeys,
-			scriptLocatorKey(record.Desired.ID),
-			scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
+			scriptrecord.ScriptLocatorKey(record.Desired.ID),
+			scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
 			deletionTombstoneKey("script", record.Desired.ID),
 		)
 	}
@@ -243,7 +244,7 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 	defer clearKeyValues(lookups.Values)
 
 	conditions := []etcdstore.Condition{
-		{Key: scriptSetActiveKey(active.Record.EnvironmentID), ModRevision: active.Revision},
+		{Key: scriptrecord.ScriptSetActiveKey(active.Record.EnvironmentID), ModRevision: active.Revision},
 		{Key: deletionTombstoneKey("environment", active.Record.EnvironmentID)},
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(records)*5)
@@ -253,9 +254,9 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 		if lookups.Values[index*3+2] != nil {
 			return false, errs.New(errs.KindResourceInUse, "Script deletion is in progress")
 		}
-		locatorCondition := etcdstore.Condition{Key: scriptLocatorKey(record.Desired.ID)}
+		locatorCondition := etcdstore.Condition{Key: scriptrecord.ScriptLocatorKey(record.Desired.ID)}
 		if locatorValue != nil {
-			locator, decodeErr := decodeScriptLocator(locatorValue.Value)
+			locator, decodeErr := scriptrecord.DecodeScriptLocator(locatorValue.Value)
 			if decodeErr != nil || locator.ScriptID != record.Desired.ID ||
 				locator.EnvironmentID != record.EnvironmentID {
 				return false, errs.New(errs.KindStateConflict, "Script stable identity is already in use")
@@ -265,7 +266,7 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			return false, errs.New(errs.KindInternal, "active Script locator is missing")
 		}
 		environmentLocatorCondition := etcdstore.Condition{
-			Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
+			Key: scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
 		}
 		if environmentLocatorValue != nil {
 			if string(environmentLocatorValue.Value) != record.Desired.ID {
@@ -276,29 +277,29 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			return false, errs.New(errs.KindInternal, "Script Environment locator is missing")
 		}
 
-		primaryKey := scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID)
-		bodyKey := scriptSetBodyGenerationKey(
+		primaryKey := scriptrecord.ScriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID)
+		bodyKey := scriptrecord.ScriptSetBodyGenerationKey(
 			record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID, record.ActiveGeneration,
 		)
-		ownerKey := scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID)
-		slugKey := scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug)
+		ownerKey := scriptrecord.ScriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID)
+		slugKey := scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug)
 		conditions = append(conditions,
 			locatorCondition, environmentLocatorCondition,
 			etcdstore.Condition{Key: deletionTombstoneKey("script", record.Desired.ID)},
 			etcdstore.Condition{Key: primaryKey}, etcdstore.Condition{Key: bodyKey}, etcdstore.Condition{Key: ownerKey}, etcdstore.Condition{Key: slugKey},
 		)
-		primary, encodeErr := encodeScriptRecord(record)
+		primary, encodeErr := scriptrecord.EncodeRecord(record)
 		if encodeErr != nil {
 			clearMutationValues(mutations)
 			return false, encodeErr
 		}
-		body, bodyErr := newScriptBodyGeneration(record)
+		body, bodyErr := scriptrecord.NewScriptBodyGeneration(record)
 		if bodyErr != nil {
 			clear(primary)
 			clearMutationValues(mutations)
 			return false, bodyErr
 		}
-		bodyValue, encodeErr := encodeScriptBodyGeneration(body)
+		bodyValue, encodeErr := scriptrecord.EncodeScriptBodyGeneration(body)
 		if encodeErr != nil {
 			clear(primary)
 			clearMutationValues(mutations)
@@ -311,8 +312,8 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: slugKey, Value: []byte(record.Desired.ID)},
 		)
 		if _, existed := current[record.Desired.ID]; !existed {
-			locator, locatorErr := encodeScriptLocator(
-				scriptLocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: record.EnvironmentID},
+			locator, locatorErr := scriptrecord.EncodeScriptLocator(
+				scriptrecord.LocatorRecord{ScriptID: record.Desired.ID, EnvironmentID: record.EnvironmentID},
 			)
 			if locatorErr != nil {
 				clearMutationValues(mutations)
@@ -320,10 +321,10 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			}
 			mutations = append(
 				mutations,
-				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptLocatorKey(record.Desired.ID), Value: locator},
+				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptLocatorKey(record.Desired.ID), Value: locator},
 			)
 			mutations = append(mutations, etcdstore.Mutation{
-				Type: etcdstore.MutationPut, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
+				Type: etcdstore.MutationPut, Key: scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),
 				Value: []byte(record.Desired.ID),
 			})
 		}
@@ -351,11 +352,11 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 
 func (repository *ScriptRepository) blueprintScriptBatchMatches(
 	ctx context.Context,
-	active Versioned[ScriptSetGenerationRecord],
+	active Versioned[scriptrecord.SetGenerationRecord],
 	mutations []etcdstore.Mutation,
 ) bool {
 	keys := make([]string, 1, len(mutations)+1)
-	keys[0] = scriptSetActiveKey(active.Record.EnvironmentID)
+	keys[0] = scriptrecord.ScriptSetActiveKey(active.Record.EnvironmentID)
 	for _, mutation := range mutations {
 		if mutation.Type != etcdstore.MutationPut || mutation.Prefix {
 			return false

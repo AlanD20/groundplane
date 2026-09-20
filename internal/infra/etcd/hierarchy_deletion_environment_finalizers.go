@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -97,7 +98,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		conditions,
 		environmentDeletionLiveAuthorityConditions(record.ID, operation.Tombstone.OperationID)...)
 	conditions = append(conditions, etcdstore.Condition{Key: environmentBlueprintRevisionsPrefix(record.ID), Prefix: true})
-	conditions = append(conditions, etcdstore.Condition{Key: scriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true})
+	conditions = append(conditions, etcdstore.Condition{Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true})
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: environmentBlueprintHeadKey(record.ID)},
 		{Type: etcdstore.MutationDelete, Key: environmentComposeProjectionKey(record.ID)},
@@ -105,8 +106,8 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name)},
 		{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID)},
 		{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentKey(record.ID)},
-		{Type: etcdstore.MutationDelete, Key: scriptSetEnvironmentPrefix(record.ID), Prefix: true},
-		{Type: etcdstore.MutationDelete, Key: scriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true},
+		{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptSetEnvironmentPrefix(record.ID), Prefix: true},
+		{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true},
 	}
 	return hierarchyDeletionControllerEffects{
 		fixedInputDigest: hierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,

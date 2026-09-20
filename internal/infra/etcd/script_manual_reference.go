@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"slices"
 
@@ -45,7 +46,7 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 		ScriptID:            execution.ScriptID, BodyGeneration: execution.ScriptGeneration,
 	}
 	body.SourceModRevision, body.SourceDigest = sources.BodyGeneration.Revision, execution.BodySHA256
-	members := []ScriptSourcePreparationMember{manualScriptExistingMember(body, scriptSetBodyGenerationKey(
+	members := []ScriptSourcePreparationMember{manualScriptExistingMember(body, scriptrecord.ScriptSetBodyGenerationKey(
 		execution.EnvironmentID, body.Source.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration,
 	))}
 	snapshotKey := scriptRunnerSnapshotKey(execution.SnapshotID)

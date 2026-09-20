@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -16,7 +17,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
-	current Versioned[ScriptRecord],
+	current Versioned[scriptrecord.Record],
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -66,8 +67,8 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			scriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
-			scriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.Slug),
+			scriptrecord.ScriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
+			scriptrecord.ScriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.Slug),
 		},
 		Revision: current.ReadRevision,
 	})
@@ -105,7 +106,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	activeValue, err := encodeScriptSetGeneration(active.Record)
+	activeValue, err := scriptrecord.EncodeScriptSetGeneration(active.Record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -117,15 +118,15 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
 		{
-			Key:         scriptSetScriptKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
+			Key:         scriptrecord.ScriptSetScriptKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
 			ModRevision: current.Revision,
 		},
 		{
-			Key:         scriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
+			Key:         scriptrecord.ScriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
 			ModRevision: indexes.Values[0].ModRevision,
 		},
 		{
-			Key: scriptSetSlugKey(
+			Key: scriptrecord.ScriptSetSlugKey(
 				current.Record.EnvironmentID,
 				active.Record.GenerationID,
 				current.Record.Desired.Slug,
@@ -139,7 +140,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
-		{Key: scriptSetActiveKey(current.Record.EnvironmentID), ModRevision: active.Revision},
+		{Key: scriptrecord.ScriptSetActiveKey(current.Record.EnvironmentID), ModRevision: active.Revision},
 	}
 	if project.Record.TenantID != "" {
 		conditions = append(conditions, etcdstore.Condition{
@@ -155,7 +156,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetScript), scriptID),
 			Value: tombstoneValue,
 		},
-		{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(current.Record.EnvironmentID), Value: activeValue},
+		{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(current.Record.EnvironmentID), Value: activeValue},
 	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
@@ -183,7 +184,7 @@ func classifyScriptDeletionStartConflict(
 	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
-	current Versioned[ScriptRecord],
+	current Versioned[scriptrecord.Record],
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {
@@ -215,7 +216,7 @@ func classifyScriptDeletionStartConflict(
 			return errs.New(errs.KindScriptNotFound, "Script was not found")
 		}
 		if values[4].ModRevision != current.Revision {
-			changed, err := decodeScriptRecord(values[4].Value)
+			changed, err := scriptrecord.DecodeRecord(values[4].Value)
 			if err != nil {
 				return err
 			}

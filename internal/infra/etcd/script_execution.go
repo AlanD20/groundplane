@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"math"
 	"strconv"
 	"strings"
@@ -176,7 +177,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 	detailKeys := make([]string, 0, len(active)*3)
 	for _, hook := range active {
 		detailKeys = append(detailKeys,
-			scriptSetScriptKey(hook.record.EnvironmentID, hook.record.ScriptSetGeneration, hook.record.ScriptID),
+			scriptrecord.ScriptSetScriptKey(hook.record.EnvironmentID, hook.record.ScriptSetGeneration, hook.record.ScriptID),
 			scriptSetBodyForwardReferenceKey(
 				hook.record.EnvironmentID,
 				hook.record.ScriptSetGeneration,
@@ -202,7 +203,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 		if values[0] == nil || values[1] == nil || values[2] == nil {
 			return false, corruptReleaseRecord()
 		}
-		script, decodeErr := decodeScriptRecord(values[0].Value)
+		script, decodeErr := scriptrecord.DecodeRecord(values[0].Value)
 		if decodeErr != nil || script.Desired.ID != hook.record.ScriptID ||
 			script.EnvironmentID != hook.record.EnvironmentID ||
 			script.ScriptSetGeneration != hook.record.ScriptSetGeneration || script.ActiveReferences == 0 {
@@ -508,7 +509,7 @@ func validateScriptBodyReference(value []byte, execution ScriptExecutionRecord) 
 }
 
 func decrementStoredScriptActiveReferences(value []byte, scriptID string) ([]byte, error) {
-	stored, err := recordcodec.Decode[storedScriptRecord](value, "script")
+	stored, err := recordcodec.Decode[scriptrecord.StoredRecord](value, "script")
 	if err != nil || stored.Desired.ID != scriptID || stored.ActiveReferences == 0 {
 		return nil, corruptReleaseRecord()
 	}
@@ -738,7 +739,7 @@ func scriptSetBodyForwardReferenceKey(
 	generation uint64,
 	executionID string,
 ) string {
-	return scriptSetBodyGenerationKey(
+	return scriptrecord.ScriptSetBodyGenerationKey(
 		environmentID,
 		setGeneration,
 		scriptID,

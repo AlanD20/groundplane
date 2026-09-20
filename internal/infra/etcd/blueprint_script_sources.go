@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -65,7 +66,7 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		members = append(members, ScriptSourcePreparationMember{
 			Reference: body,
 			Evidence: ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{
-				SourceKey: scriptSetBodyGenerationKey(
+				SourceKey: scriptrecord.ScriptSetBodyGenerationKey(
 					execution.EnvironmentID,
 					body.Source.ScriptSetGeneration,
 					execution.ScriptID,

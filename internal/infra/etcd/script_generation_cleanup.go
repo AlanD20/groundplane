@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"strings"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -24,7 +25,7 @@ func cleanupEnvironmentDeletionScriptLocators(
 	}
 	for {
 		page, err := store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: scriptEnvironmentLocatorPrefixFor(environmentID), Limit: scriptLocatorCleanupBatchSize,
+			Prefix: scriptrecord.ScriptEnvironmentLocatorPrefixFor(environmentID), Limit: scriptLocatorCleanupBatchSize,
 		})
 		if err != nil {
 			return err
@@ -42,12 +43,12 @@ func cleanupEnvironmentDeletionScriptLocators(
 		globalKeys := make([]string, len(page.Values))
 		activeKeys := make([]string, len(page.Values))
 		for index, locator := range page.Values {
-			id := strings.TrimPrefix(locator.Key, scriptEnvironmentLocatorPrefixFor(environmentID))
+			id := strings.TrimPrefix(locator.Key, scriptrecord.ScriptEnvironmentLocatorPrefixFor(environmentID))
 			if id == "" || strings.Contains(id, "/") || string(locator.Value) != id {
 				return errs.New(errs.KindInternal, "Script Environment locator is corrupt")
 			}
-			globalKeys[index] = scriptLocatorKey(id)
-			activeKeys[index] = scriptSetScriptKey(environmentID, active.Record.GenerationID, id)
+			globalKeys[index] = scriptrecord.ScriptLocatorKey(id)
+			activeKeys[index] = scriptrecord.ScriptSetScriptKey(environmentID, active.Record.GenerationID, id)
 		}
 		reads, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: append(globalKeys, activeKeys...), Revision: page.ReadRevision,
@@ -60,7 +61,7 @@ func cleanupEnvironmentDeletionScriptLocators(
 		}
 		conditions := []etcdstore.Condition{
 			authority,
-			{Key: scriptSetActiveKey(environmentID), ModRevision: active.Revision},
+			{Key: scriptrecord.ScriptSetActiveKey(environmentID), ModRevision: active.Revision},
 		}
 		mutations := make([]etcdstore.Mutation, 0, len(page.Values)*2)
 		for index, environmentLocator := range page.Values {
@@ -71,7 +72,7 @@ func cleanupEnvironmentDeletionScriptLocators(
 			if global == nil {
 				return errs.New(errs.KindInternal, "Script global locator is missing")
 			}
-			locator, decodeErr := decodeScriptLocator(global.Value)
+			locator, decodeErr := scriptrecord.DecodeScriptLocator(global.Value)
 			if decodeErr != nil || locator.EnvironmentID != environmentID ||
 				locator.ScriptID != string(environmentLocator.Value) {
 				return errs.New(errs.KindStateConflict, "Script global locator ownership changed")

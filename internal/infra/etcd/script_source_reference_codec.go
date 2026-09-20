@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"io"
 	"strings"
@@ -62,8 +63,8 @@ func validateScriptSourceIdentity(source ScriptSourceIdentity) error {
 	switch source.Kind {
 	case ScriptSourceBody:
 		valid = ids.Validate(ids.KindEnvironment, source.EnvironmentID) == nil &&
-			validateScriptSetGeneration(
-				ScriptSetGenerationRecord{
+			scriptrecord.ValidateScriptSetGeneration(
+				scriptrecord.SetGenerationRecord{
 					EnvironmentID: source.EnvironmentID,
 					GenerationID:  source.ScriptSetGeneration,
 				},
@@ -108,9 +109,9 @@ func validateScriptSourceRecord(key string, value []byte, reference ScriptSource
 	source := reference.Source
 	switch source.Kind {
 	case ScriptSourceBody:
-		generation, err := decodeScriptBodyGeneration(value)
+		generation, err := scriptrecord.DecodeScriptBodyGeneration(value)
 		if err != nil ||
-			key != scriptSetBodyGenerationKey(
+			key != scriptrecord.ScriptSetBodyGenerationKey(
 				source.EnvironmentID,
 				source.ScriptSetGeneration,
 				source.ScriptID,

@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
@@ -60,8 +61,8 @@ func (service *Service) listBlueprintScripts(
 	ctx context.Context,
 	environmentID string,
 	repository environmentBlueprintRepository,
-) ([]etcd.Versioned[etcd.ScriptRecord], int64, error) {
-	scripts := []etcd.Versioned[etcd.ScriptRecord](nil)
+) ([]etcd.Versioned[scriptrecord.Record], int64, error) {
+	scripts := []etcd.Versioned[scriptrecord.Record](nil)
 	cursor := ""
 	readRevision := int64(0)
 	for {

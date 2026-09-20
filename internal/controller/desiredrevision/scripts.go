@@ -3,6 +3,7 @@ package desiredrevision
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -18,8 +19,8 @@ const maximumBlueprintScripts = 64
 // created for new or changed bodies; unchanged bodies already have their
 // immutable generation in durable state.
 type BlueprintScriptReconciliation struct {
-	Current         []etcd.ScriptRecord
-	BodyGenerations []etcd.ScriptBodyGenerationRecord
+	Current         []scriptrecord.Record
+	BodyGenerations []scriptrecord.BodyGenerationRecord
 }
 
 // ReconcileBlueprintScripts resolves authored service names to stable Service
@@ -31,7 +32,7 @@ func ReconcileBlueprintScripts(
 	environmentID string,
 	authored map[string]core.ScriptSpec,
 	services []etcd.ServiceRecord,
-	previous []etcd.ScriptRecord,
+	previous []scriptrecord.Record,
 	resources BlueprintScriptResources,
 	allocate func(ids.Kind, string) string,
 ) (BlueprintScriptReconciliation, error) {
@@ -53,8 +54,8 @@ func ReconcileBlueprintScripts(
 		return BlueprintScriptReconciliation{}, err
 	}
 
-	currentByID := make(map[string]etcd.ScriptRecord, len(previous))
-	blueprintByKey := make(map[string]etcd.ScriptRecord, len(previous))
+	currentByID := make(map[string]scriptrecord.Record, len(previous))
+	blueprintByKey := make(map[string]scriptrecord.Record, len(previous))
 	for _, record := range previous {
 		if err := validateBlueprintScriptRecord(environmentID, record, servicesByID); err != nil {
 			return BlueprintScriptReconciliation{}, err
@@ -83,11 +84,11 @@ func ReconcileBlueprintScripts(
 	}
 	sort.Strings(keys)
 
-	result := make(map[string]etcd.ScriptRecord, len(previous)+len(authored))
+	result := make(map[string]scriptrecord.Record, len(previous)+len(authored))
 	for _, record := range previous {
 		result[record.Desired.ID] = record
 	}
-	generations := make([]etcd.ScriptBodyGenerationRecord, 0, len(authored))
+	generations := make([]scriptrecord.BodyGenerationRecord, 0, len(authored))
 	for _, key := range keys {
 		spec := authored[key]
 		if err := validateBlueprintScriptSpec(key, spec); err != nil {
@@ -156,7 +157,7 @@ func ReconcileBlueprintScripts(
 				Body: spec.Script, When: spec.When, Order: spec.Order, Execution: execution,
 			}
 			bodyChanged := desired.Body != current.Desired.Body
-			updated, replaceErr := etcd.ReplaceScriptDesired(current, desired)
+			updated, replaceErr := scriptrecord.ReplaceDesired(current, desired)
 			if replaceErr != nil {
 				return BlueprintScriptReconciliation{}, errs.Wrap(errs.KindValidationFailed, replaceErr)
 			}
@@ -169,7 +170,7 @@ func ReconcileBlueprintScripts(
 		delete(blueprintByKey, key)
 	}
 
-	scripts := make([]etcd.ScriptRecord, 0, len(result))
+	scripts := make([]scriptrecord.Record, 0, len(result))
 	slugs := make(map[string]string, len(result))
 	for _, record := range result {
 		if owner, duplicate := slugs[record.Desired.Slug]; duplicate && owner != record.Desired.ID {
@@ -241,13 +242,13 @@ func newBlueprintScriptRecord(
 	scriptID string,
 	spec core.ScriptSpec,
 	execution *core.ScriptExecution,
-) (etcd.ScriptRecord, error) {
-	record, err := etcd.NewScriptRecord(environmentID, service.Desired.ID, core.Script{
+) (scriptrecord.Record, error) {
+	record, err := scriptrecord.NewRecord(environmentID, service.Desired.ID, core.Script{
 		ID: scriptID, Slug: spec.Slug, ServiceName: service.Desired.Name,
 		Body: spec.Script, When: spec.When, Order: spec.Order, Execution: execution,
 	})
 	if err != nil {
-		return etcd.ScriptRecord{}, errs.Wrap(errs.KindValidationFailed, err)
+		return scriptrecord.Record{}, errs.Wrap(errs.KindValidationFailed, err)
 	}
 	record.Origin = "blueprint"
 	record.ReconciliationKey = key
@@ -256,7 +257,7 @@ func newBlueprintScriptRecord(
 
 func validateBlueprintScriptRecord(
 	environmentID string,
-	record etcd.ScriptRecord,
+	record scriptrecord.Record,
 	servicesByID map[string]etcd.ServiceRecord,
 ) error {
 	if record.EnvironmentID != environmentID || ids.Validate(ids.KindService, record.ServiceID) != nil ||
@@ -289,9 +290,9 @@ func validateBlueprintScriptRecord(
 	return nil
 }
 
-func scriptBodyGeneration(record etcd.ScriptRecord) etcd.ScriptBodyGenerationRecord {
+func scriptBodyGeneration(record scriptrecord.Record) scriptrecord.BodyGenerationRecord {
 	digest := sha256.Sum256([]byte(record.Desired.Body))
-	return etcd.ScriptBodyGenerationRecord{
+	return scriptrecord.BodyGenerationRecord{
 		ScriptID: record.Desired.ID, Generation: record.ActiveGeneration,
 		BodySize: uint32(len(record.Desired.Body)), Body: record.Desired.Body,
 		BodySHA256: hex.EncodeToString(digest[:]),

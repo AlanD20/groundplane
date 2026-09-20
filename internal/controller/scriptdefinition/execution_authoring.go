@@ -4,11 +4,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func authoringExecution(
-	script etcd.ScriptRecord, volumes []etcd.EnvironmentVolumeIdentity, entries []entryrecord.Record,
+	script scriptrecord.Record, volumes []etcd.EnvironmentVolumeIdentity, entries []entryrecord.Record,
 ) (*core.ScriptExecutionSpec, error) {
 	execution := script.Desired.Execution
 	if execution == nil {

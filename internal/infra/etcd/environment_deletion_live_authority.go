@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
 	removalrecord "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -43,7 +44,7 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 		return err
 	}
 	activeScripts, err := store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: scriptSetOwnerPrefix(environmentID, active.Record.GenerationID), Limit: 1, Revision: revision,
+		Prefix: scriptrecord.ScriptSetOwnerPrefix(environmentID, active.Record.GenerationID), Limit: 1, Revision: revision,
 	})
 	if err != nil {
 		return err
@@ -85,7 +86,7 @@ func environmentDeletionLiveAuthorityConditions(
 	for _, prefix := range environmentDeletionLiveAuthorityPrefixes(environmentID, operationID) {
 		conditions = append(conditions, etcdstore.Condition{Key: prefix, Prefix: true})
 	}
-	conditions = append(conditions, etcdstore.Condition{Key: scriptEnvironmentLocatorPrefixFor(environmentID), Prefix: true})
+	conditions = append(conditions, etcdstore.Condition{Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(environmentID), Prefix: true})
 	return conditions
 }
 

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"bytes"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -53,7 +54,7 @@ func validateScriptContextSources(sources ScriptExecutionSources, snapshot *agen
 
 // The storage boundary converts its typed desired record explicitly. Sorting is
 // a representation choice for immutable capture; it never mutates authored lists.
-func scriptContextFromStoredDesired(record ScriptRecord) (*agentpb.ScriptExplicitExecutionContext, error) {
+func scriptContextFromStoredDesired(record scriptrecord.Record) (*agentpb.ScriptExplicitExecutionContext, error) {
 	execution := record.Desired.Execution
 	if execution == nil {
 		return nil, nil

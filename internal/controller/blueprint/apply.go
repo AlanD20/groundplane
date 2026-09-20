@@ -19,6 +19,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -339,7 +340,7 @@ func (service *Service) applyBlueprintOnce(
 	for index, desiredService := range desiredServices {
 		scriptServices[index] = etcd.ServiceRecord{EnvironmentID: environmentID, Desired: desiredService}
 	}
-	previousScripts := make([]etcd.ScriptRecord, len(currentScripts))
+	previousScripts := make([]scriptrecord.Record, len(currentScripts))
 	for index, currentScript := range currentScripts {
 		previousScripts[index] = currentScript.Record
 	}

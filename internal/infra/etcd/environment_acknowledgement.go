@@ -5,6 +5,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"strings"
 	"time"
 
@@ -457,8 +458,8 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 				Key:  hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID),
 			},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentKey(environment.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptSetEnvironmentPrefix(environment.ID), Prefix: true},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptEnvironmentLocatorPrefixFor(environment.ID), Prefix: true},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptSetEnvironmentPrefix(environment.ID), Prefix: true},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(environment.ID), Prefix: true},
 		)
 	} else {
 		epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)

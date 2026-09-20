@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"sort"
 	"strings"
 
@@ -40,7 +41,7 @@ func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
 	if err != nil {
 		return nil, err
 	}
-	prefix, start := scriptSetOwnerPrefix(scope.Environment.Record.ID, active.Record.GenerationID), ""
+	prefix, start := scriptrecord.ScriptSetOwnerPrefix(scope.Environment.Record.ID, active.Record.GenerationID), ""
 	for {
 		page, err := ledger.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: prefix, StartExclusive: start, Limit: 64, Revision: scope.ReadRevision,
@@ -57,13 +58,13 @@ func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
 				!bytes.Equal(value.Value, []byte(scriptID)) {
 				return nil, corruptReleaseRecord()
 			}
-			primary, readErr := scriptExecutionValueAt(ctx, ledger.store, scriptSetScriptKey(
+			primary, readErr := scriptExecutionValueAt(ctx, ledger.store, scriptrecord.ScriptSetScriptKey(
 				scope.Environment.Record.ID, active.Record.GenerationID, scriptID,
 			), scope.ReadRevision)
 			if readErr != nil {
 				return nil, readErr
 			}
-			record, decodeErr := decodeScriptRecord(primary.Value)
+			record, decodeErr := scriptrecord.DecodeRecord(primary.Value)
 			if decodeErr != nil || record.Desired.ID != scriptID ||
 				record.EnvironmentID != scope.Environment.Record.ID ||
 				record.ScriptSetGeneration != active.Record.GenerationID {

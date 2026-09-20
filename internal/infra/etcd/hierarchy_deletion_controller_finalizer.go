@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"time"
 
@@ -358,34 +359,34 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 			errs.KindResourceInUse, "active Script executions fence hierarchy deletion",
 		)
 	}
-	value, err := encodeScriptRecord(record)
+	value, err := scriptrecord.EncodeRecord(record)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	defer clear(value)
 	primary := etcdstore.KeyValue{
-		Key:   scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
+		Key:   scriptrecord.ScriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
 		Value: value, ModRevision: storage.Script.Revision,
 	}
 	keys := []string{
-		scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
-		scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+		scriptrecord.ScriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
+		scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 	}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, &primary, keys)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	activeValue, err := encodeScriptSetGeneration(storage.Active.Record)
+	activeValue, err := scriptrecord.EncodeScriptSetGeneration(storage.Active.Record)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	effects.values = append(effects.values, activeValue)
 	effects.conditions = append(
 		effects.conditions,
-		etcdstore.Condition{Key: scriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
-		etcdstore.Condition{Key: scriptLocatorKey(action.TargetID), ModRevision: storage.Locator.Revision},
+		etcdstore.Condition{Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
+		etcdstore.Condition{Key: scriptrecord.ScriptLocatorKey(action.TargetID), ModRevision: storage.Locator.Revision},
 		etcdstore.Condition{
-			Key:         scriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID),
+			Key:         scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID),
 			ModRevision: storage.EnvironmentLocator.Revision,
 		},
 	)
@@ -393,12 +394,12 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 		effects.mutations,
 		etcdstore.Mutation{
 			Type:   etcdstore.MutationDelete,
-			Key:    scriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
+			Key:    scriptrecord.ScriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
 			Prefix: true,
 		},
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptLocatorKey(action.TargetID)},
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID)},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptLocatorKey(action.TargetID)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID)},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), Value: activeValue},
 	)
 	return effects, nil
 }

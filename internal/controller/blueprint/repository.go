@@ -7,6 +7,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/netip"
@@ -83,15 +84,15 @@ type environmentBlueprintRepository interface {
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	ListScripts(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ScriptRecord], error)
+	ListScripts(context.Context, string, etcd.PageRequest) (etcd.Page[scriptrecord.Record], error)
 	PrepareBlueprintScriptPublication(
 		context.Context,
 		string,
 		int64,
 		string,
-		[]etcd.Versioned[etcd.ScriptRecord],
-		[]etcd.ScriptRecord,
-		[]etcd.ScriptBodyGenerationRecord,
+		[]etcd.Versioned[scriptrecord.Record],
+		[]scriptrecord.Record,
+		[]scriptrecord.BodyGenerationRecord,
 	) (etcd.BlueprintScriptPublication, error)
 }
 
@@ -251,7 +252,7 @@ func (repository *durableRepository) ListScripts(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.ScriptRecord], error) {
+) (etcd.Page[scriptrecord.Record], error) {
 	return repository.scripts.ListScripts(ctx, environmentID, request)
 }
 
@@ -260,9 +261,9 @@ func (repository *durableRepository) PrepareBlueprintScriptPublication(
 	environmentID string,
 	readRevision int64,
 	nextGenerationID string,
-	current []etcd.Versioned[etcd.ScriptRecord],
-	desired []etcd.ScriptRecord,
-	generations []etcd.ScriptBodyGenerationRecord,
+	current []etcd.Versioned[scriptrecord.Record],
+	desired []scriptrecord.Record,
+	generations []scriptrecord.BodyGenerationRecord,
 ) (etcd.BlueprintScriptPublication, error) {
 	return repository.scripts.PrepareBlueprintScriptPublication(
 		ctx, environmentID, readRevision, nextGenerationID, current, desired, generations,

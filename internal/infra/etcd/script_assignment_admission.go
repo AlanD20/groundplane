@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -165,7 +166,7 @@ func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
 				return nil, err
 			}
 		}
-		bodyRead, readErr := repository.store.Get(ctx, scriptSetBodyGenerationKey(
+		bodyRead, readErr := repository.store.Get(ctx, scriptrecord.ScriptSetBodyGenerationKey(
 			execution.EnvironmentID, execution.ScriptSetGeneration, metadata.ScriptId, metadata.Generation,
 		))
 		if readErr != nil {
@@ -174,7 +175,7 @@ func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
 		if bodyRead == nil || bodyRead.Entry == nil {
 			return nil, errs.New(errs.KindInternal, "Script body generation is missing")
 		}
-		body, decodeErr := decodeScriptBodyGeneration(bodyRead.Entry.Value)
+		body, decodeErr := scriptrecord.DecodeScriptBodyGeneration(bodyRead.Entry.Value)
 		if decodeErr != nil || body.ScriptID != metadata.ScriptId || body.Generation != metadata.Generation ||
 			body.BodySize != metadata.Size || body.BodySHA256 != hex.EncodeToString(metadata.Sha256) ||
 			execution.BodySHA256 != body.BodySHA256 {

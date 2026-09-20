@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -55,8 +56,8 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
-			scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+			scriptrecord.ScriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
+			scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 			hierarchyrecord.EnvironmentKey(record.EnvironmentID),
 			service.Record.desiredFenceKey,
 		},
@@ -102,15 +103,15 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{
-				Key:         scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
+				Key:         scriptrecord.ScriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 				ModRevision: storage.Script.Revision,
 			},
 			{
-				Key:         scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
+				Key:         scriptrecord.ScriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 				ModRevision: dependencies.Values[0].ModRevision,
 			},
 			{
-				Key:         scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+				Key:         scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
 			{Key: deletionTombstoneKey(string(DeletionTargetScript), record.Desired.ID)},
@@ -120,7 +121,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 			{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetProject), project.ID)},
 			{Key: deletionTombstoneKey("service", service.Record.Desired.ID)},
-			{Key: scriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
+			{Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
 		},
 	}
 	if project.TenantID != "" {
@@ -147,14 +148,14 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		return scriptTaskChange{}, err
 	}
 	change.values = append(change.values, value)
-	activeValue, err := encodeScriptSetGeneration(storage.Active.Record)
+	activeValue, err := scriptrecord.EncodeScriptSetGeneration(storage.Active.Record)
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
 	change.values = append(change.values, activeValue)
 	change.mutations = append(change.mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(DeletionTargetScript), record.Desired.ID), Value: value,
-	}, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue})
+	}, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), Value: activeValue})
 	return change, nil
 }
 
@@ -190,8 +191,8 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
-			scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+			scriptrecord.ScriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
+			scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 		},
 		Revision: revision,
 	})
@@ -206,7 +207,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{
-				Key:         scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+				Key:         scriptrecord.ScriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
 				ModRevision: storage.Script.Revision,
 			},
 			{
@@ -214,17 +215,17 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 				ModRevision: stored.Values[0].ModRevision,
 			},
 			{
-				Key:         scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+				Key:         scriptrecord.ScriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
 				ModRevision: indexes.Values[0].ModRevision,
 			},
 			{
-				Key:         scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+				Key:         scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 				ModRevision: indexes.Values[1].ModRevision,
 			},
-			{Key: scriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
-			{Key: scriptLocatorKey(task.Target), ModRevision: storage.Locator.Revision},
+			{Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
+			{Key: scriptrecord.ScriptLocatorKey(task.Target), ModRevision: storage.Locator.Revision},
 			{
-				Key:         scriptEnvironmentLocatorKey(record.EnvironmentID, task.Target),
+				Key:         scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, task.Target),
 				ModRevision: storage.EnvironmentLocator.Revision,
 			},
 		},
@@ -237,33 +238,33 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 			change.mutations,
 			etcdstore.Mutation{
 				Type: etcdstore.MutationDelete,
-				Key:  scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+				Key:  scriptrecord.ScriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
 			},
 			etcdstore.Mutation{
 				Type: etcdstore.MutationDelete,
-				Key:  scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+				Key:  scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 			},
 			etcdstore.Mutation{
 				Type:   etcdstore.MutationDelete,
-				Key:    scriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+				Key:    scriptrecord.ScriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
 				Prefix: true,
 			},
 			etcdstore.Mutation{
 				Type: etcdstore.MutationDelete,
-				Key:  scriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+				Key:  scriptrecord.ScriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
 			},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptLocatorKey(task.Target)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptEnvironmentLocatorKey(record.EnvironmentID, task.Target)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptLocatorKey(task.Target)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, task.Target)},
 		)
 	}
-	activeValue, err := encodeScriptSetGeneration(storage.Active.Record)
+	activeValue, err := scriptrecord.EncodeScriptSetGeneration(storage.Active.Record)
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
 	change.values = append(change.values, activeValue)
 	change.mutations = append(
 		change.mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptSetActiveKey(record.EnvironmentID), Value: activeValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), Value: activeValue},
 	)
 	return change, nil
 }

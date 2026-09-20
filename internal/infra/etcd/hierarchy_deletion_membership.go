@@ -8,6 +8,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"strings"
 
@@ -323,9 +324,11 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 			controller:    true,
 		},
 		{targetKind: "script", actionKind: HierarchyDeletionScriptRemove,
-			ownerPrefix: func(owner string) string { return scriptSetOwnerPrefix(owner, activeScripts.Record.GenerationID) },
+			ownerPrefix: func(owner string) string {
+				return scriptrecord.ScriptSetOwnerPrefix(owner, activeScripts.Record.GenerationID)
+			},
 			primaryKey: func(id string) string {
-				return scriptSetScriptKey(environmentID, activeScripts.Record.GenerationID, id)
+				return scriptrecord.ScriptSetScriptKey(environmentID, activeScripts.Record.GenerationID, id)
 			},
 			stableIDKind: ids.KindScript, validateOwner: validateHierarchyDeletionScriptOwner, controller: true},
 		{
@@ -694,7 +697,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 		if scriptErr != nil || storage.Script.Revision != targetRevision {
 			return "", corruptHierarchyDeletion()
 		}
-		encoded, encodeErr := encodeScriptRecord(storage.Script.Record)
+		encoded, encodeErr := scriptrecord.EncodeRecord(storage.Script.Record)
 		if encodeErr != nil {
 			return "", encodeErr
 		}

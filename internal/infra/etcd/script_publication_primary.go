@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -16,7 +17,7 @@ func preparedScriptPrimary(
 	sources ScriptExecutionSources,
 ) (etcdstore.Condition, error) {
 	expected := sources.Script.Record
-	key := scriptSetScriptKey(expected.EnvironmentID, expected.ScriptSetGeneration, expected.Desired.ID)
+	key := scriptrecord.ScriptSetScriptKey(expected.EnvironmentID, expected.ScriptSetGeneration, expected.Desired.ID)
 	read, err := store.Get(ctx, key)
 	if err != nil {
 		return etcdstore.Condition{}, err
@@ -25,7 +26,7 @@ func preparedScriptPrimary(
 		return etcdstore.Condition{}, errs.New(errs.KindStateConflict, "Script disappeared during source preparation")
 	}
 	defer clear(read.Entry.Value)
-	current, err := decodeScriptRecord(read.Entry.Value)
+	current, err := scriptrecord.DecodeRecord(read.Entry.Value)
 	if err != nil {
 		return etcdstore.Condition{}, err
 	}
@@ -33,7 +34,7 @@ func preparedScriptPrimary(
 	// Blueprint's fixed-read primary is bodyless. The immutable body is needed
 	// only for write-boundary validation; encodeScriptRecord never stores it.
 	expected.Desired.Body = sources.BodyGeneration.Record.Body
-	value, err := encodeScriptRecord(expected)
+	value, err := scriptrecord.EncodeRecord(expected)
 	if err != nil {
 		return etcdstore.Condition{}, err
 	}
