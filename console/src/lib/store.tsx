@@ -1,5 +1,15 @@
 "use client";
 import {
+  createAttachActions,
+  type AttachActions,
+} from "@/features/attach/actions";
+import { listAllAttaches } from "@/features/attach/api";
+import {
+  createEntryActions,
+  type EntryActions,
+} from "@/features/entry/actions";
+import { listAllEntries } from "@/features/entry/api";
+import {
   createReleaseGroupActions,
   type ReleaseGroupActions,
 } from "@/features/release-group/actions";
@@ -43,7 +53,6 @@ import {
   type ConnectorState,
   type ConnectorActions,
 } from "@/features/connectors/use-connector-store";
-import { entryFromAPI } from "./entry-api";
 import {
   emptyTaskJournal,
   taskJournalKey,
@@ -92,12 +101,9 @@ import type {
 import { hydratePlatformComponents } from "./platform-component-hydration";
 import { useControllerPlatform } from "@/features/platform-controller/use-controller-platform";
 import type {
-  HealthState,
   ActivityEntry,
-  Attach,
   EnvFile,
   Environment,
-  EnvironmentEntry,
   EnvironmentComponent,
   Project,
   Service,
@@ -195,33 +201,6 @@ type TaskAbortResponse =
   operations["task.abort"]["responses"][202]["content"]["application/json"];
 type BackingRuntimeTaskAccepted =
   operations["backing-service.start"]["responses"][202]["content"]["application/json"];
-type EntryPageResponse =
-  operations["entry.list"]["responses"][200]["content"]["application/json"];
-type EntryResponse =
-  operations["entry.edit"]["responses"][200]["content"]["application/json"];
-type EntryCreateRequest =
-  operations["entry.create"]["requestBody"]["content"]["application/json"];
-type EntryEditRequest =
-  operations["entry.edit"]["requestBody"]["content"]["application/json"];
-type EntryBulkUpsertRequest =
-  operations["entry.bulk-upsert"]["requestBody"]["content"]["application/json"];
-type EntryBulkUpsertResponse =
-  operations["entry.bulk-upsert"]["responses"][202]["content"]["application/json"];
-type EntryValueResponse =
-  operations["entry.reveal"]["responses"][200]["content"]["application/json"];
-type AttachPageResponse =
-  operations["attach.list"]["responses"][200]["content"]["application/json"];
-type AttachResponse = NonNullable<AttachPageResponse["items"]>[number];
-type AttachCreateRequest =
-  operations["attach.create"]["requestBody"]["content"]["application/json"];
-type AttachTaskAccepted =
-  operations["attach.create"]["responses"][202]["content"]["application/json"];
-type AttachRenameRequest =
-  operations["attach.rename"]["requestBody"]["content"]["application/json"];
-type AttachRenameResponse =
-  operations["attach.rename"]["responses"][200]["content"]["application/json"];
-type AttachFactValueResponse =
-  operations["attach.fact.reveal"]["responses"][200]["content"]["application/json"];
 type BackingServicePageResponse =
   operations["backing-service.list"]["responses"][200]["content"]["application/json"];
 type BackingServiceResponse = NonNullable<
@@ -266,14 +245,6 @@ function tenantFromAPI(tenant: TenantCreateResponse): Tenant {
   };
 }
 
-type AttachCreateInput = {
-  serviceId: string;
-  backingServiceId: string;
-  name?: string;
-  credential: { mode: "new" } | { mode: "existing"; attachId: string };
-  grantAttachIds?: string[];
-};
-
 async function listAllTenants(signal: AbortSignal): Promise<Tenant[]> {
   const tenants: Tenant[] = [];
   let cursor = "";
@@ -306,140 +277,6 @@ function projectFromAPI(
     kind: project.kind,
     deletionTaskId: project.deletion_task_id,
   };
-}
-
-async function listAllEntries(
-  environmentId: string,
-  signal?: AbortSignal,
-): Promise<EnvironmentEntry[]> {
-  const entries: EnvironmentEntry[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({
-      environment: environmentId,
-      limit: "200",
-    });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<EntryPageResponse>(
-      `/entries?${query}`,
-      200,
-      { signal },
-    );
-    entries.push(...(page.items ?? []).map(entryFromAPI));
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return entries;
-}
-
-function attachHealth(status: string): HealthState {
-  if (status === "ready") return "healthy";
-  if (status === "failed") return "failed";
-  if (status === "detached") return "stopped";
-  return "pending";
-}
-
-async function revealAttachFactValue(
-  attachId: string,
-  key: string,
-  grantAttachId?: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const query = new URLSearchParams();
-  if (grantAttachId) query.set("grant_attach_id", grantAttachId);
-  const suffix = query.size > 0 ? `?${query}` : "";
-  const response = await controllerRequest<AttachFactValueResponse>(
-    `/attaches/${encodeURIComponent(attachId)}/facts/${encodeURIComponent(key)}${suffix}`,
-    200,
-    { signal },
-  );
-  return response.value;
-}
-
-async function attachFromAPI(
-  attach: AttachResponse,
-  services: Service[],
-  signal?: AbortSignal,
-): Promise<Attach> {
-  const factSets = (attach.fact_sets ?? []).map((set) => ({
-    grantAttachId: set.grant_attach_id,
-    facts: (set.facts ?? []).map((fact) => ({
-      key: fact.key,
-      secret: fact.secret,
-    })),
-  }));
-  const ready = attach.status === "ready";
-  const revealSuffix = async (
-    set: (typeof factSets)[number] | undefined,
-    suffix: string,
-  ) => {
-    const fact = set?.facts.find(
-      (candidate) => !candidate.secret && candidate.key.endsWith(suffix),
-    );
-    if (!ready || !fact) return "";
-    return revealAttachFactValue(
-      attach.id,
-      fact.key,
-      set?.grantAttachId,
-      signal,
-    );
-  };
-  const own = factSets.find((set) => !set.grantAttachId);
-  const [database, role, ...grants] = await Promise.all([
-    revealSuffix(own, "_DATABASE"),
-    revealSuffix(own, "_ROLE"),
-    ...factSets
-      .filter((set) => set.grantAttachId)
-      .map((set) => revealSuffix(set, "_DATABASE")),
-  ]);
-  const serviceId = attach.service_id;
-  return {
-    id: attach.id,
-    name: attach.name,
-    backingProjectId: attach.backing_project_id,
-    backingServiceId: attach.backing_service_id,
-    backingEnvironmentId: attach.backing_environment_id,
-    backingNetworkId: attach.backing_network_id,
-    serviceId,
-    credential: {
-      mode: attach.credential.mode,
-      attachId: attach.credential.attach_id,
-    },
-    grantAttachIds: [...(attach.grant_attach_ids ?? [])],
-    factSets,
-    projectId: attach.backing_project_id,
-    database: database || "—",
-    role,
-    service:
-      services.find((service) => service.id === serviceId)?.name ?? serviceId,
-    grants: grants.filter(Boolean),
-    status: attachHealth(attach.status),
-  };
-}
-
-async function listAllAttaches(
-  environmentId: string,
-  services: Service[],
-  signal?: AbortSignal,
-): Promise<Attach[]> {
-  const attaches: AttachResponse[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({
-      environment: environmentId,
-      limit: "200",
-    });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<AttachPageResponse>(
-      `/attaches?${query}`,
-      200,
-      { signal },
-    );
-    attaches.push(...(page.items ?? []));
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return Promise.all(
-    attaches.map((attach) => attachFromAPI(attach, services, signal)),
-  );
 }
 
 async function listAllEnvironments(
@@ -739,6 +576,8 @@ type StoreContext = State &
   VolumeActions &
   ScriptActions &
   ReleaseGroupActions &
+  AttachActions &
+  EntryActions &
   ReturnType<typeof useControllerPlatform> &
   ReturnType<typeof useBackupStore> & {
     adapters: typeof seedAdapters;
@@ -852,33 +691,6 @@ type StoreContext = State &
       onMalformed: (message: string) => void,
     ) => () => void;
     deleteEnvironment: (envId: string) => Promise<string>;
-    addAttach: (envId: string, input: AttachCreateInput) => Promise<string>;
-    renameAttach: (
-      envId: string,
-      attachId: string,
-      name: string,
-    ) => Promise<void>;
-    removeAttach: (envId: string, attachId: string) => Promise<string>;
-    revealAttachFact: (
-      attachId: string,
-      key: string,
-      grantAttachId?: string,
-    ) => Promise<string>;
-    addEntry: (
-      envId: string,
-      input: Omit<EntryCreateRequest, "environment_id">,
-    ) => Promise<EnvironmentEntry>;
-    bulkUpsertEntries: (
-      envId: string,
-      input: Omit<EntryBulkUpsertRequest, "environment_id">,
-    ) => Promise<EntryBulkUpsertResponse>;
-    updateEntry: (
-      envId: string,
-      entryId: string,
-      input: EntryEditRequest,
-    ) => Promise<EnvironmentEntry>;
-    removeEntry: (envId: string, entryId: string) => Promise<string>;
-    revealEntry: (entryId: string) => Promise<string>;
     runBackingRuntimeAction: (
       id: string,
       action: "start" | "stop" | "destroy",
@@ -2118,137 +1930,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         dispatchResourceRemoval,
       ),
       ...createReleaseGroupActions(state, update, assertEnvironmentMutable),
-      addAttach: async (_envId, input) => {
-        assertEnvironmentMutable(_envId, "Attach mutation");
-        const body: AttachCreateRequest = {
-          service_id: input.serviceId,
-          backing_service_id: input.backingServiceId,
-          name: input.name,
-          credential:
-            input.credential.mode === "new"
-              ? { mode: "new" }
-              : { mode: "existing", attach_id: input.credential.attachId },
-          grant_attach_ids:
-            input.credential.mode === "new" ? input.grantAttachIds : undefined,
-        };
-        const response = await controllerRequest<AttachTaskAccepted>(
-          "/attaches",
-          202,
-          { method: "POST", body },
-        );
-        return requireTaskId(response, "Attach creation");
-      },
-      renameAttach: async (envId, attachId, name) => {
-        assertEnvironmentMutable(envId, "Attach mutation");
-        const body: AttachRenameRequest = { name };
-        const response = await controllerRequest<AttachRenameResponse>(
-          `/attaches/${encodeURIComponent(attachId)}/rename`,
-          200,
-          { method: "POST", body },
-        );
-        update((draft) => {
-          const attach = findEnvironment(draft, envId)?.attaches.find(
-            (candidate) => candidate.id === attachId,
-          );
-          if (attach) attach.name = response.name;
-        });
-      },
-      removeAttach: async (_envId, attachId) => {
-        assertEnvironmentMutable(_envId, "Attach mutation");
-        const response = await controllerRequest<AttachTaskAccepted>(
-          `/attaches/${encodeURIComponent(attachId)}`,
-          202,
-          {
-            method: "DELETE",
-          },
-        );
-        return requireTaskId(response, "Attach removal");
-      },
-      revealAttachFact: (attachId, key, grantAttachId) =>
-        revealAttachFactValue(attachId, key, grantAttachId),
-      addEntry: async (envId, input) => {
-        assertEnvironmentMutable(envId, "Entry mutation");
-        const generation = nextEnvironmentGeneration(envId, "child");
-        const response = await controllerRequest<EntryResponse>(
-          "/entries",
-          201,
-          {
-            method: "POST",
-            body: { ...input, environment_id: envId },
-          },
-        );
-        const entry = entryFromAPI(response);
-        update((draft) => {
-          if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
-            return;
-          findEnvironment(draft, envId)?.entries.push(entry);
-        });
-        return entry;
-      },
-      bulkUpsertEntries: async (envId, input) => {
-        assertEnvironmentMutable(envId, "Entry mutation");
-        const generation = nextEnvironmentGeneration(envId, "child");
-        const response = await controllerRequest<EntryBulkUpsertResponse>(
-          "/entries/bulk",
-          202,
-          {
-            method: "POST",
-            body: { ...input, environment_id: envId },
-          },
-        );
-        const entries = (response.entries ?? []).map(entryFromAPI);
-        update((draft) => {
-          if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
-            return;
-          const environment = findEnvironment(draft, envId);
-          if (!environment) return;
-          const ids = new Set(entries.map((entry) => entry.id));
-          environment.entries = environment.entries.filter(
-            (entry) => !ids.has(entry.id),
-          );
-          environment.entries.push(...entries);
-        });
-        return response;
-      },
-      updateEntry: async (envId, entryId, input) => {
-        assertEnvironmentMutable(envId, "Entry mutation");
-        const generation = nextEnvironmentGeneration(envId, "child");
-        const response = await controllerRequest<EntryResponse>(
-          `/entries/${encodeURIComponent(entryId)}`,
-          200,
-          {
-            method: "PATCH",
-            body: input,
-          },
-        );
-        const entry = entryFromAPI(response);
-        update((draft) => {
-          if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
-            return;
-          const environment = findEnvironment(draft, envId);
-          if (!environment) return;
-          const index = environment.entries.findIndex(
-            (candidate) => candidate.id === entryId,
-          );
-          if (index >= 0) environment.entries[index] = entry;
-        });
-        return entry;
-      },
-      removeEntry: (envId, entryId) => (
-        assertEnvironmentMutable(envId, "Entry mutation"),
-        dispatchResourceRemoval({
-          kind: "entry",
-          environmentId: envId,
-          resourceId: entryId,
-        })
+      ...createAttachActions(update, assertEnvironmentMutable),
+      ...createEntryActions(
+        update,
+        assertEnvironmentMutable,
+        nextEnvironmentGeneration,
+        environmentGenerations,
+        dispatchResourceRemoval,
       ),
-      revealEntry: async (entryId) => {
-        const value = await controllerRequest<EntryValueResponse>(
-          `/entries/${encodeURIComponent(entryId)}/value`,
-          200,
-        );
-        return value.value;
-      },
       ...createSecretActions(state, update, refreshReusableSecrets),
       ...connectorActions,
       refreshRunners,
