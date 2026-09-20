@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	backupsecrettransfer "github.com/AlanD20/groundplane/internal/agent/backupsecrettransfer"
 	checkpointmailbox "github.com/AlanD20/groundplane/internal/agent/checkpointmailbox"
 	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
@@ -63,7 +64,7 @@ type WorkerPool struct {
 	scriptRuntime          ScriptRuntime
 	materializations       *filematerialization.Inbox
 	managedConfigs         *componentaction.Inbox
-	backupSecrets          *backupSecretSlotInbox
+	backupSecrets          *backupsecrettransfer.Inbox
 	backupCheckpoints      *checkpointmailbox.BackupInbox
 	scriptCheckpoints      *checkpointmailbox.ScriptInbox
 	backingHookCheckpoints *backingHookCheckpointInbox
@@ -87,7 +88,7 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		reservations:           make(map[string]*taskReservation, size),
 		materializations:       filematerialization.NewInbox(),
 		managedConfigs:         componentaction.NewInbox(),
-		backupSecrets:          newBackupSecretSlotInbox(),
+		backupSecrets:          backupsecrettransfer.New(),
 		backupCheckpoints:      checkpointmailbox.NewBackupInbox(),
 		scriptCheckpoints:      checkpointmailbox.NewScriptInbox(),
 		backingHookCheckpoints: newBackingHookCheckpointInbox(),

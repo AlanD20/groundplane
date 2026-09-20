@@ -1,4 +1,4 @@
-package agent
+package backupsecrettransfer
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-type backupSecretSlotInbox struct {
+type Inbox struct {
 	mu    sync.Mutex
 	tasks map[string]*backupSecretTaskInbox
 }
@@ -38,11 +38,11 @@ const (
 	backupSecretConsumed
 )
 
-func newBackupSecretSlotInbox() *backupSecretSlotInbox {
-	return &backupSecretSlotInbox{tasks: make(map[string]*backupSecretTaskInbox)}
+func New() *Inbox {
+	return &Inbox{tasks: make(map[string]*backupSecretTaskInbox)}
 }
 
-func (inbox *backupSecretSlotInbox) Register(assignment taskassignment.Assignment) error {
+func (inbox *Inbox) Register(assignment taskassignment.Assignment) error {
 	if inbox == nil || assignment.Plan == nil {
 		return errs.New(errs.KindInternal, "agent: Backup secret inbox registration is invalid")
 	}
@@ -96,7 +96,7 @@ func backupSecretSlotPurposes(
 	}, true, nil
 }
 
-func (inbox *backupSecretSlotInbox) Accept(
+func (inbox *Inbox) Accept(
 	ctx context.Context,
 	transfer *agentpb.BackupSecretSlotTransfer,
 ) error {
@@ -148,7 +148,7 @@ func (inbox *backupSecretSlotInbox) Accept(
 	return nil
 }
 
-func (inbox *backupSecretSlotInbox) Consume(
+func (inbox *Inbox) Consume(
 	ctx context.Context,
 	taskID string,
 	assignmentID string,
@@ -203,7 +203,7 @@ func (inbox *backupSecretSlotInbox) Consume(
 	return consume(content)
 }
 
-func (inbox *backupSecretSlotInbox) Release(taskID string) {
+func (inbox *Inbox) Release(taskID string) {
 	if inbox == nil {
 		return
 	}
@@ -212,7 +212,7 @@ func (inbox *backupSecretSlotInbox) Release(taskID string) {
 	inbox.releaseLocked(taskID)
 }
 
-func (inbox *backupSecretSlotInbox) ReleaseAll() {
+func (inbox *Inbox) ReleaseAll() {
 	if inbox == nil {
 		return
 	}
@@ -223,7 +223,7 @@ func (inbox *backupSecretSlotInbox) ReleaseAll() {
 	}
 }
 
-func (inbox *backupSecretSlotInbox) releaseLocked(taskID string) {
+func (inbox *Inbox) releaseLocked(taskID string) {
 	task := inbox.tasks[taskID]
 	if task == nil {
 		return
@@ -244,7 +244,7 @@ func (inbox *backupSecretSlotInbox) releaseLocked(taskID string) {
 	delete(inbox.tasks, taskID)
 }
 
-func (inbox *backupSecretSlotInbox) failSlot(slot *backupSecretSlot, message string) error {
+func (inbox *Inbox) failSlot(slot *backupSecretSlot, message string) error {
 	err := errs.New(errs.KindInternal, message)
 	if slot.state != backupSecretFailed && slot.state != backupSecretConsumed {
 		clear(slot.content)
