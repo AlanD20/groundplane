@@ -81,6 +81,55 @@ tag or overwrite an existing GitHub Release. Manual dispatch is available agains
 an existing release tag, not an arbitrary branch. Publishing is not proof of the
 still-unrun fresh-install OS/architecture or uninterrupted-upgrade journeys.
 
+### Public installation site
+
+The owner selected public release assets and GHCR images, with
+`https://gp.aland20.com` as the primary website and `groundplane.aland20.com`
+redirecting to it. This workflow does not change repository visibility. Its current
+same-repository release URLs must be public; a private source repository would
+need a separate public release location before these URLs could work.
+
+The release workflow calls `.github/workflows/pages.yml` after publication.
+It can also be dispatched manually with an existing stable release version.
+Before deployment it requires publicly downloadable amd64/arm64 bundles and
+checksums, and compares the published installer with the tagged source bytes.
+Only the landing page, installer, installer checksum and `.nojekyll` are uploaded;
+the repository, private evidence and internal docs are not exported to Pages.
+No site is published for a draft, prerelease or inaccessible release.
+
+One-time setup, performed by an account with GitHub and DNS administration access:
+
+1. Enable Pages with **GitHub Actions** as its source and set its custom domain to
+   `gp.aland20.com`. Verify domain ownership through GitHub's account settings.
+   Ensure the `github-pages` environment permits deployments from the release tags.
+2. Create `CNAME gp → aland20.github.io` in the `aland20.com` DNS zone. Do not put
+   a scheme, repository name or URL path in the target.
+3. Enable **Enforce HTTPS** in Pages after DNS verification and certificate issuance.
+4. Configure an HTTPS 301 redirect from `groundplane.aland20.com` to
+   `https://gp.aland20.com`, preserving path and query. This requires the DNS/edge
+   provider's URL-forwarding service; a CNAME alone does not perform a redirect.
+   The redirect service must also cover TLS for the source hostname.
+
+See [GitHub's custom-domain instructions](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)
+and [multiple-domain limits](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/troubleshooting-custom-domains-and-github-pages).
+With an Actions deployment, a tracked CNAME file does not configure the custom domain.
+
+After successful publication, download and inspect the installer before running:
+
+```sh
+curl -fsSLO https://gp.aland20.com/install.sh
+curl -fsSLO https://gp.aland20.com/install.sh.sha256
+sha256sum --check install.sh.sha256
+sudo sh install.sh --version 0.0.1
+```
+
+The release builder already generates bundle SHA256 files. The installer computes
+the downloaded bundle's checksum and compares it with the expected checksum before
+extracting executable files; it also verifies the internal manifest. Pages adds
+an installer checksum. Checksums from the same distribution channel detect changed
+bytes but are not independent publisher signatures. Acceptance requires HTTPS,
+exact installer bytes, working public downloads and path-preserving redirect checks.
+
 ### Build the Agent image
 
 ```sh

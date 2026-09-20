@@ -43,6 +43,8 @@ Initial single-host release.
 - Agent and Runner container images are distributed through GHCR. Release
   bundles pin image digests and include file checksums.
 - Tagged GitHub releases publish both platform bundles, checksums and installer.
+- GitHub Pages publishing serves a lightweight installation page, the exact
+  released installer and its SHA256 checksum after public download checks pass.
 
 ### Limits and deferred work
 

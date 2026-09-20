@@ -1,0 +1,70 @@
+name: Public installation site
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Published stable version, without v
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          ref: v${{ inputs.version }}
+      - name: Validate release and public downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/bump_version.py "$VERSION" --check
+          gh release view "v$VERSION" --json isDraft,isPrerelease --jq 'select(.isDraft == false and .isPrerelease == false)' | grep -q .
+          base="https://github.com/AlanD20/groundplane/releases/download/v$VERSION"
+          for arch in amd64 arm64; do
+            asset="groundplane-$VERSION-linux-$arch.tar.gz"
+            for name in "$asset" "$asset.sha256"; do
+              curl --fail --silent --show-error --head --location --proto '=https' --proto-redir '=https' --max-time 60 "$base/$name" > /dev/null
+            done
+          done
+      - name: Stage public site and verify the published installer
+        run: |
+          bash scripts/repo-env.sh python3 scripts/build_pages.py
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --max-time 60 \
+            "https://github.com/AlanD20/groundplane/releases/download/v$VERSION/install.sh" > .tmp/pages-build/published-install.sh
+          cmp install.sh .tmp/pages-build/published-install.sh
+          cd .tmp/pages-build/site
+          sha256sum --check install.sh.sha256
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: .tmp/pages-build/site
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - id: deployment
+        uses: actions/deploy-pages@v4
