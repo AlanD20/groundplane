@@ -1,28 +1,23 @@
-package app
+package componentaction
 
 import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
-	"encoding/hex"
 	"errors"
 	"io"
-	"runtime"
-	"strconv"
 	"time"
 
-	registeredcatalog "github.com/AlanD20/groundplane-registered-components/catalog"
 	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/common/managedconfig"
 	"github.com/AlanD20/groundplane/internal/infra/docker/dnsresolverobserver"
-	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelper"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-type registeredComponentActionRuntime struct {
-	catalog       registeredActionCatalog
+type Runtime struct {
+	catalog       Catalog
 	managedHelper managedConfigExecutor
 	composeHelper agent.ComposeHelper
 	observer      dnsResolverObserver
@@ -37,21 +32,21 @@ type managedConfigExecutor interface {
 	Execute(context.Context, *agentpb.ManagedConfigHelperRequest) (*agentpb.ManagedConfigHelperResponse, error)
 }
 
-func newRegisteredComponentActionRuntime(
-	catalog registeredActionCatalog,
+func New(
+	catalog Catalog,
 	managedHelper managedConfigExecutor,
 	composeHelper agent.ComposeHelper,
 	observer dnsResolverObserver,
-) (*registeredComponentActionRuntime, error) {
+) (*Runtime, error) {
 	if managedHelper == nil || composeHelper == nil || observer == nil {
 		return nil, errs.New(errs.KindInternal, "registered Component action helper is required")
 	}
-	return &registeredComponentActionRuntime{
+	return &Runtime{
 		catalog: catalog, managedHelper: managedHelper, composeHelper: composeHelper, observer: observer,
 	}, nil
 }
 
-func (runtime *registeredComponentActionRuntime) ExecuteComponentAction(
+func (runtime *Runtime) ExecuteComponentAction(
 	ctx context.Context,
 	assignment agent.Assignment,
 	step *agentpb.ExecutionStep,
@@ -168,7 +163,7 @@ func (runtime *registeredComponentActionRuntime) ExecuteComponentAction(
 	return result, nil
 }
 
-func (runtime *registeredComponentActionRuntime) FinalizeManagedConfig(
+func (runtime *Runtime) FinalizeManagedConfig(
 	ctx context.Context,
 	assignment agent.Assignment,
 	step *agentpb.ExecutionStep,
@@ -199,7 +194,7 @@ func (runtime *registeredComponentActionRuntime) FinalizeManagedConfig(
 	)
 }
 
-func (runtime *registeredComponentActionRuntime) executeManagedConfig(
+func (runtime *Runtime) executeManagedConfig(
 	ctx context.Context,
 	request *agentpb.ManagedConfigHelperRequest,
 ) (agent.ManagedConfigTransactionState, error) {
@@ -222,179 +217,6 @@ func (runtime *registeredComponentActionRuntime) executeManagedConfig(
 		)
 	}
 	return state, nil
-}
-
-func managedConfigTransactionState(
-	request *agentpb.ManagedConfigHelperRequest,
-	response *agentpb.ManagedConfigHelperResponse,
-) (agent.ManagedConfigTransactionState, error) {
-	if request == nil || response == nil || response.GetSchema() != managedconfighelper.SchemaVersion ||
-		response.GetTransactionId() != request.GetTransactionId() ||
-		response.GetOperation() != request.GetOperation() ||
-		response.GetDisposition() == agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_UNSPECIFIED {
-		return agent.ManagedConfigTransactionState{}, errs.New(
-			errs.KindStateConflict,
-			"agent: managed-config helper response does not match its transaction",
-		)
-	}
-	live, err := managedConfigFileState(response.GetLiveSha256())
-	if err != nil {
-		return agent.ManagedConfigTransactionState{}, err
-	}
-	previous, err := managedConfigFileState(response.GetPreviousSha256())
-	if err != nil {
-		return agent.ManagedConfigTransactionState{}, err
-	}
-	state := agent.ManagedConfigTransactionState{Live: live, Previous: previous}
-	if !managedConfigStateMatches(previous, request.GetExpectedPreviousSha256()) {
-		return agent.ManagedConfigTransactionState{}, errs.New(
-			errs.KindStateConflict,
-			"agent: managed-config helper predecessor proof changed",
-		)
-	}
-	expectedLive := request.GetSha256()
-	if request.GetOperation() == agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_ROLLBACK {
-		expectedLive = request.GetExpectedPreviousSha256()
-	}
-	if !managedConfigStateMatches(live, expectedLive) {
-		return agent.ManagedConfigTransactionState{}, errs.New(
-			errs.KindStateConflict,
-			"agent: managed-config helper live proof changed",
-		)
-	}
-	return state, nil
-}
-
-func managedConfigFileState(digest []byte) (agent.ManagedConfigFileState, error) {
-	if len(digest) == 0 {
-		return agent.ManagedConfigFileState{}, nil
-	}
-	if len(digest) != sha256.Size {
-		return agent.ManagedConfigFileState{}, errs.New(
-			errs.KindStateConflict,
-			"agent: managed-config helper digest proof is invalid",
-		)
-	}
-	state := agent.ManagedConfigFileState{Present: true}
-	copy(state.SHA256[:], digest)
-	return state, nil
-}
-
-func managedConfigStateMatches(state agent.ManagedConfigFileState, digest []byte) bool {
-	if len(digest) == 0 {
-		return !state.Present
-	}
-	return len(digest) == sha256.Size && state.Present &&
-		subtle.ConstantTimeCompare(state.SHA256[:], digest) == 1
-}
-
-func managedConfigRequest(
-	assignment agent.Assignment,
-	action *agentpb.ComponentApply,
-	relativePath string,
-	operation agentpb.ManagedConfigOperation,
-) *agentpb.ManagedConfigHelperRequest {
-	digest := sha256.New()
-	for _, value := range []string{
-		assignment.OperationID, assignment.TaskID, action.GetComponentId(), action.GetArtifactId(),
-		strconv.FormatUint(action.GetGeneration(), 10),
-	} {
-		_, _ = digest.Write([]byte(value))
-		_, _ = digest.Write([]byte{0})
-	}
-	return &agentpb.ManagedConfigHelperRequest{
-		Schema: managedconfighelper.SchemaVersion, ArtifactId: action.GetArtifactId(),
-		RelativePath: relativePath, Sha256: append([]byte(nil), action.GetArtifactDigest()...),
-		ExpectedPreviousSha256: append([]byte(nil), action.GetExpectedPreviousArtifactDigest()...),
-		Operation:              operation, TransactionId: "mct_" + hex.EncodeToString(digest.Sum(nil)),
-		Generation: action.GetGeneration(),
-	}
-}
-
-func dnsResolverObservationRequest(
-	assignment agent.Assignment,
-	action *agentpb.ComponentApply,
-	recipe registeredcatalog.DNSResolverObservationRecipe,
-) (dnsresolverobserver.Request, error) {
-	artifact := componentObservationComposeArtifact(assignment.Plan)
-	if artifact == nil {
-		return dnsresolverobserver.Request{}, errs.New(
-			errs.KindValidationFailed,
-			"agent: DNS resolver observation artifact is invalid",
-		)
-	}
-	if artifact.GetProjectName() == "" || len(artifact.GetServices()) != 1 {
-		return dnsresolverobserver.Request{}, errs.New(
-			errs.KindValidationFailed,
-			"agent: DNS resolver observation target is invalid",
-		)
-	}
-	service := artifact.GetServices()[0]
-	image := recipe.Image()
-	selectedPlatform, imageReference, selected := image.Select(runtime.GOOS, runtime.GOARCH)
-	if service.GetComposeName() != recipe.ServiceName() || service.GetServiceId() == "" || !selected ||
-		len(service.GetImageIndexDigest()) != sha256.Size || len(service.GetImageChildDigest()) != sha256.Size ||
-		len(service.GetImageConfigDigest()) != sha256.Size || service.GetImageReference() != imageReference ||
-		service.GetImageRepository() != image.Repository ||
-		hex.EncodeToString(service.GetImageIndexDigest()) != image.IndexDigest ||
-		hex.EncodeToString(service.GetImageChildDigest()) != selectedPlatform.ChildDigest ||
-		hex.EncodeToString(service.GetImageConfigDigest()) != selectedPlatform.ConfigDigest ||
-		service.GetImageOs() != selectedPlatform.OS ||
-		service.GetImageArchitecture() != selectedPlatform.Architecture || service.GetImageVariant() != selectedPlatform.Variant {
-		return dnsresolverobserver.Request{}, errs.New(
-			errs.KindValidationFailed,
-			"agent: DNS resolver observation Service is invalid",
-		)
-	}
-	labels := make(map[string]string, len(service.GetExpectedLabels()))
-	for _, label := range service.GetExpectedLabels() {
-		if label == nil || label.GetKey() == "" {
-			return dnsresolverobserver.Request{}, errs.New(
-				errs.KindValidationFailed,
-				"agent: DNS resolver ownership label is invalid",
-			)
-		}
-		labels[label.GetKey()] = label.GetValue()
-	}
-	var digest [sha256.Size]byte
-	copy(digest[:], action.GetArtifactDigest())
-	var imageIndexDigest [sha256.Size]byte
-	copy(imageIndexDigest[:], service.GetImageIndexDigest())
-	var imageConfigDigest [sha256.Size]byte
-	copy(imageConfigDigest[:], service.GetImageConfigDigest())
-	return dnsresolverobserver.Request{
-		ComponentID: action.GetComponentId(), ServiceID: service.GetServiceId(), ArtifactID: action.GetArtifactId(),
-		ArtifactSHA256: digest, RenderGeneration: action.GetGeneration(), ProjectName: artifact.GetProjectName(),
-		ServiceName: recipe.ServiceName(), ArtifactTarget: recipe.ArtifactTarget(),
-		ImageReference: imageReference, ListenEndpoint: recipe.ListenEndpoint(),
-		ImageRepository: service.GetImageRepository(), ImageIndexDigest: imageIndexDigest,
-		ImageConfigDigest: imageConfigDigest,
-		ImageOS:           service.GetImageOs(), ImageArchitecture: service.GetImageArchitecture(),
-		ImageVariant: service.GetImageVariant(),
-		MetricsURL:   recipe.MetricsURL(), ReloadMetric: recipe.ReloadMetric(), ExpectedLabels: labels,
-	}, nil
-}
-
-func componentObservationComposeArtifact(plan *agentpb.ExecutionPlan) *agentpb.ComposeArtifact {
-	if plan == nil {
-		return nil
-	}
-	if len(plan.GetArtifacts()) == 1 {
-		return plan.GetArtifacts()[0]
-	}
-	if len(plan.GetArtifacts()) != 2 {
-		return nil
-	}
-	for _, step := range plan.GetSteps() {
-		if apply := step.GetComposeApply(); apply != nil {
-			for _, artifact := range plan.GetArtifacts() {
-				if artifact.GetArtifactId() == apply.GetArtifactId() {
-					return artifact
-				}
-			}
-		}
-	}
-	return nil
 }
 
 func closeComponentArtifact(source io.ReadCloser, operationErr error) error {

@@ -11,6 +11,7 @@ import (
 	"syscall"
 
 	"github.com/AlanD20/groundplane/internal/agent"
+	"github.com/AlanD20/groundplane/internal/agent/componentaction"
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/logging"
@@ -168,7 +169,7 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 			),
 		)
 	}
-	componentActions, err := newRegisteredComponentActionRuntime(
+	componentActions, err := componentaction.New(
 		actionCatalog, managedConfigs, resources.helper, dnsObserver,
 	)
 	if err != nil {
