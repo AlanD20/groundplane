@@ -7,6 +7,7 @@ import (
 	"errors"
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	logstream "github.com/AlanD20/groundplane/internal/agent/logstream"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"io"
@@ -74,7 +75,7 @@ type Client struct {
 	scriptRuntime          ScriptRuntime
 	images                 WorkloadImageResolver
 	observer               ServiceObserver
-	logs                   *logManager
+	logs                   *logstream.Subscriptions
 }
 
 func (c *Client) SetComponentActionRuntime(runtime ComponentActionRuntime) error {
@@ -150,7 +151,7 @@ func NewClient(
 		logger:     logger,
 		connect:    connectGRPC,
 		reconnect:  waitForAgentChannelReconnect,
-		logs:       newLogManager(nil),
+		logs:       logstream.New(nil),
 	}
 	copy(client.token[:], token)
 	return client, nil
@@ -206,7 +207,7 @@ func NewClientWithLogReader(
 	if err != nil {
 		return nil, err
 	}
-	client.logs = newLogManager(logReader)
+	client.logs = logstream.New(logReader)
 	return client, nil
 }
 
@@ -405,7 +406,7 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 				assignment.GetExecutionMode() != agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY) {
 			return false, errs.New(errs.KindInternal, "agent: Controller sent invalid execution authority")
 		}
-		defer clearScriptArtifacts(assignment.ScriptArtifacts)
+		defer taskassignment.ClearScriptArtifacts(assignment.ScriptArtifacts)
 		executionDeadline := assignment.ExecutionDeadline.AsTime()
 		recoveryProofRequired := assignment.GetExecutionMode() == agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY &&
 			executionDeadline.After(assignment.RecoveryDeadline.AsTime())

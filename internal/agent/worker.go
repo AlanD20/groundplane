@@ -256,7 +256,7 @@ func (p *WorkerPool) complete(runCtx context.Context, reservation *taskReservati
 	case <-runCtx.Done():
 	}
 	clearExecutionPlanSecrets(reservation.assignment.Plan)
-	clearScriptArtifacts(reservation.assignment.ScriptArtifacts)
+	taskassignment.ClearScriptArtifacts(reservation.assignment.ScriptArtifacts)
 	p.mu.Lock()
 	if p.reservations[result.TaskID] == reservation {
 		delete(p.reservations, result.TaskID)
@@ -390,7 +390,7 @@ func (p *WorkerPool) Submit(ctx context.Context, assignment taskassignment.Assig
 	defer func() {
 		if !transferred {
 			clearExecutionPlanSecrets(owned.Plan)
-			clearScriptArtifacts(owned.ScriptArtifacts)
+			taskassignment.ClearScriptArtifacts(owned.ScriptArtifacts)
 		}
 	}()
 	p.mu.Lock()

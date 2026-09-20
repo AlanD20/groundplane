@@ -1,4 +1,4 @@
-package agent
+package logstream
 
 import (
 	"context"
@@ -14,7 +14,7 @@ const (
 	maxQueuedLogEvents  = 128
 )
 
-type logManager struct {
+type Subscriptions struct {
 	reader  agentprotocol.LogReader
 	outputs chan *agentpb.AgentMessage
 
@@ -22,19 +22,19 @@ type logManager struct {
 	active map[string]context.CancelFunc
 }
 
-func newLogManager(reader agentprotocol.LogReader) *logManager {
-	return &logManager{
+func New(reader agentprotocol.LogReader) *Subscriptions {
+	return &Subscriptions{
 		reader:  reader,
 		outputs: make(chan *agentpb.AgentMessage),
 		active:  make(map[string]context.CancelFunc),
 	}
 }
 
-func (manager *logManager) Outputs() <-chan *agentpb.AgentMessage {
+func (manager *Subscriptions) Outputs() <-chan *agentpb.AgentMessage {
 	return manager.outputs
 }
 
-func (manager *logManager) Subscribe(parent context.Context, request *agentpb.LogSubscribe) {
+func (manager *Subscriptions) Subscribe(parent context.Context, request *agentpb.LogSubscribe) {
 	if request == nil || request.GetRequestId() == "" || manager.reader == nil {
 		return
 	}
@@ -62,7 +62,7 @@ func (manager *logManager) Subscribe(parent context.Context, request *agentpb.Lo
 	go manager.run(subscriptionContext, request)
 }
 
-func (manager *logManager) Cancel(requestID string) {
+func (manager *Subscriptions) Cancel(requestID string) {
 	manager.mu.Lock()
 	cancel := manager.active[requestID]
 	manager.mu.Unlock()
@@ -71,7 +71,7 @@ func (manager *logManager) Cancel(requestID string) {
 	}
 }
 
-func (manager *logManager) run(ctx context.Context, request *agentpb.LogSubscribe) {
+func (manager *Subscriptions) run(ctx context.Context, request *agentpb.LogSubscribe) {
 	requestID := request.GetRequestId()
 	released := false
 	defer func() {
@@ -181,13 +181,13 @@ func collectLogEvents(
 	}
 }
 
-func (manager *logManager) release(requestID string) {
+func (manager *Subscriptions) release(requestID string) {
 	manager.mu.Lock()
 	delete(manager.active, requestID)
 	manager.mu.Unlock()
 }
 
-func (manager *logManager) send(ctx context.Context, message *agentpb.AgentMessage) bool {
+func (manager *Subscriptions) send(ctx context.Context, message *agentpb.AgentMessage) bool {
 	select {
 	case manager.outputs <- message:
 		return true

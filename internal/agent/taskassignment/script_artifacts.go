@@ -1,4 +1,4 @@
-package agent
+package taskassignment
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func validateAndCopyScriptArtifacts(
+func ValidateAndCopyScriptArtifacts(
 	plan *agentpb.ExecutionPlan,
 	artifacts *agentpb.ScriptAssignmentArtifacts,
 ) (*agentpb.ScriptAssignmentArtifacts, error) {
@@ -42,7 +42,7 @@ func validateAndCopyScriptArtifacts(
 	seenBodies := make(map[string]struct{}, len(artifacts.Bodies))
 	for _, body := range artifacts.Bodies {
 		if body == nil || body.Metadata == nil {
-			clearScriptArtifacts(owned)
+			ClearScriptArtifacts(owned)
 			return nil, errs.New(errs.KindInternal, "agent: Script body artifact is invalid")
 		}
 		metadata := metadataByExecution[body.Metadata.ScriptExecutionId]
@@ -50,13 +50,13 @@ func validateAndCopyScriptArtifacts(
 			metadata == nil || !proto.Equal(body.Metadata, metadata) || len(body.Body) != int(metadata.Size) ||
 			len(body.Body) == 0 || len(body.Body) > executionplan.MaximumScriptBodyBytes ||
 			!utf8.Valid(body.Body) || bytes.IndexByte(body.Body, 0) >= 0 {
-			clearScriptArtifacts(owned)
+			ClearScriptArtifacts(owned)
 			return nil, errs.New(errs.KindInternal, "agent: Script body artifact is invalid")
 		}
 		seenBodies[body.Metadata.ScriptExecutionId] = struct{}{}
 		digest := sha256.Sum256(body.Body)
 		if !bytes.Equal(digest[:], metadata.Sha256) {
-			clearScriptArtifacts(owned)
+			ClearScriptArtifacts(owned)
 			return nil, errs.New(errs.KindInternal, "agent: Script body artifact digest does not match")
 		}
 		owned.Bodies = append(owned.Bodies, &agentpb.ScriptBodyArtifact{
@@ -67,37 +67,37 @@ func validateAndCopyScriptArtifacts(
 	bindingByIdentity := make(map[string]*agentpb.ScriptRunnerEntryBinding)
 	for _, snapshot := range plan.ScriptRunnerSnapshots {
 		if snapshot == nil {
-			clearScriptArtifacts(owned)
+			ClearScriptArtifacts(owned)
 			return nil, errs.New(errs.KindInternal, "agent: Script runner snapshot is invalid")
 		}
 		for _, binding := range snapshot.EntryBindings {
 			if binding == nil {
-				clearScriptArtifacts(owned)
+				ClearScriptArtifacts(owned)
 				return nil, errs.New(errs.KindInternal, "agent: Script Entry binding is invalid")
 			}
 			identity := binding.EntryId + "\x00" + binding.ValueGenerationId
 			if previous, exists := bindingByIdentity[identity]; exists && !proto.Equal(previous, binding) {
-				clearScriptArtifacts(owned)
+				ClearScriptArtifacts(owned)
 				return nil, errs.New(errs.KindInternal, "agent: Script Entry bindings disagree")
 			}
 			bindingByIdentity[identity] = binding
 		}
 	}
 	if len(artifacts.Entries) != len(bindingByIdentity) {
-		clearScriptArtifacts(owned)
+		ClearScriptArtifacts(owned)
 		return nil, errs.New(errs.KindInternal, "agent: Script Entry artifacts are incomplete")
 	}
 	seenEntries := make(map[string]struct{}, len(artifacts.Entries))
 	for _, entry := range artifacts.Entries {
 		if entry == nil || entry.Binding == nil {
-			clearScriptArtifacts(owned)
+			ClearScriptArtifacts(owned)
 			return nil, errs.New(errs.KindInternal, "agent: Script Entry artifact is invalid")
 		}
 		identity := entry.Binding.EntryId + "\x00" + entry.Binding.ValueGenerationId
 		binding := bindingByIdentity[identity]
 		if _, duplicate := seenEntries[identity]; duplicate || !proto.Equal(entry.Binding, binding) ||
 			len(entry.Value) > 256<<10 {
-			clearScriptArtifacts(owned)
+			ClearScriptArtifacts(owned)
 			return nil, errs.New(errs.KindInternal, "agent: Script Entry artifact is invalid")
 		}
 		seenEntries[identity] = struct{}{}
@@ -105,7 +105,7 @@ func validateAndCopyScriptArtifacts(
 		if !bytes.Equal(digest[:], binding.Sha256) ||
 			(binding.Kind == agentpb.ScriptEntryBindingKind_SCRIPT_ENTRY_BINDING_KIND_ENV &&
 				(!utf8.Valid(entry.Value) || bytes.IndexByte(entry.Value, 0) >= 0)) {
-			clearScriptArtifacts(owned)
+			ClearScriptArtifacts(owned)
 			return nil, errs.New(errs.KindInternal, "agent: Script Entry artifact digest does not match")
 		}
 		owned.Entries = append(owned.Entries, &agentpb.ScriptEntryArtifact{
@@ -116,7 +116,7 @@ func validateAndCopyScriptArtifacts(
 	return owned, nil
 }
 
-func clearScriptArtifacts(artifacts *agentpb.ScriptAssignmentArtifacts) {
+func ClearScriptArtifacts(artifacts *agentpb.ScriptAssignmentArtifacts) {
 	if artifacts == nil {
 		return
 	}

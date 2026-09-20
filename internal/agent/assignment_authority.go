@@ -98,19 +98,19 @@ func validateAndCopyAssignment(assignment taskassignment.Assignment, volumeRoot 
 			"agent: automatic reconciliation assignment has an invalid plan",
 		)
 	}
-	scriptArtifacts, err := validateAndCopyScriptArtifacts(plan, assignment.ScriptArtifacts)
+	scriptArtifacts, err := taskassignment.ValidateAndCopyScriptArtifacts(plan, assignment.ScriptArtifacts)
 	if err != nil {
 		return taskassignment.Assignment{}, err
 	}
 	scriptCheckpoints := make([]*agentpb.ScriptExecutionCheckpoint, len(assignment.ScriptCheckpoints))
 	if len(assignment.ScriptCheckpoints) != len(plan.ScriptBodyArtifacts) {
-		clearScriptArtifacts(scriptArtifacts)
+		taskassignment.ClearScriptArtifacts(scriptArtifacts)
 		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Script checkpoint set is incomplete")
 	}
 	expectedCheckpoints := make(map[string]struct{}, len(plan.ScriptBodyArtifacts))
 	for _, metadata := range plan.ScriptBodyArtifacts {
 		if metadata == nil || metadata.ScriptExecutionId == "" {
-			clearScriptArtifacts(scriptArtifacts)
+			taskassignment.ClearScriptArtifacts(scriptArtifacts)
 			return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Script execution metadata is invalid")
 		}
 		expectedCheckpoints[metadata.ScriptExecutionId] = struct{}{}
@@ -119,18 +119,18 @@ func validateAndCopyAssignment(assignment taskassignment.Assignment, volumeRoot 
 	for index, checkpoint := range assignment.ScriptCheckpoints {
 		scriptCheckpoints[index], err = executionplan.ValidateScriptExecutionCheckpoint(checkpoint)
 		if err != nil {
-			clearScriptArtifacts(scriptArtifacts)
+			taskassignment.ClearScriptArtifacts(scriptArtifacts)
 			return taskassignment.Assignment{}, errs.Wrap(errs.KindInternal, err)
 		}
 		if _, expected := expectedCheckpoints[scriptCheckpoints[index].ScriptExecutionId]; !expected {
-			clearScriptArtifacts(scriptArtifacts)
+			taskassignment.ClearScriptArtifacts(scriptArtifacts)
 			return taskassignment.Assignment{}, errs.New(
 				errs.KindInternal,
 				"agent: Script checkpoint does not belong to the execution plan",
 			)
 		}
 		if _, duplicate := seenCheckpoints[scriptCheckpoints[index].ScriptExecutionId]; duplicate {
-			clearScriptArtifacts(scriptArtifacts)
+			taskassignment.ClearScriptArtifacts(scriptArtifacts)
 			return taskassignment.Assignment{}, errs.New(
 				errs.KindInternal,
 				"agent: Script checkpoint set contains a duplicate execution",
