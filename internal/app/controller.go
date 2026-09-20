@@ -681,7 +681,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	backupRunRepository, err := controller.NewDurableBackupRunRepository(
+	backupRunRepository, err := backupcapability.NewDurableBackupRunRepository(
 		backupRuntimeRecords,
 		attachFactValues.ResolveBackupIdentity,
 	)
@@ -689,14 +689,14 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup run repository: %w", err)
 	}
-	backupRunIdempotency, err := controller.NewDurableBackupRunIdempotency(intentCoordinator, idempotency)
+	backupRunIdempotency, err := backupcapability.NewDurableBackupRunIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup run idempotency: %w", err)
 	}
-	backupRuns := controller.NewBackupRunService(
+	backupRuns := backupcapability.NewBackupRunService(
 		backupRunRepository,
-		controller.BackupRunPlanBuilderFunc(controller.BuildBackupRunPlan),
+		backupcapability.BackupRunPlanBuilderFunc(backupcapability.BuildBackupRunPlan),
 		backupRunIdempotency,
 	)
 	backupSchedules, err := backupcapability.NewBackupScheduleService(backupRuntimeRecords, backupRuns, logger)
