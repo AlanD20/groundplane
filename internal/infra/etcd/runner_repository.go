@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/http"
@@ -182,8 +183,8 @@ func (repository *RunnerRepository) ResolveRunner(
 }
 
 type runnerParents struct {
-	tenant  Versioned[TenantRecord]
-	project Versioned[ProjectRecord]
+	tenant  Versioned[hierarchyrecord.TenantRecord]
+	project Versioned[hierarchyrecord.ProjectRecord]
 }
 
 func (repository *RunnerRepository) resolveRunnerParents(
@@ -207,7 +208,7 @@ func (repository *RunnerRepository) resolveRunnerParents(
 		if err != nil {
 			return runnerParents{}, err
 		}
-		if parents.project.Record.Kind != ProjectKindTenant ||
+		if parents.project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
 			parents.project.Record.TenantID != desired.TenantID {
 			return runnerParents{}, errs.New(
 				errs.KindValidationFailed,
@@ -441,9 +442,9 @@ func newRunnerTaskInitiation(
 	if err != nil {
 		return TaskInitiation{}, err
 	}
-	fences := []etcdstore.Condition{{Key: tenantKey(desired.TenantID), ModRevision: parents.tenant.Revision}}
+	fences := []etcdstore.Condition{{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.tenant.Revision}}
 	if desired.OwnerKind == RunnerOwnerProject {
-		fences = append(fences, etcdstore.Condition{Key: projectKey(desired.OwnerID), ModRevision: parents.project.Revision})
+		fences = append(fences, etcdstore.Condition{Key: hierarchyrecord.ProjectKey(desired.OwnerID), ModRevision: parents.project.Revision})
 	}
 	return newTaskInitiation(owner, actor, fences...)
 }
@@ -557,11 +558,11 @@ func newRunnerCreateEvidence(
 	evidence.owner = add(etcdstore.Condition{Key: runnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)})
 	evidence.quota = add(etcdstore.Condition{Key: runnerTenantQuotaKey(desired.TenantID), ModRevision: allocation.quota.Revision})
 	evidence.system = add(etcdstore.Condition{Key: systemPoolRegistryKey, ModRevision: allocation.system.Revision})
-	evidence.tenant = add(etcdstore.Condition{Key: tenantKey(desired.TenantID), ModRevision: parents.tenant.Revision})
+	evidence.tenant = add(etcdstore.Condition{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.tenant.Revision})
 	evidence.runnerDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetRunner), desired.ID)})
 	evidence.tenantDeletion = add(etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetTenant), desired.TenantID)})
 	if desired.OwnerKind == RunnerOwnerProject {
-		evidence.project = add(etcdstore.Condition{Key: projectKey(desired.OwnerID), ModRevision: parents.project.Revision})
+		evidence.project = add(etcdstore.Condition{Key: hierarchyrecord.ProjectKey(desired.OwnerID), ModRevision: parents.project.Revision})
 		evidence.projectDeletion = add(
 			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), desired.OwnerID)},
 		)
@@ -973,13 +974,13 @@ func (repository *RunnerRepository) PutRunnerObservation(
 		{Key: runnerObservationKey(record.RunnerID), ModRevision: expectedRevision},
 		{Key: runnerKey(record.RunnerID), ModRevision: current.Revision},
 		{Key: runnerLifecycleKey(record.RunnerID), ModRevision: current.Record.LifecycleRevision},
-		{Key: tenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
+		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
 		{Key: deletionTombstoneKey(string(DeletionTargetRunner), record.RunnerID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetTenant), current.Record.Desired.TenantID)},
 	}
 	if current.Record.Desired.OwnerKind == RunnerOwnerProject {
 		conditions = append(conditions,
-			etcdstore.Condition{Key: projectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
+			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
 			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
 		)
 	}

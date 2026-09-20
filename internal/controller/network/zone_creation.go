@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"time"
@@ -25,8 +26,8 @@ const (
 )
 
 type zoneCreationRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
@@ -250,7 +251,7 @@ func (service *zoneCreationService) createZoneOnce(
 			"Zone creation hierarchy changed during selection",
 		)
 	}
-	if environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
+	if environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		environment.Record.ID != input.EnvironmentID || projection.Record.EnvironmentID != input.EnvironmentID ||
 		project.Record.ID != environment.Record.ProjectID {
 		return etcd.IdempotencyResponse{}, errs.New(
@@ -296,7 +297,7 @@ func (service *zoneCreationService) createZoneOnce(
 	}
 	ownerKind := core.ZoneOwnerEnvironment
 	ownerID := environment.Record.ID
-	if project.Record.Kind == etcd.ProjectKindBacking {
+	if project.Record.Kind == hierarchyrecord.ProjectKindBacking {
 		ownerKind = core.ZoneOwnerBackingProject
 		ownerID = project.Record.ID
 	}

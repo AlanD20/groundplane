@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"slices"
@@ -241,7 +242,7 @@ func (ledger *ReleaseLedger) Publish(
 	}
 	defer clear(operationValue)
 	conditions := []etcdstore.Condition{
-		{Key: environmentMutationEpochKey(evidence.EnvironmentID), ModRevision: evidence.EnvironmentEpochRevision},
+		{Key: hierarchyrecord.EnvironmentMutationEpochKey(evidence.EnvironmentID), ModRevision: evidence.EnvironmentEpochRevision},
 		{Key: deletionTombstoneKey("environment", evidence.EnvironmentID)},
 		{Key: deletionTombstoneKey("project", evidence.ProjectID)},
 		{Key: deletionTombstoneKey("tenant", evidence.TenantID)},
@@ -319,7 +320,7 @@ func (ledger *ReleaseLedger) Publish(
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
 		etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
-			Key:   environmentMutationEpochKey(evidence.EnvironmentID),
+			Key:   hierarchyrecord.EnvironmentMutationEpochKey(evidence.EnvironmentID),
 			Value: slices.Clone(evidence.EnvironmentEpochValue),
 		},
 	)

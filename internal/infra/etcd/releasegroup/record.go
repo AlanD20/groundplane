@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"io"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -152,35 +153,35 @@ func decodeDurable[T any](value []byte, kind string) (T, error) {
 	return stored.Data, nil
 }
 
-func decodeEnvironment(value []byte) (infraetcd.EnvironmentRecord, error) {
-	record, err := decodeDurable[infraetcd.EnvironmentRecord](value, "environment")
+func decodeEnvironment(value []byte) (hierarchyrecord.EnvironmentRecord, error) {
+	record, err := decodeDurable[hierarchyrecord.EnvironmentRecord](value, "environment")
 	if err != nil || ids.Validate(ids.KindEnvironment, record.ID) != nil ||
 		ids.Validate(ids.KindProject, record.ProjectID) != nil || record.Name == "" ||
-		record.ProvisioningState != infraetcd.EnvironmentProvisioningReady {
-		return infraetcd.EnvironmentRecord{}, corruptRecord()
+		record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
+		return hierarchyrecord.EnvironmentRecord{}, corruptRecord()
 	}
 	return record, nil
 }
 
-func decodeProject(value []byte) (infraetcd.ProjectRecord, error) {
-	record, err := decodeDurable[infraetcd.ProjectRecord](value, "project")
+func decodeProject(value []byte) (hierarchyrecord.ProjectRecord, error) {
+	record, err := decodeDurable[hierarchyrecord.ProjectRecord](value, "project")
 	if err != nil || ids.Validate(ids.KindProject, record.ID) != nil || record.Slug == "" || record.Name == "" {
-		return infraetcd.ProjectRecord{}, corruptRecord()
+		return hierarchyrecord.ProjectRecord{}, corruptRecord()
 	}
-	if record.Kind == infraetcd.ProjectKindTenant {
+	if record.Kind == hierarchyrecord.ProjectKindTenant {
 		if ids.Validate(ids.KindTenant, record.TenantID) != nil {
-			return infraetcd.ProjectRecord{}, corruptRecord()
+			return hierarchyrecord.ProjectRecord{}, corruptRecord()
 		}
-	} else if record.Kind != infraetcd.ProjectKindBacking || record.TenantID != "" {
-		return infraetcd.ProjectRecord{}, corruptRecord()
+	} else if record.Kind != hierarchyrecord.ProjectKindBacking || record.TenantID != "" {
+		return hierarchyrecord.ProjectRecord{}, corruptRecord()
 	}
 	return record, nil
 }
 
-func decodeTenant(value []byte) (infraetcd.TenantRecord, error) {
-	record, err := decodeDurable[infraetcd.TenantRecord](value, "tenant")
+func decodeTenant(value []byte) (hierarchyrecord.TenantRecord, error) {
+	record, err := decodeDurable[hierarchyrecord.TenantRecord](value, "tenant")
 	if err != nil || ids.Validate(ids.KindTenant, record.ID) != nil || record.Slug == "" || record.Name == "" {
-		return infraetcd.TenantRecord{}, corruptRecord()
+		return hierarchyrecord.TenantRecord{}, corruptRecord()
 	}
 	return record, nil
 }
@@ -290,8 +291,8 @@ func environmentOwnerKey(projectID string, environmentID string) string {
 	return "/v1/indexes/environments/by-owner/project/" + projectID + "/" + environmentID
 }
 
-func projectOwnerKey(project infraetcd.ProjectRecord) string {
-	if project.Kind == infraetcd.ProjectKindBacking {
+func projectOwnerKey(project hierarchyrecord.ProjectRecord) string {
+	if project.Kind == hierarchyrecord.ProjectKindBacking {
 		return "/v1/indexes/projects/by-owner/platform/-/" + project.ID
 	}
 	return "/v1/indexes/projects/by-owner/tenant/" + project.TenantID + "/" + project.ID

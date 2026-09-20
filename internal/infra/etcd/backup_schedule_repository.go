@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 	"time"
@@ -103,7 +104,7 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 	keys := []string{
 		backupPolicyKey(environmentID),
 		environmentCoordinationKey(environmentID),
-		environmentOperationLockKey(environmentID),
+		hierarchyrecord.EnvironmentOperationLockKey(environmentID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
@@ -198,7 +199,7 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 	keys := []string{
 		backupPolicyKey(evaluation.EnvironmentID),
 		environmentCoordinationKey(evaluation.EnvironmentID),
-		environmentOperationLockKey(evaluation.EnvironmentID),
+		hierarchyrecord.EnvironmentOperationLockKey(evaluation.EnvironmentID),
 	}
 	dueKey, err := backupDueOutcomeKey(evaluation.EnvironmentID, evaluation.PolicyRevision, evaluation.ScheduledAt)
 	if err != nil {

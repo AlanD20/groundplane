@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -50,7 +51,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		return BackupPolicyProjection{}, err
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		environmentKey(environmentID),
+		hierarchyrecord.EnvironmentKey(environmentID),
 		backupPolicyKey(environmentID),
 		backupKeyKey(environmentID),
 		backupKeyValueKey(environmentID),
@@ -65,7 +66,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 	if base.Values[0] == nil {
 		return BackupPolicyProjection{}, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 	}
-	environment, err := decodeEnvironment(base.Values[0].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(base.Values[0].Value)
 	if err != nil || environment.ID != environmentID {
 		return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 	}
@@ -96,7 +97,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		return BackupPolicyProjection{}, corruptBackupKey()
 	}
 
-	keys := []string{projectKey(environment.ProjectID)}
+	keys := []string{hierarchyrecord.ProjectKey(environment.ProjectID)}
 	if policy != nil {
 		for _, sourceID := range policy.SourceIDs {
 			keys = append(keys,
@@ -123,11 +124,11 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		support.Values[0] == nil {
 		return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 	}
-	project, err := decodeProject(support.Values[0].Value)
+	project, err := hierarchyrecord.DecodeProject(support.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
 		return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 	}
-	if project.Kind != ProjectKindTenant || project.TenantID == "" {
+	if project.Kind != hierarchyrecord.ProjectKindTenant || project.TenantID == "" {
 		return BackupPolicyProjection{}, errs.New(
 			errs.KindValidationFailed,
 			"backing environments cannot own backup policies",

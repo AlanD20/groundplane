@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -20,9 +21,9 @@ func serviceLifecycleActiveKey(serviceID string) string {
 // also persist the immutable render snapshot used after restart and on retry.
 func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	ctx context.Context,
-	tenant Versioned[TenantRecord],
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	tenant Versioned[hierarchyrecord.TenantRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	current Versioned[ServiceRecord],
 	replacement ServiceRecord,
 	projection *Versioned[EnvironmentComposeProjection],
@@ -37,9 +38,9 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 
 func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	ctx context.Context,
-	tenant *Versioned[TenantRecord],
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	tenant *Versioned[hierarchyrecord.TenantRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	current Versioned[ServiceRecord],
 	replacement ServiceRecord,
 	projection *Versioned[EnvironmentComposeProjection],
@@ -88,7 +89,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		ctx,
 		repository.store,
 		current.Record.EnvironmentID,
-		environmentKey(environment.Record.ID),
+		hierarchyrecord.EnvironmentKey(environment.Record.ID),
 		project.Record.ID,
 		project.Record.TenantID,
 	)
@@ -143,15 +144,15 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		serviceDesiredCondition(current),
 		serviceRuntimeCondition(current),
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey("service", current.Record.Desired.ID)},
 	}
 	if tenant != nil {
 		conditions = append(conditions[:9], append([]etcdstore.Condition{
-			{Key: tenantKey(tenant.Record.ID), ModRevision: tenant.Revision},
+			{Key: hierarchyrecord.TenantKey(tenant.Record.ID), ModRevision: tenant.Revision},
 		}, conditions[9:]...)...)
 		conditions = append(conditions[:12], append([]etcdstore.Condition{
 			{Key: deletionTombstoneKey(string(DeletionTargetTenant), tenant.Record.ID)},
@@ -277,9 +278,9 @@ func serviceLifecycleProjectionFenceKey(environmentID string) string {
 }
 
 func validateServiceLifecycleHierarchy(
-	tenant *Versioned[TenantRecord],
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	tenant *Versioned[hierarchyrecord.TenantRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	service Versioned[ServiceRecord],
 ) error {
 	if project.Revision <= 0 || environment.Revision <= 0 || service.Revision <= 0 ||
@@ -290,12 +291,12 @@ func validateServiceLifecycleHierarchy(
 		return errs.New(errs.KindValidationFailed, "Service lifecycle hierarchy is invalid")
 	}
 	switch project.Record.Kind {
-	case ProjectKindTenant:
+	case hierarchyrecord.ProjectKindTenant:
 		if tenant == nil || tenant.Revision <= 0 || tenant.ReadRevision < tenant.Revision ||
 			project.Record.TenantID != tenant.Record.ID {
 			return errs.New(errs.KindValidationFailed, "Service lifecycle Tenant hierarchy is invalid")
 		}
-	case ProjectKindBacking:
+	case hierarchyrecord.ProjectKindBacking:
 		if tenant != nil || project.Record.TenantID != "" {
 			return errs.New(errs.KindValidationFailed, "Service lifecycle backing hierarchy is invalid")
 		}
@@ -385,9 +386,9 @@ func serviceLifecycleHookConfigured(input ServiceLifecycleRenderInput, taskType 
 }
 
 func classifyServiceLifecycleStartConflict(
-	tenant *Versioned[TenantRecord],
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	tenant *Versioned[hierarchyrecord.TenantRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	service Versioned[ServiceRecord],
 	input *ServiceLifecycleRenderInput,
 	operationID string,

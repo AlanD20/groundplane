@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -13,9 +14,9 @@ import (
 )
 
 type environmentBlueprintRepository interface {
-	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentBlueprintRevision(
 		context.Context,
@@ -33,8 +34,8 @@ type environmentBlueprintRepository interface {
 	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[zonerecord.Record], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	ResolveBackingProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
-	ResolveEnvironment(context.Context, string, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	ResolveBackingProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
+	ResolveEnvironment(context.Context, string, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[routerecord.Record], error)
 	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[entryrecord.Record], error)
 	BlueprintEntryValueGenerationExists(context.Context, entryrecord.Record) (bool, error)
@@ -63,8 +64,8 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		netip.Prefix,
 		string,
-		etcd.Versioned[etcd.ProjectRecord],
-		etcd.Versioned[etcd.EnvironmentRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
@@ -272,8 +273,8 @@ func (repository *durableRepository) PublishEnvironmentBlueprintDesiredRevision(
 	ctx context.Context,
 	environmentPool netip.Prefix,
 	desiredNetworkPool string,
-	project etcd.Versioned[etcd.ProjectRecord],
-	environment etcd.Versioned[etcd.EnvironmentRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64,
 	claim etcd.EnvironmentBlueprintStageClaim,
 	revision etcd.EnvironmentDesiredRevisionIdentity,

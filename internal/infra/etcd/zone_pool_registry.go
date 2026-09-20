@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -65,7 +66,7 @@ func (r *ZoneRepository) getZonePoolRegistryAtRevision(
 	}, nil
 }
 
-func (registry zonePoolRegistry) reserve(environment EnvironmentRecord, zone zonerecord.Record) (zonePoolRegistry, error) {
+func (registry zonePoolRegistry) reserve(environment hierarchyrecord.EnvironmentRecord, zone zonerecord.Record) (zonePoolRegistry, error) {
 	parent, err := ipam.ParseIPv4Prefix(environment.NetworkPool)
 	if err != nil || parent.String() != environment.NetworkPool {
 		return zonePoolRegistry{}, errs.New(errs.KindValidationFailed, "Environment network pool is invalid")

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
@@ -111,8 +112,8 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 
 func (repository *TaskRepository) PublishReleaseGroupMutation(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	prepared ReleaseGroupPreparedMutation,
 	task TaskRecord,
 	marker IdempotencyMarker,

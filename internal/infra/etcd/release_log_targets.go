@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -28,7 +29,7 @@ func (ledger *ReleaseLedger) ResolveEnvironmentLogTargets(
 		ids.Validate(ids.KindEnvironment, environmentID) != nil || maximumTargets < 1 {
 		return nil, errs.New(errs.KindValidationFailed, "Environment log target snapshot is invalid")
 	}
-	environmentRead, err := ledger.store.Get(ctx, environmentKey(environmentID))
+	environmentRead, err := ledger.store.Get(ctx, hierarchyrecord.EnvironmentKey(environmentID))
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +39,7 @@ func (ledger *ReleaseLedger) ResolveEnvironmentLogTargets(
 	if environmentRead.Entry == nil {
 		return nil, errs.New(errs.KindEnvironmentNotFound, "Environment was not found")
 	}
-	environment, err := decodeEnvironment(environmentRead.Entry.Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(environmentRead.Entry.Value)
 	if err != nil || environment.ID != environmentID {
 		return nil, errs.New(errs.KindInternal, "Environment log target anchor is invalid")
 	}

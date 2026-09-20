@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"math"
 	"net/http"
@@ -27,8 +28,8 @@ const (
 )
 
 type routeRemovalRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	GetRoute(context.Context, string) (etcd.Versioned[routerecord.Record], error)
 	GetEnvironmentComposeProjection(context.Context, string) (
@@ -36,8 +37,8 @@ type routeRemovalRepository interface {
 	)
 	BeginRouteDeletionWithTask(
 		context.Context,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		etcd.Versioned[etcd.ServiceRecord],
 		etcd.Versioned[routerecord.Record],
 		*etcd.Versioned[etcd.EnvironmentComposeProjection],

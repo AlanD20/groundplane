@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 	"time"
@@ -26,7 +27,7 @@ const (
 )
 
 type secretCreationRepository interface {
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	CreateSecretIdempotent(
 		context.Context,
 		etcd.SecretOwner,

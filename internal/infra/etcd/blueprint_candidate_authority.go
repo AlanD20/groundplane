@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -203,7 +204,7 @@ func blueprintCandidateShouldAdvanceEpoch(
 	if !taskHasBlueprintCandidateAppliedAuthority(task) {
 		return true, nil
 	}
-	epochKey := environmentMutationEpochKey(environmentID)
+	epochKey := hierarchyrecord.EnvironmentMutationEpochKey(environmentID)
 	found := false
 	for _, mutation := range mutations {
 		if mutation.Key != epochKey {
@@ -261,7 +262,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAuthority(
 	return conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: key, Value: value},
 		{
-			Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(task.Owner.EnvironmentID),
+			Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
 			Value: slices.Clone(epochValue),
 		},
 	}, nil
@@ -282,7 +283,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateClaimEpoch(
 	if task.RetryOf != "" {
 		authorityKey = blueprintCandidateAttemptAuthorityKey(task.ID)
 	}
-	epochKey := environmentMutationEpochKey(task.Owner.EnvironmentID)
+	epochKey := hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{authorityKey, epochKey}, Revision: revision,
 	})
@@ -381,7 +382,7 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 	keys := []string{
 		releasePublicationKey(publicationID),
 		releaseManifestStagingKey(publicationID),
-		environmentMutationEpochKey(task.Owner.EnvironmentID),
+		hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
 		environmentBlueprintHeadKey(task.Owner.EnvironmentID),
 		environmentBlueprintRootKey(task.Owner.EnvironmentID, desiredRevisionID),
 		environmentComposeProjectionKey(task.Owner.EnvironmentID),

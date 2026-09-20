@@ -4,14 +4,15 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type serviceMutationRepository interface {
-	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
@@ -39,9 +40,9 @@ type serviceMutationRepository interface {
 	) error
 	BeginServiceRemovalWithTask(
 		context.Context,
-		etcd.Versioned[etcd.TenantRecord],
-		etcd.Versioned[etcd.ProjectRecord],
-		etcd.Versioned[etcd.EnvironmentRecord],
+		etcd.Versioned[hierarchyrecord.TenantRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcd.Versioned[etcd.ServiceRecord],
 		etcd.Versioned[etcd.EnvironmentComposeProjection],
 		etcd.DeletionTombstoneRecord,
@@ -81,14 +82,14 @@ func NewMutationRepository(
 func (repository *durableServiceMutationRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
 func (repository *durableServiceMutationRepository) GetProject(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
+) (etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
@@ -153,9 +154,9 @@ func (repository *durableServiceMutationRepository) ValidateServiceRemovalRefere
 
 func (repository *durableServiceMutationRepository) BeginServiceRemovalWithTask(
 	ctx context.Context,
-	tenant etcd.Versioned[etcd.TenantRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
-	environment etcd.Versioned[etcd.EnvironmentRecord],
+	tenant etcd.Versioned[hierarchyrecord.TenantRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 	current etcd.Versioned[etcd.ServiceRecord],
 	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
 	tombstone etcd.DeletionTombstoneRecord,

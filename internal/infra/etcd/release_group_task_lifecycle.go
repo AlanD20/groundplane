@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -87,7 +88,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releaseGroupOwnerKey(group.EnvironmentID, group.ID), releaseGroupNameKey(group.EnvironmentID, group.Name),
-		environmentKey(group.EnvironmentID), environmentMutationEpochKey(group.EnvironmentID),
+		hierarchyrecord.EnvironmentKey(group.EnvironmentID), hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetEnvironment), group.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetProject), source.Owner.ProjectID),
 		deletionTombstoneKey(string(DeletionTargetTenant), source.Owner.TenantID),
@@ -119,8 +120,8 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 			{Key: releaseGroupRecordKey(group.ID), ModRevision: stored.Values[0].ModRevision},
 			{Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID), ModRevision: indexes.Values[0].ModRevision},
 			{Key: releaseGroupNameKey(group.EnvironmentID, group.Name), ModRevision: indexes.Values[1].ModRevision},
-			{Key: environmentKey(group.EnvironmentID), ModRevision: indexes.Values[2].ModRevision},
-			{Key: environmentMutationEpochKey(group.EnvironmentID), ModRevision: indexes.Values[3].ModRevision},
+			{Key: hierarchyrecord.EnvironmentKey(group.EnvironmentID), ModRevision: indexes.Values[2].ModRevision},
+			{Key: hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID), ModRevision: indexes.Values[3].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), group.EnvironmentID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetProject), source.Owner.ProjectID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetTenant), source.Owner.TenantID)},
@@ -166,7 +167,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releaseGroupOwnerKey(group.EnvironmentID, group.ID), releaseGroupNameKey(group.EnvironmentID, group.Name),
-		environmentMutationEpochKey(group.EnvironmentID), environmentKey(group.EnvironmentID),
+		hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID), hierarchyrecord.EnvironmentKey(group.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetEnvironment), group.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetProject), task.Owner.ProjectID),
 		deletionTombstoneKey(string(DeletionTargetTenant), task.Owner.TenantID),
@@ -203,7 +204,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 			},
 			{Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID), ModRevision: indexes.Values[0].ModRevision},
 			{Key: releaseGroupNameKey(group.EnvironmentID, group.Name), ModRevision: indexes.Values[1].ModRevision},
-			{Key: environmentKey(group.EnvironmentID), ModRevision: indexes.Values[3].ModRevision},
+			{Key: hierarchyrecord.EnvironmentKey(group.EnvironmentID), ModRevision: indexes.Values[3].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), group.EnvironmentID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetProject), task.Owner.ProjectID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetTenant), task.Owner.TenantID)},
@@ -226,7 +227,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 		change.conditions = append(
 			change.conditions,
 			etcdstore.Condition{
-				Key:         environmentMutationEpochKey(group.EnvironmentID),
+				Key:         hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID),
 				ModRevision: indexes.Values[2].ModRevision,
 			},
 			collectionCondition,
@@ -235,7 +236,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupOwnerKey(group.EnvironmentID, group.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupNameKey(group.EnvironmentID, group.Name)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupRecordKey(group.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(group.EnvironmentID), Value: epochValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID), Value: epochValue},
 			collectionMutation,
 		)
 		change.values = append(change.values, epochValue, collectionMutation.Value)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"time"
 
@@ -22,7 +23,7 @@ const (
 type projectCreationRepository interface {
 	CreateProjectIdempotent(
 		context.Context,
-		etcd.ProjectRecord,
+		hierarchyrecord.ProjectRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -209,9 +210,9 @@ func (service *projectCreationService) createProjectOnce(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	result, createErr := service.repository.CreateProjectIdempotent(ctx, etcd.ProjectRecord{
+	result, createErr := service.repository.CreateProjectIdempotent(ctx, hierarchyrecord.ProjectRecord{
 		ID: project.ID, TenantID: project.TenantID, Slug: project.Slug,
-		Name: project.Name, Description: project.Description, Kind: etcd.ProjectKindTenant,
+		Name: project.Name, Description: project.Description, Kind: hierarchyrecord.ProjectKindTenant,
 	}, marker)
 	if createErr != nil {
 		if !isUnknownProjectCreationOutcome(createErr) {

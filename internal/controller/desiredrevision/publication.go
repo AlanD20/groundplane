@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"net/netip"
 	"sync"
@@ -33,8 +34,8 @@ type PublicationRepository interface {
 		context.Context,
 		netip.Prefix,
 		string,
-		etcd.Versioned[etcd.ProjectRecord],
-		etcd.Versioned[etcd.EnvironmentRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
@@ -70,8 +71,8 @@ type Repository interface {
 	) (etcd.EnvironmentBlueprintSeal, error)
 	PublishEnvironmentDesiredRevisionWithTask(
 		context.Context,
-		etcd.Versioned[etcd.ProjectRecord],
-		etcd.Versioned[etcd.EnvironmentRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
@@ -164,8 +165,8 @@ func Claim(
 }
 
 type PublishInput struct {
-	Project                 etcd.Versioned[etcd.ProjectRecord]
-	Environment             etcd.Versioned[etcd.EnvironmentRecord]
+	Project                 etcd.Versioned[hierarchyrecord.ProjectRecord]
+	Environment             etcd.Versioned[hierarchyrecord.EnvironmentRecord]
 	EnvironmentPool         netip.Prefix
 	NetworkPool             string
 	ExpectedHeadRevision    int64

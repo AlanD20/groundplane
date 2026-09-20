@@ -3,11 +3,12 @@ package releasegroup
 import (
 	"bytes"
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
-	infraetcd "github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -285,7 +286,7 @@ func (store *Store) loadMutationEvidence(
 	)
 	ownerIndex := projectOwnerKey(project)
 	ownerKeys := []string{ownerIndex}
-	if project.Kind == infraetcd.ProjectKindTenant {
+	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		ownerKeys = append(ownerKeys, tenantKey(project.TenantID), deletionKey("tenant", project.TenantID))
 	}
 	ownerResult, err := store.backend.GetMany(ctx, etcdstore.GetManyRequest{Keys: ownerKeys})
@@ -300,7 +301,7 @@ func (store *Store) loadMutationEvidence(
 		conditions,
 		etcdstore.Condition{Key: ownerIndex, ModRevision: ownerResult.Values[0].ModRevision},
 	)
-	if project.Kind == infraetcd.ProjectKindTenant {
+	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		if ownerResult.Values[1] == nil {
 			return mutationEvidence{}, corruptRecord()
 		}

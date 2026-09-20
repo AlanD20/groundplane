@@ -1,4 +1,4 @@
-package etcd
+package hierarchy
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"

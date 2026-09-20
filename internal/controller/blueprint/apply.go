@@ -18,6 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -267,7 +268,7 @@ func (service *Service) applyBlueprintOnce(
 	}
 	zoneOwnerKind := core.ZoneOwnerEnvironment
 	zoneOwnerID := environmentID
-	if project.Record.Kind == etcd.ProjectKindBacking {
+	if project.Record.Kind == hierarchyrecord.ProjectKindBacking {
 		zoneOwnerKind = core.ZoneOwnerBackingProject
 		zoneOwnerID = project.Record.ID
 	}

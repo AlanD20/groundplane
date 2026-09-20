@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -229,26 +230,26 @@ func hierarchyDeletionRetryTargetValue(
 ) ([]byte, error) {
 	switch kind {
 	case HierarchyDeletionTargetTenant:
-		record, err := decodeTenant(value)
+		record, err := hierarchyrecord.DecodeTenant(value)
 		if err != nil || record.DeletionTaskID != sourceTaskID {
 			return nil, corruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = retryTaskID
-		return encodeTenant(record)
+		return hierarchyrecord.EncodeTenant(record)
 	case HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
-		record, err := decodeProject(value)
+		record, err := hierarchyrecord.DecodeProject(value)
 		if err != nil || record.DeletionTaskID != sourceTaskID {
 			return nil, corruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = retryTaskID
-		return encodeProject(record)
+		return hierarchyrecord.EncodeProject(record)
 	case HierarchyDeletionTargetEnvironment:
-		record, err := decodeEnvironment(value)
+		record, err := hierarchyrecord.DecodeEnvironment(value)
 		if err != nil || record.DeletionTaskID != sourceTaskID {
 			return nil, corruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = retryTaskID
-		return encodeEnvironment(record)
+		return hierarchyrecord.EncodeEnvironment(record)
 	default:
 		return nil, errs.New(errs.KindValidationFailed, "hierarchy deletion retry target is invalid")
 	}

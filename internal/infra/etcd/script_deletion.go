@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -12,8 +13,8 @@ import (
 // successful acknowledgement.
 func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	current Versioned[ScriptRecord],
 	tombstone DeletionTombstoneRecord,
@@ -132,8 +133,8 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 			ModRevision: indexes.Values[1].ModRevision,
 		},
 		{Key: deletionTombstoneKey(string(DeletionTargetScript), scriptID)},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		serviceDesiredCondition(target),
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
@@ -179,8 +180,8 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 }
 
 func classifyScriptDeletionStartConflict(
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	current Versioned[ScriptRecord],
 	operationID string,

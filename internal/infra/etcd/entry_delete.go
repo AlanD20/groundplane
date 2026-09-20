@@ -3,13 +3,14 @@ package etcd
 import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 func (repository *EntryRepository) DeleteEntry(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	current Versioned[entryrecord.Record],
 ) (int64, error) {
 	if err := validateEntryHierarchy(ctx, environment, project, current.Record); err != nil {

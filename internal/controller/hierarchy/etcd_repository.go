@@ -2,6 +2,7 @@ package hierarchy
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	etcdinfra "github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -116,7 +117,7 @@ func (repository *EtcdRepository) ListProjects(
 	request PageRequest,
 ) (Page[core.Project], error) {
 	page, err := repository.repository.ListProjects(ctx, etcdinfra.ProjectFilter{
-		TenantID: filter.TenantID, Kind: etcdinfra.ProjectKind(filter.Kind),
+		TenantID: filter.TenantID, Kind: hierarchyrecord.ProjectKind(filter.Kind),
 	}, pageRequestToEtcd(request))
 	return projectPageFromEtcd(page), err
 }
@@ -131,14 +132,14 @@ func (repository *EtcdRepository) RenameProject(
 	return projectFromEtcd(stored), err
 }
 
-func tenantToEtcd(record core.Tenant) etcdinfra.TenantRecord {
-	return etcdinfra.TenantRecord{
+func tenantToEtcd(record core.Tenant) hierarchyrecord.TenantRecord {
+	return hierarchyrecord.TenantRecord{
 		ID: record.ID, Slug: record.Slug, Name: record.Name, Description: record.Description,
 		DeletionTaskID: deletionTaskIDValue(record.DeletionTaskID),
 	}
 }
 
-func tenantFromEtcd(stored etcdinfra.Versioned[etcdinfra.TenantRecord]) Versioned[core.Tenant] {
+func tenantFromEtcd(stored etcdinfra.Versioned[hierarchyrecord.TenantRecord]) Versioned[core.Tenant] {
 	return Versioned[core.Tenant]{
 		Record: core.Tenant{
 			ID: stored.Record.ID, Slug: stored.Record.Slug, Name: stored.Record.Name,
@@ -149,19 +150,19 @@ func tenantFromEtcd(stored etcdinfra.Versioned[etcdinfra.TenantRecord]) Versione
 	}
 }
 
-func projectToEtcd(record core.Project) etcdinfra.ProjectRecord {
-	return etcdinfra.ProjectRecord{
+func projectToEtcd(record core.Project) hierarchyrecord.ProjectRecord {
+	return hierarchyrecord.ProjectRecord{
 		ID:             record.ID,
 		TenantID:       record.TenantID,
 		Slug:           record.Slug,
 		Name:           record.Name,
 		Description:    record.Description,
-		Kind:           etcdinfra.ProjectKind(record.Kind),
+		Kind:           hierarchyrecord.ProjectKind(record.Kind),
 		DeletionTaskID: deletionTaskIDValue(record.DeletionTaskID),
 	}
 }
 
-func projectFromEtcd(stored etcdinfra.Versioned[etcdinfra.ProjectRecord]) Versioned[core.Project] {
+func projectFromEtcd(stored etcdinfra.Versioned[hierarchyrecord.ProjectRecord]) Versioned[core.Project] {
 	return Versioned[core.Project]{
 		Record: core.Project{
 			ID:             stored.Record.ID,
@@ -194,7 +195,7 @@ func pageRequestToEtcd(request PageRequest) etcdinfra.PageRequest {
 	return etcdinfra.PageRequest{Limit: request.Limit, Cursor: request.Cursor}
 }
 
-func tenantPageFromEtcd(page etcdinfra.Page[etcdinfra.TenantRecord]) Page[core.Tenant] {
+func tenantPageFromEtcd(page etcdinfra.Page[hierarchyrecord.TenantRecord]) Page[core.Tenant] {
 	items := make([]Versioned[core.Tenant], len(page.Items))
 	for index, item := range page.Items {
 		items[index] = tenantFromEtcd(item)
@@ -202,7 +203,7 @@ func tenantPageFromEtcd(page etcdinfra.Page[etcdinfra.TenantRecord]) Page[core.T
 	return Page[core.Tenant]{Items: items, NextCursor: page.NextCursor, Revision: page.Revision}
 }
 
-func projectPageFromEtcd(page etcdinfra.Page[etcdinfra.ProjectRecord]) Page[core.Project] {
+func projectPageFromEtcd(page etcdinfra.Page[hierarchyrecord.ProjectRecord]) Page[core.Project] {
 	items := make([]Versioned[core.Project], len(page.Items))
 	for index, item := range page.Items {
 		items[index] = projectFromEtcd(item)

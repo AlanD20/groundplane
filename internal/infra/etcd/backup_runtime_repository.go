@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -456,7 +457,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		)
 	}
 	mutations = append(mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: environmentOperationLockKey(record.EnvironmentID), Value: lockValue,
+		Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(record.EnvironmentID), Value: lockValue,
 	})
 	mutations = append(mutations, snapshotMutations...)
 	epoch, err := fence.epochRewriteMutation()
@@ -519,7 +520,7 @@ func backupRunExternalConditions(
 			allowed[backupConfigSnapshotReferenceTaskKey(snapshotID, run.RetryOfTaskID)] = struct{}{}
 			allowed[backupConfigSnapshotTaskReferenceKey(run.TaskID, snapshotID)] = struct{}{}
 			allowed[backupConfigSnapshotReferenceTaskKey(snapshotID, run.TaskID)] = struct{}{}
-			allowed[environmentKey(run.EnvironmentID)] = struct{}{}
+			allowed[hierarchyrecord.EnvironmentKey(run.EnvironmentID)] = struct{}{}
 		}
 	}
 	result := make([]etcdstore.Condition, 0, len(allowed))
@@ -939,7 +940,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 	conditions = append(conditions, evidence.fence.transactionConditions()...)
 	conditions = append(conditions, checkpointPlan.conditions...)
 	mutations = append(mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationDelete, Key: environmentOperationLockKey(current.Record.EnvironmentID),
+		Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(current.Record.EnvironmentID),
 	})
 	epoch, err := evidence.fence.epochRewriteMutation()
 	if err != nil {
@@ -1528,10 +1529,10 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			read, readErr := repository.readFixedKeys(ctx, []string{
 				attachKey(source.TargetID),
 				attachFactsKey(source.TargetID),
-				projectKey(
+				hierarchyrecord.ProjectKey(
 					snapshot.BackingProjectID,
 				),
-				environmentKey(snapshot.BackingEnvironmentID),
+				hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID),
 				environmentBlueprintHeadKey(snapshot.BackingEnvironmentID),
 			}, fixedRevision)
 			if readErr != nil {
@@ -1554,8 +1555,8 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			}{
 				{attachKey(source.TargetID), source.TargetRevision},
 				{attachFactsKey(source.TargetID), snapshot.AttachFactsRevision},
-				{projectKey(snapshot.BackingProjectID), snapshot.BackingProjectRevision},
-				{environmentKey(snapshot.BackingEnvironmentID), snapshot.BackingEnvironmentRevision},
+				{hierarchyrecord.ProjectKey(snapshot.BackingProjectID), snapshot.BackingProjectRevision},
+				{hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID), snapshot.BackingEnvironmentRevision},
 				{environmentBlueprintHeadKey(snapshot.BackingEnvironmentID), snapshot.BackingServiceRevision},
 			} {
 				if err := addCondition(fact.key, fact.revision); err != nil {
@@ -1566,7 +1567,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 		case BackupRuntimeSourceVolume:
 			snapshot := source.Snapshot.Volume
 			keys := []string{
-				environmentKey(snapshot.EnvironmentID),
+				hierarchyrecord.EnvironmentKey(snapshot.EnvironmentID),
 				environmentBlueprintHeadKey(snapshot.EnvironmentID),
 				environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID),
 			}
@@ -1588,7 +1589,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				return nil, nil, err
 			}
 			clearKeyValues(read.Values)
-			if err := addCondition(environmentKey(snapshot.EnvironmentID), snapshot.EnvironmentRevision); err != nil {
+			if err := addCondition(hierarchyrecord.EnvironmentKey(snapshot.EnvironmentID), snapshot.EnvironmentRevision); err != nil {
 				clearBackupRuntimeMutations(mutations)
 				return nil, nil, err
 			}
@@ -1641,7 +1642,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			}
 			targetRead, readErr := repository.readFixedKeys(
 				ctx,
-				[]string{environmentKey(run.EnvironmentID)},
+				[]string{hierarchyrecord.EnvironmentKey(run.EnvironmentID)},
 				fixedRevision,
 			)
 			if readErr != nil {
@@ -1654,7 +1655,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				clearBackupRuntimeMutations(mutations)
 				return nil, nil, errs.New(errs.KindStateConflict, "backup config target changed")
 			}
-			environment, decodeErr := decodeEnvironment(targetRead.Values[0].Value)
+			environment, decodeErr := hierarchyrecord.DecodeEnvironment(targetRead.Values[0].Value)
 			clearKeyValues(targetRead.Values)
 			if decodeErr != nil || environment.ID != run.EnvironmentID {
 				clearBackupRuntimeMutations(mutations)
@@ -1726,8 +1727,8 @@ func validateBackupPostgresPublicationEvidence(
 	attach, attachErr := decodeAttachRecord(values[0].Value)
 	facts, factsErr := decodeAttachEncryptedFacts(values[1].Value)
 	defer clear(facts.Ciphertext)
-	project, projectErr := decodeProject(values[2].Value)
-	environment, environmentErr := decodeEnvironment(values[3].Value)
+	project, projectErr := hierarchyrecord.DecodeProject(values[2].Value)
+	environment, environmentErr := hierarchyrecord.DecodeEnvironment(values[3].Value)
 	if attachErr != nil || factsErr != nil || projectErr != nil || environmentErr != nil {
 		return corruptBackupRuntimeRecord()
 	}
@@ -1735,7 +1736,7 @@ func validateBackupPostgresPublicationEvidence(
 		string(attach.Status) != "ready" || attach.BackingProjectID != snapshot.BackingProjectID ||
 		attach.BackingEnvironmentID != snapshot.BackingEnvironmentID ||
 		attach.BackingServiceID != snapshot.BackingServiceID || facts.AttachID != source.TargetID ||
-		project.ID != snapshot.BackingProjectID || project.Kind != ProjectKindBacking ||
+		project.ID != snapshot.BackingProjectID || project.Kind != hierarchyrecord.ProjectKindBacking ||
 		environment.ID != snapshot.BackingEnvironmentID || environment.ProjectID != project.ID {
 		return errs.New(errs.KindStateConflict, "postgres backup publication evidence changed")
 	}
@@ -1753,7 +1754,7 @@ func validateBackupVolumePublicationEvidence(
 		values[1].ModRevision != source.TargetRevision || values[2].ModRevision != snapshot.ProjectionRoot {
 		return errs.New(errs.KindStateConflict, "volume backup publication evidence changed")
 	}
-	environment, environmentErr := decodeEnvironment(values[0].Value)
+	environment, environmentErr := hierarchyrecord.DecodeEnvironment(values[0].Value)
 	revisionID, headErr := decodeTaskReference(values[1].Value)
 	seal, sealErr := decodeEnvironmentBlueprintSeal(values[2].Value)
 	if environmentErr != nil || headErr != nil || sealErr != nil {

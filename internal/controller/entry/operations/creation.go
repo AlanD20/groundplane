@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"sort"
 	"time"
@@ -28,13 +29,13 @@ const (
 )
 
 type entryCreationRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 	CreateEntryIdempotent(
 		context.Context,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		entryrecord.Record,
 		etcd.EntryValueGeneration,
 		etcd.IdempotencyMarker,
@@ -556,14 +557,14 @@ func newDurableEntryCreationRepository(
 func (repository *durableEntryCreationRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
 func (repository *durableEntryCreationRepository) GetProject(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
+) (etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
@@ -577,8 +578,8 @@ func (repository *durableEntryCreationRepository) ListServices(
 
 func (repository *durableEntryCreationRepository) CreateEntryIdempotent(
 	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
 	generation etcd.EntryValueGeneration,
 	marker etcd.IdempotencyMarker,

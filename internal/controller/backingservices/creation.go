@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"net/netip"
@@ -215,9 +216,9 @@ func (service *CreationService) createBackingServiceFromStage(
 		)
 	}
 
-	project := etcd.ProjectRecord{
+	project := hierarchyrecord.ProjectRecord{
 		ID: stage.Record.ProjectID, Slug: input.Slug, Name: input.Name,
-		Description: input.Description, Kind: etcd.ProjectKindBacking,
+		Description: input.Description, Kind: hierarchyrecord.ProjectKindBacking,
 	}
 	poolRegistry, err := service.repository.GetEnvironmentPoolRegistry(ctx)
 	if err != nil {
@@ -230,14 +231,14 @@ func (service *CreationService) createBackingServiceFromStage(
 		return etcd.IdempotencyResponse{}, err
 	}
 	poolRegistry.Record = reservedPools
-	environment, err := etcd.NewProvisioningEnvironment(
+	environment, err := hierarchyrecord.NewProvisioningEnvironment(
 		service.volumeRoot, project, stage.Record.EnvironmentID, "main", networkPool,
 		stage.Record.TaskID, stage.Record.CreatedAt,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	environment, err = etcd.CompleteEnvironmentProvisioning(environment, stage.Record.TaskID, true)
+	environment, err = hierarchyrecord.CompleteEnvironmentProvisioning(environment, stage.Record.TaskID, true)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}

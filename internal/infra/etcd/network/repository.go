@@ -6,6 +6,7 @@ package network
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
@@ -117,14 +118,14 @@ func (repository *Repository) ResolveReplayLocator(
 func (repository *Repository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
 func (repository *Repository) GetProject(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
+) (etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
@@ -160,8 +161,8 @@ func (repository *Repository) ListZones(
 
 func (repository *Repository) BeginZoneDeletionWithTask(
 	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
 	zone etcd.Versioned[zonerecord.Record],
 	authorities etcd.EnvironmentZoneRemovalAuthorities,
 	tombstone etcd.DeletionTombstoneRecord,
@@ -203,8 +204,8 @@ func (repository *Repository) SnapshotRevision(ctx context.Context) (int64, erro
 
 func (repository *Repository) BeginRouteMutationWithTask(
 	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
 	target etcd.Versioned[etcd.ServiceRecord],
 	current *etcd.Versioned[routerecord.Record],
 	record routerecord.Record,
@@ -240,8 +241,8 @@ func (repository *Repository) GetEnvironmentAppliedComposeProjection(
 
 func (repository *Repository) BeginRouteDeletionWithTask(
 	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
 	target etcd.Versioned[etcd.ServiceRecord],
 	route etcd.Versioned[routerecord.Record],
 	projection *etcd.Versioned[etcd.EnvironmentComposeProjection],

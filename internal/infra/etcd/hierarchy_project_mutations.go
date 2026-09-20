@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -12,20 +13,20 @@ import (
 // description, kind, descendants, and materialized state cannot move here.
 func (repository *HierarchyRepository) MutateProjectIdempotent(
 	ctx context.Context,
-	current Versioned[ProjectRecord],
-	replacement ProjectRecord,
+	current Versioned[hierarchyrecord.ProjectRecord],
+	replacement hierarchyrecord.ProjectRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateProject(current.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateProject(replacement); err != nil {
+	if err := hierarchyrecord.ValidateProject(replacement); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if current.Record.Kind != ProjectKindTenant || replacement.Kind != ProjectKindTenant {
+	if current.Record.Kind != hierarchyrecord.ProjectKindTenant || replacement.Kind != hierarchyrecord.ProjectKindTenant {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	if current.Record.ID != replacement.ID || current.Record.TenantID != replacement.TenantID ||
@@ -47,13 +48,13 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	}
 	renaming := current.Record.Slug != replacement.Slug
 	secondaryKeys := []string{
-		projectSlugKey(current.Record),
-		projectOwnerKey(current.Record),
+		hierarchyrecord.ProjectSlugKey(current.Record),
+		hierarchyrecord.ProjectOwnerKey(current.Record),
 		deletionTombstoneKey("project", current.Record.ID),
 		deletionTombstoneKey("tenant", current.Record.TenantID),
 	}
 	if renaming {
-		secondaryKeys = append(secondaryKeys, projectSlugKey(replacement))
+		secondaryKeys = append(secondaryKeys, hierarchyrecord.ProjectSlugKey(replacement))
 	}
 	secondary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: secondaryKeys, Revision: current.ReadRevision,
@@ -83,24 +84,24 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	if renaming && secondary.Values[4] != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindSlugConflict, "Project slug is already in use")
 	}
-	value, err := encodeProject(replacement)
+	value, err := hierarchyrecord.EncodeProject(replacement)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
 	conditions := []etcdstore.Condition{
-		{Key: projectKey(current.Record.ID), ModRevision: current.Revision},
-		{Key: projectSlugKey(current.Record), ModRevision: secondary.Values[0].ModRevision},
-		{Key: projectOwnerKey(current.Record), ModRevision: secondary.Values[1].ModRevision},
+		{Key: hierarchyrecord.ProjectKey(current.Record.ID), ModRevision: current.Revision},
+		{Key: hierarchyrecord.ProjectSlugKey(current.Record), ModRevision: secondary.Values[0].ModRevision},
+		{Key: hierarchyrecord.ProjectOwnerKey(current.Record), ModRevision: secondary.Values[1].ModRevision},
 		{Key: deletionTombstoneKey("project", current.Record.ID)},
 		{Key: deletionTombstoneKey("tenant", current.Record.TenantID)},
 	}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: projectKey(current.Record.ID), Value: value}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(current.Record.ID), Value: value}}
 	if renaming {
-		conditions = append(conditions, etcdstore.Condition{Key: projectSlugKey(replacement)})
+		conditions = append(conditions, etcdstore.Condition{Key: hierarchyrecord.ProjectSlugKey(replacement)})
 		mutations = append(mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: projectSlugKey(current.Record)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: projectSlugKey(replacement), Value: []byte(current.Record.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.ProjectSlugKey(current.Record)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectSlugKey(replacement), Value: []byte(current.Record.ID)},
 		)
 	}
 	plan, err := newIdempotencyMutationPlan(
@@ -119,8 +120,8 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 }
 
 func classifyProjectMutationConflict(
-	current Versioned[ProjectRecord],
-	replacement ProjectRecord,
+	current Versioned[hierarchyrecord.ProjectRecord],
+	replacement hierarchyrecord.ProjectRecord,
 	renaming bool,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {

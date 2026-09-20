@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
@@ -17,17 +18,17 @@ import (
 func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 	ctx context.Context,
 	root netip.Prefix,
-	current Versioned[EnvironmentRecord],
-	replacement EnvironmentRecord,
+	current Versioned[hierarchyrecord.EnvironmentRecord],
+	replacement hierarchyrecord.EnvironmentRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEnvironment(current.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEnvironment(replacement); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(replacement); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if !root.IsValid() || !root.Addr().Is4() || root != root.Masked() {
@@ -73,7 +74,7 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 	fenceConditions := fence.transactionConditions()
 	foundCurrentRevision := false
 	for _, condition := range fenceConditions {
-		if condition.Key == environmentKey(current.Record.ID) {
+		if condition.Key == hierarchyrecord.EnvironmentKey(current.Record.ID) {
 			foundCurrentRevision = true
 			if condition.ModRevision != current.Revision {
 				return IdempotencyTransactionResult{}, stateConflict("environment", current.Record.ID)
@@ -174,7 +175,7 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 		}
 	}
 
-	environmentValue, err := encodeEnvironment(replacement)
+	environmentValue, err := hierarchyrecord.EncodeEnvironment(replacement)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -196,7 +197,7 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 		etcdstore.Condition{Key: zonePoolRegistryKey(current.Record.ID), ModRevision: zoneRevision},
 	)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: environmentKey(current.Record.ID), Value: environmentValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(current.Record.ID), Value: environmentValue},
 		{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: globalValue},
 		epochMutation,
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"math"
 	"net/http"
@@ -30,8 +31,8 @@ const (
 
 type zoneDeletionRepository interface {
 	GetZone(context.Context, string) (etcd.Versioned[zonerecord.Record], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironmentZoneRemovalAuthorities(context.Context, string) (etcd.EnvironmentZoneRemovalAuthorities, bool, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
@@ -43,8 +44,8 @@ type zoneDeletionRepository interface {
 	) (etcd.EnvironmentBlueprintSeal, error)
 	BeginZoneDeletionWithTask(
 		context.Context,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		etcd.Versioned[zonerecord.Record],
 		etcd.EnvironmentZoneRemovalAuthorities,
 		etcd.DeletionTombstoneRecord,
@@ -311,7 +312,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
+	if environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Zone Environment is not ready")
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
@@ -322,9 +323,9 @@ func (service *zoneDeletionService) removeZoneOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	ordinaryOwnership := project.Record.Kind == etcd.ProjectKindTenant &&
+	ordinaryOwnership := project.Record.Kind == hierarchyrecord.ProjectKindTenant &&
 		zone.Record.Desired.OwnerKind == core.ZoneOwnerEnvironment && zone.Record.Desired.OwnerID == environment.Record.ID
-	backingOwnership := project.Record.Kind == etcd.ProjectKindBacking &&
+	backingOwnership := project.Record.Kind == hierarchyrecord.ProjectKindBacking &&
 		zone.Record.Desired.OwnerKind == core.ZoneOwnerBackingProject && zone.Record.Desired.OwnerID == project.Record.ID
 	if (!backing && !ordinaryOwnership) || (backing && !backingOwnership) {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Zone ownership is inconsistent")

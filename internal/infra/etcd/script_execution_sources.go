@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -18,9 +19,9 @@ import (
 // private assignment-artifact path instead of entering this aggregate.
 type ScriptExecutionSources struct {
 	Revision          int64
-	Tenant            Versioned[TenantRecord]
-	Project           Versioned[ProjectRecord]
-	Environment       Versioned[EnvironmentRecord]
+	Tenant            Versioned[hierarchyrecord.TenantRecord]
+	Project           Versioned[hierarchyrecord.ProjectRecord]
+	Environment       Versioned[hierarchyrecord.EnvironmentRecord]
 	Service           Versioned[ServiceRecord]
 	ScriptSet         Versioned[ScriptSetGenerationRecord]
 	Script            Versioned[ScriptRecord]
@@ -42,9 +43,9 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 	script ScriptRecord,
 	service ServiceRecord,
 	member ReleaseTaskRenderMember,
-	tenant Versioned[TenantRecord],
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	tenant Versioned[hierarchyrecord.TenantRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	projection EnvironmentComposeProjection,
 	intendedAttaches []Versioned[AttachRecord],
 	revision int64,
@@ -260,30 +261,30 @@ func (repository *ScriptRepository) loadExecutionSources(
 	environmentValue, err := scriptExecutionValueAt(
 		ctx,
 		repository.store,
-		environmentKey(metadata.EnvironmentID),
+		hierarchyrecord.EnvironmentKey(metadata.EnvironmentID),
 		revision,
 	)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	environment, err := decodeEnvironment(environmentValue.Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(environmentValue.Value)
 	if err != nil || environment.ID != metadata.EnvironmentID || environment.DeletionTaskID != "" {
 		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script Environment is not runnable")
 	}
-	projectValue, err := scriptExecutionValueAt(ctx, repository.store, projectKey(environment.ProjectID), revision)
+	projectValue, err := scriptExecutionValueAt(ctx, repository.store, hierarchyrecord.ProjectKey(environment.ProjectID), revision)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	project, err := decodeProject(projectValue.Value)
-	if err != nil || project.ID != environment.ProjectID || project.Kind != ProjectKindTenant ||
+	project, err := hierarchyrecord.DecodeProject(projectValue.Value)
+	if err != nil || project.ID != environment.ProjectID || project.Kind != hierarchyrecord.ProjectKindTenant ||
 		project.DeletionTaskID != "" || ids.Validate(ids.KindTenant, project.TenantID) != nil {
 		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script Project is not runnable")
 	}
-	tenantValue, err := scriptExecutionValueAt(ctx, repository.store, tenantKey(project.TenantID), revision)
+	tenantValue, err := scriptExecutionValueAt(ctx, repository.store, hierarchyrecord.TenantKey(project.TenantID), revision)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	tenant, err := decodeTenant(tenantValue.Value)
+	tenant, err := hierarchyrecord.DecodeTenant(tenantValue.Value)
 	if err != nil || tenant.ID != project.TenantID || tenant.DeletionTaskID != "" {
 		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script Tenant is not runnable")
 	}
@@ -371,9 +372,9 @@ func (repository *ScriptRepository) loadExecutionSources(
 
 	return ScriptExecutionSources{
 		Revision: revision,
-		Tenant:   Versioned[TenantRecord]{Record: tenant, Revision: tenantValue.ModRevision, ReadRevision: revision},
-		Project:  Versioned[ProjectRecord]{Record: project, Revision: projectValue.ModRevision, ReadRevision: revision},
-		Environment: Versioned[EnvironmentRecord]{
+		Tenant:   Versioned[hierarchyrecord.TenantRecord]{Record: tenant, Revision: tenantValue.ModRevision, ReadRevision: revision},
+		Project:  Versioned[hierarchyrecord.ProjectRecord]{Record: project, Revision: projectValue.ModRevision, ReadRevision: revision},
+		Environment: Versioned[hierarchyrecord.EnvironmentRecord]{
 			Record: environment, Revision: environmentValue.ModRevision, ReadRevision: revision,
 		},
 		Service:   service,

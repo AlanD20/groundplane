@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
@@ -18,8 +19,8 @@ import (
 // Environment pool.
 func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask(
 	ctx context.Context,
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64,
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
@@ -55,8 +56,8 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDes
 	ctx context.Context,
 	environmentPool netip.Prefix,
 	desiredNetworkPool string,
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64,
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
@@ -93,8 +94,8 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	ctx context.Context,
 	environmentPool netip.Prefix,
 	desiredNetworkPool string,
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64,
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
@@ -118,17 +119,17 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateProject(project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEnvironment(environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if project.Record.Kind != ProjectKindTenant || project.Revision <= 0 ||
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant || project.Revision <= 0 ||
 		environment.Revision <= 0 || project.ReadRevision < project.Revision ||
 		environment.ReadRevision < environment.Revision ||
 		environment.Record.ProjectID != project.Record.ID ||
-		environment.Record.ProvisioningState != EnvironmentProvisioningReady ||
+		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		expectedHeadRevision < 0 {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict, "Environment is not ready for desired-state publication",
@@ -394,7 +395,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			Key: environmentPoolRegistryKey, ModRevision: poolChange.registryRevision,
 		})
 		mutations = append(mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentKey(environment.Record.ID), Value: poolChange.environmentValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), Value: poolChange.environmentValue},
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolChange.registryValue},
 		)
 	}

@@ -2,6 +2,7 @@ package scripts
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -9,7 +10,7 @@ import (
 )
 
 type scriptReadRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	GetScript(context.Context, string) (etcd.Versioned[etcd.ScriptRecord], error)
 	ListScripts(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ScriptRecord], error)
@@ -116,7 +117,7 @@ func NewReadRepository(
 func (repository *durableScriptReadRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 

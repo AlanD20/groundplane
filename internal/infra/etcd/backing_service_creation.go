@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -20,8 +21,8 @@ type BackingServiceCreation struct {
 	VolumeRoot   string
 	Stage        Versioned[BackingServiceCreationStage]
 	PoolRegistry Versioned[EnvironmentPoolRegistry]
-	Project      ProjectRecord
-	Environment  EnvironmentRecord
+	Project      hierarchyrecord.ProjectRecord
+	Environment  hierarchyrecord.EnvironmentRecord
 	Components   []ComponentRecord
 	Zone         zonerecord.Record
 	Service      ServiceRecord
@@ -80,12 +81,12 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	}
 	defer clear(publication.publishedDescriptor)
 
-	projectValue, err := encodeProject(creation.Project)
+	projectValue, err := hierarchyrecord.EncodeProject(creation.Project)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(projectValue)
-	environmentValue, err := encodeEnvironment(creation.Environment)
+	environmentValue, err := hierarchyrecord.EncodeEnvironment(creation.Environment)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -206,26 +207,26 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
 		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(creation.Environment.ID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: projectKey(creation.Project.ID), Value: projectValue},
-		{Type: etcdstore.MutationPut, Key: projectSlugKey(creation.Project), Value: []byte(creation.Project.ID)},
-		{Type: etcdstore.MutationPut, Key: projectOwnerKey(creation.Project), Value: []byte(creation.Project.ID)},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(creation.Project.ID), Value: projectValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectSlugKey(creation.Project), Value: []byte(creation.Project.ID)},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectOwnerKey(creation.Project), Value: []byte(creation.Project.ID)},
 		{
 			Type:  etcdstore.MutationPut,
 			Key:   HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), creation.Project.ID),
 			Value: projectCoordinationValue,
 		},
-		{Type: etcdstore.MutationPut, Key: environmentKey(creation.Environment.ID), Value: environmentValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(creation.Environment.ID), Value: environmentValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   environmentNameKey(creation.Project.ID, creation.Environment.Name),
+			Key:   hierarchyrecord.EnvironmentNameKey(creation.Project.ID, creation.Environment.Name),
 			Value: []byte(creation.Environment.ID),
 		},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   environmentOwnerKey(creation.Project.ID, creation.Environment.ID),
+			Key:   hierarchyrecord.EnvironmentOwnerKey(creation.Project.ID, creation.Environment.ID),
 			Value: []byte(creation.Environment.ID),
 		},
-		{Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(creation.Environment.ID), Value: epochValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(creation.Environment.ID), Value: epochValue},
 		{
 			Type:  etcdstore.MutationPut,
 			Key:   HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID),
@@ -338,10 +339,10 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if err := validateProject(creation.Project); err != nil {
+	if err := hierarchyrecord.ValidateProject(creation.Project); err != nil {
 		return err
 	}
-	if creation.Project.Kind != ProjectKindBacking || creation.Project.TenantID != "" {
+	if creation.Project.Kind != hierarchyrecord.ProjectKindBacking || creation.Project.TenantID != "" {
 		return errs.New(errs.KindValidationFailed, "Backing-service Project ownership is invalid")
 	}
 	if err := validateBackingServiceCreationStage(creation.Stage.Record); err != nil {
@@ -353,16 +354,16 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		creation.Stage.Record.TaskID != creation.Task.ID || creation.Stage.Record.Locator != creation.Marker.Locator {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation stage does not match publication")
 	}
-	if err := validateEnvironment(creation.Environment); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(creation.Environment); err != nil {
 		return err
 	}
 	if creation.Environment.ProjectID != creation.Project.ID || creation.Environment.Name != "main" ||
-		creation.Environment.ProvisioningState != EnvironmentProvisioningReady ||
+		creation.Environment.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		creation.Environment.CreateTaskID != creation.Task.ID ||
 		!creation.Environment.CreatedAt.Equal(creation.Task.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Backing-service Environment lifecycle is invalid")
 	}
-	if err := ValidateEnvironmentVolumeDir(creation.VolumeRoot, creation.Project, creation.Environment); err != nil {
+	if err := hierarchyrecord.ValidateEnvironmentVolumeDir(creation.VolumeRoot, creation.Project, creation.Environment); err != nil {
 		return err
 	}
 	if err := validateBackingServiceComponents(creation.Components); err != nil {
@@ -496,16 +497,16 @@ func backingServiceCreationConditions(
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: environmentBlueprintHeadKey(creation.Environment.ID)},
-		{Key: projectKey(creation.Project.ID)},
-		{Key: projectSlugKey(creation.Project)},
-		{Key: projectOwnerKey(creation.Project)},
+		{Key: hierarchyrecord.ProjectKey(creation.Project.ID)},
+		{Key: hierarchyrecord.ProjectSlugKey(creation.Project)},
+		{Key: hierarchyrecord.ProjectOwnerKey(creation.Project)},
 		{Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), creation.Project.ID)},
 		{Key: deletionTombstoneKey("project", creation.Project.ID)},
-		{Key: environmentKey(creation.Environment.ID)},
-		{Key: environmentNameKey(creation.Project.ID, creation.Environment.Name)},
-		{Key: environmentOwnerKey(creation.Project.ID, creation.Environment.ID)},
+		{Key: hierarchyrecord.EnvironmentKey(creation.Environment.ID)},
+		{Key: hierarchyrecord.EnvironmentNameKey(creation.Project.ID, creation.Environment.Name)},
+		{Key: hierarchyrecord.EnvironmentOwnerKey(creation.Project.ID, creation.Environment.ID)},
 		{Key: deletionTombstoneKey("environment", creation.Environment.ID)},
-		{Key: environmentMutationEpochKey(creation.Environment.ID)},
+		{Key: hierarchyrecord.EnvironmentMutationEpochKey(creation.Environment.ID)},
 		{Key: HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), creation.Environment.ID)},
 		{Key: scriptSetActiveKey(creation.Environment.ID)},
 		{Key: environmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},

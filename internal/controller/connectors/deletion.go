@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"time"
 
@@ -26,12 +27,12 @@ const (
 
 type connectorDeletionRepository interface {
 	GetConnector(context.Context, string) (etcd.Versioned[connectorrecord.Record], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	BeginConnectorDeletionWithTask(
 		context.Context,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		etcd.Versioned[connectorrecord.Record],
 		etcd.DeletionTombstoneRecord,
 		etcd.ConnectorRemovalIntent,
@@ -402,21 +403,21 @@ func (repository *durableConnectorDeletionRepository) GetConnector(
 func (repository *durableConnectorDeletionRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
 func (repository *durableConnectorDeletionRepository) GetProject(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
+) (etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
 func (repository *durableConnectorDeletionRepository) BeginConnectorDeletionWithTask(
 	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
 	current etcd.Versioned[connectorrecord.Record],
 	tombstone etcd.DeletionTombstoneRecord,
 	intent etcd.ConnectorRemovalIntent,

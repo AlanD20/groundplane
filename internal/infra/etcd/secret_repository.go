@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -19,10 +20,10 @@ const (
 // SecretOwner is a closed project-or-platform ownership input. A nil Project
 // denotes platform scope.
 type SecretOwner struct {
-	Project *Versioned[ProjectRecord]
+	Project *Versioned[hierarchyrecord.ProjectRecord]
 }
 
-func ProjectSecretOwner(project Versioned[ProjectRecord]) SecretOwner {
+func ProjectSecretOwner(project Versioned[hierarchyrecord.ProjectRecord]) SecretOwner {
 	return SecretOwner{Project: &project}
 }
 
@@ -402,7 +403,7 @@ func validateSecretOwnership(ctx context.Context, owner SecretOwner, record secr
 		}
 		return nil
 	}
-	if err := validateProject(owner.Project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(owner.Project.Record); err != nil {
 		return err
 	}
 	if owner.Project.Revision <= 0 || owner.Project.ReadRevision < owner.Project.Revision ||
@@ -446,7 +447,7 @@ func secretCreateConditions(owner SecretOwner, record secretrecord.Record) []etc
 	}
 	if owner.Project != nil {
 		conditions = append(conditions,
-			etcdstore.Condition{Key: projectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
+			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
 		)
 	}
 	conditions = append(conditions, etcdstore.Condition{Key: deletionTombstoneKey("secret", record.Secret.ID)})
@@ -475,7 +476,7 @@ func secretDeleteConditions(
 	}
 	if owner.Project != nil {
 		conditions = append(conditions,
-			etcdstore.Condition{Key: projectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
+			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
 		)
 	}
 	conditions = append(

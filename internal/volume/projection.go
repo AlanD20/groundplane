@@ -2,6 +2,7 @@ package volume
 
 import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"sort"
 	"strings"
 
@@ -44,7 +45,7 @@ func validateVolumeMutationAgainstProjection(
 func buildVolumeMutationProjection(
 	tenantID string,
 	projectID string,
-	environment etcd.EnvironmentRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 	current etcd.EnvironmentComposeProjection,
 	hasCurrent bool,
 	request volumeMutationRequest,
@@ -202,7 +203,7 @@ func cloneVolumeMutationProjection(current etcd.EnvironmentComposeProjection) et
 func buildVolumeMutationCandidate(
 	tenantID string,
 	projectID string,
-	environment etcd.EnvironmentRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 	current etcd.EnvironmentComposeProjection,
 	hasCurrent bool,
 	request volumeMutationRequest,

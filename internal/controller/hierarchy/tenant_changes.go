@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"time"
 
@@ -21,11 +22,11 @@ const (
 )
 
 type tenantChangeRepository interface {
-	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
+	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
 	MutateTenantIdempotent(
 		context.Context,
-		etcd.Versioned[etcd.TenantRecord],
-		etcd.TenantRecord,
+		etcd.Versioned[hierarchyrecord.TenantRecord],
+		hierarchyrecord.TenantRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -286,7 +287,7 @@ func (service *tenantChangeService) changeTenantOnce(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	result, mutationErr := service.repository.MutateTenantIdempotent(ctx, current, etcd.TenantRecord{
+	result, mutationErr := service.repository.MutateTenantIdempotent(ctx, current, hierarchyrecord.TenantRecord{
 		ID: replacement.ID, Slug: replacement.Slug,
 		Name: replacement.Name, Description: replacement.Description,
 	}, marker)

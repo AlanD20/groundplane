@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -23,7 +24,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	publicationID := task.Params[TaskReleasePublicationParam]
 	baseKeys := []string{
 		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
-		environmentMutationEpochKey(task.Owner.EnvironmentID),
+		hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: readRevision})
 	if err != nil {

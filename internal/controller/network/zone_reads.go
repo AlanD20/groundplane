@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -10,7 +11,7 @@ import (
 )
 
 type zoneReadRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetZone(context.Context, string) (etcd.Versioned[zonerecord.Record], error)
 	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[zonerecord.Record], error)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 	"time"
@@ -17,9 +18,9 @@ import (
 
 type entryDesiredMutationRepository interface {
 	controllerrevision.Repository
-	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
@@ -126,8 +127,8 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if _, err := service.repository.GetTenant(ctx, project.Record.TenantID); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if project.Record.Kind != etcd.ProjectKindTenant ||
-		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
+		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindResourceInUse,
 			"Environment is not ready for Entry mutation",

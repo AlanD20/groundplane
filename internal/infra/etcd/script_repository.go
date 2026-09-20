@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -26,8 +27,8 @@ func newScriptRepository(store hierarchyStore) (*ScriptRepository, error) {
 
 func (repository *ScriptRepository) CreateScript(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	record ScriptRecord,
 ) (Versioned[ScriptRecord], error) {
@@ -52,8 +53,8 @@ func (repository *ScriptRepository) CreateScript(
 
 func (repository *ScriptRepository) CreateScriptIdempotent(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	record ScriptRecord,
 	marker IdempotencyMarker,
@@ -79,8 +80,8 @@ func (repository *ScriptRepository) CreateScriptIdempotent(
 
 func (repository *ScriptRepository) prepareScriptCreation(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	record ScriptRecord,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
@@ -271,8 +272,8 @@ func (repository *ScriptRepository) ListScripts(
 
 func (repository *ScriptRepository) ReplaceDesiredIdempotent(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	current Versioned[ScriptRecord],
 	desired core.Script,
@@ -301,8 +302,8 @@ func (repository *ScriptRepository) ReplaceDesiredIdempotent(
 
 func (repository *ScriptRepository) prepareScriptReplacement(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	current Versioned[ScriptRecord],
 	desired core.Script,
@@ -443,8 +444,8 @@ func validateScriptMutationMarker(marker IdempotencyMarker, environmentID string
 }
 
 func scriptWriteConditions(
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	record ScriptRecord,
 	current *Versioned[ScriptRecord],
@@ -470,8 +471,8 @@ func scriptWriteConditions(
 		scriptCondition,
 		ownerCondition,
 		slugCondition,
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		serviceDesiredCondition(target),
 		{Key: deletionTombstoneKey("script", record.Desired.ID)},
 		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
@@ -493,18 +494,18 @@ func scriptWriteConditions(
 
 func validateScriptHierarchy(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	record ScriptRecord,
 ) error {
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if err := validateEnvironment(environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {
 		return err
 	}
-	if err := validateProject(project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return err
 	}
 	if err := validateServiceVersion(target); err != nil {
@@ -513,7 +514,7 @@ func validateScriptHierarchy(
 	if target.Record.Desired.Replicas < 1 {
 		return errs.New(errs.KindValidationFailed, "Script target Service must have positive replicas")
 	}
-	if project.Record.Kind != ProjectKindTenant || target.Record.Desired.Adapter != "" ||
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant || target.Record.Desired.Adapter != "" ||
 		target.Record.BackingNetworkID != "" {
 		return errs.New(errs.KindValidationFailed, "Script target must be an operator-owned Service")
 	}
@@ -541,8 +542,8 @@ func validateScriptVersion(current Versioned[ScriptRecord]) error {
 
 func classifyScriptWriteConflict(
 	values []*etcdstore.KeyValue,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	record ScriptRecord,
 	expectedScriptRevision int64,

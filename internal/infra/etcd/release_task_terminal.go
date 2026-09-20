@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"strconv"
@@ -57,7 +58,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	}
 	baseKeys := []string{
 		releasePublicationKey(publicationID), releaseOperationKey(task.OperationID),
-		releaseFenceSetKey(task.Owner.EnvironmentID), environmentMutationEpochKey(task.Owner.EnvironmentID),
+		releaseFenceSetKey(task.Owner.EnvironmentID), hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: readRevision})
 	if err != nil {
@@ -406,7 +407,7 @@ func (repository *TaskRepository) closeReleaseOperation(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: releaseOperationKey(task.OperationID), Value: headValue},
-		{Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(task.Owner.EnvironmentID), Value: epochValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID), Value: epochValue},
 	}
 	if state != domain.StateRecoveryRequired {
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseFenceSetKey(task.Owner.EnvironmentID)})

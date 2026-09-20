@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/http"
@@ -77,7 +78,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorrecord.CredentialValueKey(connector.ID),
-			environmentKey(connector.EnvironmentID),
+			hierarchyrecord.EnvironmentKey(connector.EnvironmentID),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), connector.EnvironmentID),
 		},
 		Revision: revision,
@@ -115,13 +116,13 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	if dependencies.Values[4] != nil {
 		return connectorTaskChange{}, errs.New(errs.KindResourceInUse, "environment is being deleted")
 	}
-	environment, err := decodeEnvironment(dependencies.Values[3].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(dependencies.Values[3].Value)
 	if err != nil || environment.ID != connector.EnvironmentID {
 		return connectorTaskChange{}, recordcodec.CorruptRecord()
 	}
 	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			projectKey(environment.ProjectID),
+			hierarchyrecord.ProjectKey(environment.ProjectID),
 			deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
 		},
 		Revision: revision,
@@ -138,7 +139,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	if parents.Values[1] != nil {
 		return connectorTaskChange{}, errs.New(errs.KindResourceInUse, "project is being deleted")
 	}
-	project, err := decodeProject(parents.Values[0].Value)
+	project, err := hierarchyrecord.DecodeProject(parents.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
 		return connectorTaskChange{}, recordcodec.CorruptRecord()
 	}
@@ -157,9 +158,9 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
 			{Key: connectorrecord.CredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
-			{Key: environmentKey(environment.ID), ModRevision: dependencies.Values[3].ModRevision},
+			{Key: hierarchyrecord.EnvironmentKey(environment.ID), ModRevision: dependencies.Values[3].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID)},
-			{Key: projectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
+			{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetProject), project.ID)},
 		},
 	}

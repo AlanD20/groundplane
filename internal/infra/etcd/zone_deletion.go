@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -17,8 +18,8 @@ import (
 // Zone, indexes, and subnet reservation stay visible until finalization.
 func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	zone Versioned[zonerecord.Record],
 	authorities EnvironmentZoneRemovalAuthorities,
 	tombstone DeletionTombstoneRecord,
@@ -47,9 +48,9 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	ordinary := zone.Record.Desired.OwnerKind == core.ZoneOwnerEnvironment &&
-		zone.Record.Desired.OwnerID == environment.Record.ID && project.Record.Kind == ProjectKindTenant
+		zone.Record.Desired.OwnerID == environment.Record.ID && project.Record.Kind == hierarchyrecord.ProjectKindTenant
 	backing := zone.Record.Desired.OwnerKind == core.ZoneOwnerBackingProject &&
-		zone.Record.Desired.OwnerID == project.Record.ID && project.Record.Kind == ProjectKindBacking
+		zone.Record.Desired.OwnerID == project.Record.ID && project.Record.Kind == hierarchyrecord.ProjectKindBacking
 	if !ordinary && !backing {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -163,8 +164,8 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: zonePoolRegistryKey(zone.Record.EnvironmentID), ModRevision: pool.Revision},
 		{Key: componentAddressRegistryKey(zone.Record.Desired.ID), ModRevision: addresses.Revision},
 		{Key: tombstoneKey},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
 		{Key: zoneRemovalIntentKey(intent.OperationID)},
@@ -244,8 +245,8 @@ func selectedByEnabledComponent(components []ComponentRecord, zoneID string) boo
 }
 
 func classifyZoneDeletionStartConflict(
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	pool Versioned[zonePoolRegistry],
 	addresses Versioned[componentAddressRegistry],
 	operationID string,
@@ -569,17 +570,17 @@ func selectedZoneDeletionRecord(
 
 func validateZoneDeletionHierarchy(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	zone Versioned[zonerecord.Record],
 ) error {
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if err := validateEnvironment(environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {
 		return err
 	}
-	if err := validateProject(project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return err
 	}
 	if environment.Revision <= 0 || environment.ReadRevision < environment.Revision || project.Revision <= 0 ||

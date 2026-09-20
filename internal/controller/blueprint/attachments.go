@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"slices"
 	"sort"
 	"time"
@@ -23,8 +24,8 @@ type resolvedBlueprintAttach struct {
 	name               string
 	spec               core.AttachmentSpec
 	consumer           etcd.ServiceRecord
-	backingProject     etcd.Versioned[etcd.ProjectRecord]
-	backingEnvironment etcd.Versioned[etcd.EnvironmentRecord]
+	backingProject     etcd.Versioned[hierarchyrecord.ProjectRecord]
+	backingEnvironment etcd.Versioned[hierarchyrecord.EnvironmentRecord]
 	backingService     etcd.Versioned[etcd.ServiceRecord]
 	adapter            adapters.Adapter
 	authentication     core.BackingAuthentication
@@ -126,8 +127,8 @@ func (service *Service) prepareBlueprintAttaches(
 			)
 		}
 		adapter, registered := adapters.Get(backingService.Record.Desired.Adapter)
-		if backingProject.Record.Kind != etcd.ProjectKindBacking ||
-			backingEnvironment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
+		if backingProject.Record.Kind != hierarchyrecord.ProjectKindBacking ||
+			backingEnvironment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 			backingService.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning ||
 			backingService.Record.BackingNetworkID == "" || !registered {
 			return preparedBlueprintAttaches{}, errs.New(

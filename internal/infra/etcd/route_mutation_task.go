@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"net/http"
@@ -16,8 +17,8 @@ import (
 // a failed or disabled reconciler must never discard desired state.
 func (repository *RouteRepository) BeginRouteMutationWithTask(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	current *Versioned[routerecord.Record],
 	record routerecord.Record,
@@ -101,8 +102,8 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	}
 	defer clearRouteHeadPublication(publication)
 	conditions := []etcdstore.Condition{
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey("route", record.Desired.ID)},
 		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},

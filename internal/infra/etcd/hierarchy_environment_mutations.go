@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -12,17 +13,17 @@ import (
 // provisioning, and create-Task state cannot move through this seam.
 func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	ctx context.Context,
-	current Versioned[EnvironmentRecord],
-	replacement EnvironmentRecord,
+	current Versioned[hierarchyrecord.EnvironmentRecord],
+	replacement hierarchyrecord.EnvironmentRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEnvironment(current.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEnvironment(replacement); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(replacement); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if current.Record.ID != replacement.ID ||
@@ -50,7 +51,7 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	projectAuthority, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{projectKey(current.Record.ProjectID)}, Revision: current.ReadRevision,
+		Keys: []string{hierarchyrecord.ProjectKey(current.Record.ProjectID)}, Revision: current.ReadRevision,
 	})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -58,24 +59,24 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	if len(projectAuthority.Values) != 1 || projectAuthority.Values[0] == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
-	project, err := decodeProject(projectAuthority.Values[0].Value)
+	project, err := hierarchyrecord.DecodeProject(projectAuthority.Values[0].Value)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if project.ID != current.Record.ProjectID || project.Kind != ProjectKindTenant {
+	if project.ID != current.Record.ProjectID || project.Kind != hierarchyrecord.ProjectKindTenant {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	renaming := current.Record.Name != replacement.Name
 	secondaryKeys := []string{
-		environmentNameKey(current.Record.ProjectID, current.Record.Name),
-		environmentOwnerKey(current.Record.ProjectID, current.Record.ID),
+		hierarchyrecord.EnvironmentNameKey(current.Record.ProjectID, current.Record.Name),
+		hierarchyrecord.EnvironmentOwnerKey(current.Record.ProjectID, current.Record.ID),
 		deletionTombstoneKey("environment", current.Record.ID),
 		deletionTombstoneKey("project", current.Record.ProjectID),
-		tenantKey(project.TenantID),
+		hierarchyrecord.TenantKey(project.TenantID),
 		deletionTombstoneKey("tenant", project.TenantID),
 	}
 	if renaming {
-		secondaryKeys = append(secondaryKeys, environmentNameKey(replacement.ProjectID, replacement.Name))
+		secondaryKeys = append(secondaryKeys, hierarchyrecord.EnvironmentNameKey(replacement.ProjectID, replacement.Name))
 	}
 	secondary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: secondaryKeys, Revision: current.ReadRevision,
@@ -105,7 +106,7 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	if secondary.Values[4] == nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindTenantNotFound, "tenant was not found")
 	}
-	tenant, err := decodeTenant(secondary.Values[4].Value)
+	tenant, err := hierarchyrecord.DecodeTenant(secondary.Values[4].Value)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -118,36 +119,36 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	if renaming && secondary.Values[6] != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindNameConflict, "Environment name is already in use")
 	}
-	value, err := encodeEnvironment(replacement)
+	value, err := hierarchyrecord.EncodeEnvironment(replacement)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
 	conditions := []etcdstore.Condition{
-		{Key: environmentKey(current.Record.ID), ModRevision: current.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(current.Record.ID), ModRevision: current.Revision},
 		{
-			Key:         environmentNameKey(current.Record.ProjectID, current.Record.Name),
+			Key:         hierarchyrecord.EnvironmentNameKey(current.Record.ProjectID, current.Record.Name),
 			ModRevision: secondary.Values[0].ModRevision,
 		},
 		{
-			Key:         environmentOwnerKey(current.Record.ProjectID, current.Record.ID),
+			Key:         hierarchyrecord.EnvironmentOwnerKey(current.Record.ProjectID, current.Record.ID),
 			ModRevision: secondary.Values[1].ModRevision,
 		},
 		{Key: deletionTombstoneKey("environment", current.Record.ID)},
 		{Key: deletionTombstoneKey("project", current.Record.ProjectID)},
-		{Key: projectKey(project.ID), ModRevision: projectAuthority.Values[0].ModRevision},
-		{Key: tenantKey(tenant.ID), ModRevision: secondary.Values[4].ModRevision},
+		{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: projectAuthority.Values[0].ModRevision},
+		{Key: hierarchyrecord.TenantKey(tenant.ID), ModRevision: secondary.Values[4].ModRevision},
 		{Key: deletionTombstoneKey("tenant", tenant.ID)},
 	}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: environmentKey(current.Record.ID), Value: value}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(current.Record.ID), Value: value}}
 	if renaming {
-		conditions = append(conditions, etcdstore.Condition{Key: environmentNameKey(replacement.ProjectID, replacement.Name)})
+		conditions = append(conditions, etcdstore.Condition{Key: hierarchyrecord.EnvironmentNameKey(replacement.ProjectID, replacement.Name)})
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentNameKey(current.Record.ProjectID, current.Record.Name)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentNameKey(current.Record.ProjectID, current.Record.Name)},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   environmentNameKey(replacement.ProjectID, replacement.Name),
+				Key:   hierarchyrecord.EnvironmentNameKey(replacement.ProjectID, replacement.Name),
 				Value: []byte(current.Record.ID),
 			},
 		)
@@ -174,8 +175,8 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 }
 
 func classifyEnvironmentMutationConflict(
-	current Versioned[EnvironmentRecord],
-	replacement EnvironmentRecord,
+	current Versioned[hierarchyrecord.EnvironmentRecord],
+	replacement hierarchyrecord.EnvironmentRecord,
 	projectRevision int64,
 	tenantRevision int64,
 	renaming bool,

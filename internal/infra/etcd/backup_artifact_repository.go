@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
@@ -2102,7 +2103,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: dispatchKey, Value: dispatchValue},
 		etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
-			Key:   environmentOperationLockKey(dispatch.EnvironmentID),
+			Key:   hierarchyrecord.EnvironmentOperationLockKey(dispatch.EnvironmentID),
 			Value: lockValue,
 		},
 	)
@@ -2149,7 +2150,7 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 		}
 		fixed, err := repository.readFixedKeys(ctx, []string{
 			backupSourceKey(point.SourceID),
-			environmentKey(point.EnvironmentID),
+			hierarchyrecord.EnvironmentKey(point.EnvironmentID),
 			connectorrecord.RecordKey(point.ConnectorID),
 		}, readRevision)
 		if err != nil {
@@ -2160,7 +2161,7 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 			return nil, errs.New(errs.KindStateConflict, "backup prune plan evidence is missing")
 		}
 		source, sourceErr := decodeBackupSourceRecord(fixed.Values[0].Value)
-		environment, environmentErr := decodeEnvironment(fixed.Values[1].Value)
+		environment, environmentErr := hierarchyrecord.DecodeEnvironment(fixed.Values[1].Value)
 		connector, connectorErr := connectorrecord.DecodeRecord(fixed.Values[2].Value)
 		if sourceErr != nil || environmentErr != nil || connectorErr != nil ||
 			source.ID != point.SourceID || source.EnvironmentID != point.EnvironmentID ||
@@ -2451,7 +2452,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 	mutations = append(
 		mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[0]},
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentOperationLockKey(dispatch.Record.EnvironmentID)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(dispatch.Record.EnvironmentID)},
 	)
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {
@@ -2548,7 +2549,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
 	mutations = append(mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationDelete, Key: environmentOperationLockKey(dispatch.Record.EnvironmentID),
+		Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(dispatch.Record.EnvironmentID),
 	})
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {

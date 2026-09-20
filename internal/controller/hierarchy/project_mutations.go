@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"time"
 
@@ -21,11 +22,11 @@ const (
 )
 
 type projectChangeRepository interface {
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	MutateProjectIdempotent(
 		context.Context,
-		etcd.Versioned[etcd.ProjectRecord],
-		etcd.ProjectRecord,
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
+		hierarchyrecord.ProjectRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -279,9 +280,9 @@ func (service *projectChangeService) changeProjectOnce(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	result, mutationErr := service.repository.MutateProjectIdempotent(ctx, current, etcd.ProjectRecord{
+	result, mutationErr := service.repository.MutateProjectIdempotent(ctx, current, hierarchyrecord.ProjectRecord{
 		ID: replacement.ID, TenantID: replacement.TenantID, Slug: replacement.Slug,
-		Name: replacement.Name, Description: replacement.Description, Kind: etcd.ProjectKind(replacement.Kind),
+		Name: replacement.Name, Description: replacement.Description, Kind: hierarchyrecord.ProjectKind(replacement.Kind),
 	}, marker)
 	if mutationErr != nil {
 		if !isUnknownProjectChangeOutcome(mutationErr) {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
@@ -32,7 +33,7 @@ func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 			"environment provisioning belongs to another Task",
 		)
 	}
-	replacement, err := CompleteEnvironmentProvisioning(
+	replacement, err := hierarchyrecord.CompleteEnvironmentProvisioning(
 		record,
 		task.ID,
 		terminalStatus == TaskStatusCompleted,
@@ -40,18 +41,18 @@ func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	encoded, err := encodeEnvironment(replacement)
+	encoded, err := hierarchyrecord.EncodeEnvironment(replacement)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	conditions := []etcdstore.Condition{
-		{Key: environmentKey(record.ID), ModRevision: state.Environment.Revision},
-		{Key: environmentMutationEpochKey(record.ID), ModRevision: state.EpochRevision},
-		{Key: environmentOperationLockKey(record.ID)},
+		{Key: hierarchyrecord.EnvironmentKey(record.ID), ModRevision: state.Environment.Revision},
+		{Key: hierarchyrecord.EnvironmentMutationEpochKey(record.ID), ModRevision: state.EpochRevision},
+		{Key: hierarchyrecord.EnvironmentOperationLockKey(record.ID)},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: environmentKey(record.ID), Value: encoded},
-		{Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(record.ID), Value: state.EpochValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(record.ID), Value: encoded},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(record.ID), Value: state.EpochValue},
 	}
 	return conditions, mutations, encoded, nil
 }
@@ -67,9 +68,9 @@ func (repository *TaskRepository) validateEnvironmentCreationReplay(
 		return err
 	}
 	record := state.Environment.Record
-	want := EnvironmentProvisioningFailed
+	want := hierarchyrecord.EnvironmentProvisioningFailed
 	if terminalStatus == TaskStatusCompleted {
-		want = EnvironmentProvisioningReady
+		want = hierarchyrecord.EnvironmentProvisioningReady
 	}
 	if record.ID != task.Target || record.CreateTaskID != task.ID ||
 		record.ProvisioningState != want {
@@ -103,8 +104,8 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 	tombstoneResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
-			environmentMutationEpochKey(task.Target),
-			environmentOperationLockKey(task.Target),
+			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
+			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 		},
 		Revision: page.ReadRevision,
 	})
@@ -240,13 +241,13 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			environmentKey(task.Target),
+			hierarchyrecord.EnvironmentKey(task.Target),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 			environmentBlueprintHeadKey(task.Target),
 			environmentComposeProjectionKey(task.Target),
 			environmentPoolRegistryKey,
-			environmentMutationEpochKey(task.Target),
-			environmentOperationLockKey(task.Target),
+			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
+			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 			releaseGroupCollectionEpochKey(task.Target),
 		},
 		Revision: readRevision,
@@ -263,7 +264,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		return nil, nil, errs.New(errs.KindInternal, "environment Blueprint state is inconsistent")
 	}
 	environmentValue := stored.Values[0]
-	environment, err := decodeEnvironment(environmentValue.Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(environmentValue.Value)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -316,8 +317,8 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			environmentNameKey(environment.ProjectID, environment.Name),
-			environmentOwnerKey(environment.ProjectID, environment.ID),
+			hierarchyrecord.EnvironmentNameKey(environment.ProjectID, environment.Name),
+			hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID),
 		},
 		Revision: readRevision,
 	})
@@ -331,17 +332,17 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		return nil, nil, errs.New(errs.KindInternal, "environment deletion indexes are corrupt")
 	}
 	conditions := []etcdstore.Condition{
-		{Key: environmentKey(environment.ID), ModRevision: environmentValue.ModRevision},
-		{Key: environmentNameKey(environment.ProjectID, environment.Name), ModRevision: indexes.Values[0].ModRevision},
-		{Key: environmentOwnerKey(environment.ProjectID, environment.ID), ModRevision: indexes.Values[1].ModRevision},
+		{Key: hierarchyrecord.EnvironmentKey(environment.ID), ModRevision: environmentValue.ModRevision},
+		{Key: hierarchyrecord.EnvironmentNameKey(environment.ProjectID, environment.Name), ModRevision: indexes.Values[0].ModRevision},
+		{Key: hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID), ModRevision: indexes.Values[1].ModRevision},
 		{
 			Key:         deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
 			ModRevision: tombstoneValue.ModRevision,
 		},
 		{Key: environmentBlueprintHeadKey(environment.ID), ModRevision: keyValueRevision(stored.Values[2])},
 		{Key: environmentComposeProjectionKey(environment.ID), ModRevision: keyValueRevision(stored.Values[3])},
-		{Key: environmentMutationEpochKey(environment.ID), ModRevision: stored.Values[5].ModRevision},
-		{Key: environmentOperationLockKey(environment.ID), ModRevision: stored.Values[6].ModRevision},
+		{Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.ID), ModRevision: stored.Values[5].ModRevision},
+		{Key: hierarchyrecord.EnvironmentOperationLockKey(environment.ID), ModRevision: stored.Values[6].ModRevision},
 		{Key: releaseGroupCollectionEpochKey(environment.ID), ModRevision: keyValueRevision(stored.Values[7])},
 	}
 	conditions, err = appendEnvironmentMutationFenceConditions(conditions, ownedFence)
@@ -384,12 +385,12 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 				Type: etcdstore.MutationDelete,
 				Key:  deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
 			},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentOperationLockKey(environment.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(environment.ID)},
 		)
 		mutations = append(mutations, intentMutations...)
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentMutationEpochKey(environment.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releaseGroupCollectionEpochKey(environment.ID)},
 		)
 		nextPoolRegistry, err := poolRegistry.Release(environment.ID, environment.NetworkPool)
@@ -449,13 +450,13 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			mutations,
 			etcdstore.Mutation{
 				Type: etcdstore.MutationDelete,
-				Key:  environmentNameKey(environment.ProjectID, environment.Name),
+				Key:  hierarchyrecord.EnvironmentNameKey(environment.ProjectID, environment.Name),
 			},
 			etcdstore.Mutation{
 				Type: etcdstore.MutationDelete,
-				Key:  environmentOwnerKey(environment.ProjectID, environment.ID),
+				Key:  hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID),
 			},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentKey(environment.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentKey(environment.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptSetEnvironmentPrefix(environment.ID), Prefix: true},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptEnvironmentLocatorPrefixFor(environment.ID), Prefix: true},
 		)
@@ -465,7 +466,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			return nil, nil, err
 		}
 		mutations = append(mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(environment.ID), Value: epochValue,
+			Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.ID), Value: epochValue,
 		})
 	}
 	if err := validateEnvironmentMutationTransactionBudget(conditions, mutations); err != nil {
@@ -526,13 +527,13 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 ) error {
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			environmentKey(task.Target),
+			hierarchyrecord.EnvironmentKey(task.Target),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
 			environmentBlueprintHeadKey(task.Target),
 			environmentComposeProjectionKey(task.Target),
 			environmentPoolRegistryKey,
-			environmentMutationEpochKey(task.Target),
-			environmentOperationLockKey(task.Target),
+			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
+			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 			releaseGroupCollectionEpochKey(task.Target),
 		},
 		Revision: readRevision,
@@ -584,7 +585,7 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 		stored.Values[6] == nil {
 		return errs.New(errs.KindStateConflict, "environment deletion retry state is missing")
 	}
-	environment, err := decodeEnvironment(stored.Values[0].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(stored.Values[0].Value)
 	if err != nil {
 		return err
 	}

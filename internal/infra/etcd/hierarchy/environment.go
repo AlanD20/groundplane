@@ -1,4 +1,4 @@
-package etcd
+package hierarchy
 
 import (
 	"path/filepath"
@@ -21,7 +21,7 @@ func NewProvisioningEnvironment(
 	createTaskID string,
 	createdAt time.Time,
 ) (EnvironmentRecord, error) {
-	if err := validateProject(project); err != nil {
+	if err := ValidateProject(project); err != nil {
 		return EnvironmentRecord{}, err
 	}
 	volumeDir, err := environmentpath.Derive(volumeRoot, environmentpath.Scope{
@@ -43,7 +43,7 @@ func NewProvisioningEnvironment(
 		CreateTaskID:      createTaskID,
 		CreatedAt:         createdAt,
 	}
-	if err := validateEnvironment(record); err != nil {
+	if err := ValidateEnvironment(record); err != nil {
 		return EnvironmentRecord{}, err
 	}
 	return record, nil

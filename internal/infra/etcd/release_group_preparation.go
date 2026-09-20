@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -139,9 +140,9 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 		return releaseGroupMutationEvidence{}, err
 	}
 	baseKeys := []string{
-		environmentKey(group.EnvironmentID),
-		environmentMutationEpochKey(group.EnvironmentID),
-		environmentOperationLockKey(group.EnvironmentID),
+		hierarchyrecord.EnvironmentKey(group.EnvironmentID),
+		hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID),
+		hierarchyrecord.EnvironmentOperationLockKey(group.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetEnvironment), group.EnvironmentID),
 		releaseGroupRecordKey(group.ID),
 		releaseGroupOwnerKey(group.EnvironmentID, group.ID),
@@ -162,7 +163,7 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 			"release group environment was not found",
 		)
 	}
-	environment, err := decodeEnvironment(result.Values[0].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(result.Values[0].Value)
 	if err != nil || environment.ID != group.EnvironmentID || result.Values[1] == nil {
 		return releaseGroupMutationEvidence{}, recordcodec.CorruptRecord()
 	}
@@ -290,7 +291,7 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 		conditions: conditions,
 		epochMutation: etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
-			Key:   environmentMutationEpochKey(group.EnvironmentID),
+			Key:   hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID),
 			Value: epochValue,
 		},
 		collectionEpoch: collectionMutation,

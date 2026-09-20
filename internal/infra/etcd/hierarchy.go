@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -12,13 +13,6 @@ import (
 const (
 	DefaultPageLimit = 50
 	MaximumPageLimit = 200
-)
-
-type ProjectKind string
-
-const (
-	ProjectKindTenant  ProjectKind = "tenant"
-	ProjectKindBacking ProjectKind = "backing"
 )
 
 type Versioned[T any] struct {
@@ -41,7 +35,7 @@ type Page[T any] struct {
 
 type ProjectFilter struct {
 	TenantID string
-	Kind     ProjectKind
+	Kind     hierarchyrecord.ProjectKind
 }
 
 type hierarchyStore interface {
@@ -101,24 +95,24 @@ func newEnvironmentBlueprintRepository(
 
 func (repository *HierarchyRepository) CreateTenant(
 	ctx context.Context,
-	record TenantRecord,
-) (Versioned[TenantRecord], error) {
+	record hierarchyrecord.TenantRecord,
+) (Versioned[hierarchyrecord.TenantRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[TenantRecord]{}, err
+		return Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
-	if err := validateTenant(record); err != nil {
-		return Versioned[TenantRecord]{}, err
+	if err := hierarchyrecord.ValidateTenant(record); err != nil {
+		return Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	value, err := recordcodec.Encode("tenant", record)
 	if err != nil {
-		return Versioned[TenantRecord]{}, err
+		return Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetTenant, record.ID)
 	if err != nil {
-		return Versioned[TenantRecord]{}, err
+		return Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
-	primary := tenantKey(record.ID)
-	slug := tenantSlugKey(record.Slug)
+	primary := hierarchyrecord.TenantKey(record.ID)
+	slug := hierarchyrecord.TenantSlugKey(record.Slug)
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetTenant), record.ID)
 	result, err := repository.store.Transact(ctx,
 		[]etcdstore.Condition{{Key: primary}, {Key: slug}, {Key: coordinationKey}},
@@ -129,25 +123,25 @@ func (repository *HierarchyRepository) CreateTenant(
 		},
 	)
 	if err != nil {
-		return Versioned[TenantRecord]{}, err
+		return Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[TenantRecord]{}, repository.diagnoseCreate(ctx, primary, slug)
+		return Versioned[hierarchyrecord.TenantRecord]{}, repository.diagnoseCreate(ctx, primary, slug)
 	}
-	return Versioned[TenantRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return Versioned[hierarchyrecord.TenantRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
 }
 
 // CreateTenantIdempotent atomically claims the direct HTTP marker and creates
 // the Tenant primary plus globally unique slug index.
 func (repository *HierarchyRepository) CreateTenantIdempotent(
 	ctx context.Context,
-	record TenantRecord,
+	record hierarchyrecord.TenantRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateTenant(record); err != nil {
+	if err := hierarchyrecord.ValidateTenant(record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
@@ -159,7 +153,7 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 	if err := validateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	value, err := encodeTenant(record)
+	value, err := hierarchyrecord.EncodeTenant(record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -171,10 +165,10 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 	defer clear(coordinationValue)
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetTenant), record.ID)
 	plan, err := newIdempotencyMutationPlan(
-		[]etcdstore.Condition{{Key: tenantKey(record.ID)}, {Key: tenantSlugKey(record.Slug)}, {Key: coordinationKey}},
+		[]etcdstore.Condition{{Key: hierarchyrecord.TenantKey(record.ID)}, {Key: hierarchyrecord.TenantSlugKey(record.Slug)}, {Key: coordinationKey}},
 		[]etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: tenantKey(record.ID), Value: value},
-			{Type: etcdstore.MutationPut, Key: tenantSlugKey(record.Slug), Value: []byte(record.ID)},
+			{Type: etcdstore.MutationPut, Key: hierarchyrecord.TenantKey(record.ID), Value: value},
+			{Type: etcdstore.MutationPut, Key: hierarchyrecord.TenantSlugKey(record.Slug), Value: []byte(record.ID)},
 			{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
 		},
 		classifyTenantCreateConflict(record.Slug),
@@ -212,16 +206,16 @@ func classifyTenantCreateConflict(slug string) idempotencyPlanClassifier {
 // and its deletion tombstone.
 func (repository *HierarchyRepository) CreateProjectIdempotent(
 	ctx context.Context,
-	record ProjectRecord,
+	record hierarchyrecord.ProjectRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateProject(record); err != nil {
+	if err := hierarchyrecord.ValidateProject(record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if record.Kind != ProjectKindTenant {
+	if record.Kind != hierarchyrecord.ProjectKindTenant {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "direct Project creation requires a tenant-owned Project",
 		)
@@ -251,7 +245,7 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 	if ownerState.Values[0] != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindResourceInUse, "Tenant deletion is in progress")
 	}
-	value, err := encodeProject(record)
+	value, err := hierarchyrecord.EncodeProject(record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -264,17 +258,17 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), record.ID)
 	plan, err := newIdempotencyMutationPlan(
 		[]etcdstore.Condition{
-			{Key: projectKey(record.ID)},
-			{Key: projectSlugKey(record)},
-			{Key: projectOwnerKey(record)},
-			{Key: tenantKey(record.TenantID), ModRevision: owner.Revision},
+			{Key: hierarchyrecord.ProjectKey(record.ID)},
+			{Key: hierarchyrecord.ProjectSlugKey(record)},
+			{Key: hierarchyrecord.ProjectOwnerKey(record)},
+			{Key: hierarchyrecord.TenantKey(record.TenantID), ModRevision: owner.Revision},
 			{Key: tombstoneKey},
 			{Key: coordinationKey},
 		},
 		[]etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: projectKey(record.ID), Value: value},
-			{Type: etcdstore.MutationPut, Key: projectSlugKey(record), Value: []byte(record.ID)},
-			{Type: etcdstore.MutationPut, Key: projectOwnerKey(record), Value: []byte(record.ID)},
+			{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(record.ID), Value: value},
+			{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectSlugKey(record), Value: []byte(record.ID)},
+			{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectOwnerKey(record), Value: []byte(record.ID)},
 			{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
 		},
 		classifyProjectCreateConflict(record, owner.Revision),
@@ -289,7 +283,7 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func classifyProjectCreateConflict(record ProjectRecord, ownerRevision int64) idempotencyPlanClassifier {
+func classifyProjectCreateConflict(record hierarchyrecord.ProjectRecord, ownerRevision int64) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != 6 {
 			return errs.New(errs.KindInternal, "Project creation compare evidence is incomplete")
@@ -323,17 +317,17 @@ func classifyProjectCreateConflict(record ProjectRecord, ownerRevision int64) id
 // with its completed direct idempotency marker and exact public response.
 func (repository *HierarchyRepository) MutateTenantIdempotent(
 	ctx context.Context,
-	current Versioned[TenantRecord],
-	replacement TenantRecord,
+	current Versioned[hierarchyrecord.TenantRecord],
+	replacement hierarchyrecord.TenantRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateTenant(current.Record); err != nil {
+	if err := hierarchyrecord.ValidateTenant(current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateTenant(replacement); err != nil {
+	if err := hierarchyrecord.ValidateTenant(replacement); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if current.Record.ID != replacement.ID || current.Revision <= 0 || current.ReadRevision <= 0 {
@@ -349,12 +343,12 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 		)
 	}
 	secondaryKeys := []string{
-		tenantSlugKey(current.Record.Slug),
+		hierarchyrecord.TenantSlugKey(current.Record.Slug),
 		deletionTombstoneKey("tenant", current.Record.ID),
 	}
 	renaming := current.Record.Slug != replacement.Slug
 	if renaming {
-		secondaryKeys = append(secondaryKeys, tenantSlugKey(replacement.Slug))
+		secondaryKeys = append(secondaryKeys, hierarchyrecord.TenantSlugKey(replacement.Slug))
 	}
 	secondary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: secondaryKeys, Revision: current.ReadRevision,
@@ -372,23 +366,23 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 	if renaming && secondary.Values[2] != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindSlugConflict, "Tenant slug is already in use")
 	}
-	value, err := encodeTenant(replacement)
+	value, err := hierarchyrecord.EncodeTenant(replacement)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
 	conditions := []etcdstore.Condition{
-		{Key: tenantKey(current.Record.ID), ModRevision: current.Revision},
-		{Key: tenantSlugKey(current.Record.Slug), ModRevision: secondary.Values[0].ModRevision},
+		{Key: hierarchyrecord.TenantKey(current.Record.ID), ModRevision: current.Revision},
+		{Key: hierarchyrecord.TenantSlugKey(current.Record.Slug), ModRevision: secondary.Values[0].ModRevision},
 		{Key: deletionTombstoneKey("tenant", current.Record.ID)},
 	}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: tenantKey(current.Record.ID), Value: value}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hierarchyrecord.TenantKey(current.Record.ID), Value: value}}
 	if renaming {
-		conditions = append(conditions, etcdstore.Condition{Key: tenantSlugKey(replacement.Slug)})
+		conditions = append(conditions, etcdstore.Condition{Key: hierarchyrecord.TenantSlugKey(replacement.Slug)})
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: tenantSlugKey(current.Record.Slug)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: tenantSlugKey(replacement.Slug), Value: []byte(current.Record.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.TenantSlugKey(current.Record.Slug)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.TenantSlugKey(replacement.Slug), Value: []byte(current.Record.ID)},
 		)
 	}
 	plan, err := newIdempotencyMutationPlan(
@@ -407,8 +401,8 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 }
 
 func classifyTenantMutationConflict(
-	current Versioned[TenantRecord],
-	replacement TenantRecord,
+	current Versioned[hierarchyrecord.TenantRecord],
+	replacement hierarchyrecord.TenantRecord,
 	renaming bool,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {
@@ -440,97 +434,97 @@ func classifyTenantMutationConflict(
 
 func (repository *HierarchyRepository) CreateProject(
 	ctx context.Context,
-	record ProjectRecord,
-) (Versioned[ProjectRecord], error) {
+	record hierarchyrecord.ProjectRecord,
+) (Versioned[hierarchyrecord.ProjectRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
-	if err := validateProject(record); err != nil {
-		return Versioned[ProjectRecord]{}, err
+	if err := hierarchyrecord.ValidateProject(record); err != nil {
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	conditions := []etcdstore.Condition{
-		{Key: projectKey(record.ID)},
-		{Key: projectSlugKey(record)},
-		{Key: projectOwnerKey(record)},
+		{Key: hierarchyrecord.ProjectKey(record.ID)},
+		{Key: hierarchyrecord.ProjectSlugKey(record)},
+		{Key: hierarchyrecord.ProjectOwnerKey(record)},
 	}
-	if record.Kind == ProjectKindTenant {
+	if record.Kind == hierarchyrecord.ProjectKindTenant {
 		owner, err := repository.GetTenant(ctx, record.TenantID)
 		if err != nil {
-			return Versioned[ProjectRecord]{}, err
+			return Versioned[hierarchyrecord.ProjectRecord]{}, err
 		}
-		conditions = append(conditions, etcdstore.Condition{Key: tenantKey(record.TenantID), ModRevision: owner.Revision})
+		conditions = append(conditions, etcdstore.Condition{Key: hierarchyrecord.TenantKey(record.TenantID), ModRevision: owner.Revision})
 	}
 	value, err := recordcodec.Encode("project", record)
 	if err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	coordinationTarget := HierarchyDeletionTargetProject
 	coordinationValue, err := encodeInitialHierarchyCoordination(coordinationTarget, record.ID)
 	if err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	coordinationKey := HierarchyCoordinationKey(string(coordinationTarget), record.ID)
 	conditions = append(conditions, etcdstore.Condition{Key: coordinationKey})
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: projectKey(record.ID), Value: value},
-		{Type: etcdstore.MutationPut, Key: projectSlugKey(record), Value: []byte(record.ID)},
-		{Type: etcdstore.MutationPut, Key: projectOwnerKey(record), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(record.ID), Value: value},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectSlugKey(record), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectOwnerKey(record), Value: []byte(record.ID)},
 		{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
 	})
 	if err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[ProjectRecord]{}, repository.diagnoseCreate(ctx, projectKey(record.ID), projectSlugKey(record))
+		return Versioned[hierarchyrecord.ProjectRecord]{}, repository.diagnoseCreate(ctx, hierarchyrecord.ProjectKey(record.ID), hierarchyrecord.ProjectSlugKey(record))
 	}
-	return Versioned[ProjectRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return Versioned[hierarchyrecord.ProjectRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
 }
 
 func (repository *HierarchyRepository) CreateEnvironment(
 	ctx context.Context,
-	record EnvironmentRecord,
-) (Versioned[EnvironmentRecord], error) {
+	record hierarchyrecord.EnvironmentRecord,
+) (Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
-	if err := validateEnvironment(record); err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+	if err := hierarchyrecord.ValidateEnvironment(record); err != nil {
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	owner, err := repository.GetProject(ctx, record.ProjectID)
 	if err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
-	if owner.Record.Kind == ProjectKindBacking {
-		return Versioned[EnvironmentRecord]{}, errs.New(
+	if owner.Record.Kind == hierarchyrecord.ProjectKindBacking {
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backing project environments are created by the backing-service workflow",
 		)
 	}
-	value, err := encodeEnvironment(record)
+	value, err := hierarchyrecord.EncodeEnvironment(record)
 	if err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
 		EnvironmentID: record.ID,
 	})
 	if err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetEnvironment, record.ID)
 	if err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	scriptSetValue, err := encodeScriptSetGeneration(ScriptSetGenerationRecord{
 		EnvironmentID: record.ID, GenerationID: record.ID,
 	})
 	if err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	defer clear(scriptSetValue)
-	primary := environmentKey(record.ID)
-	label := environmentNameKey(record.ProjectID, record.Name)
-	ownerIndex := environmentOwnerKey(record.ProjectID, record.ID)
-	epochKey := environmentMutationEpochKey(record.ID)
+	primary := hierarchyrecord.EnvironmentKey(record.ID)
+	label := hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name)
+	ownerIndex := hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID)
+	epochKey := hierarchyrecord.EnvironmentMutationEpochKey(record.ID)
 	coordinationKey := HierarchyCoordinationKey(string(HierarchyDeletionTargetEnvironment), record.ID)
 	scriptSetKey := scriptSetActiveKey(record.ID)
 	result, err := repository.store.Transact(ctx,
@@ -538,7 +532,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 			{Key: primary},
 			{Key: label},
 			{Key: ownerIndex},
-			{Key: projectKey(record.ProjectID), ModRevision: owner.Revision},
+			{Key: hierarchyrecord.ProjectKey(record.ProjectID), ModRevision: owner.Revision},
 			{Key: epochKey},
 			{Key: coordinationKey},
 			{Key: scriptSetKey},
@@ -553,100 +547,100 @@ func (repository *HierarchyRepository) CreateEnvironment(
 		},
 	)
 	if err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if !result.Succeeded {
 		if len(result.FailureReads) != 7 {
-			return Versioned[EnvironmentRecord]{}, errs.New(
+			return Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 				errs.KindInternal,
 				"environment creation compare evidence is incomplete",
 			)
 		}
 		if result.FailureReads[4] != nil {
-			return Versioned[EnvironmentRecord]{}, errs.New(
+			return Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 				errs.KindInternal,
 				"environment creation collided with mutation epoch state",
 			)
 		}
 		if result.FailureReads[5] != nil {
-			return Versioned[EnvironmentRecord]{}, errs.New(
+			return Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 				errs.KindInternal,
 				"environment creation collided with hierarchy coordination state",
 			)
 		}
-		return Versioned[EnvironmentRecord]{}, repository.diagnoseCreate(ctx, primary, label)
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, repository.diagnoseCreate(ctx, primary, label)
 	}
-	return Versioned[EnvironmentRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return Versioned[hierarchyrecord.EnvironmentRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
 }
 
 func (repository *HierarchyRepository) GetTenant(
 	ctx context.Context,
 	id string,
-) (Versioned[TenantRecord], error) {
+) (Versioned[hierarchyrecord.TenantRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[TenantRecord]{}, err
+		return Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTenant, id); err != nil {
-		return Versioned[TenantRecord]{}, err
+		return Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	return getRecord(
-		ctx, repository.store, tenantKey(id), id, errs.KindTenantNotFound, decodeTenant,
-		func(record TenantRecord) string { return record.ID },
+		ctx, repository.store, hierarchyrecord.TenantKey(id), id, errs.KindTenantNotFound, hierarchyrecord.DecodeTenant,
+		func(record hierarchyrecord.TenantRecord) string { return record.ID },
 	)
 }
 
 func (repository *HierarchyRepository) GetProject(
 	ctx context.Context,
 	id string,
-) (Versioned[ProjectRecord], error) {
+) (Versioned[hierarchyrecord.ProjectRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindProject, id); err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return getRecord(
-		ctx, repository.store, projectKey(id), id, errs.KindProjectNotFound, decodeProject,
-		func(record ProjectRecord) string { return record.ID },
+		ctx, repository.store, hierarchyrecord.ProjectKey(id), id, errs.KindProjectNotFound, hierarchyrecord.DecodeProject,
+		func(record hierarchyrecord.ProjectRecord) string { return record.ID },
 	)
 }
 
 func (repository *HierarchyRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (Versioned[EnvironmentRecord], error) {
+) (Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, id); err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	return getRecord(
-		ctx, repository.store, environmentKey(id), id, errs.KindEnvironmentNotFound, decodeEnvironment,
-		func(record EnvironmentRecord) string { return record.ID },
+		ctx, repository.store, hierarchyrecord.EnvironmentKey(id), id, errs.KindEnvironmentNotFound, hierarchyrecord.DecodeEnvironment,
+		func(record hierarchyrecord.EnvironmentRecord) string { return record.ID },
 	)
 }
 
 func (repository *HierarchyRepository) ResolveTenant(
 	ctx context.Context,
 	slug string,
-) (Versioned[TenantRecord], error) {
+) (Versioned[hierarchyrecord.TenantRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[TenantRecord]{}, err
+		return Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if err := recordcodec.ValidateLabel("tenant slug", slug); err != nil {
-		return Versioned[TenantRecord]{}, err
+		return Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	return resolveRecord(
 		ctx,
 		repository.store,
-		tenantSlugKey(slug),
-		tenantKey,
+		hierarchyrecord.TenantSlugKey(slug),
+		hierarchyrecord.TenantKey,
 		ids.KindTenant,
 		errs.KindTenantNotFound,
-		decodeTenant,
-		func(record TenantRecord) string { return record.ID },
-		func(record TenantRecord) bool { return record.Slug == slug },
+		hierarchyrecord.DecodeTenant,
+		func(record hierarchyrecord.TenantRecord) string { return record.ID },
+		func(record hierarchyrecord.TenantRecord) bool { return record.Slug == slug },
 	)
 }
 
@@ -654,27 +648,27 @@ func (repository *HierarchyRepository) ResolveTenantProject(
 	ctx context.Context,
 	tenantID string,
 	slug string,
-) (Versioned[ProjectRecord], error) {
+) (Versioned[hierarchyrecord.ProjectRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := recordcodec.ValidateLabel("project slug", slug); err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return resolveRecord(
 		ctx,
 		repository.store,
-		projectTenantSlugKey(tenantID, slug),
-		projectKey,
+		hierarchyrecord.ProjectTenantSlugKey(tenantID, slug),
+		hierarchyrecord.ProjectKey,
 		ids.KindProject,
 		errs.KindProjectNotFound,
-		decodeProject,
-		func(record ProjectRecord) string { return record.ID },
-		func(record ProjectRecord) bool {
-			return record.Kind == ProjectKindTenant && record.TenantID == tenantID && record.Slug == slug
+		hierarchyrecord.DecodeProject,
+		func(record hierarchyrecord.ProjectRecord) string { return record.ID },
+		func(record hierarchyrecord.ProjectRecord) bool {
+			return record.Kind == hierarchyrecord.ProjectKindTenant && record.TenantID == tenantID && record.Slug == slug
 		},
 	)
 }
@@ -682,24 +676,24 @@ func (repository *HierarchyRepository) ResolveTenantProject(
 func (repository *HierarchyRepository) ResolveBackingProject(
 	ctx context.Context,
 	slug string,
-) (Versioned[ProjectRecord], error) {
+) (Versioned[hierarchyrecord.ProjectRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := recordcodec.ValidateLabel("project slug", slug); err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return resolveRecord(
 		ctx,
 		repository.store,
-		projectPlatformSlugKey(slug),
-		projectKey,
+		hierarchyrecord.ProjectPlatformSlugKey(slug),
+		hierarchyrecord.ProjectKey,
 		ids.KindProject,
 		errs.KindProjectNotFound,
-		decodeProject,
-		func(record ProjectRecord) string { return record.ID },
-		func(record ProjectRecord) bool {
-			return record.Kind == ProjectKindBacking && record.TenantID == "" && record.Slug == slug
+		hierarchyrecord.DecodeProject,
+		func(record hierarchyrecord.ProjectRecord) string { return record.ID },
+		func(record hierarchyrecord.ProjectRecord) bool {
+			return record.Kind == hierarchyrecord.ProjectKindBacking && record.TenantID == "" && record.Slug == slug
 		},
 	)
 }
@@ -708,26 +702,28 @@ func (repository *HierarchyRepository) ResolveEnvironment(
 	ctx context.Context,
 	projectID string,
 	name string,
-) (Versioned[EnvironmentRecord], error) {
+) (Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if err := recordcodec.ValidateLabel("environment name", name); err != nil {
-		return Versioned[EnvironmentRecord]{}, err
+		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	return resolveRecord(
 		ctx,
 		repository.store,
-		environmentNameKey(projectID, name),
-		environmentKey,
+		hierarchyrecord.EnvironmentNameKey(projectID, name),
+		hierarchyrecord.EnvironmentKey,
 		ids.KindEnvironment,
 		errs.KindEnvironmentNotFound,
-		decodeEnvironment,
-		func(record EnvironmentRecord) string { return record.ID },
-		func(record EnvironmentRecord) bool { return record.ProjectID == projectID && record.Name == name },
+		hierarchyrecord.DecodeEnvironment,
+		func(record hierarchyrecord.EnvironmentRecord) string { return record.ID },
+		func(record hierarchyrecord.EnvironmentRecord) bool {
+			return record.ProjectID == projectID && record.Name == name
+		},
 	)
 }
 
@@ -736,33 +732,33 @@ func (repository *HierarchyRepository) RenameTenant(
 	id string,
 	expectedRevision int64,
 	slug string,
-) (Versioned[TenantRecord], error) {
+) (Versioned[hierarchyrecord.TenantRecord], error) {
 	current, err := repository.GetTenant(ctx, id)
 	if err != nil {
-		return Versioned[TenantRecord]{}, err
+		return Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if current.Revision != expectedRevision {
-		return Versioned[TenantRecord]{}, stateConflict("tenant", id)
+		return Versioned[hierarchyrecord.TenantRecord]{}, stateConflict("tenant", id)
 	}
 	replacement := current.Record
 	replacement.Slug = slug
-	if err := validateTenant(replacement); err != nil {
-		return Versioned[TenantRecord]{}, err
+	if err := hierarchyrecord.ValidateTenant(replacement); err != nil {
+		return Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	return renameRecord(
 		ctx,
 		repository.store,
 		current,
 		replacement,
-		tenantKey(id),
-		tenantSlugKey(current.Record.Slug),
-		tenantSlugKey(slug),
+		hierarchyrecord.TenantKey(id),
+		hierarchyrecord.TenantSlugKey(current.Record.Slug),
+		hierarchyrecord.TenantSlugKey(slug),
 		nil,
 		deletionTombstoneKey("tenant", id),
 		"tenant",
 		id,
 		errs.KindTenantNotFound,
-		encodeTenant,
+		hierarchyrecord.EncodeTenant,
 	)
 }
 
@@ -773,55 +769,55 @@ func (repository *HierarchyRepository) RenameTenantProject(
 	id string,
 	expectedRevision int64,
 	slug string,
-) (Versioned[ProjectRecord], error) {
+) (Versioned[hierarchyrecord.ProjectRecord], error) {
 	current, err := repository.GetProject(ctx, id)
 	if err != nil {
-		return Versioned[ProjectRecord]{}, err
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if current.Revision != expectedRevision {
-		return Versioned[ProjectRecord]{}, stateConflict("project", id)
+		return Versioned[hierarchyrecord.ProjectRecord]{}, stateConflict("project", id)
 	}
-	if current.Record.Kind != ProjectKindTenant {
-		return Versioned[ProjectRecord]{}, errs.New(errs.KindProjectNotFound, "project was not found")
+	if current.Record.Kind != hierarchyrecord.ProjectKindTenant {
+		return Versioned[hierarchyrecord.ProjectRecord]{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	replacement := current.Record
 	replacement.Slug = slug
-	if err := validateProject(replacement); err != nil {
-		return Versioned[ProjectRecord]{}, err
+	if err := hierarchyrecord.ValidateProject(replacement); err != nil {
+		return Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return renameRecord(
 		ctx,
 		repository.store,
 		current,
 		replacement,
-		projectKey(id),
-		projectSlugKey(current.Record),
-		projectSlugKey(replacement),
-		[]string{projectOwnerKey(current.Record)},
+		hierarchyrecord.ProjectKey(id),
+		hierarchyrecord.ProjectSlugKey(current.Record),
+		hierarchyrecord.ProjectSlugKey(replacement),
+		[]string{hierarchyrecord.ProjectOwnerKey(current.Record)},
 		deletionTombstoneKey("project", id),
 		"project",
 		id,
 		errs.KindProjectNotFound,
-		encodeProject,
+		hierarchyrecord.EncodeProject,
 	)
 }
 
 func (repository *HierarchyRepository) ListTenants(
 	ctx context.Context,
 	request PageRequest,
-) (Page[TenantRecord], error) {
+) (Page[hierarchyrecord.TenantRecord], error) {
 	return listPrimaryPage(
 		ctx,
 		repository.store,
 		"tenants",
 		"global",
 		"-",
-		tenantPrefix,
+		hierarchyrecord.TenantPrefix,
 		ids.KindTenant,
 		request,
-		decodeTenant,
-		func(record TenantRecord) string { return record.ID },
-		func(TenantRecord) bool { return true },
+		hierarchyrecord.DecodeTenant,
+		func(record hierarchyrecord.TenantRecord) string { return record.ID },
+		func(hierarchyrecord.TenantRecord) bool { return true },
 	)
 }
 
@@ -829,9 +825,9 @@ func (repository *HierarchyRepository) ListTenantProjects(
 	ctx context.Context,
 	tenantID string,
 	request PageRequest,
-) (Page[ProjectRecord], error) {
+) (Page[hierarchyrecord.ProjectRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
-		return Page[ProjectRecord]{}, err
+		return Page[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return listIndexPage(
 		ctx,
@@ -839,14 +835,14 @@ func (repository *HierarchyRepository) ListTenantProjects(
 		"projects",
 		"tenant",
 		tenantID,
-		projectTenantOwnerPrefix(tenantID),
-		projectKey,
+		hierarchyrecord.ProjectTenantOwnerPrefix(tenantID),
+		hierarchyrecord.ProjectKey,
 		ids.KindProject,
 		request,
-		decodeProject,
-		func(record ProjectRecord) string { return record.ID },
-		func(record ProjectRecord) bool {
-			return record.Kind == ProjectKindTenant && record.TenantID == tenantID
+		hierarchyrecord.DecodeProject,
+		func(record hierarchyrecord.ProjectRecord) string { return record.ID },
+		func(record hierarchyrecord.ProjectRecord) bool {
+			return record.Kind == hierarchyrecord.ProjectKindTenant && record.TenantID == tenantID
 		},
 	)
 }
@@ -855,16 +851,16 @@ func (repository *HierarchyRepository) ListProjects(
 	ctx context.Context,
 	filter ProjectFilter,
 	request PageRequest,
-) (Page[ProjectRecord], error) {
-	if filter.Kind != "" && filter.Kind != ProjectKindTenant && filter.Kind != ProjectKindBacking {
-		return Page[ProjectRecord]{}, errs.New(errs.KindValidationFailed, "project kind must be tenant or backing")
+) (Page[hierarchyrecord.ProjectRecord], error) {
+	if filter.Kind != "" && filter.Kind != hierarchyrecord.ProjectKindTenant && filter.Kind != hierarchyrecord.ProjectKindBacking {
+		return Page[hierarchyrecord.ProjectRecord]{}, errs.New(errs.KindValidationFailed, "project kind must be tenant or backing")
 	}
 	if filter.TenantID != "" {
 		if err := recordcodec.ValidateID(ids.KindTenant, filter.TenantID); err != nil {
-			return Page[ProjectRecord]{}, err
+			return Page[hierarchyrecord.ProjectRecord]{}, err
 		}
-		if filter.Kind == ProjectKindBacking {
-			return Page[ProjectRecord]{}, errs.New(
+		if filter.Kind == hierarchyrecord.ProjectKindBacking {
+			return Page[hierarchyrecord.ProjectRecord]{}, errs.New(
 				errs.KindValidationFailed,
 				"backing projects cannot have a tenant filter",
 			)
@@ -880,12 +876,12 @@ func (repository *HierarchyRepository) ListProjects(
 		"projects",
 		"filter:"+string(filter.Kind),
 		ownerID,
-		projectPrefix,
+		hierarchyrecord.ProjectPrefix,
 		ids.KindProject,
 		request,
-		decodeProject,
-		func(record ProjectRecord) string { return record.ID },
-		func(record ProjectRecord) bool {
+		hierarchyrecord.DecodeProject,
+		func(record hierarchyrecord.ProjectRecord) string { return record.ID },
+		func(record hierarchyrecord.ProjectRecord) bool {
 			return (filter.Kind == "" || record.Kind == filter.Kind) &&
 				(filter.TenantID == "" || record.TenantID == filter.TenantID)
 		},
@@ -895,21 +891,21 @@ func (repository *HierarchyRepository) ListProjects(
 func (repository *HierarchyRepository) ListBackingProjects(
 	ctx context.Context,
 	request PageRequest,
-) (Page[ProjectRecord], error) {
+) (Page[hierarchyrecord.ProjectRecord], error) {
 	return listIndexPage(
 		ctx,
 		repository.store,
 		"projects",
 		"platform",
 		"-",
-		projectPlatformOwnerPrefix,
-		projectKey,
+		hierarchyrecord.ProjectPlatformOwnerPrefix,
+		hierarchyrecord.ProjectKey,
 		ids.KindProject,
 		request,
-		decodeProject,
-		func(record ProjectRecord) string { return record.ID },
-		func(record ProjectRecord) bool {
-			return record.Kind == ProjectKindBacking && record.TenantID == ""
+		hierarchyrecord.DecodeProject,
+		func(record hierarchyrecord.ProjectRecord) string { return record.ID },
+		func(record hierarchyrecord.ProjectRecord) bool {
+			return record.Kind == hierarchyrecord.ProjectKindBacking && record.TenantID == ""
 		},
 	)
 }
@@ -918,9 +914,9 @@ func (repository *HierarchyRepository) ListEnvironments(
 	ctx context.Context,
 	projectID string,
 	request PageRequest,
-) (Page[EnvironmentRecord], error) {
+) (Page[hierarchyrecord.EnvironmentRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {
-		return Page[EnvironmentRecord]{}, err
+		return Page[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	return listIndexPage(
 		ctx,
@@ -928,13 +924,13 @@ func (repository *HierarchyRepository) ListEnvironments(
 		"environments",
 		"project",
 		projectID,
-		environmentOwnerPrefix(projectID),
-		environmentKey,
+		hierarchyrecord.EnvironmentOwnerPrefix(projectID),
+		hierarchyrecord.EnvironmentKey,
 		ids.KindEnvironment,
 		request,
-		decodeEnvironment,
-		func(record EnvironmentRecord) string { return record.ID },
-		func(record EnvironmentRecord) bool { return record.ProjectID == projectID },
+		hierarchyrecord.DecodeEnvironment,
+		func(record hierarchyrecord.EnvironmentRecord) string { return record.ID },
+		func(record hierarchyrecord.EnvironmentRecord) bool { return record.ProjectID == projectID },
 	)
 }
 

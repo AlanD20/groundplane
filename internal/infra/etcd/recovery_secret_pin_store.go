@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -143,7 +144,7 @@ func (adapter recoverySecretPinStore) VerifySecret(
 			"recovery Secret belongs to another Project",
 		)
 	}
-	ownerKey := projectKey(adapter.projectID)
+	ownerKey := hierarchyrecord.ProjectKey(adapter.projectID)
 	owners, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{ownerKey}, Revision: read.ReadRevision})
 	if err != nil {
 		return tasksecretpins.SecretAuthority{}, err
@@ -155,7 +156,7 @@ func (adapter recoverySecretPinStore) VerifySecret(
 		)
 	}
 	defer clearKeyValues(owners.Values)
-	project, err := decodeProject(owners.Values[0].Value)
+	project, err := hierarchyrecord.DecodeProject(owners.Values[0].Value)
 	if err != nil || project.ID != adapter.projectID || owners.Values[0].Key != ownerKey {
 		return tasksecretpins.SecretAuthority{}, recordcodec.CorruptRecord()
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -196,9 +197,9 @@ func (service *serviceLifecycleService) runOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	var tenant *etcd.Versioned[etcd.TenantRecord]
+	var tenant *etcd.Versioned[hierarchyrecord.TenantRecord]
 	switch project.Record.Kind {
-	case etcd.ProjectKindTenant:
+	case hierarchyrecord.ProjectKindTenant:
 		if project.Record.TenantID == "" {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service Project Tenant is missing")
 		}
@@ -207,7 +208,7 @@ func (service *serviceLifecycleService) runOnce(
 			return etcd.IdempotencyResponse{}, getErr
 		}
 		tenant = &currentTenant
-	case etcd.ProjectKindBacking:
+	case hierarchyrecord.ProjectKindBacking:
 		if project.Record.TenantID != "" {
 			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Backing Project has a Tenant")
 		}

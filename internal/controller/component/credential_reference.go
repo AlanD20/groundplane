@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 
@@ -14,7 +15,7 @@ import (
 )
 
 type credentialHierarchy interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 }
 
 type credentialSecrets interface {

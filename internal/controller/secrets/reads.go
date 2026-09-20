@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"unicode/utf8"
 
@@ -13,7 +14,7 @@ import (
 )
 
 type secretReadRepository interface {
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetSecret(context.Context, string) (etcd.Versioned[secretrecord.Record], error)
 	GetSecretValue(context.Context, etcd.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
 	ListSecrets(context.Context, core.SecretScope, string, etcd.PageRequest) (etcd.Page[secretrecord.Record], error)
@@ -144,7 +145,7 @@ func NewReadRepository(
 func (repository *durableSecretReadRepository) GetProject(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
+) (etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -37,26 +38,26 @@ func (repository *HierarchyDeletionRepository) readHierarchyDeletionPrimary(
 func hierarchyDeletionOriginalRootValue(action HierarchyDeletionAction, value []byte) ([]byte, error) {
 	switch action.ActionKind {
 	case HierarchyDeletionTenantFinalize:
-		record, err := decodeTenant(value)
+		record, err := hierarchyrecord.DecodeTenant(value)
 		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
 			return nil, corruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = ""
-		return encodeTenant(record)
+		return hierarchyrecord.EncodeTenant(record)
 	case HierarchyDeletionProjectFinalize, HierarchyDeletionBackingServiceFinalize:
-		record, err := decodeProject(value)
+		record, err := hierarchyrecord.DecodeProject(value)
 		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
 			return nil, corruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = ""
-		return encodeProject(record)
+		return hierarchyrecord.EncodeProject(record)
 	case HierarchyDeletionEnvironmentFinalize:
-		record, err := decodeEnvironment(value)
+		record, err := hierarchyrecord.DecodeEnvironment(value)
 		if err != nil || record.ID != action.TargetID || record.DeletionTaskID == "" {
 			return nil, corruptHierarchyDeletion()
 		}
 		record.DeletionTaskID = ""
-		return encodeEnvironment(record)
+		return hierarchyrecord.EncodeEnvironment(record)
 	default:
 		return nil, errs.New(errs.KindStateConflict, "hierarchy deletion finalizer target changed")
 	}

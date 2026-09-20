@@ -2,6 +2,7 @@ package serviceread
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -13,7 +14,7 @@ import (
 )
 
 type Environments interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,

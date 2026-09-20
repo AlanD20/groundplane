@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
@@ -131,7 +132,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		conditions = append(
 			conditions,
 			etcdstore.Condition{
-				Key:         projectKey(owner.Project.Record.ID),
+				Key:         hierarchyrecord.ProjectKey(owner.Project.Record.ID),
 				ModRevision: owner.Project.Revision,
 			},
 			etcdstore.Condition{

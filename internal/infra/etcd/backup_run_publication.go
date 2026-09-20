@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"sync"
@@ -95,7 +96,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		)
 	}
 	anchorKeys := []string{
-		environmentKey(input.EnvironmentID),
+		hierarchyrecord.EnvironmentKey(input.EnvironmentID),
 		backupPolicyKey(input.EnvironmentID),
 	}
 	var anchor *etcdstore.GetManyResult
@@ -116,7 +117,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		)
 	}
 	fixedRevision := anchor.ReadRevision
-	environment, environmentErr := decodeEnvironment(anchor.Values[0].Value)
+	environment, environmentErr := hierarchyrecord.DecodeEnvironment(anchor.Values[0].Value)
 	policy, policyErr := decodeBackupPolicyRecord(anchor.Values[1].Value)
 	if environmentErr != nil || policyErr != nil || environment.ID != input.EnvironmentID ||
 		policy.EnvironmentID != input.EnvironmentID {
@@ -235,12 +236,12 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 
 func (repository *BackupRuntimeRepository) manualBackupOwner(
 	ctx context.Context,
-	environment EnvironmentRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 	fixedRevision int64,
 ) (TaskOwner, error) {
 	read, err := repository.readFixedKeys(
 		ctx,
-		[]string{projectKey(environment.ProjectID)},
+		[]string{hierarchyrecord.ProjectKey(environment.ProjectID)},
 		fixedRevision,
 	)
 	if err != nil {
@@ -250,8 +251,8 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 	if read.Values[0] == nil {
 		return TaskOwner{}, errs.New(errs.KindStateConflict, "backup Project is unavailable")
 	}
-	project, err := decodeProject(read.Values[0].Value)
-	if err != nil || project.ID != environment.ProjectID || project.Kind != ProjectKindTenant {
+	project, err := hierarchyrecord.DecodeProject(read.Values[0].Value)
+	if err != nil || project.ID != environment.ProjectID || project.Kind != hierarchyrecord.ProjectKindTenant {
 		return TaskOwner{}, errs.New(
 			errs.KindStateConflict,
 			"backing Environments cannot run consumer backups",
@@ -259,7 +260,7 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 	}
 	tenantRead, err := repository.readFixedKeys(
 		ctx,
-		[]string{tenantKey(project.TenantID)},
+		[]string{hierarchyrecord.TenantKey(project.TenantID)},
 		fixedRevision,
 	)
 	if err != nil {
@@ -269,7 +270,7 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 	if tenantRead.Values[0] == nil {
 		return TaskOwner{}, errs.New(errs.KindStateConflict, "backup Tenant is unavailable")
 	}
-	tenant, err := decodeTenant(tenantRead.Values[0].Value)
+	tenant, err := hierarchyrecord.DecodeTenant(tenantRead.Values[0].Value)
 	if err != nil || tenant.ID != project.TenantID {
 		return TaskOwner{}, corruptBackupRuntimeRecord()
 	}
@@ -409,7 +410,7 @@ func (repository *BackupRuntimeRepository) prepareManualBackupSource(
 		}
 		read, readErr := repository.readFixedKeys(
 			ctx,
-			[]string{environmentKey(run.EnvironmentID)},
+			[]string{hierarchyrecord.EnvironmentKey(run.EnvironmentID)},
 			fixedRevision,
 		)
 		if readErr != nil {
@@ -468,8 +469,8 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	}
 	defer clear(facts.Ciphertext)
 	backingRead, err := repository.readFixedKeys(ctx, []string{
-		projectKey(attach.BackingProjectID),
-		environmentKey(attach.BackingEnvironmentID),
+		hierarchyrecord.ProjectKey(attach.BackingProjectID),
+		hierarchyrecord.EnvironmentKey(attach.BackingEnvironmentID),
 		environmentBlueprintHeadKey(attach.BackingEnvironmentID),
 	}, fixedRevision)
 	if err != nil {
@@ -483,10 +484,10 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 			"postgres backing evidence is unavailable",
 		)
 	}
-	project, projectErr := decodeProject(backingRead.Values[0].Value)
-	environment, environmentErr := decodeEnvironment(backingRead.Values[1].Value)
+	project, projectErr := hierarchyrecord.DecodeProject(backingRead.Values[0].Value)
+	environment, environmentErr := hierarchyrecord.DecodeEnvironment(backingRead.Values[1].Value)
 	service, serviceErr := findServiceAtRevision(ctx, repository.store, attach.BackingServiceID, fixedRevision)
-	if projectErr != nil || environmentErr != nil || serviceErr != nil || project.Kind != ProjectKindBacking ||
+	if projectErr != nil || environmentErr != nil || serviceErr != nil || project.Kind != hierarchyrecord.ProjectKindBacking ||
 		environment.ProjectID != project.ID ||
 		environment.ID != attach.BackingEnvironmentID ||
 		service.Record.EnvironmentID != environment.ID ||
@@ -734,7 +735,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	read, err := repository.readFixedKeys(ctx, []string{
 		backupRunKey(marker.TaskID),
 		taskKey(marker.TaskID),
-		environmentOperationLockKey(marker.Locator.ScopeID),
+		hierarchyrecord.EnvironmentOperationLockKey(marker.Locator.ScopeID),
 	}, readRevision)
 	if err != nil {
 		return err
@@ -1045,7 +1046,7 @@ func (repository *BackupRuntimeRepository) exactBackupRunPublicationSubordinates
 		keys = append(keys, key)
 	}
 	keys = append(keys, ownerKeys...)
-	keys = append(keys, environmentMutationEpochKey(run.EnvironmentID))
+	keys = append(keys, hierarchyrecord.EnvironmentMutationEpochKey(run.EnvironmentID))
 	read, err := repository.readFixedKeys(ctx, keys, readRevision)
 	if err != nil {
 		return false
@@ -1136,7 +1137,7 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 		keys = append(keys, key)
 	}
 	keys = append(keys, ownerKeys...)
-	keys = append(keys, environmentMutationEpochKey(run.EnvironmentID))
+	keys = append(keys, hierarchyrecord.EnvironmentMutationEpochKey(run.EnvironmentID))
 	read, err := repository.readFixedKeys(ctx, keys, readRevision)
 	if err != nil {
 		return false

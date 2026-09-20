@@ -2,6 +2,7 @@ package network
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -10,7 +11,7 @@ import (
 )
 
 type routeReadRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetRoute(context.Context, string) (etcd.Versioned[routerecord.Record], error)
 	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[routerecord.Record], error)
 }

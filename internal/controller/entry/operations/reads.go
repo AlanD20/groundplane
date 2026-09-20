@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -12,7 +13,7 @@ import (
 )
 
 type entryReadRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetEntry(context.Context, string) (etcd.Versioned[entryrecord.Record], error)
 	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[entryrecord.Record], error)
 	GetEnvironmentComposeProjection(
@@ -157,7 +158,7 @@ func NewReadRepository(
 func (repository *durableEntryReadRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 

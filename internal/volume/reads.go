@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"path"
 	"sort"
 	"time"
@@ -122,7 +123,7 @@ func (service *ReadService) GetVolume(ctx context.Context, volumeID string) (api
 }
 
 func volumeView(
-	environment etcd.EnvironmentRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 	record etcd.VolumeRecord,
 	originTaskID string,
 	state string,

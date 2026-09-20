@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -29,8 +30,8 @@ func newComponentRepository(store hierarchyStore) (*ComponentRepository, error) 
 
 func (repository *ComponentRepository) CreateEnvironmentComponent(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record ComponentRecord,
 ) (Versioned[ComponentRecord], error) {
 	if err := validateEnvironmentComponentHierarchy(ctx, environment, project, record); err != nil {
@@ -129,8 +130,8 @@ func (repository *ComponentRepository) ListEnvironmentComponents(
 
 func (repository *ComponentRepository) ReplaceDesired(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	current Versioned[ComponentRecord],
 	desired core.Component,
 ) (Versioned[ComponentRecord], error) {
@@ -143,8 +144,8 @@ func (repository *ComponentRepository) ReplaceDesired(
 
 func (repository *ComponentRepository) ReplaceRuntime(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	current Versioned[ComponentRecord],
 	generatedServices []string,
 	pinnedIPv4 string,
@@ -159,8 +160,8 @@ func (repository *ComponentRepository) ReplaceRuntime(
 
 func (repository *ComponentRepository) replace(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	current Versioned[ComponentRecord],
 	replacement ComponentRecord,
 ) (Versioned[ComponentRecord], error) {
@@ -236,8 +237,8 @@ func (repository *ComponentRepository) replace(
 }
 
 func componentWriteConditions(
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record ComponentRecord,
 	current *Versioned[ComponentRecord],
 	ownerRevision int64,
@@ -255,8 +256,8 @@ func componentWriteConditions(
 		primary,
 		owner,
 		kind,
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey("component", record.Desired.ID)},
 		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},
@@ -266,17 +267,17 @@ func componentWriteConditions(
 
 func validateEnvironmentComponentHierarchy(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record ComponentRecord,
 ) error {
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if err := validateEnvironment(environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {
 		return err
 	}
-	if err := validateProject(project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return err
 	}
 	if err := validateComponentRecord(record); err != nil {
@@ -302,8 +303,8 @@ func validateComponentVersion(current Versioned[ComponentRecord]) error {
 
 func classifyComponentWriteConflict(
 	values []*etcdstore.KeyValue,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record ComponentRecord,
 	expectedRevision int64,
 ) error {

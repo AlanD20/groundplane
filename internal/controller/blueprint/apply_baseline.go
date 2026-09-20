@@ -4,15 +4,16 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 )
 
 // applyBaseline binds one attempt to its hierarchy and prior desired state.
 type applyBaseline struct {
-	environment          etcd.Versioned[etcd.EnvironmentRecord]
-	project              etcd.Versioned[etcd.ProjectRecord]
-	tenant               etcd.Versioned[etcd.TenantRecord]
+	environment          etcd.Versioned[hierarchyrecord.EnvironmentRecord]
+	project              etcd.Versioned[hierarchyrecord.ProjectRecord]
+	tenant               etcd.Versioned[hierarchyrecord.TenantRecord]
 	taskOwner            etcd.TaskOwner
 	previousProjection   etcd.Versioned[etcd.EnvironmentComposeProjection]
 	hasProjection        bool
@@ -39,7 +40,7 @@ func (service *Service) loadApplyBaseline(ctx context.Context, environmentID, ex
 		return applyBaseline{}, err
 	}
 	if environment.Record.ProjectID != project.Record.ID || project.Record.TenantID != tenant.Record.ID ||
-		project.Record.Kind != etcd.ProjectKindTenant {
+		project.Record.Kind != hierarchyrecord.ProjectKindTenant {
 		return applyBaseline{}, errs.New(errs.KindInternal, "Environment hierarchy is inconsistent")
 	}
 

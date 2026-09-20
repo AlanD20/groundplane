@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -216,9 +217,9 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		return nil, err
 	}
 	if environment.Record.ID != intent.EnvironmentID ||
-		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
+		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		project.Record.ID != environment.Record.ProjectID ||
-		project.Record.Kind != etcd.ProjectKindTenant ||
+		project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
 		tenant.Record.ID != project.Record.TenantID {
 		return nil, errs.New(errs.KindInternal, "Route removal Environment hierarchy is invalid")
 	}

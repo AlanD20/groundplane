@@ -8,6 +8,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
@@ -98,8 +99,8 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if _, err := service.desired.repository.GetTenant(ctx, project.Record.TenantID); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if project.Record.Kind != etcd.ProjectKindTenant ||
-		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
+		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindResourceInUse,
 			"Environment is not ready for Entry mutation",

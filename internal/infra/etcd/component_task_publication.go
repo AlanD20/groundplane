@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"reflect"
 
@@ -18,7 +19,7 @@ type preparedComponentTaskPublication struct {
 
 func (repository *HierarchyRepository) prepareComponentTaskPublication(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	task TaskRecord,
 	zoneChanges []EnvironmentBlueprintZoneChange,
 	preparation ComponentTaskPreparation,

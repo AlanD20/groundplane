@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
@@ -18,8 +19,8 @@ const (
 // publishes the Controller Task and immutable intent that own finalization.
 func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	current Versioned[connectorrecord.Record],
 	tombstone DeletionTombstoneRecord,
 	intent ConnectorRemovalIntent,
@@ -456,14 +457,14 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 func loadConnectorTaskInitiationTenantAtRevision(
 	ctx context.Context,
 	store hierarchyStore,
-	project Versioned[ProjectRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	readRevision int64,
-) (*Versioned[TenantRecord], error) {
-	if project.Record.Kind == ProjectKindBacking {
+) (*Versioned[hierarchyrecord.TenantRecord], error) {
+	if project.Record.Kind == hierarchyrecord.ProjectKindBacking {
 		return nil, nil
 	}
 	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{tenantKey(project.Record.TenantID)}, Revision: readRevision,
+		Keys: []string{hierarchyrecord.TenantKey(project.Record.TenantID)}, Revision: readRevision,
 	})
 	if err != nil {
 		return nil, err
@@ -473,11 +474,11 @@ func loadConnectorTaskInitiationTenantAtRevision(
 		return nil, errs.New(errs.KindStateConflict, "task initiation tenant is missing")
 	}
 	defer clearKeyValues(result.Values)
-	tenant, err := decodeTenant(result.Values[0].Value)
+	tenant, err := hierarchyrecord.DecodeTenant(result.Values[0].Value)
 	if err != nil || tenant.ID != project.Record.TenantID {
 		return nil, errs.New(errs.KindInternal, "task initiation tenant is corrupt")
 	}
-	return &Versioned[TenantRecord]{
+	return &Versioned[hierarchyrecord.TenantRecord]{
 		Record: tenant, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }

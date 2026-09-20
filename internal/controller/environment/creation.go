@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"net/netip"
 	"time"
@@ -29,14 +30,14 @@ const (
 )
 
 type environmentCreationRepository interface {
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironmentPoolRegistry(context.Context) (etcd.Versioned[etcd.EnvironmentPoolRegistry], error)
 	CreateEnvironmentWithTask(
 		context.Context,
 		string,
-		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		etcd.Versioned[etcd.EnvironmentPoolRegistry],
-		etcd.EnvironmentRecord,
+		hierarchyrecord.EnvironmentRecord,
 		[]etcd.ComponentRecord,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
@@ -222,7 +223,7 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if project.Record.ID != input.ProjectID || project.Record.Kind != etcd.ProjectKindTenant {
+	if project.Record.ID != input.ProjectID || project.Record.Kind != hierarchyrecord.ProjectKindTenant {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	poolRegistry, err := service.repository.GetEnvironmentPoolRegistry(ctx)
@@ -241,7 +242,7 @@ func (service *environmentCreationService) createEnvironmentOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	poolRegistry.Record = nextPoolRegistry
-	environment, err := etcd.NewProvisioningEnvironment(
+	environment, err := hierarchyrecord.NewProvisioningEnvironment(
 		service.volumeRoot,
 		project.Record,
 		environmentID,
@@ -334,8 +335,8 @@ func newInitialEnvironmentComponents(environmentID string) ([]etcd.ComponentReco
 }
 
 func newEnvironmentCreationTask(
-	project etcd.ProjectRecord,
-	environment etcd.EnvironmentRecord,
+	project hierarchyrecord.ProjectRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 	taskID string,
 	idempotencyKey string,
 	createdAt time.Time,

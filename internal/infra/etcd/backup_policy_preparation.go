@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -123,13 +124,13 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 	if err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
-	if project.Record.Kind != ProjectKindTenant || project.Record.TenantID == "" {
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant || project.Record.TenantID == "" {
 		return PreparedBackupPolicyReplacement{}, errs.New(
 			errs.KindValidationFailed,
 			"backing environments cannot own backup policies",
 		)
 	}
-	if environment.Record.ProvisioningState != EnvironmentProvisioningReady {
+	if environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return PreparedBackupPolicyReplacement{}, errs.New(
 			errs.KindStateConflict,
 			"environment is not ready for backup policy replacement",
@@ -225,11 +226,11 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 	now time.Time,
 ) (backupPolicyReplacementCandidate, bool, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		environmentKey(input.EnvironmentID),
-		projectKey(projectID),
+		hierarchyrecord.EnvironmentKey(input.EnvironmentID),
+		hierarchyrecord.ProjectKey(projectID),
 		backupPolicyKey(input.EnvironmentID),
-		environmentMutationEpochKey(input.EnvironmentID),
-		environmentOperationLockKey(input.EnvironmentID),
+		hierarchyrecord.EnvironmentMutationEpochKey(input.EnvironmentID),
+		hierarchyrecord.EnvironmentOperationLockKey(input.EnvironmentID),
 		backupKeyKey(input.EnvironmentID),
 		backupKeyValueKey(input.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetEnvironment), input.EnvironmentID),
@@ -253,11 +254,11 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 			"environment was not found",
 		)
 	}
-	environment, err := decodeEnvironment(result.Values[0].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(result.Values[0].Value)
 	if err != nil || environment.ID != input.EnvironmentID || environment.ProjectID != projectID {
 		return backupPolicyReplacementCandidate{}, false, recordcodec.CorruptRecord()
 	}
-	if environment.ProvisioningState != EnvironmentProvisioningReady {
+	if environment.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return backupPolicyReplacementCandidate{}, false, errs.New(
 			errs.KindStateConflict,
 			"environment is not ready for backup policy replacement",
@@ -266,8 +267,8 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 	if result.Values[1] == nil {
 		return backupPolicyReplacementCandidate{}, false, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
-	project, err := decodeProject(result.Values[1].Value)
-	if err != nil || project.ID != projectID || project.TenantID != tenantID || project.Kind != ProjectKindTenant {
+	project, err := hierarchyrecord.DecodeProject(result.Values[1].Value)
+	if err != nil || project.ID != projectID || project.TenantID != tenantID || project.Kind != hierarchyrecord.ProjectKindTenant {
 		return backupPolicyReplacementCandidate{}, false, recordcodec.CorruptRecord()
 	}
 	for _, index := range []int{7, 8, 9} {
@@ -298,10 +299,10 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 		)
 	}
 	candidate := backupPolicyReplacementCandidate{
-		Environment: Versioned[EnvironmentRecord]{
+		Environment: Versioned[hierarchyrecord.EnvironmentRecord]{
 			Record: environment, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 		},
-		Project: Versioned[ProjectRecord]{
+		Project: Versioned[hierarchyrecord.ProjectRecord]{
 			Record: project, Revision: result.Values[1].ModRevision, ReadRevision: result.ReadRevision,
 		},
 		MutationEpoch: Versioned[EnvironmentMutationEpochRecord]{

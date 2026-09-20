@@ -4,6 +4,7 @@ package environment
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
 	etcdinfra "github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -36,12 +37,12 @@ type Page struct {
 }
 
 type hierarchyRecords interface {
-	GetEnvironment(context.Context, string) (etcdinfra.Versioned[etcdinfra.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcdinfra.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	ListEnvironments(
 		context.Context,
 		string,
 		etcdinfra.PageRequest,
-	) (etcdinfra.Page[etcdinfra.EnvironmentRecord], error)
+	) (etcdinfra.Page[hierarchyrecord.EnvironmentRecord], error)
 }
 type zoneReservations interface {
 	ListZoneSubnetReservationsAtRevision(context.Context, string, int64) ([]string, error)
@@ -92,7 +93,7 @@ func (repository *Repository) List(ctx context.Context, projectID string, reques
 
 func (repository *Repository) project(
 	ctx context.Context,
-	record etcdinfra.EnvironmentRecord,
+	record hierarchyrecord.EnvironmentRecord,
 	revision int64,
 ) (Record, error) {
 	state, err := provisioningState(record.ProvisioningState)
@@ -120,13 +121,13 @@ func (repository *Repository) project(
 	}, nil
 }
 
-func provisioningState(state etcdinfra.EnvironmentProvisioningState) (ProvisioningState, error) {
+func provisioningState(state hierarchyrecord.EnvironmentProvisioningState) (ProvisioningState, error) {
 	switch state {
-	case etcdinfra.EnvironmentProvisioningProvisioning:
+	case hierarchyrecord.EnvironmentProvisioningProvisioning:
 		return Provisioning, nil
-	case etcdinfra.EnvironmentProvisioningReady:
+	case hierarchyrecord.EnvironmentProvisioningReady:
 		return Ready, nil
-	case etcdinfra.EnvironmentProvisioningFailed:
+	case hierarchyrecord.EnvironmentProvisioningFailed:
 		return Failed, nil
 	default:
 		return "", errs.New(errs.KindInternal, "stored Environment provisioning state is invalid")

@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"strings"
@@ -60,9 +61,9 @@ type PrepareInput struct {
 	IntendedAttaches []etcd.Versioned[etcd.AttachRecord]
 	Workloads        WorkloadPreparation
 	VolumeRoot       string
-	Tenant           etcd.Versioned[etcd.TenantRecord]
-	Project          etcd.Versioned[etcd.ProjectRecord]
-	Environment      etcd.Versioned[etcd.EnvironmentRecord]
+	Tenant           etcd.Versioned[hierarchyrecord.TenantRecord]
+	Project          etcd.Versioned[hierarchyrecord.ProjectRecord]
+	Environment      etcd.Versioned[hierarchyrecord.EnvironmentRecord]
 	Projection       etcd.EnvironmentComposeProjection
 	ServiceChanges   []etcd.EnvironmentBlueprintServiceChange
 	Memberships      NormalizedServiceMemberships

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -16,14 +17,14 @@ import (
 const attachRecordPrefix = "/v1/records/attaches/"
 
 type AttachCreateScope struct {
-	Tenant             Versioned[TenantRecord]
-	Project            Versioned[ProjectRecord]
-	Environment        Versioned[EnvironmentRecord]
+	Tenant             Versioned[hierarchyrecord.TenantRecord]
+	Project            Versioned[hierarchyrecord.ProjectRecord]
+	Environment        Versioned[hierarchyrecord.EnvironmentRecord]
 	DesiredHead        Versioned[EnvironmentBlueprintHead]
 	ComposeProjection  Versioned[EnvironmentComposeProjection]
 	Services           []Versioned[ServiceRecord]
-	BackingProject     Versioned[ProjectRecord]
-	BackingEnvironment Versioned[EnvironmentRecord]
+	BackingProject     Versioned[hierarchyrecord.ProjectRecord]
+	BackingEnvironment Versioned[hierarchyrecord.EnvironmentRecord]
 	BackingService     Versioned[ServiceRecord]
 	CredentialOwner    *Versioned[AttachRecord]
 	Grants             []Versioned[AttachRecord]
@@ -138,7 +139,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(renderInputValue)
-	environmentValue, err := encodeEnvironment(scope.Environment.Record)
+	environmentValue, err := hierarchyrecord.EncodeEnvironment(scope.Environment.Record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -178,10 +179,10 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		{Key: attachOwnerKey(record.EnvironmentID, record.ID)},
 		{Key: attachBackingServiceKey(record.BackingServiceID, record.ID)},
 		{Key: attachBackingProjectKey(record.BackingProjectID, record.ID)},
-		{Key: environmentKey(scope.Environment.Record.ID), ModRevision: scope.Environment.Revision},
-		{Key: projectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
-		{Key: environmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
-		{Key: projectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID), ModRevision: scope.Environment.Revision},
+		{Key: hierarchyrecord.ProjectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
+		{Key: hierarchyrecord.ProjectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
 		{Key: deletionTombstoneKey("attach", record.ID)},
 		{Key: deletionTombstoneKey("environment", record.EnvironmentID)},
 		{Key: deletionTombstoneKey("project", scope.Project.Record.ID)},
@@ -192,7 +193,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		{Key: deletionTombstoneKey(string(DeletionTargetZone), record.BackingNetworkID)},
 		{Key: attachTaskRenderInputKey(task.PlanID)},
 		{Key: planReferenceKey},
-		{Key: tenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
+		{Key: hierarchyrecord.TenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
 			Key:         environmentBlueprintRootKey(record.EnvironmentID, renderInput.DesiredRevisionID),
 			ModRevision: scope.ComposeProjection.Revision,
@@ -211,7 +212,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		{Type: etcdstore.MutationPut, Key: attachBackingProjectKey(record.BackingProjectID, record.ID), Value: []byte(record.ID)},
 		{Type: etcdstore.MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
 		{Type: etcdstore.MutationPut, Key: planReferenceKey, Value: planReferenceValue},
-		{Type: etcdstore.MutationPut, Key: environmentKey(scope.Environment.Record.ID), Value: environmentValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID), Value: environmentValue},
 	}
 	for _, service := range scope.Services {
 		serviceID := service.Record.Desired.ID
@@ -505,7 +506,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(renderInputValue)
-	environmentValue, err := encodeEnvironment(scope.Environment.Record)
+	environmentValue, err := hierarchyrecord.EncodeEnvironment(scope.Environment.Record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -543,10 +544,10 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: attachKey(current.Record.ID), ModRevision: current.Revision},
 		exclusionCondition,
 		{Key: attachCredentialByPrefix(current.Record.ID), Prefix: true},
-		{Key: environmentKey(scope.Environment.Record.ID), ModRevision: scope.Environment.Revision},
-		{Key: projectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
-		{Key: environmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
-		{Key: projectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID), ModRevision: scope.Environment.Revision},
+		{Key: hierarchyrecord.ProjectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
+		{Key: hierarchyrecord.ProjectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
 		{Key: deletionTombstoneKey("attach", current.Record.ID)},
 		{Key: deletionTombstoneKey("environment", current.Record.EnvironmentID)},
 		{Key: deletionTombstoneKey("project", scope.Project.Record.ID)},
@@ -556,7 +557,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: deletionTombstoneKey("service", current.Record.BackingServiceID)},
 		{Key: attachTaskRenderInputKey(task.PlanID)},
 		{Key: planReferenceKey},
-		{Key: tenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
+		{Key: hierarchyrecord.TenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
 			Key:         environmentBlueprintRootKey(current.Record.EnvironmentID, renderInput.DesiredRevisionID),
 			ModRevision: scope.ComposeProjection.Revision,
@@ -571,7 +572,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Type: etcdstore.MutationPut, Key: attachKey(detaching.ID), Value: attachValue},
 		{Type: etcdstore.MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
 		{Type: etcdstore.MutationPut, Key: planReferenceKey, Value: planReferenceValue},
-		{Type: etcdstore.MutationPut, Key: environmentKey(scope.Environment.Record.ID), Value: environmentValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID), Value: environmentValue},
 	}
 	for _, service := range scope.Services {
 		serviceID := service.Record.Desired.ID
@@ -815,8 +816,8 @@ func (repository *AttachRepository) ReplaceLifecycle(
 
 func (repository *AttachRepository) RenameAttachIdempotent(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	current Versioned[AttachRecord],
 	name string,
 	marker IdempotencyMarker,
@@ -892,8 +893,8 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 			Key:         attachOwnerKey(current.Record.EnvironmentID, current.Record.ID),
 			ModRevision: secondary.Values[1].ModRevision,
 		},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey("attach", current.Record.ID)},
 		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},
@@ -1228,13 +1229,13 @@ func validateAttachCreateScope(
 		scope.BackingEnvironment.Revision <= 0 || scope.BackingService.Revision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach scope records must be versioned")
 	}
-	if scope.Tenant.Record.ID != scope.Project.Record.TenantID || scope.Project.Record.Kind != ProjectKindTenant ||
+	if scope.Tenant.Record.ID != scope.Project.Record.TenantID || scope.Project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
 		scope.Project.Record.TenantID == "" ||
 		scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
 		record.EnvironmentID != scope.Environment.Record.ID {
 		return errs.New(errs.KindScopeUnauthorized, "Attach consumer hierarchy is invalid")
 	}
-	if scope.BackingProject.Record.Kind != ProjectKindBacking || scope.BackingProject.Record.TenantID != "" ||
+	if scope.BackingProject.Record.Kind != hierarchyrecord.ProjectKindBacking || scope.BackingProject.Record.TenantID != "" ||
 		scope.BackingEnvironment.Record.ProjectID != scope.BackingProject.Record.ID ||
 		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
 		record.BackingProjectID != scope.BackingProject.Record.ID ||
@@ -1364,12 +1365,12 @@ func validateAttachDetachScope(
 		scope.BackingService.Revision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach detach scope records must be versioned")
 	}
-	if scope.Tenant.Record.ID != scope.Project.Record.TenantID || scope.Project.Record.Kind != ProjectKindTenant ||
+	if scope.Tenant.Record.ID != scope.Project.Record.TenantID || scope.Project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
 		scope.Project.Record.TenantID == "" || scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
 		record.EnvironmentID != scope.Environment.Record.ID {
 		return errs.New(errs.KindScopeUnauthorized, "Attach detach consumer hierarchy is invalid")
 	}
-	if scope.BackingProject.Record.Kind != ProjectKindBacking || scope.BackingProject.Record.TenantID != "" ||
+	if scope.BackingProject.Record.Kind != hierarchyrecord.ProjectKindBacking || scope.BackingProject.Record.TenantID != "" ||
 		scope.BackingEnvironment.Record.ProjectID != scope.BackingProject.Record.ID ||
 		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
 		record.BackingProjectID != scope.BackingProject.Record.ID ||

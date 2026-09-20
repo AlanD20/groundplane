@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -13,7 +14,7 @@ import (
 // applied-projection candidate, and publishes the Task that owns finalization.
 // The Entry and every immutable generation remain visible until success.
 func (repository *EntryRepository) BeginEntryDeletionWithTask(
-	ctx context.Context, environment Versioned[EnvironmentRecord], project Versioned[ProjectRecord],
+	ctx context.Context, environment Versioned[hierarchyrecord.EnvironmentRecord], project Versioned[hierarchyrecord.ProjectRecord],
 	entry Versioned[entryrecord.Record],
 	projection *Versioned[EnvironmentComposeProjection],
 	tombstone DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker IdempotencyMarker,
@@ -299,16 +300,16 @@ func classifyEntryDeletionStartConflict(
 }
 
 func loadEntryTaskInitiationTenantAtRevision(
-	ctx context.Context, store hierarchyStore, project Versioned[ProjectRecord], readRevision int64,
-) (*Versioned[TenantRecord], error) {
-	if project.Record.Kind == ProjectKindBacking {
+	ctx context.Context, store hierarchyStore, project Versioned[hierarchyrecord.ProjectRecord], readRevision int64,
+) (*Versioned[hierarchyrecord.TenantRecord], error) {
+	if project.Record.Kind == hierarchyrecord.ProjectKindBacking {
 		return nil, nil
 	}
-	if project.Record.Kind != ProjectKindTenant || ids.Validate(ids.KindTenant, project.Record.TenantID) != nil {
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant || ids.Validate(ids.KindTenant, project.Record.TenantID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "task initiation project ancestry is invalid")
 	}
 	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{tenantKey(project.Record.TenantID)}, Revision: readRevision,
+		Keys: []string{hierarchyrecord.TenantKey(project.Record.TenantID)}, Revision: readRevision,
 	})
 	if err != nil {
 		return nil, err
@@ -317,12 +318,12 @@ func loadEntryTaskInitiationTenantAtRevision(
 		return nil, errs.New(errs.KindStateConflict, "task initiation tenant is missing")
 	}
 	defer clearKeyValues(result.Values)
-	tenant, err := decodeTenant(result.Values[0].Value)
-	if err != nil || result.Values[0].Key != tenantKey(project.Record.TenantID) ||
+	tenant, err := hierarchyrecord.DecodeTenant(result.Values[0].Value)
+	if err != nil || result.Values[0].Key != hierarchyrecord.TenantKey(project.Record.TenantID) ||
 		tenant.ID != project.Record.TenantID {
 		return nil, errs.New(errs.KindInternal, "task initiation tenant is corrupt")
 	}
-	return &Versioned[TenantRecord]{
+	return &Versioned[hierarchyrecord.TenantRecord]{
 		Record: tenant, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }

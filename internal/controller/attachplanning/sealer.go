@@ -4,6 +4,7 @@ package attachplanning
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
@@ -14,9 +15,9 @@ import (
 )
 
 type Repository interface {
-	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	GetEnvironmentBlueprintRevision(
 		context.Context,

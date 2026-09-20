@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
 	"sort"
 	"strings"
@@ -103,9 +104,9 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 		return nil, err
 	}
 	if environment.Record.ID != environmentID ||
-		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
+		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		project.Record.ID != environment.Record.ProjectID ||
-		project.Record.Kind != etcd.ProjectKindTenant ||
+		project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
 		tenant.Record.ID != project.Record.TenantID ||
 		candidateArtifact.AuthorizedVolumeDir != environment.Record.VolumeDir {
 		return nil, errs.New(errs.KindInternal, "durable Volume Environment hierarchy is invalid")

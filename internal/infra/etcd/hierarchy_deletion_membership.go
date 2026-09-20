@@ -6,6 +6,7 @@ import (
 	"fmt"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"strings"
@@ -155,10 +156,10 @@ func (repository *HierarchyDeletionRepository) freezeTenantMembership(
 	operation HierarchyDeletionOperation,
 ) ([]HierarchyDeletionMembershipNode, error) {
 	projects, err := repository.hierarchyDeletionIndexedTargets(
-		ctx, operation.Tombstone.SnapshotRevision, projectTenantOwnerPrefix(operation.Tombstone.TargetID),
-		projectKey, ids.KindProject, func(value []byte, id, owner string) error {
-			record, decodeErr := decodeProject(value)
-			if decodeErr != nil || record.ID != id || record.TenantID != owner || record.Kind != ProjectKindTenant {
+		ctx, operation.Tombstone.SnapshotRevision, hierarchyrecord.ProjectTenantOwnerPrefix(operation.Tombstone.TargetID),
+		hierarchyrecord.ProjectKey, ids.KindProject, func(value []byte, id, owner string) error {
+			record, decodeErr := hierarchyrecord.DecodeProject(value)
+			if decodeErr != nil || record.ID != id || record.TenantID != owner || record.Kind != hierarchyrecord.ProjectKindTenant {
 				return corruptHierarchyDeletion()
 			}
 			return nil
@@ -200,9 +201,9 @@ func (repository *HierarchyDeletionRepository) freezeProjectMembership(
 	root bool,
 ) ([]HierarchyDeletionMembershipNode, error) {
 	environments, err := repository.hierarchyDeletionIndexedTargets(
-		ctx, operation.Tombstone.SnapshotRevision, environmentOwnerPrefix(projectID), environmentKey,
+		ctx, operation.Tombstone.SnapshotRevision, hierarchyrecord.EnvironmentOwnerPrefix(projectID), hierarchyrecord.EnvironmentKey,
 		ids.KindEnvironment, func(value []byte, id, owner string) error {
-			record, decodeErr := decodeEnvironment(value)
+			record, decodeErr := hierarchyrecord.DecodeEnvironment(value)
 			if decodeErr != nil || record.ID != id || record.ProjectID != owner {
 				return corruptHierarchyDeletion()
 			}
@@ -683,11 +684,11 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 	key := ""
 	switch targetKind {
 	case "tenant":
-		key = tenantKey(targetID)
+		key = hierarchyrecord.TenantKey(targetID)
 	case "project", "backing-service":
-		key = projectKey(targetID)
+		key = hierarchyrecord.ProjectKey(targetID)
 	case "environment", "reservation":
-		key = environmentKey(targetID)
+		key = hierarchyrecord.EnvironmentKey(targetID)
 	case "script":
 		storage, scriptErr := readActiveScriptStorage(ctx, repository.store, targetID, revision)
 		if scriptErr != nil || storage.Script.Revision != targetRevision {

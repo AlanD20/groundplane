@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"maps"
@@ -154,7 +155,7 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 ) (*etcdstore.GetManyResult, []string, error) {
 	baseKeys := []string{
 		entryOwnerKey(entry.EnvironmentID, entry.Entry.ID),
-		environmentKey(entry.EnvironmentID),
+		hierarchyrecord.EnvironmentKey(entry.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetEnvironment), entry.EnvironmentID),
 	}
 	base, err := getManyBatchedAtRevision(ctx, repository.store, baseKeys, revision)
@@ -165,12 +166,12 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 		string(base.Values[0].Value) != entry.Entry.ID {
 		return nil, nil, errs.New(errs.KindResourceInUse, "entry retry hierarchy is unavailable")
 	}
-	environment, err := decodeEnvironment(base.Values[1].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(base.Values[1].Value)
 	if err != nil || environment.ID != entry.EnvironmentID {
 		return nil, nil, recordcodec.CorruptRecord()
 	}
 	extraKeys := []string{
-		projectKey(environment.ProjectID),
+		hierarchyrecord.ProjectKey(environment.ProjectID),
 		deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
 	}
 	projectRead, err := getManyBatchedAtRevision(ctx, repository.store, extraKeys, revision)
@@ -180,22 +181,22 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	if projectRead.Values[0] == nil || projectRead.Values[1] != nil {
 		return nil, nil, errs.New(errs.KindResourceInUse, "entry retry Project is unavailable")
 	}
-	project, err := decodeProject(projectRead.Values[0].Value)
+	project, err := hierarchyrecord.DecodeProject(projectRead.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
 		return nil, nil, recordcodec.CorruptRecord()
 	}
 	keys := append(baseKeys, extraKeys...)
 	values := append(base.Values, projectRead.Values...)
 	if project.TenantID != "" {
-		tenantKey := deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID)
-		tenantRead, readErr := getManyBatchedAtRevision(ctx, repository.store, []string{tenantKey}, revision)
+		hierarchyrecord.TenantKey := deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID)
+		tenantRead, readErr := getManyBatchedAtRevision(ctx, repository.store, []string{hierarchyrecord.TenantKey}, revision)
 		if readErr != nil {
 			return nil, nil, readErr
 		}
 		if tenantRead.Values[0] != nil {
 			return nil, nil, errs.New(errs.KindResourceInUse, "entry retry Tenant is unavailable")
 		}
-		keys = append(keys, tenantKey)
+		keys = append(keys, hierarchyrecord.TenantKey)
 		values = append(values, tenantRead.Values[0])
 	}
 	if intent.CurrentProjection != nil {

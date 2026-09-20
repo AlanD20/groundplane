@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
@@ -53,14 +54,14 @@ func loadOrdinaryEnvironmentMutationContext(
 		readRevision:  anchor.ReadRevision,
 		fence:         evidence,
 	}
-	if _, ok := mutationContext.revisionForKey(environmentKey(environmentID)); !ok {
+	if _, ok := mutationContext.revisionForKey(hierarchyrecord.EnvironmentKey(environmentID)); !ok {
 		return nil, errs.New(errs.KindInternal, "environment mutation fence omitted the environment")
 	}
-	if _, ok := mutationContext.revisionForKey(projectKey(projectID)); !ok {
+	if _, ok := mutationContext.revisionForKey(hierarchyrecord.ProjectKey(projectID)); !ok {
 		return nil, errs.New(errs.KindScopeUnauthorized, "environment mutation project scope is invalid")
 	}
 	if tenantID != "" {
-		if _, ok := mutationContext.revisionForKey(tenantKey(tenantID)); !ok {
+		if _, ok := mutationContext.revisionForKey(hierarchyrecord.TenantKey(tenantID)); !ok {
 			return nil, errs.New(errs.KindScopeUnauthorized, "environment mutation tenant scope is invalid")
 		}
 	}
@@ -80,20 +81,20 @@ func (mutationContext *ordinaryEnvironmentMutationContext) revisionForKey(key st
 }
 
 func (mutationContext *ordinaryEnvironmentMutationContext) versionHierarchy(
-	tenant *Versioned[TenantRecord],
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
-) (*Versioned[TenantRecord], Versioned[ProjectRecord], Versioned[EnvironmentRecord], error) {
-	projectRevision, ok := mutationContext.revisionForKey(projectKey(project.Record.ID))
+	tenant *Versioned[hierarchyrecord.TenantRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+) (*Versioned[hierarchyrecord.TenantRecord], Versioned[hierarchyrecord.ProjectRecord], Versioned[hierarchyrecord.EnvironmentRecord], error) {
+	projectRevision, ok := mutationContext.revisionForKey(hierarchyrecord.ProjectKey(project.Record.ID))
 	if !ok {
-		return nil, Versioned[ProjectRecord]{}, Versioned[EnvironmentRecord]{}, errs.New(
+		return nil, Versioned[hierarchyrecord.ProjectRecord]{}, Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 			errs.KindScopeUnauthorized,
 			"environment mutation project scope is invalid",
 		)
 	}
-	environmentRevision, ok := mutationContext.revisionForKey(environmentKey(environment.Record.ID))
+	environmentRevision, ok := mutationContext.revisionForKey(hierarchyrecord.EnvironmentKey(environment.Record.ID))
 	if !ok {
-		return nil, Versioned[ProjectRecord]{}, Versioned[EnvironmentRecord]{}, errs.New(
+		return nil, Versioned[hierarchyrecord.ProjectRecord]{}, Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 			errs.KindScopeUnauthorized,
 			"environment mutation environment scope is invalid",
 		)
@@ -104,7 +105,7 @@ func (mutationContext *ordinaryEnvironmentMutationContext) versionHierarchy(
 	environment.ReadRevision = mutationContext.readRevision
 	if project.Record.TenantID == "" {
 		if tenant != nil {
-			return nil, Versioned[ProjectRecord]{}, Versioned[EnvironmentRecord]{}, errs.New(
+			return nil, Versioned[hierarchyrecord.ProjectRecord]{}, Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 				errs.KindScopeUnauthorized,
 				"backing project environment mutation cannot contain a tenant",
 			)
@@ -112,14 +113,14 @@ func (mutationContext *ordinaryEnvironmentMutationContext) versionHierarchy(
 		return nil, project, environment, nil
 	}
 	if tenant == nil || tenant.Record.ID != project.Record.TenantID {
-		return nil, Versioned[ProjectRecord]{}, Versioned[EnvironmentRecord]{}, errs.New(
+		return nil, Versioned[hierarchyrecord.ProjectRecord]{}, Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 			errs.KindScopeUnauthorized,
 			"environment mutation tenant scope is invalid",
 		)
 	}
-	tenantRevision, ok := mutationContext.revisionForKey(tenantKey(tenant.Record.ID))
+	tenantRevision, ok := mutationContext.revisionForKey(hierarchyrecord.TenantKey(tenant.Record.ID))
 	if !ok {
-		return nil, Versioned[ProjectRecord]{}, Versioned[EnvironmentRecord]{}, errs.New(
+		return nil, Versioned[hierarchyrecord.ProjectRecord]{}, Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 			errs.KindScopeUnauthorized,
 			"environment mutation tenant scope is invalid",
 		)
@@ -185,7 +186,7 @@ func (mutationContext *ordinaryEnvironmentMutationContext) prepareBinding(
 	mutations = append([]etcdstore.Mutation(nil), mutations...)
 	filteredMutations := mutations[:0]
 	for _, mutation := range mutations {
-		if mutation.Type == etcdstore.MutationPut && mutation.Key == environmentKey(mutationContext.environmentID) {
+		if mutation.Type == etcdstore.MutationPut && mutation.Key == hierarchyrecord.EnvironmentKey(mutationContext.environmentID) {
 			continue
 		}
 		filteredMutations = append(filteredMutations, mutation)
@@ -414,17 +415,17 @@ func validateServiceMutationMarker(marker IdempotencyMarker, environmentID strin
 
 func validateServiceHierarchy(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record ServiceRecord,
 ) error {
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if err := validateEnvironment(environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {
 		return err
 	}
-	if err := validateProject(project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return err
 	}
 	if err := validateServiceRecord(record); err != nil {
@@ -450,8 +451,8 @@ func validateServiceVersion(current Versioned[ServiceRecord]) error {
 
 func classifyServiceWriteConflict(
 	values []*etcdstore.KeyValue,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record ServiceRecord,
 	expectedServiceRevision int64,
 ) error {

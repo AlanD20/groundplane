@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
 )
@@ -40,9 +41,9 @@ func (service *MutationService) resolveAttachScope(
 	if err != nil {
 		return etcd.AttachCreateScope{}, nil, nil, err
 	}
-	if environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
-		backingEnvironment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
-		project.Record.Kind != etcd.ProjectKindTenant || backingProject.Record.Kind != etcd.ProjectKindBacking ||
+	if environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
+		backingEnvironment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
+		project.Record.Kind != hierarchyrecord.ProjectKindTenant || backingProject.Record.Kind != hierarchyrecord.ProjectKindBacking ||
 		consumer.Record.EnvironmentID != environment.Record.ID ||
 		consumer.Record.Runtime.RuntimeIntent == core.ServiceRuntimeIntentAbsent ||
 		backingService.Record.Runtime.RuntimeIntent != core.ServiceRuntimeIntentRunning {

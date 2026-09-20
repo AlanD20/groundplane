@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -85,7 +86,7 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 	if record.Secret.Scope == core.SecretScopeProject {
 		parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
-				projectKey(record.Secret.ProjectID),
+				hierarchyrecord.ProjectKey(record.Secret.ProjectID),
 				deletionTombstoneKey(string(DeletionTargetProject), record.Secret.ProjectID),
 			},
 			Revision: revision,
@@ -96,12 +97,12 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 		if parents == nil || len(parents.Values) != 2 || parents.Values[0] == nil || parents.Values[1] != nil {
 			return secretTaskChange{}, errs.New(errs.KindResourceInUse, "Secret owner is unavailable")
 		}
-		project, err := decodeProject(parents.Values[0].Value)
+		project, err := hierarchyrecord.DecodeProject(parents.Values[0].Value)
 		if err != nil || project.ID != record.Secret.ProjectID {
 			return secretTaskChange{}, recordcodec.CorruptRecord()
 		}
 		change.conditions = append(change.conditions,
-			etcdstore.Condition{Key: projectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
+			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
 			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), project.ID)},
 		)
 		if project.TenantID != "" {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"time"
 
@@ -19,7 +20,7 @@ const tenantCreationRoute = "/tenants"
 type tenantCreationRepository interface {
 	CreateTenantIdempotent(
 		context.Context,
-		etcd.TenantRecord,
+		hierarchyrecord.TenantRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -166,7 +167,7 @@ func (service *tenantCreationService) CreateTenant(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	result, createErr := service.repository.CreateTenantIdempotent(ctx, etcd.TenantRecord{
+	result, createErr := service.repository.CreateTenantIdempotent(ctx, hierarchyrecord.TenantRecord{
 		ID: tenant.ID, Slug: tenant.Slug, Name: tenant.Name, Description: tenant.Description,
 	}, marker)
 	var resolution requestidempotency.Resolution

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -76,7 +77,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	rootKey := scriptSourceRootKey(task.OperationID)
 	keys := []string{
 		rootKey,
-		environmentMutationEpochKey(environmentID),
+		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
 		taskActiveOperationKey(task.OperationID),
 	}
 	writerIndex := -1
@@ -140,7 +141,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		},
 		{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
 		{Key: lifecycleKey, ModRevision: lifecycleValue.ModRevision},
-		{Key: environmentMutationEpochKey(environmentID), ModRevision: read.Values[1].ModRevision},
+		{Key: hierarchyrecord.EnvironmentMutationEpochKey(environmentID), ModRevision: read.Values[1].ModRevision},
 		{Key: taskActiveOperationKey(task.OperationID), ModRevision: read.Values[2].ModRevision},
 	}
 	if recovery.final {

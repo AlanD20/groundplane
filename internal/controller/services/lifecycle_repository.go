@@ -3,12 +3,13 @@ package services
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 )
 
 type serviceLifecycleRepository interface {
-	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	GetEnvironmentAppliedComposeProjection(
 		context.Context,
@@ -18,9 +19,9 @@ type serviceLifecycleRepository interface {
 	GetReleaseRenderInputAt(context.Context, string, int64) (etcd.Versioned[etcd.ReleaseRenderInput], error)
 	BeginServiceLifecycleWithTaskHookInputs(
 		context.Context,
-		*etcd.Versioned[etcd.TenantRecord],
-		etcd.Versioned[etcd.ProjectRecord],
-		etcd.Versioned[etcd.EnvironmentRecord],
+		*etcd.Versioned[hierarchyrecord.TenantRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcd.Versioned[etcd.ServiceRecord],
 		etcd.ServiceRecord,
 		*etcd.Versioned[etcd.EnvironmentComposeProjection],
@@ -34,7 +35,7 @@ type serviceLifecycleRepository interface {
 func (repository *durableServiceMutationRepository) GetTenant(
 	ctx context.Context,
 	tenantID string,
-) (etcd.Versioned[etcd.TenantRecord], error) {
+) (etcd.Versioned[hierarchyrecord.TenantRecord], error) {
 	return repository.hierarchy.GetTenant(ctx, tenantID)
 }
 
@@ -71,9 +72,9 @@ func (repository *durableServiceMutationRepository) GetReleaseRenderInputAt(
 
 func (repository *durableServiceMutationRepository) BeginServiceLifecycleWithTaskHookInputs(
 	ctx context.Context,
-	tenant *etcd.Versioned[etcd.TenantRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
-	environment etcd.Versioned[etcd.EnvironmentRecord],
+	tenant *etcd.Versioned[hierarchyrecord.TenantRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 	current etcd.Versioned[etcd.ServiceRecord],
 	replacement etcd.ServiceRecord,
 	projection *etcd.Versioned[etcd.EnvironmentComposeProjection],

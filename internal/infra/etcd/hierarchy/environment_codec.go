@@ -1,4 +1,4 @@
-package etcd
+package hierarchy
 
 import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -7,7 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func encodeEnvironment(record EnvironmentRecord) ([]byte, error) {
+func EncodeEnvironment(record EnvironmentRecord) ([]byte, error) {
 	type environmentData struct {
 		ID                string                       `json:"id"`
 		ProjectID         string                       `json:"project_id"`
@@ -27,7 +27,7 @@ func encodeEnvironment(record EnvironmentRecord) ([]byte, error) {
 	})
 }
 
-func decodeEnvironment(value []byte) (EnvironmentRecord, error) {
+func DecodeEnvironment(value []byte) (EnvironmentRecord, error) {
 	type environmentData struct {
 		ID                string                       `json:"id"`
 		ProjectID         string                       `json:"project_id"`
@@ -53,7 +53,7 @@ func decodeEnvironment(value []byte) (EnvironmentRecord, error) {
 		VolumeDir:      data.VolumeDir, ProvisioningState: data.ProvisioningState,
 		CreateTaskID: data.CreateTaskID, CreatedAt: createdAt,
 	}
-	if err := validateEnvironment(record); err != nil {
+	if err := ValidateEnvironment(record); err != nil {
 		return EnvironmentRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil

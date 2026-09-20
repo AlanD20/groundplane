@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
@@ -91,9 +92,9 @@ func (repository *ServiceRepository) scanServiceRemovalRecords(
 // without changing the active desired head or deleting the visible Service.
 func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	ctx context.Context,
-	tenant Versioned[TenantRecord],
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	tenant Versioned[hierarchyrecord.TenantRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	current Versioned[ServiceRecord],
 	projection Versioned[EnvironmentComposeProjection],
 	tombstone DeletionTombstoneRecord,
@@ -142,7 +143,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		return existing, err
 	}
 	mutationContext, err := loadOrdinaryEnvironmentMutationContext(
-		ctx, repository.store, environment.Record.ID, environmentKey(environment.Record.ID),
+		ctx, repository.store, environment.Record.ID, hierarchyrecord.EnvironmentKey(environment.Record.ID),
 		project.Record.ID, tenant.Record.ID,
 	)
 	if err != nil {

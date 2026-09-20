@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"time"
@@ -33,9 +34,9 @@ type BackupSecretResolutionEvidence struct {
 	ReadRevision        int64
 	Task                TaskRecord
 	Assignment          TaskAssignmentRecord
-	Environment         EnvironmentRecord
+	Environment         hierarchyrecord.EnvironmentRecord
 	EnvironmentRevision int64
-	Project             ProjectRecord
+	Project             hierarchyrecord.ProjectRecord
 	ProjectRevision     int64
 	Connector           connectorrecord.Record
 	ConnectorRevision   int64
@@ -472,7 +473,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 	if environmentID == "" || stepIndex < 0 || stepIndex >= len(plan.Steps) {
 		return "", nil, nil, errs.New(errs.KindInternal, "backup secret resolution scope is incomplete")
 	}
-	dynamic.environment = dynamic.add(environmentKey(environmentID))
+	dynamic.environment = dynamic.add(hierarchyrecord.EnvironmentKey(environmentID))
 	dynamic.environmentFence = dynamic.add(
 		deletionTombstoneKey(string(DeletionTargetEnvironment), environmentID),
 	)
@@ -492,8 +493,8 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 			}
 			dynamic.add(attachKey(source.TargetID))
 			dynamic.add(attachFactsKey(source.TargetID))
-			dynamic.add(projectKey(snapshot.BackingProjectID))
-			dynamic.add(environmentKey(snapshot.BackingEnvironmentID))
+			dynamic.add(hierarchyrecord.ProjectKey(snapshot.BackingProjectID))
+			dynamic.add(hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID))
 			dynamic.add(environmentBlueprintHeadKey(snapshot.BackingEnvironmentID))
 		case BackupRuntimeSourceVolume:
 			snapshot := source.Snapshot.Volume
@@ -510,7 +511,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 				return "", nil, nil, errs.New(errs.KindInternal, "config backup source snapshot is corrupt")
 			}
 			// The target environment is already part of the common evidence.
-			dynamic.add(environmentKey(environmentID))
+			dynamic.add(hierarchyrecord.EnvironmentKey(environmentID))
 		default:
 			return "", nil, nil, errs.New(errs.KindInternal, "backup source kind is corrupt")
 		}
@@ -562,14 +563,14 @@ func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
 	if environmentValue == nil {
 		return errs.New(errs.KindStateConflict, "backup environment evidence is unavailable")
 	}
-	environment, err := decodeEnvironment(environmentValue.Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(environmentValue.Value)
 	if err != nil || environment.ID != environmentID {
 		return errs.New(errs.KindInternal, "backup environment evidence is corrupt")
 	}
 	evidence.Environment = environment
 	evidence.EnvironmentRevision = environmentValue.ModRevision
 	projectKeyID = environment.ProjectID
-	dynamic.project = dynamic.add(projectKey(projectKeyID))
+	dynamic.project = dynamic.add(hierarchyrecord.ProjectKey(projectKeyID))
 	dynamic.projectFence = dynamic.add(
 		deletionTombstoneKey(string(DeletionTargetProject), projectKeyID),
 	)
@@ -609,11 +610,11 @@ func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
 	} {
 		credential := evidence.Connector.Connector.Credentials[name]
 		if credential.Kind == backupsecret.CredentialSourceSecretRef {
-			projectKey := secretKeyIndexKey(backupsecret.SecretScopeProject, projectKeyID, credential.SecretRef)
+			hierarchyrecord.ProjectKey := secretKeyIndexKey(backupsecret.SecretScopeProject, projectKeyID, credential.SecretRef)
 			platformKey := secretKeyIndexKey(backupsecret.SecretScopePlatform, "", credential.SecretRef)
 			dynamic.secretIndexes = append(dynamic.secretIndexes, backupSecretIndexRead{
 				name: name, reference: credential.SecretRef,
-				projectIndex: dynamic.add(projectKey), platformIndex: dynamic.add(platformKey),
+				projectIndex: dynamic.add(hierarchyrecord.ProjectKey), platformIndex: dynamic.add(platformKey),
 			})
 		}
 	}
@@ -683,8 +684,8 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 		keys := []*etcdstore.KeyValue{
 			result.Values[dynamic.index[attachKey(source.TargetID)]],
 			result.Values[dynamic.index[attachFactsKey(source.TargetID)]],
-			result.Values[dynamic.index[projectKey(snapshot.BackingProjectID)]],
-			result.Values[dynamic.index[environmentKey(snapshot.BackingEnvironmentID)]],
+			result.Values[dynamic.index[hierarchyrecord.ProjectKey(snapshot.BackingProjectID)]],
+			result.Values[dynamic.index[hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID)]],
 			result.Values[dynamic.index[environmentBlueprintHeadKey(snapshot.BackingEnvironmentID)]],
 		}
 		return validateBackupPostgresPublicationEvidence(keys, source, *snapshot)
@@ -696,7 +697,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 		keys := make([]*etcdstore.KeyValue, 0, len(snapshot.Services)+3)
 		keys = append(
 			keys,
-			result.Values[dynamic.index[environmentKey(snapshot.EnvironmentID)]],
+			result.Values[dynamic.index[hierarchyrecord.EnvironmentKey(snapshot.EnvironmentID)]],
 			result.Values[dynamic.index[environmentBlueprintHeadKey(snapshot.EnvironmentID)]],
 			result.Values[dynamic.index[environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID)]],
 		)
@@ -711,7 +712,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 			config.SnapshotRevision != uint64(snapshot.ReadRevision) {
 			return errs.New(errs.KindStateConflict, "backup config snapshot revision changed")
 		}
-		target := result.Values[dynamic.index[environmentKey(run.EnvironmentID)]]
+		target := result.Values[dynamic.index[hierarchyrecord.EnvironmentKey(run.EnvironmentID)]]
 		if target == nil || target.ModRevision != source.TargetRevision {
 			return errs.New(errs.KindStateConflict, "backup config target evidence changed")
 		}
@@ -780,7 +781,7 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 			return errs.New(errs.KindStateConflict, "backup prune authority evidence is unavailable")
 		}
 		source, sourceErr := decodeBackupSourceRecord(sourceValue.Value)
-		environment, environmentErr := decodeEnvironment(environmentValue.Value)
+		environment, environmentErr := hierarchyrecord.DecodeEnvironment(environmentValue.Value)
 		connector, connectorErr := connectorrecord.DecodeRecord(connectorValue.Value)
 		if sourceErr != nil {
 			return errs.New(errs.KindStateConflict, "backup prune source authority is corrupt")
@@ -860,7 +861,7 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 		return errs.New(errs.KindStateConflict, "backup project evidence is unavailable")
 	}
 	projectValue := second.Values[dynamic.project]
-	project, err := decodeProject(projectValue.Value)
+	project, err := hierarchyrecord.DecodeProject(projectValue.Value)
 	if err != nil || project.ID != evidence.Environment.ProjectID {
 		return errs.New(errs.KindInternal, "backup project evidence is corrupt")
 	}

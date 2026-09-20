@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
@@ -54,19 +55,19 @@ func (repository *HierarchyDeletionRepository) ResolveProjectDeletionTargetKind(
 	project, err := getRecord(
 		ctx,
 		repository.store,
-		projectKey(projectID),
+		hierarchyrecord.ProjectKey(projectID),
 		projectID,
 		errs.KindProjectNotFound,
-		decodeProject,
-		func(record ProjectRecord) string { return record.ID },
+		hierarchyrecord.DecodeProject,
+		func(record hierarchyrecord.ProjectRecord) string { return record.ID },
 	)
 	if err != nil {
 		return "", err
 	}
 	switch project.Record.Kind {
-	case ProjectKindTenant:
+	case hierarchyrecord.ProjectKindTenant:
 		return HierarchyDeletionTargetProject, nil
-	case ProjectKindBacking:
+	case hierarchyrecord.ProjectKindBacking:
 		return "", errs.New(errs.KindValidationFailed, "project deletion requires an ordinary Project")
 	default:
 		return "", errs.New(errs.KindInternal, "hierarchy deletion Project kind is invalid")
@@ -98,18 +99,18 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			ScopeID:    targetID,
 		}, nil
 	case HierarchyDeletionTargetProject:
-		project, err := getRecord(ctx, repository.store, projectKey(targetID), targetID, errs.KindProjectNotFound,
-			decodeProject, func(record ProjectRecord) string { return record.ID })
+		project, err := getRecord(ctx, repository.store, hierarchyrecord.ProjectKey(targetID), targetID, errs.KindProjectNotFound,
+			hierarchyrecord.DecodeProject, func(record hierarchyrecord.ProjectRecord) string { return record.ID })
 		if err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
-		if project.Record.Kind == ProjectKindBacking {
+		if project.Record.Kind == hierarchyrecord.ProjectKindBacking {
 			return HierarchyDeletionTargetResolution{}, errs.New(
 				errs.KindValidationFailed,
 				"project deletion requires an ordinary Project",
 			)
 		}
-		if project.Record.Kind != ProjectKindTenant {
+		if project.Record.Kind != hierarchyrecord.ProjectKindTenant {
 			return HierarchyDeletionTargetResolution{}, errs.New(
 				errs.KindInternal,
 				"hierarchy deletion Project kind is invalid",
@@ -124,12 +125,12 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		if err := recordcodec.ValidateID(ids.KindProject, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
-		project, err := getRecord(ctx, repository.store, projectKey(targetID), targetID, errs.KindProjectNotFound,
-			decodeProject, func(record ProjectRecord) string { return record.ID })
+		project, err := getRecord(ctx, repository.store, hierarchyrecord.ProjectKey(targetID), targetID, errs.KindProjectNotFound,
+			hierarchyrecord.DecodeProject, func(record hierarchyrecord.ProjectRecord) string { return record.ID })
 		if err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
-		if project.Record.Kind != ProjectKindBacking || project.Record.TenantID != "" {
+		if project.Record.Kind != hierarchyrecord.ProjectKindBacking || project.Record.TenantID != "" {
 			return HierarchyDeletionTargetResolution{}, errs.New(
 				errs.KindBackingServiceNotFound,
 				"backing service was not found",
@@ -147,11 +148,11 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		environment, err := getRecord(
 			ctx,
 			repository.store,
-			environmentKey(targetID),
+			hierarchyrecord.EnvironmentKey(targetID),
 			targetID,
 			errs.KindEnvironmentNotFound,
-			decodeEnvironment,
-			func(record EnvironmentRecord) string { return record.ID },
+			hierarchyrecord.DecodeEnvironment,
+			func(record hierarchyrecord.EnvironmentRecord) string { return record.ID },
 		)
 		if err != nil {
 			return HierarchyDeletionTargetResolution{}, err

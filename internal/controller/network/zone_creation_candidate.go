@@ -1,6 +1,7 @@
 package network
 
 import (
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
 
@@ -17,7 +18,7 @@ import (
 // identity, the added Zone/network, and the corresponding rendered artifacts.
 func buildZoneCreationProjection(
 	current etcd.EnvironmentComposeProjection,
-	project etcd.ProjectRecord,
+	project hierarchyrecord.ProjectRecord,
 	zone zonerecord.Record,
 	revisionID string,
 	generation uint64,

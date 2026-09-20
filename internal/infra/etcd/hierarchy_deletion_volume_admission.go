@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -22,10 +23,10 @@ func (repository *HierarchyDeletionRepository) requireHierarchyVolumeRemovalAbse
 		return repository.requireProjectVolumeRemovalAbsent(ctx, revision, targetID)
 	case HierarchyDeletionTargetTenant:
 		projects, err := repository.hierarchyDeletionIndexedTargets(ctx, revision,
-			projectTenantOwnerPrefix(targetID), projectKey, ids.KindProject,
+			hierarchyrecord.ProjectTenantOwnerPrefix(targetID), hierarchyrecord.ProjectKey, ids.KindProject,
 			func(value []byte, id, owner string) error {
-				record, err := decodeProject(value)
-				if err != nil || record.ID != id || record.TenantID != owner || record.Kind != ProjectKindTenant {
+				record, err := hierarchyrecord.DecodeProject(value)
+				if err != nil || record.ID != id || record.TenantID != owner || record.Kind != hierarchyrecord.ProjectKindTenant {
 					return corruptHierarchyDeletion()
 				}
 				return nil
@@ -48,9 +49,9 @@ func (repository *HierarchyDeletionRepository) requireProjectVolumeRemovalAbsent
 	ctx context.Context, revision int64, projectID string,
 ) error {
 	environments, err := repository.hierarchyDeletionIndexedTargets(ctx, revision,
-		environmentOwnerPrefix(projectID), environmentKey, ids.KindEnvironment,
+		hierarchyrecord.EnvironmentOwnerPrefix(projectID), hierarchyrecord.EnvironmentKey, ids.KindEnvironment,
 		func(value []byte, id, owner string) error {
-			record, err := decodeEnvironment(value)
+			record, err := hierarchyrecord.DecodeEnvironment(value)
 			if err != nil || record.ID != id || record.ProjectID != owner {
 				return corruptHierarchyDeletion()
 			}

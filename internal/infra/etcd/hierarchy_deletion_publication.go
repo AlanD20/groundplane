@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -34,7 +35,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 	root.targetValue = append([]byte(nil), result.Entry.Value...)
 	switch targetKind {
 	case HierarchyDeletionTargetTenant:
-		tenant, decodeErr := decodeTenant(result.Entry.Value)
+		tenant, decodeErr := hierarchyrecord.DecodeTenant(result.Entry.Value)
 		if decodeErr != nil || tenant.ID != targetID || tenant.DeletionTaskID != "" {
 			return hierarchyDeletionRoot{}, 0, hierarchyDeletionUnavailable(targetKind)
 		}
@@ -43,13 +44,13 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		root.owner, err = TenantTaskOwner(tenant.ID)
 		root.coordinationKeys = []string{HierarchyCoordinationKey(string(targetKind), targetID)}
 	case HierarchyDeletionTargetProject:
-		project, decodeErr := decodeProject(result.Entry.Value)
+		project, decodeErr := hierarchyrecord.DecodeProject(result.Entry.Value)
 		if decodeErr != nil || project.ID != targetID || project.DeletionTaskID != "" {
 			return hierarchyDeletionRoot{}, 0, hierarchyDeletionUnavailable(targetKind)
 		}
 		root.rootSlug = project.Slug
 		root.owner, err = ProjectTaskOwner(project)
-		if project.Kind == ProjectKindBacking {
+		if project.Kind == hierarchyrecord.ProjectKindBacking {
 			root.workspace = HierarchyDeletionWorkspace{Type: "platform"}
 		} else {
 			root.workspace = HierarchyDeletionWorkspace{Type: "tenant", TenantID: project.TenantID}
@@ -59,8 +60,8 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 			root, err = repository.readProjectParentAtRevision(ctx, result.ReadRevision, project, root)
 		}
 	case HierarchyDeletionTargetBacking:
-		project, decodeErr := decodeProject(result.Entry.Value)
-		if decodeErr != nil || project.ID != targetID || project.Kind != ProjectKindBacking ||
+		project, decodeErr := hierarchyrecord.DecodeProject(result.Entry.Value)
+		if decodeErr != nil || project.ID != targetID || project.Kind != hierarchyrecord.ProjectKindBacking ||
 			project.TenantID != "" || project.DeletionTaskID != "" {
 			return hierarchyDeletionRoot{}, 0, hierarchyDeletionUnavailable(targetKind)
 		}
@@ -69,7 +70,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		root.owner, err = ProjectTaskOwner(project)
 		root.coordinationKeys = []string{HierarchyCoordinationKey(string(HierarchyDeletionTargetProject), targetID)}
 	case HierarchyDeletionTargetEnvironment:
-		environment, decodeErr := decodeEnvironment(result.Entry.Value)
+		environment, decodeErr := hierarchyrecord.DecodeEnvironment(result.Entry.Value)
 		if decodeErr != nil || environment.ID != targetID || environment.DeletionTaskID != "" {
 			return hierarchyDeletionRoot{}, 0, hierarchyDeletionUnavailable(targetKind)
 		}
@@ -131,11 +132,11 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 func (repository *HierarchyDeletionRepository) readProjectParentAtRevision(
 	ctx context.Context,
 	revision int64,
-	project ProjectRecord,
+	project hierarchyrecord.ProjectRecord,
 	root hierarchyDeletionRoot,
 ) (hierarchyDeletionRoot, error) {
 	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{tenantKey(project.TenantID)}, Revision: revision,
+		Keys: []string{hierarchyrecord.TenantKey(project.TenantID)}, Revision: revision,
 	})
 	if err != nil {
 		return hierarchyDeletionRoot{}, err
@@ -143,12 +144,12 @@ func (repository *HierarchyDeletionRepository) readProjectParentAtRevision(
 	if parents == nil || parents.ReadRevision != revision || len(parents.Values) != 1 || parents.Values[0] == nil {
 		return hierarchyDeletionRoot{}, corruptHierarchyDeletion()
 	}
-	tenant, err := decodeTenant(parents.Values[0].Value)
+	tenant, err := hierarchyrecord.DecodeTenant(parents.Values[0].Value)
 	if err != nil || tenant.ID != project.TenantID || tenant.DeletionTaskID != "" {
 		return hierarchyDeletionRoot{}, hierarchyDeletionUnavailable(HierarchyDeletionTargetProject)
 	}
 	root.primaryFences = append(root.primaryFences, etcdstore.Condition{
-		Key: tenantKey(tenant.ID), ModRevision: parents.Values[0].ModRevision,
+		Key: hierarchyrecord.TenantKey(tenant.ID), ModRevision: parents.Values[0].ModRevision,
 	})
 	root.coordinationKeys = append([]string{
 		HierarchyCoordinationKey(string(HierarchyDeletionTargetTenant), tenant.ID),
@@ -159,11 +160,11 @@ func (repository *HierarchyDeletionRepository) readProjectParentAtRevision(
 func (repository *HierarchyDeletionRepository) readEnvironmentParentsAtRevision(
 	ctx context.Context,
 	revision int64,
-	environment EnvironmentRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 	root hierarchyDeletionRoot,
 ) (hierarchyDeletionRoot, error) {
 	projectResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{projectKey(environment.ProjectID)}, Revision: revision,
+		Keys: []string{hierarchyrecord.ProjectKey(environment.ProjectID)}, Revision: revision,
 	})
 	if err != nil {
 		return hierarchyDeletionRoot{}, err
@@ -172,12 +173,12 @@ func (repository *HierarchyDeletionRepository) readEnvironmentParentsAtRevision(
 		projectResult.Values[0] == nil {
 		return hierarchyDeletionRoot{}, corruptHierarchyDeletion()
 	}
-	project, err := decodeProject(projectResult.Values[0].Value)
+	project, err := hierarchyrecord.DecodeProject(projectResult.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID || project.DeletionTaskID != "" {
 		return hierarchyDeletionRoot{}, hierarchyDeletionUnavailable(HierarchyDeletionTargetEnvironment)
 	}
 	root.primaryFences = append(root.primaryFences, etcdstore.Condition{
-		Key: projectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision,
+		Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision,
 	})
 	root.owner, err = EnvironmentTaskOwner(project, environment)
 	if err != nil {
@@ -359,33 +360,33 @@ func hierarchyDeletionRootValue(
 ) ([]byte, error) {
 	switch targetKind {
 	case HierarchyDeletionTargetTenant:
-		record, err := decodeTenant(value)
+		record, err := hierarchyrecord.DecodeTenant(value)
 		if err != nil || record.DeletionTaskID != "" {
 			return nil, hierarchyDeletionUnavailable(targetKind)
 		}
 		record.DeletionTaskID = taskID
-		return encodeTenant(record)
+		return hierarchyrecord.EncodeTenant(record)
 	case HierarchyDeletionTargetProject:
-		record, err := decodeProject(value)
+		record, err := hierarchyrecord.DecodeProject(value)
 		if err != nil || record.DeletionTaskID != "" {
 			return nil, hierarchyDeletionUnavailable(targetKind)
 		}
 		record.DeletionTaskID = taskID
-		return encodeProject(record)
+		return hierarchyrecord.EncodeProject(record)
 	case HierarchyDeletionTargetBacking:
-		record, err := decodeProject(value)
-		if err != nil || record.Kind != ProjectKindBacking || record.TenantID != "" || record.DeletionTaskID != "" {
+		record, err := hierarchyrecord.DecodeProject(value)
+		if err != nil || record.Kind != hierarchyrecord.ProjectKindBacking || record.TenantID != "" || record.DeletionTaskID != "" {
 			return nil, hierarchyDeletionUnavailable(targetKind)
 		}
 		record.DeletionTaskID = taskID
-		return encodeProject(record)
+		return hierarchyrecord.EncodeProject(record)
 	case HierarchyDeletionTargetEnvironment:
-		record, err := decodeEnvironment(value)
+		record, err := hierarchyrecord.DecodeEnvironment(value)
 		if err != nil || record.DeletionTaskID != "" {
 			return nil, hierarchyDeletionUnavailable(targetKind)
 		}
 		record.DeletionTaskID = taskID
-		return encodeEnvironment(record)
+		return hierarchyrecord.EncodeEnvironment(record)
 	default:
 		return nil, errs.New(errs.KindValidationFailed, "hierarchy deletion target kind is invalid")
 	}
@@ -394,13 +395,13 @@ func hierarchyDeletionRootValue(
 func hierarchyDeletionPrimaryKey(kind HierarchyDeletionTargetKind, id string) string {
 	switch kind {
 	case HierarchyDeletionTargetTenant:
-		return tenantKey(id)
+		return hierarchyrecord.TenantKey(id)
 	case HierarchyDeletionTargetProject:
-		return projectKey(id)
+		return hierarchyrecord.ProjectKey(id)
 	case HierarchyDeletionTargetBacking:
-		return projectKey(id)
+		return hierarchyrecord.ProjectKey(id)
 	case HierarchyDeletionTargetEnvironment:
-		return environmentKey(id)
+		return hierarchyrecord.EnvironmentKey(id)
 	default:
 		return ""
 	}

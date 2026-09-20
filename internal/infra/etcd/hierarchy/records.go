@@ -1,4 +1,4 @@
-package etcd
+package hierarchy
 
 import "time"
 
@@ -37,3 +37,10 @@ type EnvironmentRecord struct {
 	CreatedAt         time.Time                    `json:"created_at"`
 	DeletionTaskID    string                       `json:"deletion_task_id,omitempty"`
 }
+
+type ProjectKind string
+
+const (
+	ProjectKindTenant  ProjectKind = "tenant"
+	ProjectKindBacking ProjectKind = "backing"
+)

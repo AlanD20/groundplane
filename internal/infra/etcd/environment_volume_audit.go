@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"fmt"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -87,7 +88,7 @@ func (repository *HierarchyRepository) validateTenantEnvironmentVolumeDirs(
 func (repository *HierarchyRepository) validateProjectEnvironmentVolumeDirs(
 	ctx context.Context,
 	volumeRoot string,
-	project ProjectRecord,
+	project hierarchyrecord.ProjectRecord,
 ) error {
 	environmentCursor := ""
 	for {
@@ -98,7 +99,7 @@ func (repository *HierarchyRepository) validateProjectEnvironmentVolumeDirs(
 			return err
 		}
 		for _, environment := range environments.Items {
-			if err := ValidateEnvironmentVolumeDir(volumeRoot, project, environment.Record); err != nil {
+			if err := hierarchyrecord.ValidateEnvironmentVolumeDir(volumeRoot, project, environment.Record); err != nil {
 				return errs.Wrap(errs.KindInternal, fmt.Errorf(
 					"persisted environment %s volume_dir invariant failed: %w",
 					environment.Record.ID,

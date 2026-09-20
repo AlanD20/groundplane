@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -377,7 +378,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 	}
 	epochRevision := int64(0)
 	for _, condition := range fence.transactionConditions() {
-		if condition.Key == environmentMutationEpochKey(fence.environmentID) {
+		if condition.Key == hierarchyrecord.EnvironmentMutationEpochKey(fence.environmentID) {
 			epochRevision = condition.ModRevision
 			break
 		}

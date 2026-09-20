@@ -1,6 +1,7 @@
 package backingservices
 
 import (
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"path/filepath"
 	"strings"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
@@ -17,7 +18,7 @@ func backingComposeProject(
 	serviceID string,
 	zone core.Zone,
 	volume *core.Volume,
-	environment etcd.EnvironmentRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 ) *composetypes.Project {
 	service := composetypes.ServiceConfig{
 		Name: spec.ServiceName, Image: spec.Image, Command: composetypes.ShellCommand(backingComposeShell(spec.Command)),

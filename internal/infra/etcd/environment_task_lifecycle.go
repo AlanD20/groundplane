@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -16,7 +17,7 @@ type environmentTaskChange struct {
 }
 
 type taskEnvironmentMutationState struct {
-	Environment   Versioned[EnvironmentRecord]
+	Environment   Versioned[hierarchyrecord.EnvironmentRecord]
 	EpochRevision int64
 	EpochValue    []byte
 }
@@ -52,28 +53,28 @@ func (repository *TaskRepository) prepareEnvironmentTaskRetry(
 			"source Task no longer owns Environment provisioning",
 		)
 	}
-	retrying, err := RetryEnvironmentProvisioning(current.Record, retry.ID)
+	retrying, err := hierarchyrecord.RetryEnvironmentProvisioning(current.Record, retry.ID)
 	if err != nil {
 		return environmentTaskChange{}, err
 	}
-	value, err := encodeEnvironment(retrying)
+	value, err := hierarchyrecord.EncodeEnvironment(retrying)
 	if err != nil {
 		return environmentTaskChange{}, err
 	}
 	return environmentTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: environmentKey(source.Target), ModRevision: current.Revision},
-			{Key: environmentMutationEpochKey(source.Target), ModRevision: state.EpochRevision},
-			{Key: environmentOperationLockKey(source.Target)},
+			{Key: hierarchyrecord.EnvironmentKey(source.Target), ModRevision: current.Revision},
+			{Key: hierarchyrecord.EnvironmentMutationEpochKey(source.Target), ModRevision: state.EpochRevision},
+			{Key: hierarchyrecord.EnvironmentOperationLockKey(source.Target)},
 		},
 		mutations: []etcdstore.Mutation{
 			{
-				Type: etcdstore.MutationPut, Key: environmentKey(source.Target), Value: value,
+				Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(source.Target), Value: value,
 			},
 			{
 				Type:  etcdstore.MutationPut,
-				Key:   environmentMutationEpochKey(source.Target),
+				Key:   hierarchyrecord.EnvironmentMutationEpochKey(source.Target),
 				Value: state.EpochValue,
 			},
 		},
@@ -89,9 +90,9 @@ func (repository *TaskRepository) readTaskEnvironmentMutationState(
 ) (taskEnvironmentMutationState, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			environmentKey(environmentID),
-			environmentMutationEpochKey(environmentID),
-			environmentOperationLockKey(environmentID),
+			hierarchyrecord.EnvironmentKey(environmentID),
+			hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
+			hierarchyrecord.EnvironmentOperationLockKey(environmentID),
 		},
 		Revision: revision,
 	})
@@ -126,7 +127,7 @@ func (repository *TaskRepository) readTaskEnvironmentMutationState(
 			"environment mutation epoch is missing",
 		)
 	}
-	record, err := decodeEnvironment(environmentValue.Value)
+	record, err := hierarchyrecord.DecodeEnvironment(environmentValue.Value)
 	if err != nil {
 		return taskEnvironmentMutationState{}, err
 	}
@@ -163,7 +164,7 @@ func (repository *TaskRepository) readTaskEnvironmentMutationState(
 		return taskEnvironmentMutationState{}, err
 	}
 	return taskEnvironmentMutationState{
-		Environment: Versioned[EnvironmentRecord]{
+		Environment: Versioned[hierarchyrecord.EnvironmentRecord]{
 			Record:       record,
 			Revision:     environmentValue.ModRevision,
 			ReadRevision: result.ReadRevision,

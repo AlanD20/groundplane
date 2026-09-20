@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"sort"
@@ -119,7 +120,7 @@ func (service *Service) prepareBlueprintComponents(
 }
 
 func blueprintComponentEnvironment(
-	environment etcd.EnvironmentRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 	zones []core.Zone,
 	services []core.Service,
 	routes []core.Route,

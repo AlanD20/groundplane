@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"net/netip"
@@ -27,7 +28,7 @@ type volumeRemovalInitialPublication struct {
 // authority; evidence, ownership and Task writes remain one transaction.
 func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemovalWithTask(
 	ctx context.Context,
-	project Versioned[ProjectRecord], environment Versioned[EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord], environment Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64, claim EnvironmentBlueprintStageClaim,
 	projection EnvironmentComposeProjection, policy VolumeRemovalBackupPolicyPreparation,
 	initial removalrecord.InitialPublication, task TaskRecord, marker IdempotencyMarker,

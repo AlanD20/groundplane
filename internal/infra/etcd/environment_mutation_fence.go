@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -101,9 +102,9 @@ func loadEnvironmentMutationFence(
 	}
 
 	baseKeys := []string{
-		environmentKey(environmentID),
-		environmentMutationEpochKey(environmentID),
-		environmentOperationLockKey(environmentID),
+		hierarchyrecord.EnvironmentKey(environmentID),
+		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
+		hierarchyrecord.EnvironmentOperationLockKey(environmentID),
 		deletionTombstoneKey(string(DeletionTargetEnvironment), environmentID),
 	}
 	base, err := readEnvironmentMutationFenceKeys(ctx, store, baseKeys, readRevision)
@@ -117,7 +118,7 @@ func loadEnvironmentMutationFence(
 			"environment was not found",
 		)
 	}
-	environment, err := decodeEnvironment(base.Values[0].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(base.Values[0].Value)
 	if err != nil || environment.ID != environmentID {
 		return environmentMutationFenceEvidence{}, errs.New(
 			errs.KindInternal,
@@ -150,7 +151,7 @@ func loadEnvironmentMutationFence(
 	}
 
 	projectKeys := []string{
-		projectKey(environment.ProjectID),
+		hierarchyrecord.ProjectKey(environment.ProjectID),
 		deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
 	}
 	projectRead, err := readEnvironmentMutationFenceKeys(ctx, store, projectKeys, readRevision)
@@ -164,7 +165,7 @@ func loadEnvironmentMutationFence(
 			"project was not found",
 		)
 	}
-	project, err := decodeProject(projectRead.Values[0].Value)
+	project, err := hierarchyrecord.DecodeProject(projectRead.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
 		return environmentMutationFenceEvidence{}, errs.New(
 			errs.KindInternal,
@@ -192,9 +193,9 @@ func loadEnvironmentMutationFence(
 			kind:        environmentMutationFenceProject,
 		},
 	}
-	if project.Kind == ProjectKindTenant {
+	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		tenantKeys := []string{
-			tenantKey(project.TenantID),
+			hierarchyrecord.TenantKey(project.TenantID),
 			deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID),
 		}
 		tenantRead, readErr := readEnvironmentMutationFenceKeys(
@@ -213,7 +214,7 @@ func loadEnvironmentMutationFence(
 				"tenant was not found",
 			)
 		}
-		tenant, decodeErr := decodeTenant(tenantRead.Values[0].Value)
+		tenant, decodeErr := hierarchyrecord.DecodeTenant(tenantRead.Values[0].Value)
 		if decodeErr != nil || tenant.ID != project.TenantID {
 			return environmentMutationFenceEvidence{}, errs.New(
 				errs.KindInternal,
@@ -230,7 +231,7 @@ func loadEnvironmentMutationFence(
 			key: tenantKeys[0], stableID: tenant.ID,
 			modRevision: tenantRead.Values[0].ModRevision, kind: environmentMutationFenceTenant,
 		})
-	} else if project.Kind != ProjectKindBacking || project.TenantID != "" {
+	} else if project.Kind != hierarchyrecord.ProjectKindBacking || project.TenantID != "" {
 		return environmentMutationFenceEvidence{}, errs.New(
 			errs.KindInternal,
 			"environment mutation fence project ownership is corrupt",
@@ -253,7 +254,7 @@ func loadEnvironmentMutationFence(
 			kind: environmentMutationFenceProjectTombstone,
 		},
 	)
-	if project.Kind == ProjectKindTenant {
+	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		conditions = append(conditions, environmentMutationFenceCondition{
 			key:  deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID),
 			kind: environmentMutationFenceTenantTombstone,
@@ -422,7 +423,7 @@ func (evidence environmentMutationFenceEvidence) epochRewriteMutation() (etcdsto
 		return etcdstore.Mutation{}, err
 	}
 	return etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(evidence.environmentID), Value: value,
+		Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(evidence.environmentID), Value: value,
 	}, nil
 }
 
@@ -446,7 +447,7 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore
 			if value == nil {
 				return errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 			}
-			record, err := decodeEnvironment(value.Value)
+			record, err := hierarchyrecord.DecodeEnvironment(value.Value)
 			if err != nil || record.ID != condition.stableID {
 				return errs.New(
 					errs.KindInternal,
@@ -460,7 +461,7 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore
 			if value == nil {
 				return errs.New(errs.KindProjectNotFound, "project was not found")
 			}
-			record, err := decodeProject(value.Value)
+			record, err := hierarchyrecord.DecodeProject(value.Value)
 			if err != nil || record.ID != condition.stableID {
 				return errs.New(errs.KindInternal, "environment mutation fence project is corrupt")
 			}
@@ -471,7 +472,7 @@ func (evidence environmentMutationFenceEvidence) classifyCAS(values []*etcdstore
 			if value == nil {
 				return errs.New(errs.KindTenantNotFound, "tenant was not found")
 			}
-			record, err := decodeTenant(value.Value)
+			record, err := hierarchyrecord.DecodeTenant(value.Value)
 			if err != nil || record.ID != condition.stableID {
 				return errs.New(errs.KindInternal, "environment mutation fence tenant is corrupt")
 			}

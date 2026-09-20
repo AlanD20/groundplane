@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -34,8 +35,8 @@ func newConnectorRepository(store hierarchyStore) (*ConnectorRepository, error) 
 
 func (repository *ConnectorRepository) CreateConnector(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record connectorrecord.Record,
 	credentials connectorrecord.EncryptedCredentials,
 ) (Versioned[connectorrecord.Record], error) {
@@ -121,8 +122,8 @@ func (repository *ConnectorRepository) CreateConnector(
 
 func (repository *ConnectorRepository) CreateConnectorIdempotent(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record connectorrecord.Record,
 	credentials connectorrecord.EncryptedCredentials,
 	marker IdempotencyMarker,
@@ -472,15 +473,15 @@ func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 
 func (repository *ConnectorRepository) loadConnectorMutationFence(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	domainKeys []string,
 ) (environmentMutationFenceEvidence, *etcdstore.GetManyResult, error) {
 	keys := append([]string(nil), domainKeys...)
 	environmentIndex := len(keys)
-	keys = append(keys, environmentKey(environment.Record.ID))
+	keys = append(keys, hierarchyrecord.EnvironmentKey(environment.Record.ID))
 	projectIndex := len(keys)
-	keys = append(keys, projectKey(project.Record.ID))
+	keys = append(keys, hierarchyrecord.ProjectKey(project.Record.ID))
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return environmentMutationFenceEvidence{}, nil, err
@@ -543,17 +544,17 @@ func (repository *ConnectorRepository) loadConnectorMutationFence(
 
 func validateConnectorHierarchy(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record connectorrecord.Record,
 ) error {
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if err := validateEnvironment(environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {
 		return err
 	}
-	if err := validateProject(project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return err
 	}
 	if err := connectorrecord.ValidateRecord(record); err != nil {

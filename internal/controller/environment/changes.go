@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"net/netip"
 	"time"
@@ -22,11 +23,11 @@ const (
 )
 
 type environmentChangeRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	MutateEnvironmentIdempotent(context.Context, etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.EnvironmentRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
-	ReplaceEnvironmentPoolIdempotent(context.Context, netip.Prefix, etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.EnvironmentRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	MutateEnvironmentIdempotent(context.Context, etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		hierarchyrecord.EnvironmentRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	ReplaceEnvironmentPoolIdempotent(context.Context, netip.Prefix, etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		hierarchyrecord.EnvironmentRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
 }
 
 // environmentCapacityRepository supplies the fixed revision used to seal a
@@ -179,10 +180,10 @@ func (service *environmentChangeService) EditEnvironment(
 		func(ctx context.Context) (environmentChangeEvidence, error) {
 			return service.idempotency.PrepareEdit(ctx, id, input)
 		},
-		func(current etcd.EnvironmentRecord) (etcd.EnvironmentRecord, error) {
+		func(current hierarchyrecord.EnvironmentRecord) (hierarchyrecord.EnvironmentRecord, error) {
 			networkPool, err := PrepareEnvironmentEdit(current.NetworkPool, input)
 			if err != nil {
-				return etcd.EnvironmentRecord{}, err
+				return hierarchyrecord.EnvironmentRecord{}, err
 			}
 			replacement := current
 			replacement.NetworkPool = networkPool
@@ -190,8 +191,8 @@ func (service *environmentChangeService) EditEnvironment(
 		},
 		func(
 			ctx context.Context,
-			current etcd.Versioned[etcd.EnvironmentRecord],
-			replacement etcd.EnvironmentRecord,
+			current etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+			replacement hierarchyrecord.EnvironmentRecord,
 			marker etcd.IdempotencyMarker,
 		) (etcd.IdempotencyTransactionResult, error) {
 			return service.repository.ReplaceEnvironmentPoolIdempotent(
@@ -215,10 +216,10 @@ func (service *environmentChangeService) RenameEnvironment(
 		func(ctx context.Context) (environmentChangeEvidence, error) {
 			return service.idempotency.PrepareRename(ctx, id, input)
 		},
-		func(current etcd.EnvironmentRecord) (etcd.EnvironmentRecord, error) {
+		func(current hierarchyrecord.EnvironmentRecord) (hierarchyrecord.EnvironmentRecord, error) {
 			name, err := PrepareEnvironmentRename(current.Name, input)
 			if err != nil {
-				return etcd.EnvironmentRecord{}, err
+				return hierarchyrecord.EnvironmentRecord{}, err
 			}
 			replacement := current
 			replacement.Name = name
@@ -230,8 +231,8 @@ func (service *environmentChangeService) RenameEnvironment(
 
 type environmentChangeMutation func(
 	context.Context,
-	etcd.Versioned[etcd.EnvironmentRecord],
-	etcd.EnvironmentRecord,
+	etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	hierarchyrecord.EnvironmentRecord,
 	etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error)
 
@@ -242,7 +243,7 @@ func (service *environmentChangeService) changeEnvironment(
 	route string,
 	idempotencyKey string,
 	prepare func(context.Context) (environmentChangeEvidence, error),
-	change func(etcd.EnvironmentRecord) (etcd.EnvironmentRecord, error),
+	change func(hierarchyrecord.EnvironmentRecord) (hierarchyrecord.EnvironmentRecord, error),
 	mutate environmentChangeMutation,
 ) (etcd.IdempotencyResponse, error) {
 	if ctx == nil {
@@ -273,7 +274,7 @@ func (service *environmentChangeService) changeEnvironmentOnce(
 	id string,
 	locator etcd.IdempotencyLocator,
 	prepare func(context.Context) (environmentChangeEvidence, error),
-	change func(etcd.EnvironmentRecord) (etcd.EnvironmentRecord, error),
+	change func(hierarchyrecord.EnvironmentRecord) (hierarchyrecord.EnvironmentRecord, error),
 	mutate environmentChangeMutation,
 ) (etcd.IdempotencyResponse, error) {
 	evidence, err := prepare(ctx)
@@ -352,11 +353,11 @@ func (service *environmentChangeService) changeEnvironmentOnce(
 }
 
 func environmentAPI(
-	record etcd.EnvironmentRecord,
+	record hierarchyrecord.EnvironmentRecord,
 	capacity NetworkCapacity,
 ) apiTypes.Environment {
 	var createTaskID *string
-	if record.ProvisioningState != etcd.EnvironmentProvisioningReady && record.CreateTaskID != "" {
+	if record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady && record.CreateTaskID != "" {
 		value := record.CreateTaskID
 		createTaskID = &value
 	}

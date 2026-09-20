@@ -2,6 +2,7 @@ package volume
 
 import (
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"sort"
 	"strings"
@@ -181,7 +182,7 @@ func volumeMutationConsumerIDs(projection etcd.EnvironmentComposeProjection, vol
 
 func volumeMutationResponse(
 	request volumeMutationRequest,
-	environment etcd.EnvironmentRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 	taskID string,
 ) (etcd.IdempotencyResponse, error) {
 	if request.action == volumeMutationActionRemove {

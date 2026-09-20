@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/http"
@@ -40,8 +41,8 @@ type backupPolicyConnectorReferenceEvidence struct {
 // backupPolicyReplacementCandidate contains the fully resolved, prevalidated
 // durable evidence for one protected Environment-scoped replacement.
 type backupPolicyReplacementCandidate struct {
-	Environment         Versioned[EnvironmentRecord]
-	Project             Versioned[ProjectRecord]
+	Environment         Versioned[hierarchyrecord.EnvironmentRecord]
+	Project             Versioned[hierarchyrecord.ProjectRecord]
 	MutationEpoch       Versioned[EnvironmentMutationEpochRecord]
 	Coordination        Versioned[EnvironmentCoordinationRecord]
 	NextCoordination    EnvironmentCoordinationRecord
@@ -184,10 +185,10 @@ func validatebackupPolicyReplacementCandidate(
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if err := validateEnvironment(candidate.Environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(candidate.Environment.Record); err != nil {
 		return err
 	}
-	if err := validateProject(candidate.Project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(candidate.Project.Record); err != nil {
 		return err
 	}
 	if err := validateEnvironmentMutationEpochRecord(candidate.MutationEpoch.Record); err != nil {
@@ -208,10 +209,10 @@ func validatebackupPolicyReplacementCandidate(
 		candidate.Coordination.Record.EnvironmentID != candidate.Environment.Record.ID ||
 		candidate.NextCoordination.EnvironmentID != candidate.Environment.Record.ID ||
 		candidate.Environment.Record.ProjectID != candidate.Project.Record.ID ||
-		candidate.Project.Record.Kind != ProjectKindTenant || candidate.Project.Record.TenantID == "" {
+		candidate.Project.Record.Kind != hierarchyrecord.ProjectKindTenant || candidate.Project.Record.TenantID == "" {
 		return errs.New(errs.KindValidationFailed, "backup policy hierarchy is invalid")
 	}
-	if candidate.Environment.Record.ProvisioningState != EnvironmentProvisioningReady {
+	if candidate.Environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return errs.New(errs.KindStateConflict, "environment is not ready for backup policy replacement")
 	}
 	if !equalEnvironmentCoordinationRecord(candidate.NextCoordination, mustBackupPolicyScheduleTransition(candidate)) {
@@ -530,13 +531,13 @@ func prepareBackupPolicyReplacement(
 	plan.compare(
 		backupPolicyCompareEnvironment,
 		candidate.Environment.Record.ID,
-		environmentKey(candidate.Environment.Record.ID),
+		hierarchyrecord.EnvironmentKey(candidate.Environment.Record.ID),
 		candidate.Environment.Revision,
 	)
 	plan.compare(
 		backupPolicyCompareProject,
 		candidate.Project.Record.ID,
-		projectKey(candidate.Project.Record.ID),
+		hierarchyrecord.ProjectKey(candidate.Project.Record.ID),
 		candidate.Project.Revision,
 	)
 	plan.compare(
@@ -548,7 +549,7 @@ func prepareBackupPolicyReplacement(
 	plan.compare(
 		backupPolicyCompareOperationLock,
 		candidate.Replacement.EnvironmentID,
-		environmentOperationLockKey(candidate.Replacement.EnvironmentID),
+		hierarchyrecord.EnvironmentOperationLockKey(candidate.Replacement.EnvironmentID),
 		0,
 	)
 	for _, fence := range []struct {

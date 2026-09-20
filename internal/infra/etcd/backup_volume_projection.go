@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"hash"
@@ -30,7 +31,7 @@ type BackupVolumeRemovalImpact struct {
 }
 
 type backupVolumeProjectionEvidence struct {
-	Environment      Versioned[EnvironmentRecord]
+	Environment      Versioned[hierarchyrecord.EnvironmentRecord]
 	Projection       Versioned[EnvironmentComposeProjection]
 	ProjectionRoot   int64
 	DependencyDigest string
@@ -271,7 +272,7 @@ func loadBackupVolumeProjectionEvidence(
 		)
 	}
 	headRead, err := store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys:     []string{environmentKey(environmentID), environmentBlueprintHeadKey(environmentID)},
+		Keys:     []string{hierarchyrecord.EnvironmentKey(environmentID), environmentBlueprintHeadKey(environmentID)},
 		Revision: fixedRevision,
 	})
 	if err != nil {
@@ -285,7 +286,7 @@ func loadBackupVolumeProjectionEvidence(
 	if fixedRevision > 0 && headRead.ReadRevision != fixedRevision {
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
-	environment, err := decodeEnvironment(headRead.Values[0].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(headRead.Values[0].Value)
 	revisionID, headErr := decodeTaskReference(headRead.Values[1].Value)
 	if err != nil || headErr != nil || environment.ID != environmentID ||
 		ids.Validate(ids.KindTask, revisionID) != nil {
@@ -339,7 +340,7 @@ func loadBackupVolumeProjectionEvidence(
 	projection.Revision = headRead.Values[1].ModRevision
 	projection.ReadRevision = fixedRevision
 	return backupVolumeProjectionEvidence{
-		Environment: Versioned[EnvironmentRecord]{
+		Environment: Versioned[hierarchyrecord.EnvironmentRecord]{
 			Record: environment, Revision: headRead.Values[0].ModRevision, ReadRevision: fixedRevision,
 		},
 		Projection: projection, ProjectionRoot: rootRead.Values[0].ModRevision,

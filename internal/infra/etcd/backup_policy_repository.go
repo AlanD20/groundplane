@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -14,8 +15,8 @@ import (
 const maximumBackupSourceEnsureAttempts = 3
 
 type backupSourceCreationEvidence struct {
-	environment   Versioned[EnvironmentRecord]
-	project       Versioned[ProjectRecord]
+	environment   Versioned[hierarchyrecord.EnvironmentRecord]
+	project       Versioned[hierarchyrecord.ProjectRecord]
 	mutationEpoch Versioned[EnvironmentMutationEpochRecord]
 }
 
@@ -40,8 +41,8 @@ func newBackupPolicyRepository(store hierarchyStore) (*BackupPolicyRepository, e
 
 func (repository *BackupPolicyRepository) EnsureBackupSource(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	kind core.BackupSourceKind,
 	targetID string,
 ) (Versioned[BackupSourceRecord], error) {
@@ -189,16 +190,16 @@ func (repository *BackupPolicyRepository) createBackupSource(
 		{Key: backupSourceKey(record.ID)},
 		{Key: backupSourceEnvironmentKey(record.EnvironmentID, record.ID)},
 		{Key: backupSourceIdentityKey(record.EnvironmentID, record.Kind, record.TargetID)},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID)},
 		{
-			Key:         environmentMutationEpochKey(environment.Record.ID),
+			Key:         hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			ModRevision: evidence.mutationEpoch.Revision,
 		},
-		{Key: environmentOperationLockKey(environment.Record.ID)},
+		{Key: hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID)},
 	}, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: backupSourceKey(record.ID), Value: value},
 		{
@@ -210,7 +211,7 @@ func (repository *BackupPolicyRepository) createBackupSource(
 			Value: []byte(record.ID),
 		},
 		{
-			Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(environment.Record.ID),
+			Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			Value: epochValue,
 		},
 	})
@@ -230,8 +231,8 @@ func (repository *BackupPolicyRepository) createBackupSource(
 
 func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	kind core.BackupSourceKind,
 	targetID string,
 	revision int64,
@@ -239,13 +240,13 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			backupSourceIdentityKey(environment.Record.ID, kind, targetID),
-			environmentKey(environment.Record.ID),
-			projectKey(project.Record.ID),
+			hierarchyrecord.EnvironmentKey(environment.Record.ID),
+			hierarchyrecord.ProjectKey(project.Record.ID),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID),
 			deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID),
 			deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
-			environmentMutationEpochKey(environment.Record.ID),
-			environmentOperationLockKey(environment.Record.ID),
+			hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
+			hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID),
 		},
 		Revision: revision,
 	})
@@ -268,7 +269,7 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 	if result.Values[1] == nil {
 		return backupSourceCreationEvidence{}, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 	}
-	currentEnvironment, err := decodeEnvironment(result.Values[1].Value)
+	currentEnvironment, err := hierarchyrecord.DecodeEnvironment(result.Values[1].Value)
 	if err != nil || currentEnvironment.ID != environment.Record.ID ||
 		currentEnvironment.ProjectID != project.Record.ID {
 		return backupSourceCreationEvidence{}, recordcodec.CorruptRecord()
@@ -276,9 +277,9 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 	if result.Values[2] == nil {
 		return backupSourceCreationEvidence{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
-	currentProject, err := decodeProject(result.Values[2].Value)
+	currentProject, err := hierarchyrecord.DecodeProject(result.Values[2].Value)
 	if err != nil || currentProject.ID != project.Record.ID || currentProject.TenantID != project.Record.TenantID ||
-		currentProject.Kind != ProjectKindTenant {
+		currentProject.Kind != hierarchyrecord.ProjectKindTenant {
 		return backupSourceCreationEvidence{}, recordcodec.CorruptRecord()
 	}
 	for _, index := range []int{3, 4, 5} {
@@ -309,10 +310,10 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 		)
 	}
 	return backupSourceCreationEvidence{
-		environment: Versioned[EnvironmentRecord]{
+		environment: Versioned[hierarchyrecord.EnvironmentRecord]{
 			Record: currentEnvironment, Revision: result.Values[1].ModRevision, ReadRevision: result.ReadRevision,
 		},
-		project: Versioned[ProjectRecord]{
+		project: Versioned[hierarchyrecord.ProjectRecord]{
 			Record: currentProject, Revision: result.Values[2].ModRevision, ReadRevision: result.ReadRevision,
 		},
 		mutationEpoch: Versioned[EnvironmentMutationEpochRecord]{
@@ -370,18 +371,18 @@ func (repository *BackupPolicyRepository) getBackupSourceByIdentity(
 
 func validateBackupSourceHierarchy(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	kind core.BackupSourceKind,
 	targetID string,
 ) error {
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if err := validateEnvironment(environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {
 		return err
 	}
-	if err := validateProject(project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return err
 	}
 	probe := BackupSourceRecord{
@@ -393,7 +394,7 @@ func validateBackupSourceHierarchy(
 	}
 	if environment.Revision <= 0 || environment.ReadRevision < environment.Revision ||
 		project.Revision <= 0 || project.ReadRevision < project.Revision ||
-		environment.Record.ProjectID != project.Record.ID || project.Record.Kind != ProjectKindTenant ||
+		environment.Record.ProjectID != project.Record.ID || project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
 		project.Record.TenantID == "" {
 		return errs.New(errs.KindValidationFailed, "backup source hierarchy is invalid")
 	}

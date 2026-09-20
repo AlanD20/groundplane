@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
@@ -49,7 +50,7 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 	baseKeys := []string{
 		releasePublicationKey(publicationID), releaseManifestStagingKey(publicationID),
 		releaseOperationKey(source.OperationID), releaseFenceSetKey(source.Owner.EnvironmentID),
-		environmentMutationEpochKey(source.Owner.EnvironmentID),
+		hierarchyrecord.EnvironmentMutationEpochKey(source.Owner.EnvironmentID),
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: revision})
 	if err != nil {

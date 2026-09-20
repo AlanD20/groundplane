@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sync"
 	"time"
@@ -101,7 +102,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		)
 	}
 	anchor, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		environmentKey(input.EnvironmentID), backupKeyKey(input.EnvironmentID), backupKeyValueKey(input.EnvironmentID),
+		hierarchyrecord.EnvironmentKey(input.EnvironmentID), backupKeyKey(input.EnvironmentID), backupKeyValueKey(input.EnvironmentID),
 	}})
 	if err != nil {
 		return PreparedBackupKeyRotation{}, err
@@ -113,7 +114,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	if anchor.Values[0] == nil || anchor.Values[1] == nil || anchor.Values[2] == nil {
 		return PreparedBackupKeyRotation{}, errs.New(errs.KindStateConflict, "backup encryption key is not configured")
 	}
-	environment, err := decodeEnvironment(anchor.Values[0].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(anchor.Values[0].Value)
 	if err != nil || environment.ID != input.EnvironmentID {
 		return PreparedBackupKeyRotation{}, errs.New(errs.KindInternal, "backup key rotation Environment is corrupt")
 	}
@@ -135,7 +136,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		return PreparedBackupKeyRotation{}, err
 	}
 	projectRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{projectKey(environment.ProjectID)}, Revision: anchor.ReadRevision,
+		Keys: []string{hierarchyrecord.ProjectKey(environment.ProjectID)}, Revision: anchor.ReadRevision,
 	})
 	if err != nil || projectRead == nil || len(projectRead.Values) != 1 || projectRead.Values[0] == nil {
 		return PreparedBackupKeyRotation{}, errs.New(
@@ -144,7 +145,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		)
 	}
 	defer clearKeyValues(projectRead.Values)
-	project, err := decodeProject(projectRead.Values[0].Value)
+	project, err := hierarchyrecord.DecodeProject(projectRead.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
 		return PreparedBackupKeyRotation{}, errs.New(errs.KindInternal, "backup key rotation Project is corrupt")
 	}
@@ -187,7 +188,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: backupKeyRotationKey(input.TaskID), Value: rotationValue},
 		{Type: etcdstore.MutationPut, Key: indexKey, Value: []byte(input.TaskID)},
-		{Type: etcdstore.MutationPut, Key: environmentOperationLockKey(input.EnvironmentID), Value: lockValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(input.EnvironmentID), Value: lockValue},
 	}
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {
@@ -387,7 +388,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		backupKeyRotationKey(task.ID),
 		backupKeyKey(task.Target),
 		backupKeyValueKey(task.Target),
-		environmentOperationLockKey(task.Target),
+		hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
@@ -491,7 +492,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 	}
 	mutations = append(
 		mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentOperationLockKey(task.Target)},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(task.Target)},
 	)
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {
@@ -515,7 +516,7 @@ func (repository *TaskRepository) validateBackupKeyRotationTaskAcknowledgementRe
 		backupKeyRotationKey(task.ID),
 		backupKeyKey(task.Target),
 		backupKeyValueKey(task.Target),
-		environmentOperationLockKey(task.Target),
+		hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
@@ -594,7 +595,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		backupKeyRotationKey(retry.ID),
 		backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, retry.ID),
 		backupKeyKey(source.Record.Owner.EnvironmentID), backupKeyValueKey(source.Record.Owner.EnvironmentID),
-		environmentOperationLockKey(source.Record.Owner.EnvironmentID),
+		hierarchyrecord.EnvironmentOperationLockKey(source.Record.Owner.EnvironmentID),
 	}, Revision: source.ReadRevision})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -700,7 +701,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		},
 		{Type: etcdstore.MutationPut, Key: backupKeyRotationKey(retry.ID), Value: rotationValue},
 		{Type: etcdstore.MutationPut, Key: newIndex, Value: []byte(retry.ID)},
-		{Type: etcdstore.MutationPut, Key: environmentOperationLockKey(source.Record.Owner.EnvironmentID), Value: lockValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(source.Record.Owner.EnvironmentID), Value: lockValue},
 	}
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {

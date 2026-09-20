@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"strconv"
@@ -44,7 +45,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 	}
 	scope := ReleasePlanningScope{
 		ReadRevision: captured.ReadRevision,
-		Environment:  Versioned[EnvironmentRecord]{Record: EnvironmentRecord{ID: environmentID}},
+		Environment:  Versioned[hierarchyrecord.EnvironmentRecord]{Record: hierarchyrecord.EnvironmentRecord{ID: environmentID}},
 	}
 	actual, found, err := ledger.GetPlanningAppliedProjection(ctx, scope)
 	if err != nil {

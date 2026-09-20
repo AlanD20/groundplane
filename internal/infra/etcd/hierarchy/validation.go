@@ -1,7 +1,6 @@
-package etcd
+package hierarchy
 
 import (
-	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -9,14 +8,7 @@ import (
 	"unicode/utf8"
 )
 
-func validateContext(ctx context.Context) error {
-	if ctx == nil {
-		return errs.New(errs.KindInternal, "hierarchy context is required")
-	}
-	return ctx.Err()
-}
-
-func validateTenant(record TenantRecord) error {
+func ValidateTenant(record TenantRecord) error {
 	if err := recordcodec.ValidateID(ids.KindTenant, record.ID); err != nil {
 		return err
 	}
@@ -35,7 +27,7 @@ func validateTenant(record TenantRecord) error {
 	return nil
 }
 
-func validateProject(record ProjectRecord) error {
+func ValidateProject(record ProjectRecord) error {
 	if err := recordcodec.ValidateID(ids.KindProject, record.ID); err != nil {
 		return err
 	}
@@ -64,7 +56,7 @@ func validateProject(record ProjectRecord) error {
 	}
 }
 
-func validateEnvironment(record EnvironmentRecord) error {
+func ValidateEnvironment(record EnvironmentRecord) error {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, record.ID); err != nil {
 		return err
 	}

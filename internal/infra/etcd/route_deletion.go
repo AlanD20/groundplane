@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 
@@ -13,8 +14,8 @@ import (
 // The Route and its indexes remain visible until successful acknowledgement.
 func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	route Versioned[routerecord.Record],
 	projection *Versioned[EnvironmentComposeProjection],
@@ -130,8 +131,8 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: routeRemovalIntentKey(task.ID)},
 		{Key: tombstoneKey},
 		{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID)},
@@ -225,8 +226,8 @@ func validateRouteDeletionProjection(
 }
 
 func classifyRouteDeletionStartConflict(
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	target Versioned[ServiceRecord],
 	route Versioned[routerecord.Record],
 	projection *Versioned[EnvironmentComposeProjection],

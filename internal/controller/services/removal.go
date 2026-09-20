@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
@@ -80,8 +81,8 @@ func (service *serviceMutationService) removeServiceOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if project.Record.Kind != etcd.ProjectKindTenant ||
-		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
+		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindResourceInUse,
 			"Environment is not ready for Service removal",

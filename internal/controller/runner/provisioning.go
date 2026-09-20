@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"slices"
 	"strings"
@@ -46,7 +47,7 @@ type runnerTaskReader interface {
 }
 
 type runnerProjectReader interface {
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 }
 
 // ProvisioningService turns Runner create and failed-create retry requests
@@ -226,7 +227,7 @@ func (service *ProvisioningService) normalizeCreate(
 		if err != nil {
 			return etcd.RunnerDesiredRecord{}, err
 		}
-		if project.Record.Kind != etcd.ProjectKindTenant || project.Record.TenantID == "" {
+		if project.Record.Kind != hierarchyrecord.ProjectKindTenant || project.Record.TenantID == "" {
 			return etcd.RunnerDesiredRecord{}, errs.New(
 				errs.KindValidationFailed,
 				"Runner project owner must be a Tenant Project",

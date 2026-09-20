@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -215,7 +216,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		return nil, nil, errs.New(errs.KindResourceInUse, "Route retry target Service is unavailable")
 	}
 	baseKeys := []string{
-		environmentKey(route.EnvironmentID),
+		hierarchyrecord.EnvironmentKey(route.EnvironmentID),
 		service.Record.desiredFenceKey,
 		deletionTombstoneKey(string(DeletionTargetEnvironment), route.EnvironmentID),
 		deletionTombstoneKey("service", route.Desired.TargetServiceID),
@@ -228,7 +229,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		base.Values[2] != nil || base.Values[3] != nil {
 		return nil, nil, errs.New(errs.KindResourceInUse, "Route retry hierarchy is unavailable")
 	}
-	environment, err := decodeEnvironment(base.Values[0].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(base.Values[0].Value)
 	if err != nil || environment.ID != route.EnvironmentID {
 		return nil, nil, recordcodec.CorruptRecord()
 	}
@@ -236,7 +237,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		return nil, nil, recordcodec.CorruptRecord()
 	}
 	extraKeys := []string{
-		projectKey(environment.ProjectID),
+		hierarchyrecord.ProjectKey(environment.ProjectID),
 		deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
 	}
 	projectRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: extraKeys, Revision: revision})
@@ -247,17 +248,17 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		projectRead.Values[0] == nil || projectRead.Values[1] != nil {
 		return nil, nil, errs.New(errs.KindResourceInUse, "Route retry Project is unavailable")
 	}
-	project, err := decodeProject(projectRead.Values[0].Value)
+	project, err := hierarchyrecord.DecodeProject(projectRead.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
 		return nil, nil, recordcodec.CorruptRecord()
 	}
 	keys := append(baseKeys, extraKeys...)
 	values := append(base.Values, projectRead.Values...)
 	if project.TenantID != "" {
-		tenantKey := deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID)
+		hierarchyrecord.TenantKey := deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID)
 		tenantRead, readErr := repository.store.GetMany(
 			ctx,
-			etcdstore.GetManyRequest{Keys: []string{tenantKey}, Revision: revision},
+			etcdstore.GetManyRequest{Keys: []string{hierarchyrecord.TenantKey}, Revision: revision},
 		)
 		if readErr != nil {
 			return nil, nil, readErr
@@ -265,7 +266,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 		if tenantRead == nil || len(tenantRead.Values) != 1 || tenantRead.Values[0] != nil {
 			return nil, nil, errs.New(errs.KindResourceInUse, "Route retry Tenant is unavailable")
 		}
-		keys = append(keys, tenantKey)
+		keys = append(keys, hierarchyrecord.TenantKey)
 		values = append(values, tenantRead.Values[0])
 	}
 	if intent.CurrentProjection != nil {

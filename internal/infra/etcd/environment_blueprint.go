@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -188,7 +189,7 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 }
 
 type preparedEnvironmentBlueprintPoolChange struct {
-	environment      Versioned[EnvironmentRecord]
+	environment      Versioned[hierarchyrecord.EnvironmentRecord]
 	registryRevision int64
 	environmentValue []byte
 	registryValue    []byte
@@ -204,7 +205,7 @@ func clearPreparedEnvironmentBlueprintPoolChange(change preparedEnvironmentBluep
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRevision(
 	ctx context.Context,
 	root netip.Prefix,
-	current Versioned[EnvironmentRecord],
+	current Versioned[hierarchyrecord.EnvironmentRecord],
 	desiredNetworkPool string,
 	revision int64,
 ) (preparedEnvironmentBlueprintPoolChange, error) {
@@ -219,7 +220,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRe
 		)
 	}
 	prepared.environment.Record.NetworkPool = desiredNetworkPool
-	if err := validateEnvironment(prepared.environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(prepared.environment.Record); err != nil {
 		return preparedEnvironmentBlueprintPoolChange{}, err
 	}
 	registries, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -258,7 +259,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRe
 			"x-gp-network-pool must be a canonical IPv4 CIDR",
 		)
 	}
-	prepared.environmentValue, err = encodeEnvironment(prepared.environment.Record)
+	prepared.environmentValue, err = hierarchyrecord.EncodeEnvironment(prepared.environment.Record)
 	if err != nil {
 		return preparedEnvironmentBlueprintPoolChange{}, err
 	}
@@ -318,10 +319,10 @@ func classifyEnvironmentBlueprintBaseConflict(
 
 func (repository *HierarchyRepository) loadEnvironmentBlueprintMutationFence(
 	ctx context.Context,
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 ) (environmentMutationFenceEvidence, error) {
-	keys := []string{environmentKey(environment.Record.ID), projectKey(project.Record.ID)}
+	keys := []string{hierarchyrecord.EnvironmentKey(environment.Record.ID), hierarchyrecord.ProjectKey(project.Record.ID)}
 	anchor, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return environmentMutationFenceEvidence{}, err
@@ -361,7 +362,7 @@ type preparedEnvironmentBlueprintZonePool struct {
 
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintZonePoolAtRevision(
 	ctx context.Context,
-	environment EnvironmentRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 	desired []EnvironmentZoneProjection,
 	readRevision int64,
 ) (preparedEnvironmentBlueprintZonePool, error) {
@@ -432,7 +433,7 @@ type preparedEnvironmentBlueprintRoute struct {
 
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChanges(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	services []EnvironmentBlueprintServiceChange,
 	changes []EnvironmentBlueprintRouteChange,
 ) ([]preparedEnvironmentBlueprintRoute, error) {
@@ -447,7 +448,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChanges(
 
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChangesAtRevision(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	services []EnvironmentBlueprintServiceChange,
 	changes []EnvironmentBlueprintRouteChange,
 	readRevision int64,

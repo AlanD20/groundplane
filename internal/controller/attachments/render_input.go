@@ -2,6 +2,7 @@ package attachments
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
 	"slices"
 	"time"
@@ -23,8 +24,8 @@ type attachRuntimeCapture interface {
 }
 
 func newAttachMutationTask(
-	project etcd.ProjectRecord,
-	environment etcd.EnvironmentRecord,
+	project hierarchyrecord.ProjectRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 	taskID string,
 	attachID string,
 	environmentID string,
@@ -112,13 +113,13 @@ func buildAttachTaskRenderInput(
 		)
 	}
 	if scope.Tenant.Record.ID != scope.Project.Record.TenantID ||
-		scope.Project.Record.Kind != etcd.ProjectKindTenant ||
+		scope.Project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
 		scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
 		record.EnvironmentID != scope.Environment.Record.ID ||
 		scope.DesiredHead.Record.EnvironmentID != record.EnvironmentID ||
 		scope.ComposeProjection.Record.EnvironmentID != record.EnvironmentID ||
 		scope.ComposeProjection.Record.RevisionID != scope.DesiredHead.Record.RevisionID ||
-		scope.BackingProject.Record.Kind != etcd.ProjectKindBacking ||
+		scope.BackingProject.Record.Kind != hierarchyrecord.ProjectKindBacking ||
 		scope.BackingEnvironment.Record.ProjectID != scope.BackingProject.Record.ID ||
 		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
 		record.BackingProjectID != scope.BackingProject.Record.ID ||

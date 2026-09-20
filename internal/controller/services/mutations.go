@@ -8,6 +8,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -96,8 +97,8 @@ func (service *serviceMutationService) createServiceOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if project.Record.Kind != etcd.ProjectKindTenant ||
-		environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
+		environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindResourceInUse,
 			"Environment is not ready for Service creation",
@@ -214,14 +215,14 @@ func (service *serviceMutationService) rejectComponentGeneratedServiceMutation(
 func (service *serviceMutationService) serviceHierarchy(
 	ctx context.Context,
 	environmentID string,
-) (etcd.Versioned[etcd.EnvironmentRecord], etcd.Versioned[etcd.ProjectRecord], error) {
+) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
 	environment, err := service.repository.GetEnvironment(ctx, environmentID)
 	if err != nil {
-		return etcd.Versioned[etcd.EnvironmentRecord]{}, etcd.Versioned[etcd.ProjectRecord]{}, err
+		return etcd.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcd.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return etcd.Versioned[etcd.EnvironmentRecord]{}, etcd.Versioned[etcd.ProjectRecord]{}, err
+		return etcd.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcd.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return environment, project, nil
 }

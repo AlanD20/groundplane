@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -54,7 +55,7 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 	keys := []string{
 		backupPolicyKey(environmentID),
 		environmentCoordinationKey(environmentID),
-		environmentMutationEpochKey(environmentID),
+		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {

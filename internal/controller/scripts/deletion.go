@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"time"
 
@@ -23,14 +24,14 @@ const (
 )
 
 type scriptDeletionRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
 	GetScript(context.Context, string) (etcd.Versioned[etcd.ScriptRecord], error)
 	BeginScriptDeletionWithTask(
 		context.Context,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		etcd.Versioned[etcd.ServiceRecord],
 		etcd.Versioned[etcd.ScriptRecord],
 		etcd.DeletionTombstoneRecord,
@@ -41,8 +42,8 @@ type scriptDeletionRepository interface {
 
 func (repository *durableScriptMutationRepository) BeginScriptDeletionWithTask(
 	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
 	target etcd.Versioned[etcd.ServiceRecord],
 	current etcd.Versioned[etcd.ScriptRecord],
 	tombstone etcd.DeletionTombstoneRecord,

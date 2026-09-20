@@ -12,6 +12,7 @@ package controller
 import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
 	"sort"
 	"strings"
@@ -114,9 +115,9 @@ type TaskPlanResolver struct {
 }
 
 type blueprintPlanStateReader interface {
-	GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetEnvironmentBlueprintRevision(
 		context.Context,
 		string,
@@ -721,7 +722,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentBlueprintArtifact(
 	if err != nil {
 		return pinnedEnvironmentBlueprintArtifact{}, err
 	}
-	if environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady {
+	if environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return pinnedEnvironmentBlueprintArtifact{}, errs.New(
 			errs.KindInternal,
 			"Blueprint Task Environment is not ready",
@@ -731,7 +732,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentBlueprintArtifact(
 	if err != nil {
 		return pinnedEnvironmentBlueprintArtifact{}, err
 	}
-	if project.Record.Kind != etcd.ProjectKindTenant && project.Record.Kind != etcd.ProjectKindBacking {
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant && project.Record.Kind != hierarchyrecord.ProjectKindBacking {
 		return pinnedEnvironmentBlueprintArtifact{}, errs.New(
 			errs.KindInternal,
 			"Blueprint Task Project kind is invalid",

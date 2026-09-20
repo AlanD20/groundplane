@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 	"time"
@@ -479,19 +480,19 @@ func (repository *HierarchyDeletionRepository) validateHierarchyDeletionRootProj
 	deletionTaskID := ""
 	switch operation.Tombstone.TargetKind {
 	case HierarchyDeletionTargetTenant:
-		record, decodeErr := decodeTenant(read.Entry.Value)
+		record, decodeErr := hierarchyrecord.DecodeTenant(read.Entry.Value)
 		if decodeErr != nil || record.ID != operation.Tombstone.TargetID {
 			return corruptHierarchyDeletion()
 		}
 		deletionTaskID = record.DeletionTaskID
 	case HierarchyDeletionTargetProject, HierarchyDeletionTargetBacking:
-		record, decodeErr := decodeProject(read.Entry.Value)
+		record, decodeErr := hierarchyrecord.DecodeProject(read.Entry.Value)
 		if decodeErr != nil || record.ID != operation.Tombstone.TargetID {
 			return corruptHierarchyDeletion()
 		}
 		deletionTaskID = record.DeletionTaskID
 	case HierarchyDeletionTargetEnvironment:
-		record, decodeErr := decodeEnvironment(read.Entry.Value)
+		record, decodeErr := hierarchyrecord.DecodeEnvironment(read.Entry.Value)
 		if decodeErr != nil || record.ID != operation.Tombstone.TargetID {
 			return corruptHierarchyDeletion()
 		}

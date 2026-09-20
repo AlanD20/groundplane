@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"maps"
 	"slices"
@@ -12,8 +13,8 @@ import (
 )
 
 type EnvironmentServiceDesiredPublication struct {
-	Project              Versioned[ProjectRecord]
-	Environment          Versioned[EnvironmentRecord]
+	Project              Versioned[hierarchyrecord.ProjectRecord]
+	Environment          Versioned[hierarchyrecord.EnvironmentRecord]
 	ExpectedHeadRevision int64
 	Claim                EnvironmentBlueprintStageClaim
 	Revision             EnvironmentDesiredRevisionIdentity
@@ -30,17 +31,17 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateProject(input.Project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(input.Project.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEnvironment(input.Environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(input.Environment.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if input.Project.Record.Kind != ProjectKindTenant || input.Project.Revision <= 0 ||
+	if input.Project.Record.Kind != hierarchyrecord.ProjectKindTenant || input.Project.Revision <= 0 ||
 		input.Environment.Revision <= 0 || input.Project.ReadRevision < input.Project.Revision ||
 		input.Environment.ReadRevision < input.Environment.Revision ||
 		input.Environment.Record.ProjectID != input.Project.Record.ID ||
-		input.Environment.Record.ProvisioningState != EnvironmentProvisioningReady ||
+		input.Environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		input.ExpectedHeadRevision < 0 || input.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
 		input.Revision.EnvironmentID != input.Environment.Record.ID ||
 		input.Revision.RevisionID != input.Claim.RevisionID || input.Claim.TaskID != input.Claim.RevisionID ||
@@ -197,8 +198,8 @@ func (repository *HierarchyRepository) validateDirectServiceHierarchy(
 ) error {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			environmentKey(input.Environment.Record.ID),
-			projectKey(input.Project.Record.ID),
+			hierarchyrecord.EnvironmentKey(input.Environment.Record.ID),
+			hierarchyrecord.ProjectKey(input.Project.Record.ID),
 		},
 		Revision: readRevision,
 	})
@@ -209,8 +210,8 @@ func (repository *HierarchyRepository) validateDirectServiceHierarchy(
 		return errs.New(errs.KindStateConflict, "Environment Blueprint hierarchy changed")
 	}
 	defer clearKeyValues(result.Values)
-	durableEnvironment, environmentErr := decodeEnvironment(result.Values[0].Value)
-	durableProject, projectErr := decodeProject(result.Values[1].Value)
+	durableEnvironment, environmentErr := hierarchyrecord.DecodeEnvironment(result.Values[0].Value)
+	durableProject, projectErr := hierarchyrecord.DecodeProject(result.Values[1].Value)
 	if environmentErr != nil || projectErr != nil ||
 		!equalDirectEnvironmentRecord(durableEnvironment, input.Environment.Record) ||
 		!equalDirectProjectRecord(durableProject, input.Project.Record) {
@@ -219,14 +220,14 @@ func (repository *HierarchyRepository) validateDirectServiceHierarchy(
 	return nil
 }
 
-func equalDirectEnvironmentRecord(left EnvironmentRecord, right EnvironmentRecord) bool {
+func equalDirectEnvironmentRecord(left hierarchyrecord.EnvironmentRecord, right hierarchyrecord.EnvironmentRecord) bool {
 	return left.ID == right.ID && left.ProjectID == right.ProjectID && left.Name == right.Name &&
 		left.NetworkPool == right.NetworkPool && left.VolumeDir == right.VolumeDir &&
 		left.ProvisioningState == right.ProvisioningState && left.CreateTaskID == right.CreateTaskID &&
 		left.CreatedAt.Equal(right.CreatedAt) && left.DeletionTaskID == right.DeletionTaskID
 }
 
-func equalDirectProjectRecord(left ProjectRecord, right ProjectRecord) bool {
+func equalDirectProjectRecord(left hierarchyrecord.ProjectRecord, right hierarchyrecord.ProjectRecord) bool {
 	return left.ID == right.ID && left.TenantID == right.TenantID && left.Slug == right.Slug &&
 		left.Name == right.Name && left.Description == right.Description && left.Kind == right.Kind &&
 		left.DeletionTaskID == right.DeletionTaskID

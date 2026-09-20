@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"time"
@@ -94,7 +95,7 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 	keys := []string{
 		releasePublicationKey(input.PublicationID), releaseOperationKey(input.OperationID),
 		releaseCheckpointStagingKey(input.PublicationID, input.ReleaseID), releaseFenceSetKey(input.EnvironmentID),
-		environmentMutationEpochKey(input.EnvironmentID),
+		hierarchyrecord.EnvironmentMutationEpochKey(input.EnvironmentID),
 	}
 	loaded, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {

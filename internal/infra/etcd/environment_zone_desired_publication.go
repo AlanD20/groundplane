@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -18,8 +19,8 @@ import (
 // Zone create. The immutable Environment revision remains the only desired
 // record; the pool registry is an operational reservation committed beside it.
 type EnvironmentZoneDesiredPublication struct {
-	Project              Versioned[ProjectRecord]
-	Environment          Versioned[EnvironmentRecord]
+	Project              Versioned[hierarchyrecord.ProjectRecord]
+	Environment          Versioned[hierarchyrecord.EnvironmentRecord]
 	ExpectedHeadRevision int64
 	Claim                EnvironmentBlueprintStageClaim
 	Revision             EnvironmentDesiredRevisionIdentity
@@ -163,10 +164,10 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 }
 
 func validateDirectZoneDesiredPublicationInput(input EnvironmentZoneDesiredPublication) error {
-	if err := validateProject(input.Project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(input.Project.Record); err != nil {
 		return err
 	}
-	if err := validateEnvironment(input.Environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(input.Environment.Record); err != nil {
 		return err
 	}
 	if err := zonerecord.ValidateRecord(input.Zone); err != nil {
@@ -174,7 +175,7 @@ func validateDirectZoneDesiredPublicationInput(input EnvironmentZoneDesiredPubli
 	}
 	if input.Project.Revision <= 0 || input.Environment.Revision <= 0 ||
 		input.Project.ReadRevision < input.Project.Revision || input.Environment.ReadRevision < input.Environment.Revision ||
-		input.Environment.Record.ProvisioningState != EnvironmentProvisioningReady ||
+		input.Environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		input.Environment.Record.ProjectID != input.Project.Record.ID ||
 		input.Zone.EnvironmentID != input.Environment.Record.ID || input.ExpectedHeadRevision <= 0 ||
 		input.Claim.SourceKind != EnvironmentBlueprintSourceMutation ||
@@ -184,12 +185,12 @@ func validateDirectZoneDesiredPublicationInput(input EnvironmentZoneDesiredPubli
 		input.Projection.RevisionID != input.Revision.RevisionID {
 		return errs.New(errs.KindValidationFailed, "direct Zone desired publication identity is invalid")
 	}
-	if input.Project.Record.Kind == ProjectKindTenant &&
+	if input.Project.Record.Kind == hierarchyrecord.ProjectKindTenant &&
 		(input.Zone.Desired.OwnerKind != core.ZoneOwnerEnvironment ||
 			input.Zone.Desired.OwnerID != input.Environment.Record.ID) {
 		return errs.New(errs.KindValidationFailed, "tenant Project Zone ownership is invalid")
 	}
-	if input.Project.Record.Kind == ProjectKindBacking &&
+	if input.Project.Record.Kind == hierarchyrecord.ProjectKindBacking &&
 		(input.Zone.Desired.OwnerKind != core.ZoneOwnerBackingProject ||
 			input.Zone.Desired.OwnerID != input.Project.Record.ID) {
 		return errs.New(errs.KindValidationFailed, "backing Project Zone ownership is invalid")

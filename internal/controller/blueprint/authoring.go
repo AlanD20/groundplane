@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"sort"
 	"time"
 
@@ -18,9 +19,9 @@ import (
 )
 
 type environmentBlueprintSnapshot struct {
-	tenant      etcd.Versioned[etcd.TenantRecord]
-	project     etcd.Versioned[etcd.ProjectRecord]
-	environment etcd.Versioned[etcd.EnvironmentRecord]
+	tenant      etcd.Versioned[hierarchyrecord.TenantRecord]
+	project     etcd.Versioned[hierarchyrecord.ProjectRecord]
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord]
 	head        etcd.Versioned[etcd.EnvironmentBlueprintHead]
 	projection  etcd.Versioned[etcd.EnvironmentComposeProjection]
 	hasHead     bool
@@ -148,7 +149,7 @@ func (service *Service) loadEnvironmentBlueprintSnapshot(
 		return environmentBlueprintSnapshot{}, err
 	}
 	if environment.Record.ProjectID != project.Record.ID || project.Record.TenantID != tenant.Record.ID ||
-		project.Record.Kind != etcd.ProjectKindTenant {
+		project.Record.Kind != hierarchyrecord.ProjectKindTenant {
 		return environmentBlueprintSnapshot{}, errs.New(errs.KindInternal, "Environment hierarchy is inconsistent")
 	}
 	head, hasHead, err := service.repository.GetEnvironmentBlueprintHead(ctx, environmentID)

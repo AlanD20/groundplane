@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -23,9 +24,9 @@ func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	ctx context.Context,
 	taskType etcd.TaskType,
 	current etcd.Versioned[etcd.ServiceRecord],
-	tenant *etcd.Versioned[etcd.TenantRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
-	environment etcd.Versioned[etcd.EnvironmentRecord],
+	tenant *etcd.Versioned[hierarchyrecord.TenantRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
 	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
 	task etcd.TaskRecord,
 ) (etcd.TaskRecord, etcd.ServiceLifecycleRenderInput, *etcd.BackingHookEncryptedInputs, error) {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -98,8 +99,8 @@ func (repository *HierarchyRepository) GetDeletionTombstone(
 // Environment and all indexes remain visible until finalization.
 func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	ctx context.Context,
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedBlueprintRevision int64,
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
@@ -108,10 +109,10 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateProject(project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEnvironment(environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if expectedBlueprintRevision < 0 {
@@ -120,7 +121,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			"expected Blueprint revision cannot be negative",
 		)
 	}
-	if project.Record.Kind != ProjectKindTenant || project.Revision <= 0 ||
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant || project.Revision <= 0 ||
 		environment.Revision <= 0 ||
 		project.ReadRevision < project.Revision ||
 		environment.ReadRevision < environment.Revision ||
@@ -164,15 +165,15 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	}
 	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			environmentKey(environment.Record.ID),
-			projectKey(project.Record.ID),
-			tenantKey(project.Record.TenantID),
-			environmentNameKey(environment.Record.ProjectID, environment.Record.Name),
-			environmentOwnerKey(environment.Record.ProjectID, environment.Record.ID),
+			hierarchyrecord.EnvironmentKey(environment.Record.ID),
+			hierarchyrecord.ProjectKey(project.Record.ID),
+			hierarchyrecord.TenantKey(project.Record.TenantID),
+			hierarchyrecord.EnvironmentNameKey(environment.Record.ProjectID, environment.Record.Name),
+			hierarchyrecord.EnvironmentOwnerKey(environment.Record.ProjectID, environment.Record.ID),
 			environmentBlueprintHeadKey(environment.Record.ID),
 			environmentComposeProjectionKey(environment.Record.ID),
-			environmentMutationEpochKey(environment.Record.ID),
-			environmentOperationLockKey(environment.Record.ID),
+			hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
+			hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), environment.Record.ID),
 			deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID),
 			deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID),
@@ -197,7 +198,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if evidence.Values[1].ModRevision != project.Revision {
 		return IdempotencyTransactionResult{}, stateConflict("project", project.Record.ID)
 	}
-	storedTenant, err := decodeTenant(evidence.Values[2].Value)
+	storedTenant, err := hierarchyrecord.DecodeTenant(evidence.Values[2].Value)
 	if err != nil || storedTenant.ID != project.Record.TenantID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindInternal,
@@ -303,13 +304,13 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: environmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{
-			Key:         environmentNameKey(environment.Record.ProjectID, environment.Record.Name),
+			Key:         hierarchyrecord.EnvironmentNameKey(environment.Record.ProjectID, environment.Record.Name),
 			ModRevision: evidence.Values[3].ModRevision,
 		},
 		{
-			Key:         environmentOwnerKey(environment.Record.ProjectID, environment.Record.ID),
+			Key:         hierarchyrecord.EnvironmentOwnerKey(environment.Record.ProjectID, environment.Record.ID),
 			ModRevision: evidence.Values[4].ModRevision,
 		},
 		{Key: tombstoneKey},
@@ -321,14 +322,14 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			Key:         environmentComposeProjectionKey(environment.Record.ID),
 			ModRevision: expectedBlueprintRevision,
 		},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetTenant), project.Record.TenantID)},
 		{
-			Key:         environmentMutationEpochKey(environment.Record.ID),
+			Key:         hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			ModRevision: evidence.Values[7].ModRevision,
 		},
-		{Key: environmentOperationLockKey(environment.Record.ID)},
+		{Key: hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID)},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
@@ -342,16 +343,16 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   environmentOperationLockKey(environment.Record.ID),
+			Key:   hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID),
 			Value: lockValue,
 		},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   environmentMutationEpochKey(environment.Record.ID),
+			Key:   hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			Value: epochValue,
 		},
 	}
-	fixedTenant := Versioned[TenantRecord]{
+	fixedTenant := Versioned[hierarchyrecord.TenantRecord]{
 		Record: storedTenant, Revision: evidence.Values[2].ModRevision, ReadRevision: readRevision,
 	}
 	fixedProject := project
@@ -365,7 +366,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	cleanupSnapshot, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		environmentMutationEpochKey(environment.Record.ID),
+		hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 	}})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -437,8 +438,8 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 }
 
 func classifyEnvironmentDeletionStartConflict(
-	project Versioned[ProjectRecord],
-	environment Versioned[EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	operationID string,
 	expectedBlueprintRevision int64,
 	expectedEpochRevision int64,

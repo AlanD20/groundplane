@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -235,7 +236,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRetryConfigReferences(
 		backupConfigSnapshotReferenceTaskKey(snapshotID, retrySource.TaskID),
 		backupConfigSnapshotTaskReferenceKey(run.TaskID, snapshotID),
 		backupConfigSnapshotReferenceTaskKey(snapshotID, run.TaskID),
-		environmentKey(run.EnvironmentID),
+		hierarchyrecord.EnvironmentKey(run.EnvironmentID),
 	}
 	read, err := repository.readFixedKeys(ctx, keys, fixedRevision)
 	if err != nil {
@@ -253,7 +254,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRetryConfigReferences(
 		)
 	}
 	stored, decodeErr := decodeBackupConfigSnapshotRecord(read.Values[0].Value)
-	environment, environmentErr := decodeEnvironment(read.Values[5].Value)
+	environment, environmentErr := hierarchyrecord.DecodeEnvironment(read.Values[5].Value)
 	if decodeErr != nil || environmentErr != nil || environment.ID != run.EnvironmentID ||
 		stored.SnapshotID != snapshotID || stored.EnvironmentID != run.EnvironmentID ||
 		stored.SourceID != source.SourceID || stored.State == BackupConfigSnapshotUninitialized ||

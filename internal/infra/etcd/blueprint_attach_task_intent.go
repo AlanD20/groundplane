@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -24,8 +25,8 @@ const (
 type EnvironmentBlueprintAttachCandidateInput struct {
 	Record                  AttachRecord
 	Facts                   *AttachEncryptedFacts
-	BackingProject          Versioned[ProjectRecord]
-	BackingEnvironment      Versioned[EnvironmentRecord]
+	BackingProject          Versioned[hierarchyrecord.ProjectRecord]
+	BackingEnvironment      Versioned[hierarchyrecord.EnvironmentRecord]
 	BackingService          Versioned[ServiceRecord]
 	RetainedCredentialOwner *Versioned[AttachRecord]
 	RetainedGrantTargets    []Versioned[AttachRecord]

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"time"
 
@@ -30,13 +31,13 @@ type entryEditInput struct {
 
 type entryEditRepository interface {
 	GetEntry(context.Context, string) (etcd.Versioned[entryrecord.Record], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 	ReplaceEntryIdempotent(
 		context.Context,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		etcd.Versioned[entryrecord.Record],
 		core.EnvEntry,
 		string,
@@ -461,8 +462,8 @@ func (repository *durableEntryEditRepository) GetEntry(
 
 func (repository *durableEntryEditRepository) ReplaceEntryIdempotent(
 	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
 	current etcd.Versioned[entryrecord.Record],
 	desired core.EnvEntry,
 	generationID string,

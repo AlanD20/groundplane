@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -89,8 +90,8 @@ func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
 	if err != nil {
 		return nil, err
 	}
-	if environment.Record.ProvisioningState != etcd.EnvironmentProvisioningReady ||
-		project.Record.Kind != etcd.ProjectKindTenant {
+	if environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
+		project.Record.Kind != hierarchyrecord.ProjectKindTenant {
 		return nil, corruptMaterializationSource()
 	}
 	identity := pinnedEnvironmentIdentity{

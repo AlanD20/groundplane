@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -307,7 +308,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		},
 	)
 	environmentState, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{environmentKey(intent.EnvironmentID)}, Revision: revision,
+		Keys: []string{hierarchyrecord.EnvironmentKey(intent.EnvironmentID)}, Revision: revision,
 	})
 	if err != nil {
 		clearComponentTaskChange(change)
@@ -320,7 +321,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			"Component retry Environment was not found",
 		)
 	}
-	environment, err := decodeEnvironment(environmentState.Values[0].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(environmentState.Values[0].Value)
 	if err != nil || environment.ID != intent.EnvironmentID {
 		clearComponentTaskChange(change)
 		return componentTaskChange{}, recordcodec.CorruptRecord()
@@ -339,7 +340,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	}
 	change.conditions = append(
 		change.conditions,
-		etcdstore.Condition{Key: environmentKey(intent.EnvironmentID), ModRevision: environmentState.Values[0].ModRevision},
+		etcdstore.Condition{Key: hierarchyrecord.EnvironmentKey(intent.EnvironmentID), ModRevision: environmentState.Values[0].ModRevision},
 	)
 	change.conditions = append(change.conditions, secretConditions...)
 	change.mutations = append(change.mutations, secretMutations...)

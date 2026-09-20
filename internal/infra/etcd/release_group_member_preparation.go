@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -13,11 +14,11 @@ import (
 
 func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 	ctx context.Context,
-	environment EnvironmentRecord,
+	environment hierarchyrecord.EnvironmentRecord,
 ) ([]etcdstore.Condition, error) {
 	projectResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		projectKey(environment.ProjectID),
-		environmentOwnerKey(environment.ProjectID, environment.ID),
+		hierarchyrecord.ProjectKey(environment.ProjectID),
+		hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID),
 		deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
 	}})
 	if err != nil {
@@ -27,7 +28,7 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 		projectResult.Values[0] == nil || projectResult.Values[1] == nil {
 		return nil, recordcodec.CorruptRecord()
 	}
-	project, err := decodeProject(projectResult.Values[0].Value)
+	project, err := hierarchyrecord.DecodeProject(projectResult.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID ||
 		!bytes.Equal(projectResult.Values[1].Value, []byte(environment.ID)) {
 		return nil, recordcodec.CorruptRecord()
@@ -39,15 +40,15 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 		)
 	}
 	conditions := []etcdstore.Condition{
-		{Key: projectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision},
-		{Key: environmentOwnerKey(project.ID, environment.ID), ModRevision: projectResult.Values[1].ModRevision},
+		{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision},
+		{Key: hierarchyrecord.EnvironmentOwnerKey(project.ID, environment.ID), ModRevision: projectResult.Values[1].ModRevision},
 		{Key: deletionTombstoneKey(string(DeletionTargetProject), project.ID)},
 	}
-	ownerIndex := projectOwnerKey(project)
+	ownerIndex := hierarchyrecord.ProjectOwnerKey(project)
 	ownerKeys := []string{ownerIndex}
-	if project.Kind == ProjectKindTenant {
+	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		ownerKeys = append(ownerKeys,
-			tenantKey(project.TenantID),
+			hierarchyrecord.TenantKey(project.TenantID),
 			deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID),
 		)
 	}
@@ -63,11 +64,11 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 	conditions = append(conditions,
 		etcdstore.Condition{Key: ownerIndex, ModRevision: ownerResult.Values[0].ModRevision},
 	)
-	if project.Kind == ProjectKindTenant {
+	if project.Kind == hierarchyrecord.ProjectKindTenant {
 		if ownerResult.Values[1] == nil {
 			return nil, recordcodec.CorruptRecord()
 		}
-		tenant, tenantErr := decodeTenant(ownerResult.Values[1].Value)
+		tenant, tenantErr := hierarchyrecord.DecodeTenant(ownerResult.Values[1].Value)
 		if tenantErr != nil || tenant.ID != project.TenantID {
 			return nil, recordcodec.CorruptRecord()
 		}
@@ -78,7 +79,7 @@ func (repository *TaskRepository) prepareReleaseGroupProjectEvidence(
 			)
 		}
 		conditions = append(conditions,
-			etcdstore.Condition{Key: tenantKey(project.TenantID), ModRevision: ownerResult.Values[1].ModRevision},
+			etcdstore.Condition{Key: hierarchyrecord.TenantKey(project.TenantID), ModRevision: ownerResult.Values[1].ModRevision},
 			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetTenant), project.TenantID)},
 		)
 	}

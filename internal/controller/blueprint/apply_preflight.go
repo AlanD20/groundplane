@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"sort"
 )
@@ -20,7 +21,7 @@ type applyPreflight struct {
 	requirements          core.BlueprintRequirements
 	submittedServiceNames map[string]struct{}
 	priorProject          *composetypes.Project
-	desiredEnvironment    etcd.Versioned[etcd.EnvironmentRecord]
+	desiredEnvironment    etcd.Versioned[hierarchyrecord.EnvironmentRecord]
 	workloads             blueprintrelease.WorkloadPreparation
 }
 

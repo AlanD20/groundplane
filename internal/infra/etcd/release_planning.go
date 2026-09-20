@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"strings"
@@ -15,9 +16,9 @@ import (
 // ReleasePlanningScope is one fixed-revision view of every ancestor and
 // render input shared by all candidates in an operation.
 type ReleasePlanningScope struct {
-	Environment              Versioned[EnvironmentRecord]
-	Project                  Versioned[ProjectRecord]
-	Tenant                   Versioned[TenantRecord]
+	Environment              Versioned[hierarchyrecord.EnvironmentRecord]
+	Project                  Versioned[hierarchyrecord.ProjectRecord]
+	Tenant                   Versioned[hierarchyrecord.TenantRecord]
 	Compose                  Versioned[EnvironmentComposeProjection]
 	EnvironmentEpochRevision int64
 	EnvironmentEpochValue    []byte
@@ -66,9 +67,9 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 	var initial *etcdstore.GetResult
 	var err error
 	if revision == 0 {
-		initial, err = ledger.store.Get(ctx, environmentKey(environmentID))
+		initial, err = ledger.store.Get(ctx, hierarchyrecord.EnvironmentKey(environmentID))
 	} else {
-		loaded, loadErr := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{environmentKey(environmentID)}, Revision: revision})
+		loaded, loadErr := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{hierarchyrecord.EnvironmentKey(environmentID)}, Revision: revision})
 		if loadErr != nil {
 			return ReleasePlanningScope{}, loadErr
 		}
@@ -86,12 +87,12 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 	if initial.Entry == nil {
 		return ReleasePlanningScope{}, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 	}
-	environment, err := decodeEnvironment(initial.Entry.Value)
-	if err != nil || environment.ID != environmentID || environment.ProvisioningState != EnvironmentProvisioningReady {
+	environment, err := hierarchyrecord.DecodeEnvironment(initial.Entry.Value)
+	if err != nil || environment.ID != environmentID || environment.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
 	projectRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{projectKey(environment.ProjectID)}, Revision: initial.ReadRevision,
+		Keys: []string{hierarchyrecord.ProjectKey(environment.ProjectID)}, Revision: initial.ReadRevision,
 	})
 	if err != nil {
 		return ReleasePlanningScope{}, err
@@ -100,8 +101,8 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 		projectRead.Values[0] == nil {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
-	project, err := decodeProject(projectRead.Values[0].Value)
-	if err != nil || project.ID != environment.ProjectID || project.Kind != ProjectKindTenant {
+	project, err := hierarchyrecord.DecodeProject(projectRead.Values[0].Value)
+	if err != nil || project.ID != environment.ProjectID || project.Kind != hierarchyrecord.ProjectKindTenant {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
 	hierarchy, err := newHierarchyRepository(ledger.store)
@@ -116,9 +117,9 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
 	keys := []string{
-		environmentKey(environmentID), projectKey(project.ID), tenantKey(project.TenantID),
-		environmentMutationEpochKey(environmentID),
-		environmentOperationLockKey(environmentID), releaseFenceSetKey(environmentID),
+		hierarchyrecord.EnvironmentKey(environmentID), hierarchyrecord.ProjectKey(project.ID), hierarchyrecord.TenantKey(project.TenantID),
+		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
+		hierarchyrecord.EnvironmentOperationLockKey(environmentID), releaseFenceSetKey(environmentID),
 		deletionTombstoneKey("environment", environmentID), deletionTombstoneKey("project", project.ID),
 		deletionTombstoneKey("tenant", project.TenantID),
 	}
@@ -138,15 +139,15 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 		loaded.Values[8] != nil {
 		return ReleasePlanningScope{}, errs.New(errs.KindResourceInUse, "release planning scope is locked or deleting")
 	}
-	environment, err = decodeEnvironment(loaded.Values[0].Value)
+	environment, err = hierarchyrecord.DecodeEnvironment(loaded.Values[0].Value)
 	if err != nil || environment.ID != environmentID || environment.ProjectID != project.ID {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
-	project, err = decodeProject(loaded.Values[1].Value)
-	if err != nil || project.ID != environment.ProjectID || project.Kind != ProjectKindTenant {
+	project, err = hierarchyrecord.DecodeProject(loaded.Values[1].Value)
+	if err != nil || project.ID != environment.ProjectID || project.Kind != hierarchyrecord.ProjectKindTenant {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
-	tenant, err := decodeTenant(loaded.Values[2].Value)
+	tenant, err := hierarchyrecord.DecodeTenant(loaded.Values[2].Value)
 	if err != nil || tenant.ID != project.TenantID {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
@@ -155,17 +156,17 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
 	return ReleasePlanningScope{
-		Environment: Versioned[EnvironmentRecord]{
+		Environment: Versioned[hierarchyrecord.EnvironmentRecord]{
 			Record:       environment,
 			Revision:     loaded.Values[0].ModRevision,
 			ReadRevision: loaded.ReadRevision,
 		},
-		Project: Versioned[ProjectRecord]{
+		Project: Versioned[hierarchyrecord.ProjectRecord]{
 			Record:       project,
 			Revision:     loaded.Values[1].ModRevision,
 			ReadRevision: loaded.ReadRevision,
 		},
-		Tenant: Versioned[TenantRecord]{
+		Tenant: Versioned[hierarchyrecord.TenantRecord]{
 			Record:       tenant,
 			Revision:     loaded.Values[2].ModRevision,
 			ReadRevision: loaded.ReadRevision,

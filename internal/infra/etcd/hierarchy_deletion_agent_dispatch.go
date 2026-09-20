@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strconv"
@@ -110,14 +111,14 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	planHash := action.AgentProcedure.InputDigest
 	taskSteps := []TaskStepRecord{{Kind: TaskStepOperation, ID: stepID}}
 	if action.AgentProcedure.TypedProcedure == "environment.cleanup" {
-		environmentResult, getErr := repository.store.Get(ctx, environmentKey(action.TargetID))
+		environmentResult, getErr := repository.store.Get(ctx, hierarchyrecord.EnvironmentKey(action.TargetID))
 		if getErr != nil {
 			return HierarchyDeletionChildEntry{}, getErr
 		}
 		if environmentResult.Entry == nil {
 			return HierarchyDeletionChildEntry{}, corruptHierarchyDeletion()
 		}
-		environment, decodeErr := decodeEnvironment(environmentResult.Entry.Value)
+		environment, decodeErr := hierarchyrecord.DecodeEnvironment(environmentResult.Entry.Value)
 		clear(environmentResult.Entry.Value)
 		if decodeErr != nil || environment.ID != action.TargetID {
 			return HierarchyDeletionChildEntry{}, corruptHierarchyDeletion()

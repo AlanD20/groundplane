@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -577,7 +578,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 		Value: slices.Clone(attemptAuthorityValue),
 	})
 	mutations = append(mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(source.Owner.EnvironmentID),
+		Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(source.Owner.EnvironmentID),
 		Value: slices.Clone(epochValue),
 	})
 	return releaseTaskRetryChange{applies: true, conditions: conditions, mutations: mutations}, nil

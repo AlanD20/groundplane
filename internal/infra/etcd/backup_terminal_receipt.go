@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -506,7 +507,7 @@ func bindBackupTerminalReceiptEpoch(
 	plan backupTerminalReceiptPlan,
 	domainConditions []etcdstore.Condition,
 ) (backupTerminalReceiptPlan, error) {
-	wantKey := environmentMutationEpochKey(plan.record.Task.Owner.EnvironmentID)
+	wantKey := hierarchyrecord.EnvironmentMutationEpochKey(plan.record.Task.Owner.EnvironmentID)
 	var revision int64
 	for _, condition := range domainConditions {
 		if condition.Key != wantKey {
@@ -626,9 +627,9 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 ) error {
 	environmentID := receipt.Task.Owner.EnvironmentID
 	keys := []string{
-		environmentKey(environmentID),
-		environmentMutationEpochKey(environmentID),
-		environmentOperationLockKey(environmentID),
+		hierarchyrecord.EnvironmentKey(environmentID),
+		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
+		hierarchyrecord.EnvironmentOperationLockKey(environmentID),
 		deletionTombstoneKey(string(DeletionTargetEnvironment), environmentID),
 		backupRecoveryPointPruneDispatchKey(receipt.Task.TaskID),
 	}
@@ -893,7 +894,7 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 		}
 		return false, nil, false, nil
 	}
-	environment, err := decodeEnvironment(environmentValue.Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(environmentValue.Value)
 	if err != nil {
 		return false, nil, false, err
 	}

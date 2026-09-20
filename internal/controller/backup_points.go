@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"io"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -20,7 +21,7 @@ const (
 )
 
 type recoveryPointEnvironmentReader interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
 }
 
 type recoveryPointRepository interface {

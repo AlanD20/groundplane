@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -17,9 +18,9 @@ import (
 func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	ctx context.Context,
 	volumeRoot string,
-	project Versioned[ProjectRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	poolRegistry Versioned[EnvironmentPoolRegistry],
-	record EnvironmentRecord,
+	record hierarchyrecord.EnvironmentRecord,
 	components []ComponentRecord,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -27,17 +28,17 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateProject(project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if project.Record.Kind != ProjectKindTenant || project.Revision <= 0 ||
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant || project.Revision <= 0 ||
 		project.ReadRevision < project.Revision {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
-	if err := validateEnvironment(record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := ValidateEnvironmentVolumeDir(volumeRoot, project.Record, record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironmentVolumeDir(volumeRoot, project.Record, record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateInitialEnvironmentComponents(record.ID, components); err != nil {
@@ -53,7 +54,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	if err := validateEnvironmentPoolRegistry(poolRegistry.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if record.ProvisioningState != EnvironmentProvisioningProvisioning ||
+	if record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningProvisioning ||
 		record.CreateTaskID != task.ID || !record.CreatedAt.Equal(task.CreatedAt) ||
 		task.Type != TaskCreate || task.Target != record.ID || task.Status != TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -82,7 +83,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 
-	environmentValue, err := encodeEnvironment(record)
+	environmentValue, err := hierarchyrecord.EncodeEnvironment(record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -137,15 +138,15 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: environmentKey(record.ID)},
-		{Key: environmentNameKey(record.ProjectID, record.Name)},
-		{Key: environmentOwnerKey(record.ProjectID, record.ID)},
-		{Key: projectKey(project.Record.ID), ModRevision: project.Revision},
+		{Key: hierarchyrecord.EnvironmentKey(record.ID)},
+		{Key: hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name)},
+		{Key: hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID)},
+		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
 		{Key: deletionTombstoneKey("environment", record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},
 		{Key: deletionTombstoneKey("tenant", project.Record.TenantID)},
 		{Key: environmentPoolRegistryKey, ModRevision: poolRegistry.Revision},
-		{Key: environmentMutationEpochKey(record.ID)},
+		{Key: hierarchyrecord.EnvironmentMutationEpochKey(record.ID)},
 		{Key: coordinationKey},
 		{Key: scriptSetKey},
 	}
@@ -161,11 +162,11 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: environmentKey(record.ID), Value: environmentValue},
-		{Type: etcdstore.MutationPut, Key: environmentNameKey(record.ProjectID, record.Name), Value: []byte(record.ID)},
-		{Type: etcdstore.MutationPut, Key: environmentOwnerKey(record.ProjectID, record.ID), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(record.ID), Value: environmentValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name), Value: []byte(record.ID)},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID), Value: []byte(record.ID)},
 		{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
-		{Type: etcdstore.MutationPut, Key: environmentMutationEpochKey(record.ID), Value: epochValue},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(record.ID), Value: epochValue},
 		{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
 		{Type: etcdstore.MutationPut, Key: scriptSetKey, Value: scriptSetValue},
 	}
@@ -251,7 +252,7 @@ func validateInitialEnvironmentComponents(environmentID string, components []Com
 }
 
 func classifyEnvironmentCreateConflict(
-	project Versioned[ProjectRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	poolRegistry Versioned[EnvironmentPoolRegistry],
 	components []ComponentRecord,
 	operationID string,

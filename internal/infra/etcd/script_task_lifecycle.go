@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -56,7 +57,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		Keys: []string{
 			scriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 			scriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
-			environmentKey(record.EnvironmentID),
+			hierarchyrecord.EnvironmentKey(record.EnvironmentID),
 			service.Record.desiredFenceKey,
 		},
 		Revision: revision,
@@ -70,7 +71,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		string(dependencies.Values[1].Value) != record.Desired.ID {
 		return scriptTaskChange{}, errs.New(errs.KindInternal, "Script retry dependencies are corrupt")
 	}
-	environment, err := decodeEnvironment(dependencies.Values[2].Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(dependencies.Values[2].Value)
 	if err != nil || environment.ID != record.EnvironmentID {
 		return scriptTaskChange{}, recordcodec.CorruptRecord()
 	}
@@ -79,7 +80,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	}
 	parents, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			projectKey(environment.ProjectID),
+			hierarchyrecord.ProjectKey(environment.ProjectID),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID),
 			deletionTombstoneKey(string(DeletionTargetProject), environment.ProjectID),
 			deletionTombstoneKey("service", service.Record.Desired.ID),
@@ -93,7 +94,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		parents.Values[1] != nil || parents.Values[2] != nil || parents.Values[3] != nil {
 		return scriptTaskChange{}, errs.New(errs.KindResourceInUse, "Script owner is unavailable")
 	}
-	project, err := decodeProject(parents.Values[0].Value)
+	project, err := hierarchyrecord.DecodeProject(parents.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID {
 		return scriptTaskChange{}, recordcodec.CorruptRecord()
 	}
@@ -113,9 +114,9 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
 			{Key: deletionTombstoneKey(string(DeletionTargetScript), record.Desired.ID)},
-			{Key: environmentKey(environment.ID), ModRevision: dependencies.Values[2].ModRevision},
+			{Key: hierarchyrecord.EnvironmentKey(environment.ID), ModRevision: dependencies.Values[2].ModRevision},
 			serviceDesiredCondition(service),
-			{Key: projectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
+			{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID)},
 			{Key: deletionTombstoneKey(string(DeletionTargetProject), project.ID)},
 			{Key: deletionTombstoneKey("service", service.Record.Desired.ID)},

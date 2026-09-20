@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -103,8 +104,8 @@ func newEntryRepository(store hierarchyStore) (*EntryRepository, error) {
 
 func (repository *EntryRepository) CreateEntry(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
 	generation EntryValueGeneration,
 ) (Versioned[entryrecord.Record], error) {
@@ -173,8 +174,8 @@ func (repository *EntryRepository) CreateEntry(
 // one immutable value generation, and the exact completed replay marker.
 func (repository *EntryRepository) CreateEntryIdempotent(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
 	generation EntryValueGeneration,
 	marker IdempotencyMarker,
@@ -297,8 +298,8 @@ func (repository *EntryRepository) ListEntries(
 
 func (repository *EntryRepository) ReplaceEntry(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	current Versioned[entryrecord.Record],
 	desired core.EnvEntry,
 	valueGenerationID string,
@@ -373,8 +374,8 @@ func (repository *EntryRepository) ReplaceEntry(
 // immutable value generation, and the exact completed replay marker.
 func (repository *EntryRepository) ReplaceEntryIdempotent(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	current Versioned[entryrecord.Record],
 	desired core.EnvEntry,
 	valueGenerationID string,
@@ -495,17 +496,17 @@ func prepareEntryGeneration(
 
 func (repository *EntryRepository) loadEntryMutationFence(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	domainKeys []string,
 	ownerIndex int,
 	entryID string,
 ) (environmentMutationFenceEvidence, int64, error) {
 	keys := append([]string(nil), domainKeys...)
 	environmentIndex := len(keys)
-	keys = append(keys, environmentKey(environment.Record.ID))
+	keys = append(keys, hierarchyrecord.EnvironmentKey(environment.Record.ID))
 	projectIndex := len(keys)
-	keys = append(keys, projectKey(project.Record.ID))
+	keys = append(keys, hierarchyrecord.ProjectKey(project.Record.ID))
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: keys,
 	})
@@ -594,17 +595,17 @@ func entryDeleteConditions(
 
 func validateEntryHierarchy(
 	ctx context.Context,
-	environment Versioned[EnvironmentRecord],
-	project Versioned[ProjectRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
 ) error {
 	if err := validateContext(ctx); err != nil {
 		return err
 	}
-	if err := validateEnvironment(environment.Record); err != nil {
+	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {
 		return err
 	}
-	if err := validateProject(project.Record); err != nil {
+	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return err
 	}
 	if err := entryrecord.ValidateRecord(record); err != nil {

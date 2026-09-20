@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 	"sort"
@@ -20,13 +21,13 @@ import (
 )
 
 type connectorCreationRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
 	ResolveSecret(context.Context, string, string) (etcd.Versioned[secretrecord.Record], error)
 	CreateConnectorIdempotent(
 		context.Context,
-		etcd.Versioned[etcd.EnvironmentRecord],
-		etcd.Versioned[etcd.ProjectRecord],
+		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		connectorrecord.Record,
 		connectorrecord.EncryptedCredentials,
 		etcd.IdempotencyMarker,
@@ -373,14 +374,14 @@ func NewCreationRepository(
 func (repository *durableConnectorCreationRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
 func (repository *durableConnectorCreationRepository) GetProject(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
+) (etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
@@ -394,8 +395,8 @@ func (repository *durableConnectorCreationRepository) ResolveSecret(
 
 func (repository *durableConnectorCreationRepository) CreateConnectorIdempotent(
 	ctx context.Context,
-	environment etcd.Versioned[etcd.EnvironmentRecord],
-	project etcd.Versioned[etcd.ProjectRecord],
+	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcd.Versioned[hierarchyrecord.ProjectRecord],
 	record connectorrecord.Record,
 	credentials connectorrecord.EncryptedCredentials,
 	marker etcd.IdempotencyMarker,

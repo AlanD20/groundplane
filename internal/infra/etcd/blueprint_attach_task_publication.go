@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -13,7 +14,7 @@ type preparedBlueprintAttachTaskPublication struct {
 }
 
 func prepareBlueprintAttachTaskPublication(
-	environment Versioned[EnvironmentRecord],
+	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	projection EnvironmentComposeProjection,
 	task TaskRecord,
 	preparation BlueprintAttachTaskPreparation,
@@ -102,8 +103,8 @@ func prepareBlueprintAttachTaskPublication(
 			etcdstore.Condition{Key: attachBackingServiceKey(record.BackingServiceID, record.ID)},
 			etcdstore.Condition{Key: attachBackingProjectKey(record.BackingProjectID, record.ID)},
 			etcdstore.Condition{Key: deletionTombstoneKey("attach", record.ID)},
-			etcdstore.Condition{Key: projectKey(record.BackingProjectID), ModRevision: input.BackingProject.Revision},
-			etcdstore.Condition{Key: environmentKey(record.BackingEnvironmentID), ModRevision: input.BackingEnvironment.Revision},
+			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(record.BackingProjectID), ModRevision: input.BackingProject.Revision},
+			etcdstore.Condition{Key: hierarchyrecord.EnvironmentKey(record.BackingEnvironmentID), ModRevision: input.BackingEnvironment.Revision},
 			serviceDesiredCondition(input.BackingService),
 		)
 		publication.mutations = append(

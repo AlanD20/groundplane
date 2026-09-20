@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -42,25 +43,25 @@ func (repository *HierarchyDeletionRepository) GetDeletionTaskIDAtRevision(
 	var taskID string
 	switch targetKind {
 	case HierarchyDeletionTargetTenant:
-		record, decodeErr := decodeTenant(stored.Values[0].Value)
+		record, decodeErr := hierarchyrecord.DecodeTenant(stored.Values[0].Value)
 		if decodeErr != nil || record.ID != targetID {
 			return nil, corruptHierarchyDeletion()
 		}
 		taskID = record.DeletionTaskID
 	case HierarchyDeletionTargetProject:
-		record, decodeErr := decodeProject(stored.Values[0].Value)
+		record, decodeErr := hierarchyrecord.DecodeProject(stored.Values[0].Value)
 		if decodeErr != nil || record.ID != targetID {
 			return nil, corruptHierarchyDeletion()
 		}
 		taskID = record.DeletionTaskID
 	case HierarchyDeletionTargetBacking:
-		record, decodeErr := decodeProject(stored.Values[0].Value)
-		if decodeErr != nil || record.ID != targetID || record.Kind != ProjectKindBacking || record.TenantID != "" {
+		record, decodeErr := hierarchyrecord.DecodeProject(stored.Values[0].Value)
+		if decodeErr != nil || record.ID != targetID || record.Kind != hierarchyrecord.ProjectKindBacking || record.TenantID != "" {
 			return nil, corruptHierarchyDeletion()
 		}
 		taskID = record.DeletionTaskID
 	case HierarchyDeletionTargetEnvironment:
-		record, decodeErr := decodeEnvironment(stored.Values[0].Value)
+		record, decodeErr := hierarchyrecord.DecodeEnvironment(stored.Values[0].Value)
 		if decodeErr != nil || record.ID != targetID {
 			return nil, corruptHierarchyDeletion()
 		}

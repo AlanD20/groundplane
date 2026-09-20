@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
@@ -54,7 +55,7 @@ func (repository *BackingServiceRepository) GetBackingService(
 		}
 		return Versioned[BackingServiceRecord]{}, err
 	}
-	if project.Record.Kind != ProjectKindBacking || project.Record.TenantID != "" {
+	if project.Record.Kind != hierarchyrecord.ProjectKindBacking || project.Record.TenantID != "" {
 		return Versioned[BackingServiceRecord]{}, backingServiceNotFound()
 	}
 	return repository.composeBackingService(ctx, project)
@@ -70,14 +71,14 @@ func (repository *BackingServiceRepository) ListBackingServices(
 		"backing-services",
 		"platform",
 		"-",
-		projectPlatformOwnerPrefix,
-		projectKey,
+		hierarchyrecord.ProjectPlatformOwnerPrefix,
+		hierarchyrecord.ProjectKey,
 		ids.KindProject,
 		request,
-		decodeProject,
-		func(record ProjectRecord) string { return record.ID },
-		func(record ProjectRecord) bool {
-			return record.Kind == ProjectKindBacking && record.TenantID == ""
+		hierarchyrecord.DecodeProject,
+		func(record hierarchyrecord.ProjectRecord) string { return record.ID },
+		func(record hierarchyrecord.ProjectRecord) bool {
+			return record.Kind == hierarchyrecord.ProjectKindBacking && record.TenantID == ""
 		},
 	)
 	if err != nil {
@@ -100,27 +101,27 @@ func (repository *BackingServiceRepository) ListBackingServices(
 
 func (repository *BackingServiceRepository) composeBackingService(
 	ctx context.Context,
-	project Versioned[ProjectRecord],
+	project Versioned[hierarchyrecord.ProjectRecord],
 ) (Versioned[BackingServiceRecord], error) {
-	if project.ReadRevision <= 0 || project.Record.Kind != ProjectKindBacking || project.Record.TenantID != "" {
+	if project.ReadRevision <= 0 || project.Record.Kind != hierarchyrecord.ProjectKindBacking || project.Record.TenantID != "" {
 		return Versioned[BackingServiceRecord]{}, errs.New(
 			errs.KindInternal,
 			"Backing-service Project projection is inconsistent",
 		)
 	}
 	environmentID, err := repository.singleOwnerID(
-		ctx, environmentOwnerPrefix(project.Record.ID), ids.KindEnvironment, project.ReadRevision,
+		ctx, hierarchyrecord.EnvironmentOwnerPrefix(project.Record.ID), ids.KindEnvironment, project.ReadRevision,
 	)
 	if err != nil {
 		return Versioned[BackingServiceRecord]{}, err
 	}
 	environmentValue, err := repository.primaryAtRevision(
-		ctx, environmentKey(environmentID), project.ReadRevision,
+		ctx, hierarchyrecord.EnvironmentKey(environmentID), project.ReadRevision,
 	)
 	if err != nil {
 		return Versioned[BackingServiceRecord]{}, err
 	}
-	environment, err := decodeEnvironment(environmentValue.Value)
+	environment, err := hierarchyrecord.DecodeEnvironment(environmentValue.Value)
 	if err != nil {
 		return Versioned[BackingServiceRecord]{}, err
 	}

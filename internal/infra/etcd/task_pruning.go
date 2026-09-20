@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -205,7 +206,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		environmentDeletionFenceStart = len(companionKeys)
 		environmentDeletionFenceKeys = []string{
 			deletionTombstoneKey(string(DeletionTargetEnvironment), task.Target),
-			environmentOperationLockKey(task.Target),
+			hierarchyrecord.EnvironmentOperationLockKey(task.Target),
 			environmentDeletionIntentKey(task.OperationID),
 		}
 		companionKeys = append(companionKeys, environmentDeletionFenceKeys...)

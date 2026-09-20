@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -214,7 +215,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			deletionTombstoneKey(string(DeletionTargetEnvironment), source.Target),
-			environmentOperationLockKey(source.Target),
+			hierarchyrecord.EnvironmentOperationLockKey(source.Target),
 			retentionKey,
 		},
 		Revision: revision,
@@ -316,7 +317,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 				Key:   deletionTombstoneKey(string(DeletionTargetEnvironment), source.Target),
 				Value: tombstoneValue,
 			},
-			{Type: etcdstore.MutationPut, Key: environmentOperationLockKey(source.Target), Value: lockValue},
+			{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(source.Target), Value: lockValue},
 			{
 				Type:  etcdstore.MutationPut,
 				Key:   environmentDeletionIntentKey(source.OperationID),
