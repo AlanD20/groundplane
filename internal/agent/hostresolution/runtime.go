@@ -1,4 +1,4 @@
-package app
+package hostresolution
 
 import (
 	"context"
@@ -9,11 +9,15 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-type hostResolutionRuntime struct {
+type Runtime struct {
 	helper *hostresolutionhelpercontainer.Executor
 }
 
-func (runtime *hostResolutionRuntime) ExecuteHostResolution(
+func New(helper *hostresolutionhelpercontainer.Executor) *Runtime {
+	return &Runtime{helper: helper}
+}
+
+func (runtime *Runtime) ExecuteHostResolution(
 	ctx context.Context,
 	assignment agent.Assignment,
 	step *agentpb.ExecutionStep,
