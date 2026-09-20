@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -138,7 +139,7 @@ func scriptExplicitAuthority(sources etcd.ScriptExecutionSources) (*agentpb.Scri
 }
 
 func scriptPreparationSourceDigest(
-	sources etcd.ScriptExecutionSources, entries []etcd.EntryRecord, explicit *agentpb.ScriptExplicitExecutionAuthority,
+	sources etcd.ScriptExecutionSources, entries []entryrecord.Record, explicit *agentpb.ScriptExplicitExecutionAuthority,
 ) ([sha256.Size]byte, error) {
 	metadata := make([]*agentpb.ScriptRunnerEntryBinding, 0, len(entries))
 	for _, entry := range entries {

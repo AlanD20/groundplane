@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 	"time"
@@ -152,7 +153,7 @@ type EnvironmentEntryMutationAudit struct {
 	Action         EnvironmentEntryMutationAction
 	BaseRevisionID string
 	EntryID        string
-	Record         *EntryRecord
+	Record         *entryrecord.Record
 }
 type EnvironmentServiceMutationAction uint8
 
@@ -476,7 +477,7 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 			EntryID:        reader.string(128),
 		}
 		var err error
-		entry.Record, err = decodeEnvironmentMutationRequest[EntryRecord](&reader)
+		entry.Record, err = decodeEnvironmentMutationRequest[entryrecord.Record](&reader)
 		if err != nil {
 			return EnvironmentDesiredMutationAudit{}, err
 		}
@@ -494,7 +495,7 @@ func decodeEnvironmentDesiredMutationAudit(value []byte) (EnvironmentDesiredMuta
 				EntryID:        reader.string(128),
 			}
 			var err error
-			entry.Record, err = decodeEnvironmentMutationRequest[EntryRecord](&reader)
+			entry.Record, err = decodeEnvironmentMutationRequest[entryrecord.Record](&reader)
 			if err != nil {
 				return EnvironmentDesiredMutationAudit{}, err
 			}
@@ -644,7 +645,7 @@ func validateEnvironmentEntryMutationAudit(value EnvironmentEntryMutationAudit) 
 	}
 	if value.Action != EnvironmentEntryMutationCreate && value.Action != EnvironmentEntryMutationEdit ||
 		value.Record == nil || value.Record.Entry.ID != value.EntryID ||
-		validateEntryRecord(*value.Record) != nil {
+		entryrecord.ValidateRecord(*value.Record) != nil {
 		return errs.New(errs.KindValidationFailed, "Entry desired mutation audit record is invalid")
 	}
 	if value.Record.Entry.Source.Kind == core.SourceLiteral && value.Record.Entry.Source.Literal != "" {

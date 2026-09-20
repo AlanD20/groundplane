@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -41,7 +42,7 @@ func NewEtcdRepository(
 }
 
 type etcdRemovalState struct {
-	entry       etcd.Versioned[etcd.EntryRecord]
+	entry       etcd.Versioned[entryrecord.Record]
 	environment etcd.Versioned[etcd.EnvironmentRecord]
 	project     etcd.Versioned[etcd.ProjectRecord]
 	tenant      *etcd.Versioned[etcd.TenantRecord]

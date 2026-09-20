@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"slices"
 
@@ -111,7 +112,7 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 		}
 	}
 	explicit := execution != nil && execution.Mode == core.ScriptExecutionExplicit
-	selected := make(map[string]EntryRecord)
+	selected := make(map[string]entryrecord.Record)
 	for _, record := range sources.DesiredProjection.Record.Entries {
 		if explicit && !slices.Contains(execution.EntryIDs, record.Entry.ID) {
 			continue

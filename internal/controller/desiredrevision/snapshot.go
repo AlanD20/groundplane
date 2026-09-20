@@ -3,6 +3,7 @@ package desiredrevision
 import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 )
@@ -49,7 +50,7 @@ func CloneProjection(current etcd.EnvironmentComposeProjection) etcd.Environment
 		Volumes:                append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...),
 		VolumeMounts:           append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),
 		Components:             append([]etcd.ComponentRecord(nil), current.Components...),
-		Entries:                append([]etcd.EntryRecord(nil), current.Entries...),
+		Entries:                append([]entryrecord.Record(nil), current.Entries...),
 		ServiceDependencyPlans: current.ServiceDependencyPlans.Clone(),
 	}
 	result.ManagedComponentRuntimeSources = append(

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
 	"time"
@@ -29,7 +30,7 @@ func (service *CreationService) backingCreationEntries(
 	spec adapters.CreationSpec,
 	allocator *desiredrevision.BlueprintIdentityAllocator,
 	createdAt time.Time,
-) ([]etcd.EntryRecord, []etcd.EntryValueGeneration, []secretrecord.Record, []secretrecord.EncryptedValue, map[string]string, error) {
+) ([]entryrecord.Record, []etcd.EntryValueGeneration, []secretrecord.Record, []secretrecord.EncryptedValue, map[string]string, error) {
 	bootstrapValues := make(map[string][]byte)
 	bootstrapSecrets := make(map[string]string)
 	var secrets []secretrecord.Record
@@ -72,7 +73,7 @@ func (service *CreationService) backingCreationEntries(
 			delete(bootstrapValues, key)
 		}
 	}()
-	entries := make([]etcd.EntryRecord, 0, len(spec.Environment))
+	entries := make([]entryrecord.Record, 0, len(spec.Environment))
 	generations := make([]etcd.EntryValueGeneration, 0, len(spec.Environment))
 	resolved := make(map[string]string, len(spec.Environment))
 	for _, declaration := range spec.Environment {
@@ -92,7 +93,7 @@ func (service *CreationService) backingCreationEntries(
 			}
 			value = bootstrapValues[declaration.BootstrapKey]
 		}
-		record, err := etcd.NewEntryRecord(environmentID, entry, generationID)
+		record, err := entryrecord.NewRecord(environmentID, entry, generationID)
 		if err != nil {
 			return nil, nil, nil, nil, nil, err
 		}
@@ -129,7 +130,7 @@ func (service *CreationService) backingCreationEntries(
 	sort.Slice(order, func(left, right int) bool {
 		return entries[order[left]].Entry.ID < entries[order[right]].Entry.ID
 	})
-	sortedEntries := make([]etcd.EntryRecord, len(entries))
+	sortedEntries := make([]entryrecord.Record, len(entries))
 	sortedGenerations := make([]etcd.EntryValueGeneration, len(generations))
 	for index, source := range order {
 		sortedEntries[index] = entries[source]
@@ -192,7 +193,7 @@ func sealBackingEntry(
 func backingEnvironmentMaterialization(
 	environmentID string,
 	artifactID string,
-	entries []etcd.EntryRecord,
+	entries []entryrecord.Record,
 	resolved map[string]string,
 	allocator *desiredrevision.BlueprintIdentityAllocator,
 ) (etcd.TaskMaterializationRecord, *agentpb.ExecutionStep, error) {

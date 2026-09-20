@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"time"
@@ -360,7 +361,7 @@ func sameServiceRemovalComponents(left, right []ComponentRecord) bool {
 	return true
 }
 
-func sameServiceRemovalEntries(left, right []EntryRecord) bool {
+func sameServiceRemovalEntries(left, right []entryrecord.Record) bool {
 	if (left == nil) != (right == nil) || len(left) != len(right) {
 		return false
 	}
@@ -428,7 +429,7 @@ func sameServiceRemovalComponentConfig(left, right core.ComponentConfig) bool {
 	return true
 }
 
-func sameServiceRemovalEntryRecord(left, right EntryRecord) bool {
+func sameServiceRemovalEntryRecord(left, right entryrecord.Record) bool {
 	return left.EnvironmentID == right.EnvironmentID && left.BlueprintKey == right.BlueprintKey &&
 		left.CurrentValueGenerationID == right.CurrentValueGenerationID &&
 		sameServiceRemovalEnvEntry(left.Entry, right.Entry)

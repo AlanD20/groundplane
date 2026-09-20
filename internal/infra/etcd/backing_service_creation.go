@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -25,7 +26,7 @@ type BackingServiceCreation struct {
 	Service      ServiceRecord
 	Secrets      []secretrecord.Record
 	SecretValues []secretrecord.EncryptedValue
-	Entries      []EntryRecord
+	Entries      []entryrecord.Record
 	EntryValues  []EntryValueGeneration
 	Claim        EnvironmentBlueprintStageClaim
 	Revision     EnvironmentDesiredRevisionIdentity
@@ -157,7 +158,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	entryGenerationKeys := make([]string, len(creation.Entries))
 	entryGenerationValues := make([][]byte, len(creation.Entries))
 	for index := range creation.Entries {
-		entryValues[index], err = encodeEntryRecord(creation.Entries[index])
+		entryValues[index], err = entryrecord.EncodeRecord(creation.Entries[index])
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
@@ -256,7 +257,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	for index, entry := range creation.Entries {
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: entryRecordKey(entry.Entry.ID), Value: entryValues[index]},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: entryrecord.RecordKey(entry.Entry.ID), Value: entryValues[index]},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
 				Key:   entryOwnerKey(creation.Environment.ID, entry.Entry.ID),
@@ -525,7 +526,7 @@ func backingServiceCreationConditions(
 			generationKey = plainEntryValueGenerationKey(entry.Entry.ID, entry.CurrentValueGenerationID)
 		}
 		conditions = append(conditions,
-			etcdstore.Condition{Key: entryRecordKey(entry.Entry.ID)},
+			etcdstore.Condition{Key: entryrecord.RecordKey(entry.Entry.ID)},
 			etcdstore.Condition{Key: entryOwnerKey(creation.Environment.ID, entry.Entry.ID)},
 			etcdstore.Condition{Key: generationKey},
 		)

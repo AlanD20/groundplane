@@ -1,24 +1,25 @@
 package controller
 
 import (
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type BlueprintEntryValueCandidate struct {
-	Record  etcd.EntryRecord
+	Record  entryrecord.Record
 	Desired core.EnvEntry
 }
 
 type BlueprintEntryReconciliation struct {
-	Current []etcd.EntryRecord
+	Current []entryrecord.Record
 	Values  []BlueprintEntryValueCandidate
-	Removed []etcd.EntryRecord
+	Removed []entryrecord.Record
 }
 
 // ReconcileBlueprintEntries owns only records previously authored through
@@ -27,7 +28,7 @@ type BlueprintEntryReconciliation struct {
 func ReconcileBlueprintEntries(
 	environmentID string,
 	authored map[string]core.EntrySpec,
-	current []etcd.EntryRecord,
+	current []entryrecord.Record,
 	allocate func(ids.Kind, string) string,
 ) (BlueprintEntryReconciliation, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || allocate == nil {
@@ -36,8 +37,8 @@ func ReconcileBlueprintEntries(
 			"Blueprint Entry reconciliation input is invalid",
 		)
 	}
-	currentByKey := make(map[string]etcd.EntryRecord)
-	result := BlueprintEntryReconciliation{Current: make([]etcd.EntryRecord, 0, len(current)+len(authored))}
+	currentByKey := make(map[string]entryrecord.Record)
+	result := BlueprintEntryReconciliation{Current: make([]entryrecord.Record, 0, len(current)+len(authored))}
 	for _, record := range current {
 		if record.EnvironmentID != environmentID || record.Entry.Validate() != nil {
 			return BlueprintEntryReconciliation{}, errs.New(
@@ -95,7 +96,7 @@ func ReconcileBlueprintEntries(
 		if changed {
 			generationID = allocate(ids.KindConfig, "entry-generation/"+key)
 		}
-		record, err := etcd.NewBlueprintEntryRecord(environmentID, key, persisted, generationID)
+		record, err := entryrecord.NewBlueprintRecord(environmentID, key, persisted, generationID)
 		if err != nil {
 			return BlueprintEntryReconciliation{}, err
 		}

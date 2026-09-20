@@ -1,12 +1,13 @@
 package desiredrevision
 
 import (
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/scriptpolicy"
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -15,7 +16,7 @@ import (
 // or value lookup is permitted while resolving authored context keys.
 type BlueprintScriptResources struct {
 	Volumes []controller.ComposeResourceIdentity
-	Entries []etcd.EntryRecord
+	Entries []entryrecord.Record
 }
 
 func (resources BlueprintScriptResources) resolveExecution(

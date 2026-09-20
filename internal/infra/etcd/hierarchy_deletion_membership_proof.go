@@ -3,6 +3,7 @@ package etcd
 import (
 	"crypto/sha256"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
 
@@ -104,7 +105,7 @@ func validateHierarchyDeletionReleaseGroupOwner(value []byte, id, owner string) 
 }
 
 func validateHierarchyDeletionEntryOwner(value []byte, id, owner string) error {
-	record, err := decodeEntryRecord(value)
+	record, err := entryrecord.DecodeRecord(value)
 	if err != nil || record.Entry.ID != id || record.EnvironmentID != owner {
 		return corruptHierarchyDeletion()
 	}

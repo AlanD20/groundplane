@@ -3,6 +3,7 @@ package scriptdefinition
 import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -10,7 +11,7 @@ import (
 func Authoring(
 	records []etcd.Versioned[etcd.ScriptRecord],
 	volumes []etcd.EnvironmentVolumeIdentity,
-	entries []etcd.EntryRecord,
+	entries []entryrecord.Record,
 ) (map[string]core.ScriptSpec, error) {
 	result := make(map[string]core.ScriptSpec)
 	for _, versioned := range records {

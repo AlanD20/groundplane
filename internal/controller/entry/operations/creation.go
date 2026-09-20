@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"net/http"
 	"sort"
 	"time"
@@ -34,7 +35,7 @@ type entryCreationRepository interface {
 		context.Context,
 		etcd.Versioned[etcd.EnvironmentRecord],
 		etcd.Versioned[etcd.ProjectRecord],
-		etcd.EntryRecord,
+		entryrecord.Record,
 		etcd.EntryValueGeneration,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -264,7 +265,7 @@ func (service *entryCreationService) createEntryOnce(
 	if persisted.Secret && persisted.Source.Kind == core.SourceLiteral {
 		persisted.Source.Literal = ""
 	}
-	record, err := etcd.NewEntryRecord(environment.Record.ID, persisted, generationID)
+	record, err := entryrecord.NewRecord(environment.Record.ID, persisted, generationID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -578,7 +579,7 @@ func (repository *durableEntryCreationRepository) CreateEntryIdempotent(
 	ctx context.Context,
 	environment etcd.Versioned[etcd.EnvironmentRecord],
 	project etcd.Versioned[etcd.ProjectRecord],
-	record etcd.EntryRecord,
+	record entryrecord.Record,
 	generation etcd.EntryValueGeneration,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {

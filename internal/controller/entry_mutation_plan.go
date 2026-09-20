@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/hex"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"math"
 	"slices"
 	"sort"
@@ -261,7 +262,7 @@ func entryMutationConsumerIDs(
 		}
 		running[id] = true
 	}
-	previous := make(map[string]etcd.EntryRecord, len(baseline.Entries))
+	previous := make(map[string]entryrecord.Record, len(baseline.Entries))
 	for _, entry := range baseline.Entries {
 		previous[entry.Entry.ID] = entry
 	}

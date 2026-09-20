@@ -4,20 +4,21 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
 )
 
 type entryBulkChange struct {
 	desired  core.EnvEntry
-	record   etcd.EntryRecord
-	previous *etcd.EntryRecord
+	record   entryrecord.Record
+	previous *entryrecord.Record
 }
 
 type entryBulkCandidate struct {
-	entries  []etcd.EntryRecord
+	entries  []entryrecord.Record
 	changes  []entryBulkChange
-	previous []etcd.EntryRecord
+	previous []entryrecord.Record
 }
 
 func buildEntryBulkCandidate(
@@ -25,7 +26,7 @@ func buildEntryBulkCandidate(
 	input entryBulkUpsertInput,
 	revisionID string,
 ) (entryBulkCandidate, error) {
-	byKey := make(map[string]etcd.EntryRecord)
+	byKey := make(map[string]entryrecord.Record)
 	for _, record := range current.Entries {
 		if record.Entry.Kind != core.EntryKindEnv {
 			continue
@@ -39,7 +40,7 @@ func buildEntryBulkCandidate(
 		byKey[record.Entry.Key] = record
 	}
 	changes := make([]entryBulkChange, 0, len(input.entries))
-	previous := make([]etcd.EntryRecord, 0, len(input.entries))
+	previous := make([]entryrecord.Record, 0, len(input.entries))
 	replaced := make(map[string]struct{}, len(input.entries))
 	for _, item := range input.entries {
 		desired := core.EnvEntry{
@@ -47,7 +48,7 @@ func buildEntryBulkCandidate(
 			Source:   core.EntrySource{Kind: core.SourceLiteral, Literal: item.value},
 			Exposure: append([]string(nil), input.exposure...), Secret: input.secret,
 		}
-		var prior *etcd.EntryRecord
+		var prior *entryrecord.Record
 		if existing, found := byKey[item.key]; found {
 			if existing.Entry.Secret != input.secret {
 				return entryBulkCandidate{}, errs.Newf(
@@ -75,7 +76,7 @@ func buildEntryBulkCandidate(
 		if persisted.Secret {
 			persisted.Source.Literal = ""
 		}
-		record, err := etcd.NewEntryRecord(current.EnvironmentID, persisted, generationID)
+		record, err := entryrecord.NewRecord(current.EnvironmentID, persisted, generationID)
 		if err != nil {
 			return entryBulkCandidate{}, err
 		}
@@ -84,7 +85,7 @@ func buildEntryBulkCandidate(
 		}
 		changes = append(changes, entryBulkChange{desired: desired, record: record, previous: prior})
 	}
-	entries := make([]etcd.EntryRecord, 0, len(current.Entries)+len(changes))
+	entries := make([]entryrecord.Record, 0, len(current.Entries)+len(changes))
 	for _, record := range current.Entries {
 		if _, drop := replaced[record.Entry.ID]; !drop {
 			entries = append(entries, record)

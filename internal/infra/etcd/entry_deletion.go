@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -13,7 +14,7 @@ import (
 // The Entry and every immutable generation remain visible until success.
 func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	ctx context.Context, environment Versioned[EnvironmentRecord], project Versioned[ProjectRecord],
-	entry Versioned[EntryRecord],
+	entry Versioned[entryrecord.Record],
 	projection *Versioned[EnvironmentComposeProjection],
 	tombstone DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
@@ -93,7 +94,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		taskOperationIndexKey(task.OperationID, task.ID),
 		taskActiveOperationKey(task.OperationID),
 		taskQueueKey(task.Executor, task.ID),
-		entryRecordKey(entry.Record.Entry.ID),
+		entryrecord.RecordKey(entry.Record.Entry.ID),
 		entryOwnerKey(entry.Record.EnvironmentID, entry.Record.Entry.ID),
 		entryRemovalIntentKey(task.ID),
 		tombstoneKey,
@@ -140,7 +141,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		{Key: entryRecordKey(entry.Record.Entry.ID), ModRevision: entry.Revision},
+		{Key: entryrecord.RecordKey(entry.Record.Entry.ID), ModRevision: entry.Revision},
 		{Key: entryOwnerKey(entry.Record.EnvironmentID, entry.Record.Entry.ID), ModRevision: ownerRevision},
 		{Key: entryRemovalIntentKey(task.ID)},
 		{Key: tombstoneKey},
@@ -234,7 +235,7 @@ func validateEntryDeletionProjection(
 }
 
 func classifyEntryDeletionStartConflict(
-	entry Versioned[EntryRecord], projection *Versioned[EnvironmentComposeProjection],
+	entry Versioned[entryrecord.Record], projection *Versioned[EnvironmentComposeProjection],
 	ownerRevision int64, operationID string,
 	fence environmentMutationFenceEvidence,
 ) idempotencyPlanClassifier {

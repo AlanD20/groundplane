@@ -3,6 +3,7 @@ package blueprint
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
 )
@@ -132,15 +133,15 @@ func (service *Service) listBlueprintComponents(
 func (service *Service) listBlueprintEntries(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[etcd.EntryRecord], error) {
-	entriesByID := make(map[string]etcd.Versioned[etcd.EntryRecord])
+) ([]etcd.Versioned[entryrecord.Record], error) {
+	entriesByID := make(map[string]etcd.Versioned[entryrecord.Record])
 	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
 	if err != nil {
 		return nil, err
 	}
 	if found {
 		for _, record := range projection.Record.Entries {
-			entriesByID[record.Entry.ID] = etcd.Versioned[etcd.EntryRecord]{
+			entriesByID[record.Entry.ID] = etcd.Versioned[entryrecord.Record]{
 				Record: record, Revision: projection.Revision, ReadRevision: projection.ReadRevision,
 			}
 		}
@@ -161,7 +162,7 @@ func (service *Service) listBlueprintEntries(
 			}
 		}
 		if page.NextCursor == "" {
-			entries := make([]etcd.Versioned[etcd.EntryRecord], 0, len(entriesByID))
+			entries := make([]etcd.Versioned[entryrecord.Record], 0, len(entriesByID))
 			for _, item := range entriesByID {
 				entries = append(entries, item)
 			}

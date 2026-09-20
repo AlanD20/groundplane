@@ -1,6 +1,7 @@
 package controller
 
 import (
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"strings"
 	"unicode/utf8"
 
@@ -14,7 +15,7 @@ import (
 
 // selectedScriptEntries validates the complete resource selection before the
 // caller resolves any value. Inherited selection keeps its existing exposure rule.
-func selectedScriptEntries(sources etcd.ScriptExecutionSources) ([]etcd.EntryRecord, error) {
+func selectedScriptEntries(sources etcd.ScriptExecutionSources) ([]entryrecord.Record, error) {
 	execution := sources.Script.Record.Desired.Execution
 	if execution != nil {
 		if err := execution.Validate(); err != nil {
@@ -24,7 +25,7 @@ func selectedScriptEntries(sources etcd.ScriptExecutionSources) ([]etcd.EntryRec
 			return explicitScriptEntries(sources, *execution)
 		}
 	}
-	entries := make([]etcd.EntryRecord, 0, len(sources.DesiredProjection.Record.Entries))
+	entries := make([]entryrecord.Record, 0, len(sources.DesiredProjection.Record.Entries))
 	for _, record := range sources.DesiredProjection.Record.Entries {
 		if scriptEntryExposesService(record.Entry, sources.Service.Record.Desired.Name) {
 			entries = append(entries, record)
@@ -36,7 +37,7 @@ func selectedScriptEntries(sources etcd.ScriptExecutionSources) ([]etcd.EntryRec
 func explicitScriptEntries(
 	sources etcd.ScriptExecutionSources,
 	execution core.ScriptExecution,
-) ([]etcd.EntryRecord, error) {
+) ([]entryrecord.Record, error) {
 	environmentID, serviceID := sources.Environment.Record.ID, sources.Service.Record.Desired.ID
 	projection := sources.DesiredProjection.Record
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || ids.Validate(ids.KindService, serviceID) != nil ||
@@ -56,9 +57,9 @@ func explicitScriptEntries(
 			)
 		}
 	}
-	selected := make(map[string]etcd.EntryRecord, len(execution.EntryIDs))
+	selected := make(map[string]entryrecord.Record, len(execution.EntryIDs))
 	for _, id := range execution.EntryIDs {
-		selected[id] = etcd.EntryRecord{}
+		selected[id] = entryrecord.Record{}
 	}
 	for _, record := range projection.Entries {
 		previous, wanted := selected[record.Entry.ID]
@@ -75,7 +76,7 @@ func explicitScriptEntries(
 		}
 		selected[record.Entry.ID] = record
 	}
-	entries := make([]etcd.EntryRecord, 0, len(selected))
+	entries := make([]entryrecord.Record, 0, len(selected))
 	fileTargets := make([]string, 0, len(selected))
 	environmentKeys := make(map[string]struct{}, len(selected))
 	for _, id := range execution.EntryIDs {

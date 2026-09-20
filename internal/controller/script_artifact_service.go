@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"path"
 	"sort"
 	"unicode/utf8"
@@ -65,7 +66,7 @@ func (service *ScriptArtifactService) BuildScriptEntryBindings(
 }
 
 func (service *ScriptArtifactService) buildScriptEntryBindings(
-	ctx context.Context, sources etcd.ScriptExecutionSources, entries []etcd.EntryRecord,
+	ctx context.Context, sources etcd.ScriptExecutionSources, entries []entryrecord.Record,
 ) ([]*agentpb.ScriptRunnerEntryBinding, error) {
 	if service.values == nil {
 		return nil, errs.New(errs.KindInternal, "Script Entry values are not configured")
@@ -94,7 +95,7 @@ func (service *ScriptArtifactService) buildScriptEntryBindings(
 	return bindings, nil
 }
 
-func scriptEntryBindingMetadata(record etcd.EntryRecord) (*agentpb.ScriptRunnerEntryBinding, error) {
+func scriptEntryBindingMetadata(record entryrecord.Record) (*agentpb.ScriptRunnerEntryBinding, error) {
 	binding := &agentpb.ScriptRunnerEntryBinding{
 		EntryId: record.Entry.ID, ValueGenerationId: record.CurrentValueGenerationID, Secret: record.Entry.Secret,
 	}
@@ -328,7 +329,7 @@ func scriptOutcomeCheckpointReason(reason etcd.ScriptOutcomeReason) (agentpb.Scr
 func (service *ScriptArtifactService) resolveScriptEntryValue(
 	ctx context.Context,
 	environmentID string,
-	record etcd.EntryRecord,
+	record entryrecord.Record,
 ) ([]byte, error) {
 	storage := etcd.TaskEntryValueStoragePlain
 	if record.Entry.Secret {

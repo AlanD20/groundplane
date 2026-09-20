@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
 )
@@ -39,9 +40,9 @@ func entryDesiredCandidateRecord(
 	current etcd.EnvironmentComposeProjection,
 	request entryDesiredMutationRequest,
 	revisionID string,
-) (*etcd.EntryRecord, *etcd.EntryRecord, error) {
+) (*entryrecord.Record, *entryrecord.Record, error) {
 	desired := request.desired
-	var previous *etcd.EntryRecord
+	var previous *entryrecord.Record
 	if request.action == entryDesiredMutationCreate {
 		desired.ID = entryStableIDFromRevision(ids.KindEnvEntry, revisionID)
 	} else {
@@ -64,7 +65,7 @@ func entryDesiredCandidateRecord(
 	if persisted.Secret && persisted.Source.Kind == core.SourceLiteral {
 		persisted.Source.Literal = ""
 	}
-	record, err := etcd.NewEntryRecord(
+	record, err := entryrecord.NewRecord(
 		current.EnvironmentID, persisted, entryStableIDFromRevision(ids.KindConfig, revisionID),
 	)
 	if err != nil {
@@ -77,11 +78,11 @@ func entryDesiredCandidateRecord(
 }
 
 func replaceProjectedEntry(
-	current []etcd.EntryRecord,
-	previous *etcd.EntryRecord,
-	next *etcd.EntryRecord,
-) []etcd.EntryRecord {
-	result := make([]etcd.EntryRecord, 0, len(current)+1)
+	current []entryrecord.Record,
+	previous *entryrecord.Record,
+	next *entryrecord.Record,
+) []entryrecord.Record {
+	result := make([]entryrecord.Record, 0, len(current)+1)
 	for _, record := range current {
 		if previous == nil || record.Entry.ID != previous.Entry.ID {
 			result = append(result, record)
@@ -97,17 +98,17 @@ func replaceProjectedEntry(
 func (service *entryDesiredMutationService) resolveCurrentEntry(
 	ctx context.Context,
 	entryID string,
-) (string, etcd.EntryRecord, error) {
+) (string, entryrecord.Record, error) {
 	environmentID, found, err := service.repository.ResolveBlueprintEntryEnvironment(ctx, entryID)
 	if err != nil {
-		return "", etcd.EntryRecord{}, err
+		return "", entryrecord.Record{}, err
 	}
 	if !found {
-		return "", etcd.EntryRecord{}, errs.New(errs.KindEntryNotFound, "Entry was not found")
+		return "", entryrecord.Record{}, errs.New(errs.KindEntryNotFound, "Entry was not found")
 	}
 	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
 	if err != nil {
-		return "", etcd.EntryRecord{}, err
+		return "", entryrecord.Record{}, err
 	}
 	if found {
 		for _, record := range projection.Record.Entries {
@@ -116,7 +117,7 @@ func (service *entryDesiredMutationService) resolveCurrentEntry(
 			}
 		}
 	}
-	return "", etcd.EntryRecord{}, errs.New(errs.KindEntryNotFound, "Entry was not found")
+	return "", entryrecord.Record{}, errs.New(errs.KindEntryNotFound, "Entry was not found")
 }
 
 func (service *entryDesiredMutationService) validateExposure(

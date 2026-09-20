@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"sort"
@@ -74,7 +75,7 @@ type EnvironmentComposeProjection struct {
 	VolumeMounts                   []EnvironmentServiceVolumeMount      `json:"volume_mounts,omitempty"`
 	Components                     []ComponentRecord                    `json:"components,omitempty"`
 	ManagedComponentRuntimeSources []ManagedComponentRuntimeSource      `json:"managed_component_runtime_sources,omitempty"`
-	Entries                        []EntryRecord                        `json:"entries,omitempty"`
+	Entries                        []entryrecord.Record                 `json:"entries,omitempty"`
 	Backup                         *EnvironmentBlueprintBackupPolicy    `json:"backup,omitempty"`
 	core.ServiceDependencyPlans
 	core.BlueprintRequirements
@@ -488,10 +489,10 @@ func RemoveEnvironmentEntry(
 	return next, true, nil
 }
 
-func validateEnvironmentEntryProjection(environmentID string, values []EntryRecord) error {
+func validateEnvironmentEntryProjection(environmentID string, values []entryrecord.Record) error {
 	previousID := ""
 	for _, value := range values {
-		if value.Entry.ID <= previousID || value.EnvironmentID != environmentID || validateEntryRecord(value) != nil {
+		if value.Entry.ID <= previousID || value.EnvironmentID != environmentID || entryrecord.ValidateRecord(value) != nil {
 			return errs.New(errs.KindValidationFailed, "Environment Entry projection is invalid or unsorted")
 		}
 		previousID = value.Entry.ID
@@ -633,9 +634,9 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 		[]ManagedComponentRuntimeSource(nil), source.ManagedComponentRuntimeSources...,
 	)
 	if source.Entries != nil {
-		clone.Entries = make([]EntryRecord, len(source.Entries))
+		clone.Entries = make([]entryrecord.Record, len(source.Entries))
 		for index, entry := range source.Entries {
-			clone.Entries[index] = cloneEntryRecord(entry)
+			clone.Entries[index] = entryrecord.CloneRecord(entry)
 		}
 	}
 	return clone

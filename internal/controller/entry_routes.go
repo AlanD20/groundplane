@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,8 +21,8 @@ import (
 )
 
 type EntryReader interface {
-	GetEntry(context.Context, string) (etcd.Versioned[etcd.EntryRecord], error)
-	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.EntryRecord], error)
+	GetEntry(context.Context, string) (etcd.Versioned[entryrecord.Record], error)
+	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[entryrecord.Record], error)
 	RevealEntry(context.Context, string) (string, error)
 }
 

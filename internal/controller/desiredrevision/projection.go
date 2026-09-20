@@ -1,6 +1,7 @@
 package desiredrevision
 
 import (
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"sort"
 	"time"
 
@@ -22,7 +23,7 @@ func ComposeProjection(
 	serviceExtensions map[string]core.ServiceExtensionSpec,
 	_ []core.Route,
 	components []etcd.ComponentRecord,
-	entries []etcd.EntryRecord,
+	entries []entryrecord.Record,
 ) etcd.EnvironmentComposeProjection {
 	convertVolumes := func(values []controller.ComposeResourceIdentity) []etcd.EnvironmentVolumeIdentity {
 		result := make([]etcd.EnvironmentVolumeIdentity, len(values))

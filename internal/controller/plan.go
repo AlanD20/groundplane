@@ -11,6 +11,7 @@ package controller
 
 import (
 	"context"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"math"
 	"sort"
 	"strings"
@@ -963,7 +964,7 @@ func (resolver *TaskPlanResolver) parsePinnedEnvironmentBlueprint(
 	}, bundle)
 }
 
-func projectedEnvironmentEntries(records []etcd.EntryRecord) []core.EnvEntry {
+func projectedEnvironmentEntries(records []entryrecord.Record) []core.EnvEntry {
 	entries := make([]core.EnvEntry, len(records))
 	for index, record := range records {
 		entries[index] = record.Entry

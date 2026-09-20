@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
@@ -29,13 +30,13 @@ func validateScriptContextResources(sources ScriptExecutionSources, snapshot *ag
 			return errs.New(errs.KindValidationFailed, "captured Script Volume is not uniquely available in its source")
 		}
 	}
-	entries := make(map[string]EntryRecord, len(context.EntryIds))
+	entries := make(map[string]entryrecord.Record, len(context.EntryIds))
 	for _, record := range projection.Entries {
 		if !slices.Contains(context.EntryIds, record.Entry.ID) {
 			continue
 		}
 		if _, duplicate := entries[record.Entry.ID]; duplicate || record.EnvironmentID != environmentID ||
-			validateEntryRecord(record) != nil || (!record.Entry.ExposesAll() &&
+			entryrecord.ValidateRecord(record) != nil || (!record.Entry.ExposesAll() &&
 			!slices.Contains(record.Entry.Exposure, sources.Service.Record.Desired.Name)) {
 			return errs.New(errs.KindValidationFailed, "captured Script Entry is not uniquely exposed in its source")
 		}
@@ -53,7 +54,7 @@ func validateScriptContextResources(sources ScriptExecutionSources, snapshot *ag
 	return nil
 }
 
-func scriptContextEntryBindingMatches(record EntryRecord, binding *agentpb.ScriptRunnerEntryBinding) bool {
+func scriptContextEntryBindingMatches(record entryrecord.Record, binding *agentpb.ScriptRunnerEntryBinding) bool {
 	expected := &agentpb.ScriptRunnerEntryBinding{
 		EntryId: record.Entry.ID, ValueGenerationId: record.CurrentValueGenerationID, Secret: record.Entry.Secret,
 		// Private value preparation owns the plaintext hash; metadata must match

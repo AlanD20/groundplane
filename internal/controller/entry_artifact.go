@@ -2,6 +2,7 @@ package controller
 
 import (
 	"crypto/sha256"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"path"
 	"path/filepath"
 	"sort"
@@ -22,7 +23,7 @@ type EnvironmentEntryArtifactMutation struct {
 	ArtifactID       string
 	PlanID           string
 	RenderGeneration uint64
-	Entries          []etcd.EntryRecord
+	Entries          []entryrecord.Record
 }
 
 func ProjectEnvironmentEntryMutation(
@@ -68,7 +69,7 @@ func ProjectEnvironmentEntryMutation(
 	candidate.Volumes = append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...)
 	candidate.VolumeMounts = append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...)
 	candidate.Components = append([]etcd.ComponentRecord(nil), current.Components...)
-	candidate.Entries = append([]etcd.EntryRecord(nil), mutation.Entries...)
+	candidate.Entries = append([]entryrecord.Record(nil), mutation.Entries...)
 	sort.Slice(candidate.Entries, func(left, right int) bool {
 		return candidate.Entries[left].Entry.ID < candidate.Entries[right].Entry.ID
 	})
@@ -78,7 +79,7 @@ func ProjectEnvironmentEntryMutation(
 
 func projectEnvironmentEntryMaterializations(
 	projection etcd.EnvironmentComposeProjection,
-	entries []etcd.EntryRecord,
+	entries []entryrecord.Record,
 ) ([]EnvironmentEntryMaterialization, error) {
 	identities, err := ComposeIdentitySnapshotFromProjection(projection)
 	if err != nil {
@@ -233,7 +234,7 @@ type entryArtifactMount struct {
 	exposes map[string]struct{}
 }
 
-func entryArtifactFileMounts(volumeDir string, entries []etcd.EntryRecord) []entryArtifactMount {
+func entryArtifactFileMounts(volumeDir string, entries []entryrecord.Record) []entryArtifactMount {
 	result := make([]entryArtifactMount, 0)
 	for _, record := range entries {
 		entry := record.Entry
@@ -252,7 +253,7 @@ func entryArtifactFileMounts(volumeDir string, entries []etcd.EntryRecord) []ent
 	return result
 }
 
-func entryArtifactServiceEnvironment(entries []etcd.EntryRecord) map[string]struct{} {
+func entryArtifactServiceEnvironment(entries []entryrecord.Record) map[string]struct{} {
 	result := make(map[string]struct{})
 	for _, record := range entries {
 		entry := record.Entry

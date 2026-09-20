@@ -1,13 +1,14 @@
 package entry
 
 import (
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 // Response projects persisted metadata, including the immutable authoring key
 // needed to resolve Script grants. It does not resolve or reveal Entry values.
-func Response(record etcd.EntryRecord) apiTypes.Entry {
+func Response(record entryrecord.Record) apiTypes.Entry {
 	entry := record.Entry
 	response := apiTypes.Entry{
 		ID: entry.ID, Type: string(entry.Kind), Key: entry.Key, Path: entry.Path,

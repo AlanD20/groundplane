@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"math"
 	"sort"
 
@@ -399,7 +400,7 @@ func entryRemovalMaterializationTemplates(
 		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID {
 		return nil, errs.New(errs.KindInternal, "entry removal projection is unavailable")
 	}
-	var removed *etcd.EntryRecord
+	var removed *entryrecord.Record
 	for index := range intent.CurrentProjection.Entries {
 		if intent.CurrentProjection.Entries[index].Entry.ID == intent.EntryID {
 			value := intent.CurrentProjection.Entries[index]

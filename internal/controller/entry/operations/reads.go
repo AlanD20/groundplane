@@ -2,6 +2,7 @@ package operations
 
 import (
 	"context"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -12,8 +13,8 @@ import (
 
 type entryReadRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetEntry(context.Context, string) (etcd.Versioned[etcd.EntryRecord], error)
-	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.EntryRecord], error)
+	GetEntry(context.Context, string) (etcd.Versioned[entryrecord.Record], error)
+	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[entryrecord.Record], error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
@@ -49,24 +50,24 @@ func (service *entryReadService) ListEntries(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.EntryRecord], error) {
+) (etcd.Page[entryrecord.Record], error) {
 	if ctx == nil {
-		return etcd.Page[etcd.EntryRecord]{}, errs.New(errs.KindInternal, "Entry list context is required")
+		return etcd.Page[entryrecord.Record]{}, errs.New(errs.KindInternal, "Entry list context is required")
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.Page[etcd.EntryRecord]{}, errs.New(
+		return etcd.Page[entryrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Entry list requires a stable Environment id",
 		)
 	}
 	if request.Limit < 0 {
-		return etcd.Page[etcd.EntryRecord]{}, errs.New(
+		return etcd.Page[entryrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Entry list limit must be a positive integer",
 		)
 	}
 	if _, err := service.repository.GetEnvironment(ctx, environmentID); err != nil {
-		return etcd.Page[etcd.EntryRecord]{}, err
+		return etcd.Page[entryrecord.Record]{}, err
 	}
 	if page, found, err := service.listProjectedEntries(ctx, environmentID, request); err != nil || found {
 		return page, err
@@ -77,12 +78,12 @@ func (service *entryReadService) ListEntries(
 func (service *entryReadService) GetEntry(
 	ctx context.Context,
 	entryID string,
-) (etcd.Versioned[etcd.EntryRecord], error) {
+) (etcd.Versioned[entryrecord.Record], error) {
 	if ctx == nil {
-		return etcd.Versioned[etcd.EntryRecord]{}, errs.New(errs.KindInternal, "Entry read context is required")
+		return etcd.Versioned[entryrecord.Record]{}, errs.New(errs.KindInternal, "Entry read context is required")
 	}
 	if ids.Validate(ids.KindEnvEntry, entryID) != nil {
-		return etcd.Versioned[etcd.EntryRecord]{}, errs.New(
+		return etcd.Versioned[entryrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Entry read requires a stable Entry id",
 		)
@@ -163,33 +164,33 @@ func (repository *durableEntryReadRepository) GetEnvironment(
 func (repository *durableEntryReadRepository) GetEntry(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.EntryRecord], error) {
+) (etcd.Versioned[entryrecord.Record], error) {
 	current, err := repository.entries.GetEntry(ctx, id)
 	if err == nil {
 		return current, nil
 	}
 	kind, ok := errs.KindOf(err)
 	if !ok || kind != errs.KindEntryNotFound {
-		return etcd.Versioned[etcd.EntryRecord]{}, err
+		return etcd.Versioned[entryrecord.Record]{}, err
 	}
 	environmentID, found, err := repository.entries.ResolveBlueprintEntryEnvironment(ctx, id)
 	if err != nil || !found {
-		return etcd.Versioned[etcd.EntryRecord]{}, err
+		return etcd.Versioned[entryrecord.Record]{}, err
 	}
 	projection, found, err := repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
 	if err != nil {
-		return etcd.Versioned[etcd.EntryRecord]{}, err
+		return etcd.Versioned[entryrecord.Record]{}, err
 	}
 	if found {
 		for _, record := range projection.Record.Entries {
 			if record.Entry.ID == id {
-				return etcd.Versioned[etcd.EntryRecord]{
+				return etcd.Versioned[entryrecord.Record]{
 					Record: record, Revision: projection.Revision, ReadRevision: projection.ReadRevision,
 				}, nil
 			}
 		}
 	}
-	return etcd.Versioned[etcd.EntryRecord]{}, errs.New(errs.KindEntryNotFound, "Entry was not found")
+	return etcd.Versioned[entryrecord.Record]{}, errs.New(errs.KindEntryNotFound, "Entry was not found")
 }
 
 func (repository *durableEntryReadRepository) GetEnvironmentComposeProjection(
@@ -211,7 +212,7 @@ func (repository *durableEntryReadRepository) ListEntries(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.EntryRecord], error) {
+) (etcd.Page[entryrecord.Record], error) {
 	return repository.entries.ListEntries(ctx, environmentID, request)
 }
 

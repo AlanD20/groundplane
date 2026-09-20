@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"sort"
@@ -123,7 +124,7 @@ func blueprintComponentEnvironment(
 	services []core.Service,
 	routes []core.Route,
 	components []core.Component,
-	entries []etcd.EntryRecord,
+	entries []entryrecord.Record,
 ) core.Environment {
 	projected := core.Environment{
 		ID: environment.ID, ProjectID: environment.ProjectID, Name: environment.Name,
@@ -141,7 +142,7 @@ func blueprintComponentEnvironment(
 	return projected
 }
 
-func projectedEnvironmentEntries(records []etcd.EntryRecord) []core.EnvEntry {
+func projectedEnvironmentEntries(records []entryrecord.Record) []core.EnvEntry {
 	entries := make([]core.EnvEntry, len(records))
 	for index, record := range records {
 		entries[index] = record.Entry
@@ -189,7 +190,7 @@ func (service *Service) environmentComponentMaterializations(
 	runtimeFiles []core.BlueprintFile,
 	projection controller.EnvironmentComponentComposeProjection,
 	entryMaterializations []controller.EnvironmentEntryMaterialization,
-	entries []etcd.EntryRecord,
+	entries []entryrecord.Record,
 ) ([]etcd.TaskMaterializationRecord, []*agentpb.ExecutionStep, error) {
 	inputs := make([]environmentComponentMaterializationInput, 0,
 		len(runtimeFiles)+len(projection.PlainFiles)+len(projection.EnvironmentFiles)+len(entryMaterializations))

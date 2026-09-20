@@ -9,6 +9,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 	"time"
@@ -27,7 +28,7 @@ type entryDesiredMutationRepository interface {
 	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
 	ListEnvironmentComponents(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ComponentRecord], error)
 	ResolveBlueprintEntryEnvironment(context.Context, string) (string, bool, error)
-	BlueprintEntryValueGenerationExists(context.Context, etcd.EntryRecord) (bool, error)
+	BlueprintEntryValueGenerationExists(context.Context, entryrecord.Record) (bool, error)
 	CreateBlueprintEntryValueGeneration(context.Context, etcd.EntryValueGeneration) error
 	BindBlueprintEntryEnvironment(context.Context, string, string) error
 }
@@ -224,7 +225,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 			return etcd.IdempotencyResponse{}, snapshotErr
 		}
 		removals, err := PlanEntryRemovals(
-			request.environmentID, []etcd.EntryRecord{*previous}, entries,
+			request.environmentID, []entryrecord.Record{*previous}, entries,
 			serviceIdentities,
 		)
 		if err != nil {
@@ -286,7 +287,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	var auditRecord *etcd.EntryRecord
+	var auditRecord *entryrecord.Record
 	action := etcd.EnvironmentEntryMutationCreate
 	if request.action == entryDesiredMutationEdit {
 		action = etcd.EnvironmentEntryMutationEdit

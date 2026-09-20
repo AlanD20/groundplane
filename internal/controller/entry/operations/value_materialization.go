@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
 	"time"
@@ -20,7 +21,7 @@ func (service *entryDesiredMutationService) prepareEntryGeneration(
 	projectID string,
 	environmentID string,
 	desired core.EnvEntry,
-	record etcd.EntryRecord,
+	record entryrecord.Record,
 	createdAt time.Time,
 ) error {
 	found, err := service.repository.BlueprintEntryValueGenerationExists(ctx, record)

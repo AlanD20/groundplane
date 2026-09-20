@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	"encoding/base64"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"strconv"
 	"strings"
 
@@ -20,7 +21,7 @@ func (service *entryReadService) listProjectedEntries(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.EntryRecord], bool, error) {
+) (etcd.Page[entryrecord.Record], bool, error) {
 	var projection etcd.Versioned[etcd.EnvironmentComposeProjection]
 	var found bool
 	var err error
@@ -29,20 +30,20 @@ func (service *entryReadService) listProjectedEntries(
 		projection, found, err = service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
 	} else {
 		if !strings.HasPrefix(request.Cursor, entryProjectionCursorPrefix) {
-			return etcd.Page[etcd.EntryRecord]{}, false, nil
+			return etcd.Page[entryrecord.Record]{}, false, nil
 		}
 		revisionID, decodedOffset, decodeErr := decodeEntryProjectionCursor(request.Cursor)
 		if decodeErr != nil {
-			return etcd.Page[etcd.EntryRecord]{}, false, decodeErr
+			return etcd.Page[entryrecord.Record]{}, false, decodeErr
 		}
 		offset = decodedOffset
 		projection, found, err = service.repository.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
 	}
 	if err != nil || !found {
-		return etcd.Page[etcd.EntryRecord]{}, found, err
+		return etcd.Page[entryrecord.Record]{}, found, err
 	}
 	if offset < 0 || offset > len(projection.Record.Entries) {
-		return etcd.Page[etcd.EntryRecord]{}, false, errs.New(errs.KindValidationFailed, "Entry page cursor is invalid")
+		return etcd.Page[entryrecord.Record]{}, false, errs.New(errs.KindValidationFailed, "Entry page cursor is invalid")
 	}
 	limit := request.Limit
 	if limit == 0 {
@@ -52,10 +53,10 @@ func (service *entryReadService) listProjectedEntries(
 	if end > len(projection.Record.Entries) {
 		end = len(projection.Record.Entries)
 	}
-	page := etcd.Page[etcd.EntryRecord]{Revision: projection.Revision}
-	page.Items = make([]etcd.Versioned[etcd.EntryRecord], end-offset)
+	page := etcd.Page[entryrecord.Record]{Revision: projection.Revision}
+	page.Items = make([]etcd.Versioned[entryrecord.Record], end-offset)
 	for index := offset; index < end; index++ {
-		page.Items[index-offset] = etcd.Versioned[etcd.EntryRecord]{
+		page.Items[index-offset] = etcd.Versioned[entryrecord.Record]{
 			Record: projection.Record.Entries[index], Revision: projection.Revision, ReadRevision: projection.ReadRevision,
 		}
 	}

@@ -1,6 +1,7 @@
 package operations
 
 import (
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
@@ -12,8 +13,8 @@ import (
 
 func PlanEntryRemovals(
 	environmentID string,
-	removed []etcd.EntryRecord,
-	next []etcd.EntryRecord,
+	removed []entryrecord.Record,
+	next []entryrecord.Record,
 	services []controller.ComposeResourceIdentity,
 ) ([]controller.EnvironmentEntryMaterialization, error) {
 	nextFiles := make(map[string]struct{})

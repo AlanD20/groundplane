@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
@@ -9,12 +10,12 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEntryFina
 	ctx context.Context,
 	action HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
-	primary, err := repository.readHierarchyDeletionPrimary(ctx, entryRecordKey(action.TargetID), action)
+	primary, err := repository.readHierarchyDeletionPrimary(ctx, entryrecord.RecordKey(action.TargetID), action)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	defer clear(primary.Value)
-	record, err := decodeEntryRecord(primary.Value)
+	record, err := entryrecord.DecodeRecord(primary.Value)
 	if err != nil || record.Entry.ID != action.TargetID {
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}

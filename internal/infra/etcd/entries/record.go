@@ -1,4 +1,4 @@
-package etcd
+package entries
 
 import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -11,92 +11,92 @@ import (
 
 const entryRecordPrefix = "/v1/records/entries/"
 
-// EntryRecord is the durable metadata boundary for one environment Entry.
+// Record is the durable metadata boundary for one environment Entry.
 // CurrentValueGenerationID selects immutable bytes; secret bytes never enter
 // this primary record.
-type EntryRecord struct {
+type Record struct {
 	EnvironmentID            string        `json:"environment_id"`
 	BlueprintKey             string        `json:"blueprint_key,omitempty"`
 	Entry                    core.EnvEntry `json:"entry"`
 	CurrentValueGenerationID string        `json:"current_value_generation_id"`
 }
 
-func NewEntryRecord(
+func NewRecord(
 	environmentID string,
 	entry core.EnvEntry,
 	valueGenerationID string,
-) (EntryRecord, error) {
-	record := EntryRecord{
+) (Record, error) {
+	record := Record{
 		EnvironmentID: environmentID, Entry: entry, CurrentValueGenerationID: valueGenerationID,
 	}
-	if err := validateEntryRecord(record); err != nil {
-		return EntryRecord{}, err
+	if err := ValidateRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-func NewBlueprintEntryRecord(
+func NewBlueprintRecord(
 	environmentID string,
 	blueprintKey string,
 	entry core.EnvEntry,
 	valueGenerationID string,
-) (EntryRecord, error) {
+) (Record, error) {
 	if blueprintKey == "" {
-		return EntryRecord{}, errs.New(errs.KindValidationFailed, "Blueprint Entry key is required")
+		return Record{}, errs.New(errs.KindValidationFailed, "Blueprint Entry key is required")
 	}
-	record, err := NewEntryRecord(environmentID, entry, valueGenerationID)
+	record, err := NewRecord(environmentID, entry, valueGenerationID)
 	if err != nil {
-		return EntryRecord{}, err
+		return Record{}, err
 	}
 	record.BlueprintKey = blueprintKey
 	return record, nil
 }
 
-func ReplaceEntryDesired(
-	current EntryRecord,
+func ReplaceDesired(
+	current Record,
 	desired core.EnvEntry,
 	valueGenerationID string,
-) (EntryRecord, error) {
-	if err := validateEntryRecord(current); err != nil {
-		return EntryRecord{}, err
+) (Record, error) {
+	if err := ValidateRecord(current); err != nil {
+		return Record{}, err
 	}
 	if current.Entry.ID != desired.ID || current.Entry.Kind != desired.Kind ||
 		current.Entry.Key != desired.Key || current.Entry.Path != desired.Path ||
 		current.Entry.Secret != desired.Secret || !equalOptionalUint32(current.Entry.UID, desired.UID) ||
 		!equalOptionalUint32(current.Entry.GID, desired.GID) {
-		return EntryRecord{}, errs.New(
+		return Record{}, errs.New(
 			errs.KindValidationFailed,
 			"Entry edit changed immutable identity, destination, ownership, or storage class",
 		)
 	}
-	replacement, err := NewEntryRecord(current.EnvironmentID, desired, valueGenerationID)
+	replacement, err := NewRecord(current.EnvironmentID, desired, valueGenerationID)
 	if err != nil {
-		return EntryRecord{}, err
+		return Record{}, err
 	}
 	replacement.BlueprintKey = current.BlueprintKey
 	return replacement, nil
 }
 
-func entryRecordKey(entryID string) string {
+func RecordKey(entryID string) string {
 	return entryRecordPrefix + entryID
 }
 
-func encodeEntryRecord(record EntryRecord) ([]byte, error) {
-	if err := validateEntryRecord(record); err != nil {
+func EncodeRecord(record Record) ([]byte, error) {
+	if err := ValidateRecord(record); err != nil {
 		return nil, err
 	}
 	return recordcodec.Encode("entry", record)
 }
 
-func decodeEntryRecord(value []byte) (EntryRecord, error) {
-	record, err := recordcodec.Decode[EntryRecord](value, "entry")
-	if err != nil || validateEntryRecord(record) != nil {
-		return EntryRecord{}, corruptEntryRecord()
+func DecodeRecord(value []byte) (Record, error) {
+	record, err := recordcodec.Decode[Record](value, "entry")
+	if err != nil || ValidateRecord(record) != nil {
+		return Record{}, CorruptRecord()
 	}
 	return record, nil
 }
 
-func validateEntryRecord(record EntryRecord) error {
+func ValidateRecord(record Record) error {
 	if recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		recordcodec.ValidateID(ids.KindEnvEntry, record.Entry.ID) != nil ||
 		recordcodec.ValidateID(ids.KindConfig, record.CurrentValueGenerationID) != nil {
@@ -112,7 +112,7 @@ func validateEntryRecord(record EntryRecord) error {
 	return nil
 }
 
-func equalEntryRecord(left EntryRecord, right EntryRecord) bool {
+func EqualRecord(left Record, right Record) bool {
 	return left.EnvironmentID == right.EnvironmentID &&
 		left.BlueprintKey == right.BlueprintKey &&
 		left.CurrentValueGenerationID == right.CurrentValueGenerationID &&
@@ -143,7 +143,7 @@ func equalOptionalUint32(left *uint32, right *uint32) bool {
 	return *left == *right
 }
 
-func cloneEntryRecord(source EntryRecord) EntryRecord {
+func CloneRecord(source Record) Record {
 	clone := source
 	clone.Entry.Exposure = append([]string(nil), source.Entry.Exposure...)
 	if source.Entry.UID != nil {
@@ -161,6 +161,6 @@ func cloneEntryRecord(source EntryRecord) EntryRecord {
 	return clone
 }
 
-func corruptEntryRecord() error {
+func CorruptRecord() error {
 	return errs.New(errs.KindInternal, "Entry record is corrupt")
 }

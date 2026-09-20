@@ -5,13 +5,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
 
 func entryDesiredResponse(
-	record *etcd.EntryRecord,
+	record *entryrecord.Record,
 	taskID string,
 	status int,
 ) (etcd.IdempotencyResponse, error) {

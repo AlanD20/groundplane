@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/netip"
 	"time"
@@ -33,8 +34,8 @@ type environmentBlueprintRepository interface {
 	ResolveBackingProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	ResolveEnvironment(context.Context, string, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
-	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.EntryRecord], error)
-	BlueprintEntryValueGenerationExists(context.Context, etcd.EntryRecord) (bool, error)
+	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[entryrecord.Record], error)
+	BlueprintEntryValueGenerationExists(context.Context, entryrecord.Record) (bool, error)
 	CreateBlueprintEntryValueGeneration(context.Context, etcd.EntryValueGeneration) error
 	BindBlueprintEntryEnvironment(context.Context, string, string) error
 	ListAttaches(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.AttachRecord], error)
@@ -144,7 +145,7 @@ func NewRepository(
 }
 func (repository *durableRepository) BlueprintEntryValueGenerationExists(
 	ctx context.Context,
-	record etcd.EntryRecord,
+	record entryrecord.Record,
 ) (bool, error) {
 	if record.Entry.Secret {
 		value, found, err := repository.values.GetSecret(ctx, record.Entry.ID, record.CurrentValueGenerationID)
@@ -202,7 +203,7 @@ func (repository *durableRepository) ListEntries(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.EntryRecord], error) {
+) (etcd.Page[entryrecord.Record], error) {
 	return repository.entries.ListEntries(ctx, environmentID, request)
 }
 func (repository *durableRepository) ListAttaches(

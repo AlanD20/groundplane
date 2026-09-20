@@ -1,6 +1,7 @@
 package volume
 
 import (
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"sort"
 	"strings"
 
@@ -192,7 +193,7 @@ func cloneVolumeMutationProjection(current etcd.EnvironmentComposeProjection) et
 		Volumes:                append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...),
 		VolumeMounts:           append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),
 		Components:             append([]etcd.ComponentRecord(nil), current.Components...),
-		Entries:                append([]etcd.EntryRecord(nil), current.Entries...),
+		Entries:                append([]entryrecord.Record(nil), current.Entries...),
 		Backup:                 etcd.CloneEnvironmentBlueprintBackupPolicy(current.Backup),
 		ServiceDependencyPlans: current.ServiceDependencyPlans.Clone(),
 	}

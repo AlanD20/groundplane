@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
@@ -9,7 +10,7 @@ func (repository *EntryRepository) DeleteEntry(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
-	current Versioned[EntryRecord],
+	current Versioned[entryrecord.Record],
 ) (int64, error) {
 	if err := validateEntryHierarchy(ctx, environment, project, current.Record); err != nil {
 		return 0, err
@@ -22,7 +23,7 @@ func (repository *EntryRepository) DeleteEntry(
 		environment,
 		project,
 		[]string{
-			entryRecordKey(current.Record.Entry.ID),
+			entryrecord.RecordKey(current.Record.Entry.ID),
 			entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID),
 			deletionTombstoneKey(string(DeletionTargetEntry), current.Record.Entry.ID),
 		},
@@ -57,7 +58,7 @@ func (repository *EntryRepository) DeleteEntry(
 			return classifyEntryDeleteConflict(values, current, ownerRevision, fence)
 		})
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
-		{Type: etcdstore.MutationDelete, Key: entryRecordKey(current.Record.Entry.ID)},
+		{Type: etcdstore.MutationDelete, Key: entryrecord.RecordKey(current.Record.Entry.ID)},
 		{Type: etcdstore.MutationDelete, Key: entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID)},
 		{
 			Type: etcdstore.MutationDelete, Key: entryPlainValueGenerationPrefix + current.Record.Entry.ID + "/",

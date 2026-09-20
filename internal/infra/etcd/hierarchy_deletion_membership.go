@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"strings"
@@ -306,7 +307,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 			targetKind:    "entry",
 			actionKind:    HierarchyDeletionEntryRemove,
 			ownerPrefix:   entryOwnerCollectionPrefix,
-			primaryKey:    entryRecordKey,
+			primaryKey:    entryrecord.RecordKey,
 			stableIDKind:  ids.KindEnvEntry,
 			validateOwner: validateHierarchyDeletionEntryOwner,
 			controller:    true,

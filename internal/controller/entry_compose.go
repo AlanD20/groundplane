@@ -1,6 +1,7 @@
 package controller
 
 import (
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"path"
 	"path/filepath"
 	"sort"
@@ -43,7 +44,7 @@ func ProjectEnvironmentEntries(
 	environmentID string,
 	volumeDir string,
 	authoredServices []ComposeResourceIdentity,
-	entries []etcd.EntryRecord,
+	entries []entryrecord.Record,
 ) (EnvironmentEntryComposeProjection, error) {
 	if project == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil ||
 		!filepath.IsAbs(

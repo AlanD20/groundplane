@@ -1,6 +1,7 @@
 package entry
 
 import (
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -11,12 +12,12 @@ import (
 // BlueprintProjection validates pinned Entry metadata without losing authored
 // keys. Reconciliation and explicit Script grants consume this same projection.
 func BlueprintProjection(
-	current []etcd.Versioned[etcd.EntryRecord],
-) ([]etcd.EntryRecord, error) {
-	records := make([]etcd.EntryRecord, len(current))
+	current []etcd.Versioned[entryrecord.Record],
+) ([]entryrecord.Record, error) {
+	records := make([]entryrecord.Record, len(current))
 	for index, versioned := range current {
 		var err error
-		records[index], err = etcd.NewEntryRecord(
+		records[index], err = entryrecord.NewRecord(
 			versioned.Record.EnvironmentID,
 			versioned.Record.Entry,
 			versioned.Record.CurrentValueGenerationID,
@@ -35,7 +36,7 @@ func BlueprintProjection(
 // BlueprintAuthoring emits only Blueprint-owned desired fields, never values
 // from the private Entry generation store or generated runtime state.
 func BlueprintAuthoring(
-	records []etcd.EntryRecord,
+	records []entryrecord.Record,
 ) (map[string]core.EntrySpec, error) {
 	result := make(map[string]core.EntrySpec)
 	for _, record := range records {
