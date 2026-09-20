@@ -2,8 +2,8 @@ package services
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -68,7 +68,7 @@ func applyServiceEdit(current core.Service, input apiTypes.ServiceEdit) core.Ser
 	desired.Restart = input.Restart
 	desired.Replicas = input.Replicas
 	if input.Hooks != nil {
-		desired.Hooks = controller.BackingHookConfigurationFromAPI(input.Hooks)
+		desired.Hooks = taskplanning.BackingHookConfigurationFromAPI(input.Hooks)
 	}
 	return desired
 }

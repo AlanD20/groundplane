@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -297,7 +297,7 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 	for index := range serviceSteps {
 		serviceSteps[index] = ids.New(ids.KindStep)
 	}
-	child, err = service.plans.PrepareZoneRemovalTask(ctx, child, intent, controller.ZoneRemovalTaskProcedureIDs{
+	child, err = service.plans.PrepareZoneRemovalTask(ctx, child, intent, taskplanning.ZoneRemovalTaskProcedureIDs{
 		ArtifactID:     zoneStableIDFromRevision(ids.KindConfig, intent.Claim.RevisionID),
 		ServiceStepIDs: serviceSteps, NetworkStepID: ids.New(ids.KindStep),
 	})

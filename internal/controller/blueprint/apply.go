@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
@@ -19,6 +18,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	releasegroup "github.com/AlanD20/groundplane/internal/controller/releasegroup"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -80,7 +80,7 @@ func NewService(
 		blueprintReleases == nil {
 		return nil, errs.New(errs.KindInternal, "Environment Blueprint service is not configured")
 	}
-	if _, err := controller.NewTaskPlanResolver(volumeRoot, componentCatalog); err != nil {
+	if _, err := taskplanning.NewTaskPlanResolver(volumeRoot, componentCatalog); err != nil {
 		return nil, err
 	}
 	return &Service{
@@ -238,7 +238,7 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	normalizedCompose, err := controller.MarshalNormalizedEnvironmentProject(parsed.Project)
+	normalizedCompose, err := taskplanning.MarshalNormalizedEnvironmentProject(parsed.Project)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -275,7 +275,7 @@ func (service *Service) applyBlueprintOnce(
 		zoneOwnerKind = core.ZoneOwnerBackingProject
 		zoneOwnerID = project.Record.ID
 	}
-	desiredZones, err := controller.ProjectZoneProjection(
+	desiredZones, err := taskplanning.ProjectZoneProjection(
 		parsed.Project,
 		changes.Current,
 		zoneOwnerKind,
@@ -305,7 +305,7 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	desiredServices, err := controller.ProjectServiceProjection(
+	desiredServices, err := taskplanning.ProjectServiceProjection(
 		parsed.Project,
 		changes.Current,
 		serviceExtensions,
@@ -327,7 +327,7 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	reconciledEntries, err := controller.ReconcileBlueprintEntries(
+	reconciledEntries, err := taskplanning.ReconcileBlueprintEntries(
 		environmentID, parsed.Extensions.Entries, pinnedEntries, allocator.Named,
 	)
 	if err != nil {
@@ -400,7 +400,7 @@ func (service *Service) applyBlueprintOnce(
 		effectiveComponents,
 		reconciledEntries.Current,
 	)
-	componentProjection, err := controller.ProjectEnvironmentComponents(
+	componentProjection, err := taskplanning.ProjectEnvironmentComponents(
 		parsed.Project,
 		componentEnvironment,
 		service.componentCatalog,
@@ -409,7 +409,7 @@ func (service *Service) applyBlueprintOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	renderIdentities := environmentComponentComposeIdentities(changes.Current, componentProjection.Services)
-	entryProjection, err := controller.ProjectEnvironmentEntries(
+	entryProjection, err := taskplanning.ProjectEnvironmentEntries(
 		componentProjection.Project,
 		environmentID,
 		environment.Record.VolumeDir,
@@ -428,7 +428,7 @@ func (service *Service) applyBlueprintOnce(
 	entryProjection.Materializations = append(entryProjection.Materializations, entryRemovals...)
 	componentProjection.Project = entryProjection.Project
 	attachZones, attachServices, _ := environmentBlueprintTopologyProjection(zoneChanges, serviceChanges, nil)
-	externalNetworks, err := controller.ProjectEnvironmentAttachNetworks(
+	externalNetworks, err := taskplanning.ProjectEnvironmentAttachNetworks(
 		componentProjection.Project, environmentID, attachZones, attachServices, preparedAttaches.effective,
 	)
 	if err != nil {
@@ -440,9 +440,9 @@ func (service *Service) applyBlueprintOnce(
 	}
 	planID := allocator.Named(ids.KindPlan, "execution-plan")
 	artifactID := allocator.Named(ids.KindConfig, "compose-artifact")
-	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{
+	artifact, err := taskplanning.RenderCompose(taskplanning.ComposeRenderInput{
 		Project: componentProjection.Project, ArtifactID: artifactID,
-		ProjectOwnerKind: controller.ComposeProjectOwnerTenant,
+		ProjectOwnerKind: taskplanning.ComposeProjectOwnerTenant,
 		TenantID:         tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environmentID,
 		PlanID: planID, RenderGeneration: generation, AuthorizedVolumeDir: environment.Record.VolumeDir,
 		Identities: renderIdentities, ExternalNetworks: externalNetworks,
@@ -481,9 +481,9 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	componentSteps, _, err := controller.BuildEnvironmentComponentTaskContribution(
-		controller.EnvironmentComponentTaskContributionInput{
-			Apply: controller.EnvironmentManagedConfigApplyInput{
+	componentSteps, _, err := taskplanning.BuildEnvironmentComponentTaskContribution(
+		taskplanning.EnvironmentComponentTaskContributionInput{
+			Apply: taskplanning.EnvironmentManagedConfigApplyInput{
 				RevisionID: taskID, RenderGeneration: generation, Components: pinnedComponents,
 				ComponentCatalog: service.componentCatalog,
 				Materializations: materializations, Artifact: artifact,
@@ -587,16 +587,16 @@ func (service *Service) applyBlueprintOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	params := map[string]string{
-		etcd.EnvironmentDesiredRevisionParam:         taskID,
-		etcd.TaskMaterializationEnvironmentParam:     environmentID,
-		controller.EnvironmentBlueprintArtifactParam: artifactID,
+		etcd.EnvironmentDesiredRevisionParam:           taskID,
+		etcd.TaskMaterializationEnvironmentParam:       environmentID,
+		taskplanning.EnvironmentBlueprintArtifactParam: artifactID,
 		taskcontract.EnvironmentBlueprintProcedureParam: string(
 			taskcontract.BlueprintComposeProcedureNone,
 		),
 	}
 	if len(managedVolumeIDs) != 0 {
-		params[controller.EnvironmentBlueprintManagedVolumesParam] = strings.Join(managedVolumeIDs, ",")
-		params[controller.VolumeTaskIntentSHA256Param] = hex.EncodeToString(volumeIntentDigest)
+		params[taskplanning.EnvironmentBlueprintManagedVolumesParam] = strings.Join(managedVolumeIDs, ",")
+		params[taskplanning.VolumeTaskIntentSHA256Param] = hex.EncodeToString(volumeIntentDigest)
 	}
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: allocator.Named(ids.KindOperation, "operation"), IdempotencyKey: idempotencyKey,

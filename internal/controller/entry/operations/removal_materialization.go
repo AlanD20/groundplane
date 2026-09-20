@@ -7,7 +7,7 @@ import (
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
-	"github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -18,7 +18,7 @@ func PlanEntryRemovals(
 	removed []entryrecord.Record,
 	next []entryrecord.Record,
 	services []composeidentity.Resource,
-) ([]controller.EnvironmentEntryMaterialization, error) {
+) ([]taskplanning.EnvironmentEntryMaterialization, error) {
 	nextFiles := make(map[string]struct{})
 	nextScopes := make(map[string]struct{})
 	for _, record := range next {
@@ -37,7 +37,7 @@ func PlanEntryRemovals(
 		serviceByName[service.Name] = service
 	}
 	seen := make(map[string]struct{})
-	result := make([]controller.EnvironmentEntryMaterialization, 0, len(removed))
+	result := make([]taskplanning.EnvironmentEntryMaterialization, 0, len(removed))
 	for _, record := range removed {
 		entry := record.Entry
 		if entry.Kind == core.EntryKindFile {
@@ -55,7 +55,7 @@ func PlanEntryRemovals(
 			}
 			if _, duplicate := seen[entry.Path]; !duplicate {
 				seen[entry.Path] = struct{}{}
-				result = append(result, controller.EnvironmentEntryMaterialization{
+				result = append(result, taskplanning.EnvironmentEntryMaterialization{
 					Destination: entry.Path, OutputKind: output, UID: *entry.UID, GID: *entry.GID, Mode: mode,
 					Source: etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceRemoval},
 				})
@@ -78,7 +78,7 @@ func PlanEntryRemovals(
 				return nil, errs.New(errs.KindInternal, "removed Blueprint Entry exposure Service is missing")
 			}
 			seen[destination] = struct{}{}
-			result = append(result, controller.EnvironmentEntryMaterialization{
+			result = append(result, taskplanning.EnvironmentEntryMaterialization{
 				Destination: destination, ServiceID: identity.ID, ServiceName: identity.Name,
 				OutputKind: etcd.TaskMaterializationOutputRemoveGeneratedEnv,
 				Mode:       entrymaterialization.ModePrivate,

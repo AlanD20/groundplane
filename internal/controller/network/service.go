@@ -8,8 +8,8 @@ import (
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
-	"github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	corenetwork "github.com/AlanD20/groundplane/internal/core/network"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
@@ -44,7 +44,7 @@ type idempotencyEvidenceRepository interface {
 // all Zone and Route decisions remain in this package.
 func NewEtcdService(
 	repository *networketcd.Repository,
-	plans *controller.TaskPlanResolver,
+	plans *taskplanning.TaskPlanResolver,
 	coordinator *requestidempotency.Coordinator,
 ) (*Service, error) {
 	if repository == nil || plans == nil || coordinator == nil {
@@ -116,7 +116,7 @@ func NewEtcdService(
 func (service *Service) NewBackingZoneCascadeExecutor(
 	detaches backingZoneCascadeDetaches,
 	retries backingZoneCascadeRetries,
-	plans *controller.TaskPlanResolver,
+	plans *taskplanning.TaskPlanResolver,
 ) (*backingZoneCascadeService, error) {
 	if service == nil || service.repository == nil || service.zoneDeletionID == nil {
 		return nil, errs.New(errs.KindInternal, "network capability is not configured")

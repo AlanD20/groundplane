@@ -6,7 +6,7 @@ import (
 	releasegroup "github.com/AlanD20/groundplane/internal/controller/releasegroup"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -39,7 +39,7 @@ func (service *Service) PreflightBlueprint(ctx context.Context, input BlueprintP
 	if err != nil {
 		return WorkloadPreparation{}, err
 	}
-	desired, err := controller.ProjectServiceProjection(input.Project, identities.Current, input.ServiceExtensions)
+	desired, err := taskplanning.ProjectServiceProjection(input.Project, identities.Current, input.ServiceExtensions)
 	if err != nil {
 		return WorkloadPreparation{}, err
 	}

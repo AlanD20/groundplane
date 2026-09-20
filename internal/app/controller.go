@@ -24,7 +24,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/common/logging"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/attachplanning"
 	"github.com/AlanD20/groundplane/internal/controller/backingservices"
@@ -48,6 +47,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/secrets"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	serviceoperations "github.com/AlanD20/groundplane/internal/controller/services"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	controllerconfigstore "github.com/AlanD20/groundplane/internal/infra/controllerconfig"
@@ -452,7 +452,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Attach fact reads: %w", err)
 	}
-	planResolver, err := controller.NewTaskPlanResolverWithAttachments(
+	planResolver, err := taskplanning.NewTaskPlanResolverWithAttachments(
 		cfg.Storage.VolumeRoot,
 		hierarchyRecords,
 		attachRecords,
@@ -490,7 +490,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, err
 	}
-	scriptArtifacts, err := controller.NewScriptArtifactService(scriptRecords, materializationResolver)
+	scriptArtifacts, err := taskplanning.NewScriptArtifactService(scriptRecords, materializationResolver)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script artifact service: %w", err)
@@ -783,7 +783,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script mutation idempotency: %w", err)
 	}
-	scriptPreparation, err := controller.NewScriptRunnerPreparationService(
+	scriptPreparation, err := taskplanning.NewScriptRunnerPreparationService(
 		scriptArtifacts,
 		agents,
 		agentRuntime.Registry,

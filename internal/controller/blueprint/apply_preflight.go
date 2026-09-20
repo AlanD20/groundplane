@@ -2,9 +2,9 @@ package blueprint
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
@@ -48,7 +48,7 @@ func (service *Service) prepareApplyPreflight(ctx context.Context, environmentID
 	if err != nil {
 		return applyPreflight{}, err
 	}
-	if err := controller.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
+	if err := taskplanning.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return applyPreflight{}, err
 	}
 	currentAttaches, attachReadRevision, err := service.listBlueprintAttaches(ctx, environmentID)
@@ -67,7 +67,7 @@ func (service *Service) prepareApplyPreflight(ctx context.Context, environmentID
 	submittedServiceNames := environmentBlueprintServiceNames(parsed.Project)
 	var priorProject *composetypes.Project
 	if hasProjection {
-		priorProject, err = controller.LoadNormalizedEnvironmentProject(ctx, previousProjection.Record)
+		priorProject, err = taskplanning.LoadNormalizedEnvironmentProject(ctx, previousProjection.Record)
 		if err != nil {
 			return applyPreflight{}, err
 		}

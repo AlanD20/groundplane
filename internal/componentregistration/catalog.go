@@ -7,15 +7,15 @@ import (
 	registeredcatalog "github.com/AlanD20/groundplane-registered-components/catalog"
 	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
 	registeredcoredns "github.com/AlanD20/groundplane-registered-components/coredns"
-	"github.com/AlanD20/groundplane/internal/controller"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 const ManagedConfigActivateAction = componentsdk.ActionID("activate-config")
 
-func ConfigureReleasePlans(resolver *controller.TaskPlanResolver, ledger *etcd.ReleaseLedger) error {
+func ConfigureReleasePlans(resolver *taskplanning.TaskPlanResolver, ledger *etcd.ReleaseLedger) error {
 	if err := resolver.EnableServiceProxyImage(registeredcaddy.Image); err != nil {
 		return err
 	}

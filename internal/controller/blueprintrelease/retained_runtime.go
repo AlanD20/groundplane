@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"sort"
 
-	controller "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -106,12 +106,12 @@ func (service *Service) PrepareRuntimeArtifact(
 		return nil, err
 	}
 	if workloads.retained != nil {
-		return controller.RetainEnvironmentComponentRuntime(artifact, workloads.retained.applied.Record.ComposeArtifact)
+		return taskplanning.RetainEnvironmentComponentRuntime(artifact, workloads.retained.applied.Record.ComposeArtifact)
 	}
 	for _, predecessor := range workloads.predecessors {
 		// All captures share one planning revision; each is checked again by
 		// preparePredecessor and its applied-key CAS before final publication.
-		return controller.RetainEnvironmentComponentRuntime(artifact, predecessor.applied.Record.ComposeArtifact)
+		return taskplanning.RetainEnvironmentComponentRuntime(artifact, predecessor.applied.Record.ComposeArtifact)
 	}
 	return artifact, nil
 }
@@ -144,7 +144,7 @@ func (service *Service) prepareNativeRuntimeArtifact(
 	if len(ids) != len(captured.services) {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint retained Service disappeared after preflight")
 	}
-	return controller.RetainBlueprintNativeRuntimeSources(artifact, captured.artifacts, ids)
+	return taskplanning.RetainBlueprintNativeRuntimeSources(artifact, captured.artifacts, ids)
 }
 
 func (service *Service) prepareRetainedPublication(

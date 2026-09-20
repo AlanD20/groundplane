@@ -10,7 +10,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -45,14 +45,14 @@ type Facts interface {
 		context.Context,
 		etcd.Versioned[attachrecord.Record],
 		string,
-		controllerpkg.AttachPlanIdentityConsumer,
+		taskplanning.AttachPlanIdentityConsumer,
 	) error
 	ResolveHookInput(
 		context.Context,
 		etcd.Versioned[attachrecord.Record],
 		etcd.TaskRecord,
 		backinghook.Context,
-		controllerpkg.BackingHookInputConsumer,
+		taskplanning.BackingHookInputConsumer,
 	) error
 	ResolveDraftHookInput(
 		context.Context,
@@ -61,7 +61,7 @@ type Facts interface {
 		etcd.TaskRecord,
 		*etcd.BackingHookEncryptedInputs,
 		backinghook.Context,
-		controllerpkg.BackingHookInputConsumer,
+		taskplanning.BackingHookInputConsumer,
 	) error
 }
 
@@ -83,7 +83,7 @@ func New(
 	if repository == nil || facts == nil || runtimes == nil {
 		return nil, errs.New(errs.KindInternal, "Attach draft plan dependencies are required")
 	}
-	if _, err := controllerpkg.NewTaskPlanResolver(volumeRoot, componentCatalog); err != nil {
+	if _, err := taskplanning.NewTaskPlanResolver(volumeRoot, componentCatalog); err != nil {
 		return nil, err
 	}
 	return &Sealer{
@@ -97,7 +97,7 @@ func (sealer *Sealer) SealDraft(
 	current etcd.Versioned[attachrecord.Record],
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
-	identity *controllerpkg.AttachPlanIdentity,
+	identity *taskplanning.AttachPlanIdentity,
 	hookBundle *attachrecord.EncryptedFacts,
 	hookInputs *etcd.BackingHookEncryptedInputs,
 ) (serviceruntimerecord.AttachPreparation, error) {
@@ -105,7 +105,7 @@ func (sealer *Sealer) SealDraft(
 		repository: sealer.repository, facts: sealer.facts, current: current,
 		renderInput: renderInput, identity: identity, hookBundle: hookBundle, hookInputs: hookInputs,
 	}
-	resolver, err := controllerpkg.NewTaskPlanResolverWithAttachments(
+	resolver, err := taskplanning.NewTaskPlanResolverWithAttachments(
 		sealer.volumeRoot, sealer.repository, state, sealer.repository, state,
 		sealer.componentCatalog,
 	)
@@ -125,7 +125,7 @@ type draftAttachPlanState struct {
 	facts       Facts
 	current     etcd.Versioned[attachrecord.Record]
 	renderInput etcd.AttachTaskRenderInput
-	identity    *controllerpkg.AttachPlanIdentity
+	identity    *taskplanning.AttachPlanIdentity
 	hookBundle  *attachrecord.EncryptedFacts
 	hookInputs  *etcd.BackingHookEncryptedInputs
 }
@@ -135,7 +135,7 @@ func (state *draftAttachPlanState) ResolveHookInput(
 	current etcd.Versioned[attachrecord.Record],
 	task etcd.TaskRecord,
 	hookContext backinghook.Context,
-	consume controllerpkg.BackingHookInputConsumer,
+	consume taskplanning.BackingHookInputConsumer,
 ) error {
 	if current.Record.ID == state.current.Record.ID && (state.hookBundle != nil || state.hookInputs != nil) {
 		return state.facts.ResolveDraftHookInput(
@@ -176,15 +176,15 @@ func (state *draftAttachPlanState) ResolveTaskIdentity(
 	ctx context.Context,
 	current etcd.Versioned[attachrecord.Record],
 	taskID string,
-	consume controllerpkg.AttachPlanIdentityConsumer,
+	consume taskplanning.AttachPlanIdentityConsumer,
 ) error {
 	if current.Record.ID != state.current.Record.ID || state.identity == nil {
 		return state.facts.ResolveTaskIdentity(ctx, current, taskID, consume)
 	}
-	identity := controllerpkg.AttachPlanIdentity{
+	identity := taskplanning.AttachPlanIdentity{
 		Authentication: state.identity.Authentication, Database: state.identity.Database, Role: state.identity.Role,
 		Password: append([]byte(nil), state.identity.Password...),
-		Grants:   append([]controllerpkg.AttachPlanGrantIdentity(nil), state.identity.Grants...),
+		Grants:   append([]taskplanning.AttachPlanGrantIdentity(nil), state.identity.Grants...),
 	}
 	defer identity.Clear()
 	return consume(identity)

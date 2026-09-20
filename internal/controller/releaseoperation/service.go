@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -36,9 +36,9 @@ type Service struct {
 	groups      *etcdrg.Store
 	idempotency *etcd.IdempotencyRepository
 	coordinator *requestidempotency.Coordinator
-	plans       *controllerpkg.TaskPlanResolver
+	plans       *taskplanning.TaskPlanResolver
 	scripts     *etcd.ScriptRepository
-	preparation *controllerpkg.ScriptRunnerPreparationService
+	preparation *taskplanning.ScriptRunnerPreparationService
 	timeout     time.Duration
 	now         func() time.Time
 }
@@ -63,9 +63,9 @@ func NewService(
 	groups *etcdrg.Store,
 	idempotency *etcd.IdempotencyRepository,
 	coordinator *requestidempotency.Coordinator,
-	plans *controllerpkg.TaskPlanResolver,
+	plans *taskplanning.TaskPlanResolver,
 	scripts *etcd.ScriptRepository,
-	artifacts *controllerpkg.ScriptArtifactService,
+	artifacts *taskplanning.ScriptArtifactService,
 	timeout time.Duration,
 	agents *etcd.LocalAgentRepository,
 	images workloadseal.Resolver,
@@ -83,7 +83,7 @@ func NewService(
 			"release execution timeout must be an integral duration from 40m through 24h",
 		)
 	}
-	preparation, err := controllerpkg.NewScriptRunnerPreparationService(artifacts, agents, images)
+	preparation, err := taskplanning.NewScriptRunnerPreparationService(artifacts, agents, images)
 	if err != nil {
 		return nil, err
 	}

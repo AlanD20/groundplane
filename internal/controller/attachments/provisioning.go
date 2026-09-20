@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
@@ -15,7 +15,7 @@ func (service *MutationService) prepareAttachFacts(
 	consumer etcd.Versioned[etcd.ServiceRecord],
 	scope etcd.AttachCreateScope,
 	adapter adapters.Adapter,
-) (*controllerpkg.AttachPlanIdentity, []attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts,
+) (*taskplanning.AttachPlanIdentity, []attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts,
 	*etcd.BackingHookEncryptedInputs, error,
 ) {
 	if adapter.Custom() {
@@ -53,10 +53,10 @@ func (service *MutationService) prepareAttachFacts(
 		Database: identityName, Role: role, Password: password,
 	}
 	grantFacts := make([]GrantInput, 0, len(scope.Grants))
-	planIdentity := &controllerpkg.AttachPlanIdentity{
+	planIdentity := &taskplanning.AttachPlanIdentity{
 		Authentication: authentication,
 		Database:       identityName, Role: role, Password: append([]byte(nil), password...),
-		Grants: make([]controllerpkg.AttachPlanGrantIdentity, 0, len(scope.Grants)),
+		Grants: make([]taskplanning.AttachPlanGrantIdentity, 0, len(scope.Grants)),
 	}
 	failed := true
 	defer func() {
@@ -80,7 +80,7 @@ func (service *MutationService) prepareAttachFacts(
 				Database: database, Role: role, Password: password,
 			},
 		})
-		planIdentity.Grants = append(planIdentity.Grants, controllerpkg.AttachPlanGrantIdentity{
+		planIdentity.Grants = append(planIdentity.Grants, taskplanning.AttachPlanGrantIdentity{
 			AttachID: grant.Record.ID, Database: database,
 		})
 	}

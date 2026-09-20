@@ -15,8 +15,8 @@ import (
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/managedconfig"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -82,8 +82,8 @@ func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
 		ownershipPlanID = resolved.input.OwnershipPlanID
 		ownershipGeneration = resolved.input.OwnershipGeneration
 	}
-	composeArtifact, err := controllerpkg.RenderPlatformComponentCompose(
-		controllerpkg.PlatformComponentComposeInput{
+	composeArtifact, err := taskplanning.RenderPlatformComponentCompose(
+		taskplanning.PlatformComponentComposeInput{
 			ComponentID: task.Target, PlanID: ownershipPlanID,
 			RenderGeneration: ownershipGeneration,
 			ArtifactID:       resolved.input.ComposeArtifactID, Plan: resolved.plan,

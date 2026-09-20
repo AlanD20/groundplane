@@ -19,10 +19,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -55,7 +55,7 @@ type CreationService struct {
 	repository       backingServiceCreationRepository
 	idempotency      *desiredrevision.Idempotency
 	protector        *secretvalue.Protector
-	plans            *controller.TaskPlanResolver
+	plans            *taskplanning.TaskPlanResolver
 	hookInputs       backingServiceHookInputs
 	componentCatalog []componentrender.EnvironmentComponentRegistration
 	now              func() time.Time
@@ -67,7 +67,7 @@ func NewCreationService(
 	repository backingServiceCreationRepository,
 	idempotency *desiredrevision.Idempotency,
 	protector *secretvalue.Protector,
-	plans *controller.TaskPlanResolver,
+	plans *taskplanning.TaskPlanResolver,
 	hookInputs backingServiceHookInputs,
 	componentCatalog []componentrender.EnvironmentComponentRegistration,
 ) (*CreationService, error) {
@@ -100,7 +100,7 @@ func (service *CreationService) CreateBackingService(
 			errs.KindValidationFailed, "unsupported backing-service adapter %q", input.Adapter,
 		)
 	}
-	hooks := controller.BackingHookConfigurationFromAPI(input.Hooks)
+	hooks := taskplanning.BackingHookConfigurationFromAPI(input.Hooks)
 	if hooks != nil && !adapter.Custom() {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
@@ -281,7 +281,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		Expose:  append([]string(nil), spec.Expose...), Restart: "unless-stopped",
 		Adapter: input.Adapter, Authentication: authentication,
 		FactsPrefix: adapter.FactsPrefix(), Label: input.Name,
-		Hooks: controller.BackingHookConfigurationFromAPI(input.Hooks),
+		Hooks: taskplanning.BackingHookConfigurationFromAPI(input.Hooks),
 	}
 	serviceRecord, err := etcd.NewServiceRecord(environment.ID, desiredService, zone.Desired.ID)
 	if err != nil {
@@ -304,7 +304,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		Entries: entryDesired, CreatedAt: environment.CreatedAt,
 	}
 	baseProject := backingComposeProject(spec, serviceID, zone.Desired, volume, environment)
-	componentProjection, err := controller.ProjectEnvironmentComponents(
+	componentProjection, err := taskplanning.ProjectEnvironmentComponents(
 		baseProject,
 		environmentProjection,
 		service.componentCatalog,
@@ -322,9 +322,9 @@ func (service *CreationService) createBackingServiceFromStage(
 	identities.Services = append(identities.Services, componentProjection.Services...)
 	planID := allocator.Named(ids.KindPlan, "execution-plan")
 	artifactID := allocator.Named(ids.KindConfig, "compose-artifact")
-	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{
+	artifact, err := taskplanning.RenderCompose(taskplanning.ComposeRenderInput{
 		Project: componentProjection.Project, ArtifactID: artifactID,
-		ProjectOwnerKind: controller.ComposeProjectOwnerBacking,
+		ProjectOwnerKind: taskplanning.ComposeProjectOwnerBacking,
 		ProjectID:        project.ID, EnvironmentID: environment.ID, PlanID: planID,
 		RenderGeneration: 1, AuthorizedVolumeDir: environment.VolumeDir, Identities: identities,
 	})
@@ -413,7 +413,7 @@ func (service *CreationService) createBackingServiceFromStage(
 			{ServiceID: serviceID, VolumeID: volumeID, Target: spec.MountPath},
 		}
 	}
-	normalizedCompose, err := controller.MarshalNormalizedEnvironmentProject(baseProject)
+	normalizedCompose, err := taskplanning.MarshalNormalizedEnvironmentProject(baseProject)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}

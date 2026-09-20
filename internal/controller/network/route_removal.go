@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -147,7 +147,7 @@ type routeRemovalPlanResolver interface {
 		context.Context,
 		etcd.TaskRecord,
 		etcd.RouteRemovalIntent,
-		controller.RouteRemovalTaskProcedureIDs,
+		taskplanning.RouteRemovalTaskProcedureIDs,
 	) (etcd.RouteRemovalTaskPreparation, error)
 }
 
@@ -282,7 +282,7 @@ func (service *routeRemovalService) removeRouteOnce(
 		ctx,
 		task,
 		intent,
-		controller.RouteRemovalTaskProcedureIDs{
+		taskplanning.RouteRemovalTaskProcedureIDs{
 			ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
 			MaterializeStepID: ids.New(ids.KindStep), ComposeApplyStepID: ids.New(ids.KindStep),
 			ActivateStepID: ids.New(ids.KindStep),

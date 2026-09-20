@@ -1,7 +1,7 @@
 package blueprint
 
 import (
-	"github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -9,7 +9,7 @@ import (
 )
 
 func (service *Service) prepareRoutePublication(componentEnvironment core.Environment, pinnedComponents []componentrecord.Record, componentPreparation etcd.ComponentTaskPreparation, generation uint64, routeChanges []etcd.EnvironmentBlueprintRouteChange) (etcd.ComponentTaskPreparation, []etcd.EnvironmentBlueprintRouteChange, error) {
-	routeProvider, routeProjection, err := controller.ResolveComponentTaskRouteProvider(
+	routeProvider, routeProjection, err := taskplanning.ResolveComponentTaskRouteProvider(
 		service.componentCatalog,
 		componentEnvironment,
 		pinnedComponents,

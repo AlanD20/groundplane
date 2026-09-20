@@ -3,8 +3,8 @@ package attachments
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -121,7 +121,7 @@ func (service *MutationService) createAttachOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	var identity *controllerpkg.AttachPlanIdentity
+	var identity *taskplanning.AttachPlanIdentity
 	var metadata []attachrecord.FactSetMetadata
 	var encryptedFacts *attachrecord.EncryptedFacts
 	var hookInputs *etcd.BackingHookEncryptedInputs

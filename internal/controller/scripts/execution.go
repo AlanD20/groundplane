@@ -8,8 +8,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -74,7 +74,7 @@ func (service *scriptMutationService) RunScript(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	plan, err := controller.BuildManualScriptPlan(ctx, controller.ManualScriptPlanInput{
+	plan, err := taskplanning.BuildManualScriptPlan(ctx, taskplanning.ManualScriptPlanInput{
 		TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID, StepID: task.Steps[0].ID,
 		ExecutionID: task.Params[etcd.ScriptExecutionIDParam], SnapshotID: ids.NewULID(), Sources: sources,
 		Preparation: prepared,

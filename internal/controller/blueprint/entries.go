@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 )
 
 func (service *Service) prepareBlueprintEntryValues(
@@ -13,7 +13,7 @@ func (service *Service) prepareBlueprintEntryValues(
 	generationService *entrygeneration.EntryGenerationService,
 	projectID string,
 	environmentID string,
-	reconciliation controller.BlueprintEntryReconciliation,
+	reconciliation taskplanning.BlueprintEntryReconciliation,
 	createdAt time.Time,
 ) error {
 	for _, candidate := range reconciliation.Values {

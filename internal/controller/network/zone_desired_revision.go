@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -84,12 +84,12 @@ func buildZoneRemovalProjection(
 			"Zone baseline artifact is corrupt",
 		)
 	}
-	mutation := controller.ZoneArtifactMutation{
+	mutation := taskplanning.ZoneArtifactMutation{
 		ZoneID: zoneID, ZoneName: zoneName,
 		ArtifactID: zoneStableIDFromRevision(ids.KindConfig, revisionID),
 		PlanID:     zoneStableIDFromRevision(ids.KindPlan, revisionID), RenderGeneration: generation,
 	}
-	mutated, err := controller.MutateEnvironmentZoneArtifact(artifact, mutation)
+	mutated, err := taskplanning.MutateEnvironmentZoneArtifact(artifact, mutation)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, nil, err
 	}
@@ -97,11 +97,11 @@ func buildZoneRemovalProjection(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
-	normalized, err := controller.NormalizedEnvironmentArtifact(current)
+	normalized, err := taskplanning.NormalizedEnvironmentArtifact(current)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, nil, err
 	}
-	normalized, err = controller.MutateEnvironmentZoneArtifact(normalized, mutation)
+	normalized, err = taskplanning.MutateEnvironmentZoneArtifact(normalized, mutation)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, nil, err
 	}

@@ -12,8 +12,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -175,7 +175,7 @@ func (service *FactService) ResolveTaskIdentity(
 	ctx context.Context,
 	current etcd.Versioned[attachrecord.Record],
 	taskID string,
-	consume controllerpkg.AttachPlanIdentityConsumer,
+	consume taskplanning.AttachPlanIdentityConsumer,
 ) error {
 	if ctx == nil || consume == nil || ids.Validate(ids.KindTask, taskID) != nil ||
 		current.Record.TaskID != taskID || !current.Record.OwnsCredential() {
@@ -189,15 +189,15 @@ func (service *FactService) ResolveTaskIdentity(
 		return errs.New(errs.KindStateConflict, "Attach task identity is unavailable in the current lifecycle")
 	}
 	return service.openBundle(ctx, current, func(bundle *attachFactBundle) error {
-		identity := controllerpkg.AttachPlanIdentity{
+		identity := taskplanning.AttachPlanIdentity{
 			Authentication: bundle.Identity.Authentication,
 			Database:       bundle.Identity.Database,
 			Role:           bundle.Identity.Role,
 			Password:       append([]byte(nil), bundle.Identity.Password...),
-			Grants:         make([]controllerpkg.AttachPlanGrantIdentity, 0, len(bundle.Identity.Grants)),
+			Grants:         make([]taskplanning.AttachPlanGrantIdentity, 0, len(bundle.Identity.Grants)),
 		}
 		for _, grant := range bundle.Identity.Grants {
-			identity.Grants = append(identity.Grants, controllerpkg.AttachPlanGrantIdentity{
+			identity.Grants = append(identity.Grants, taskplanning.AttachPlanGrantIdentity{
 				AttachID: grant.AttachID, Database: grant.Database,
 			})
 		}

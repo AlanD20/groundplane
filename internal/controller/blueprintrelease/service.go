@@ -6,9 +6,9 @@ import (
 	"errors"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	controller "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -27,16 +27,16 @@ type Service struct {
 	images      workloadseal.Resolver
 	ledger      *etcd.ReleaseLedger
 	scripts     *etcd.ScriptRepository
-	plans       *controller.TaskPlanResolver
-	preparation *controller.ScriptRunnerPreparationService
+	plans       *taskplanning.TaskPlanResolver
+	preparation *taskplanning.ScriptRunnerPreparationService
 	sources     *etcd.ScriptSourceReferenceAuthority
 }
 
 func NewService(
 	ledger *etcd.ReleaseLedger,
 	scripts *etcd.ScriptRepository,
-	plans *controller.TaskPlanResolver,
-	artifacts *controller.ScriptArtifactService,
+	plans *taskplanning.TaskPlanResolver,
+	artifacts *taskplanning.ScriptArtifactService,
 	sources *etcd.ScriptSourceReferenceAuthority,
 	agents *etcd.LocalAgentRepository,
 	images workloadseal.Resolver,
@@ -45,7 +45,7 @@ func NewService(
 		images == nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Release dependencies are not configured")
 	}
-	preparation, err := controller.NewScriptRunnerPreparationService(artifacts, agents, images)
+	preparation, err := taskplanning.NewScriptRunnerPreparationService(artifacts, agents, images)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		if len(steps) != 0 {
 			prerequisite = steps[len(steps)-1].StepId
 		}
-		managedSteps, buildErr := controller.BlueprintManagedServiceSteps(task, input.Artifact, prerequisite, false)
+		managedSteps, buildErr := taskplanning.BlueprintManagedServiceSteps(task, input.Artifact, prerequisite, false)
 		if buildErr != nil {
 			return Prepared{}, buildErr
 		}
@@ -176,7 +176,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		return Prepared{}, errs.New(errs.KindInternal, "Blueprint Release publication allocator is invalid")
 	}
 	task.Params[etcd.TaskReleasePublicationParam] = publicationID
-	artifactID := task.Params[controller.EnvironmentBlueprintArtifactParam]
+	artifactID := task.Params[taskplanning.EnvironmentBlueprintArtifactParam]
 	stage := etcd.ReleaseStage{PublicationID: publicationID, OperationID: task.OperationID, CreatedAt: input.CreatedAt,
 		Members: make([]etcd.ReleaseStageMember, len(candidates))}
 	members := make([]etcd.ReleaseTaskRenderMember, len(candidates))
@@ -252,7 +252,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 			"blueprint-candidate-recovery-compensate/"+member.Render.ServiceID,
 		)
 	}
-	task, plan, err := service.plans.PrepareBlueprintReleaseTask(ctx, task, controller.BlueprintReleasePlanInput{
+	task, plan, err := service.plans.PrepareBlueprintReleaseTask(ctx, task, taskplanning.BlueprintReleasePlanInput{
 		NativePredecessors: nativePredecessors(input, members),
 		Members:            members, PrefixSteps: input.PrefixSteps, ComponentSteps: input.ComponentSteps,
 		ApplyStepIDs: applyStepIDs, HealthStepIDs: healthStepIDs,

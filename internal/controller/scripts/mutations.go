@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/scriptdefinition"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -243,13 +243,13 @@ type scriptMutationService struct {
 	idempotency scriptMutationIdempotency
 	deletions   *scriptDeletionService
 	now         func() time.Time
-	preparation *controller.ScriptRunnerPreparationService
+	preparation *taskplanning.ScriptRunnerPreparationService
 }
 
 func NewMutationService(
 	repository scriptMutationRepository,
 	idempotency scriptMutationIdempotency,
-	preparation *controller.ScriptRunnerPreparationService,
+	preparation *taskplanning.ScriptRunnerPreparationService,
 	deletions *scriptDeletionService,
 ) (*scriptMutationService, error) {
 	if repository == nil || idempotency == nil || preparation == nil {

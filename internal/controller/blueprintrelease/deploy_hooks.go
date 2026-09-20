@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	controller "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -107,11 +107,11 @@ func (service *Service) prepareDeployHooks(
 			if idErr != nil {
 				return preparedHooks{}, idErr
 			}
-			hook, err := controller.BuildReleaseHookRenderInput(ctx, controller.ManualScriptPlanInput{
+			hook, err := taskplanning.BuildReleaseHookRenderInput(ctx, taskplanning.ManualScriptPlanInput{
 				TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID,
 				StepID: stepID, ExecutionID: executionID, SnapshotID: snapshotID,
 				Sources: sources, Preparation: prepared,
-				Candidate: &controller.BlueprintScriptCandidateSources{
+				Candidate: &taskplanning.BlueprintScriptCandidateSources{
 					EnvironmentID:     input.Environment.Record.ID,
 					RevisionID:        input.Projection.RevisionID,
 					RenderGeneration:  input.Projection.RenderGeneration,

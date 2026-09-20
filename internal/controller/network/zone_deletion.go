@@ -13,9 +13,9 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -190,7 +190,7 @@ type zoneDeletionPlanResolver interface {
 		context.Context,
 		etcd.TaskRecord,
 		etcd.ZoneRemovalIntent,
-		controller.ZoneRemovalTaskProcedureIDs,
+		taskplanning.ZoneRemovalTaskProcedureIDs,
 	) (etcd.TaskRecord, error)
 }
 
@@ -448,7 +448,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 		for index := range serviceSteps {
 			serviceSteps[index] = ids.New(ids.KindStep)
 		}
-		task, err = service.plans.PrepareZoneRemovalTask(ctx, task, intent, controller.ZoneRemovalTaskProcedureIDs{
+		task, err = service.plans.PrepareZoneRemovalTask(ctx, task, intent, taskplanning.ZoneRemovalTaskProcedureIDs{
 			ArtifactID:     zoneStableIDFromRevision(ids.KindConfig, claim.RevisionID),
 			ServiceStepIDs: serviceSteps, NetworkStepID: ids.New(ids.KindStep),
 		})

@@ -11,9 +11,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/scriptdefinition"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/entry"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -97,7 +97,7 @@ func (service *Service) ValidateBlueprint(
 	if err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
-	if err := controller.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
+	if err := taskplanning.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
 		return apiTypes.EnvironmentBlueprintValidation{}, err
 	}
 	if parsed.Extensions.Backup != nil {

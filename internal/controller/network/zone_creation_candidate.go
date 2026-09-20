@@ -6,7 +6,7 @@ import (
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -50,12 +50,12 @@ func buildZoneCreationProjection(
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(current.ComposeArtifact, artifact); err != nil {
 		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Zone baseline artifact is corrupt")
 	}
-	addition := controller.ZoneArtifactAddition{
+	addition := taskplanning.ZoneArtifactAddition{
 		Zone: zone.Desired, ProjectID: project.ID, TenantID: project.TenantID,
 		ArtifactID: zoneStableIDFromRevision(ids.KindConfig, revisionID),
 		PlanID:     zoneStableIDFromRevision(ids.KindPlan, revisionID), RenderGeneration: generation,
 	}
-	mutated, err := controller.AddEnvironmentZoneArtifact(artifact, addition)
+	mutated, err := taskplanning.AddEnvironmentZoneArtifact(artifact, addition)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
@@ -63,11 +63,11 @@ func buildZoneCreationProjection(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
 	}
-	normalized, err := controller.NormalizedEnvironmentArtifact(current)
+	normalized, err := taskplanning.NormalizedEnvironmentArtifact(current)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
-	normalized, err = controller.AddEnvironmentZoneArtifact(normalized, addition)
+	normalized, err = taskplanning.AddEnvironmentZoneArtifact(normalized, addition)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}

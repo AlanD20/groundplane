@@ -12,9 +12,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/slug"
 	"github.com/AlanD20/groundplane/internal/common/volumeidentity"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -437,7 +437,7 @@ func (service *MutationService) mutateOnce(
 		etcd.EnvironmentDesiredRevisionParam:     claim.RevisionID,
 		etcd.TaskComposeArtifactParam:            artifactID,
 		volumeActionParam:                        request.action, volumeComposeKeyParam: request.key,
-		controller.VolumeTaskIntentSHA256Param: hex.EncodeToString(intentDigest),
+		taskplanning.VolumeTaskIntentSHA256Param: hex.EncodeToString(intentDigest),
 	}
 	if request.action == volumeMutationActionRemove && hasCurrent {
 		params[volumeBaselineRevisionParam] = current.Record.RevisionID

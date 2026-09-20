@@ -3,7 +3,7 @@ package releaseoperation
 import (
 	"context"
 
-	"github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -22,7 +22,7 @@ func (service *Service) captureDesiredProjection(
 		return etcd.EnvironmentComposeProjection{}, err
 	}
 	projection := scope.Compose.Record
-	joins, err := controller.ResolveAttachNetworkJoins(projection.EnvironmentID, projection, attaches, "")
+	joins, err := taskplanning.ResolveAttachNetworkJoins(projection.EnvironmentID, projection, attaches, "")
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
@@ -30,7 +30,7 @@ func (service *Service) captureDesiredProjection(
 	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil {
 		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "release desired artifact is corrupt")
 	}
-	bound, err := controller.MutateAttachNetworkArtifact(ctx, artifact, projection, joins, artifact.ArtifactId)
+	bound, err := taskplanning.MutateAttachNetworkArtifact(ctx, artifact, projection, joins, artifact.ArtifactId)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}

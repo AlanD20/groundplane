@@ -6,8 +6,8 @@ import (
 	"errors"
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -54,7 +54,7 @@ type attachMutationFacts interface {
 		context.Context,
 		etcd.Versioned[attachrecord.Record],
 		string,
-		controllerpkg.AttachPlanIdentityConsumer,
+		taskplanning.AttachPlanIdentityConsumer,
 	) error
 }
 
@@ -64,7 +64,7 @@ type attachDraftPlanSealer interface {
 		etcd.Versioned[attachrecord.Record],
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
-		*controllerpkg.AttachPlanIdentity,
+		*taskplanning.AttachPlanIdentity,
 		*attachrecord.EncryptedFacts,
 		*etcd.BackingHookEncryptedInputs,
 	) (serviceruntimerecord.AttachPreparation, error)

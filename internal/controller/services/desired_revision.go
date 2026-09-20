@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -244,11 +244,11 @@ func buildServiceDesiredProjection(
 			)
 		}
 	}
-	action := controller.ServiceArtifactEdit
+	action := taskplanning.ServiceArtifactEdit
 	if create {
-		action = controller.ServiceArtifactCreate
+		action = taskplanning.ServiceArtifactCreate
 	}
-	mutated, err := controller.MutateEnvironmentServiceArtifact(artifact, controller.ServiceArtifactMutation{
+	mutated, err := taskplanning.MutateEnvironmentServiceArtifact(artifact, taskplanning.ServiceArtifactMutation{
 		Action: action, Desired: record.Desired,
 		Zones:      serviceArtifactZones(references),
 		ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
@@ -260,14 +260,14 @@ func buildServiceDesiredProjection(
 	}
 	normalizedArtifact := proto.Clone(artifact).(*agentpb.ComposeArtifact)
 	if hasCurrent {
-		normalizedArtifact, err = controller.NormalizedEnvironmentArtifact(current)
+		normalizedArtifact, err = taskplanning.NormalizedEnvironmentArtifact(current)
 		if err != nil {
 			return etcd.EnvironmentComposeProjection{}, err
 		}
 	}
-	normalizedArtifact, err = controller.MutateEnvironmentServiceArtifact(
+	normalizedArtifact, err = taskplanning.MutateEnvironmentServiceArtifact(
 		normalizedArtifact,
-		controller.ServiceArtifactMutation{
+		taskplanning.ServiceArtifactMutation{
 			Action: action, Desired: record.Desired,
 			Zones:      serviceArtifactZones(references),
 			ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
@@ -288,10 +288,10 @@ func buildServiceDesiredProjection(
 	return candidate, nil
 }
 
-func serviceArtifactZones(references etcd.ServiceMutationReferences) []controller.ServiceArtifactZone {
-	zones := make([]controller.ServiceArtifactZone, len(references.Zones))
+func serviceArtifactZones(references etcd.ServiceMutationReferences) []taskplanning.ServiceArtifactZone {
+	zones := make([]taskplanning.ServiceArtifactZone, len(references.Zones))
 	for index, zone := range references.Zones {
-		zones[index] = controller.ServiceArtifactZone{
+		zones[index] = taskplanning.ServiceArtifactZone{
 			ID: zone.Record.Desired.ID, Name: zone.Record.Desired.Name,
 			Subnet: zone.Record.Desired.Subnet, Internal: zone.Record.Desired.Internal,
 		}
@@ -333,8 +333,8 @@ func buildServiceRemovalProjection(
 	if err := proto.Unmarshal(current.ComposeArtifact, artifact); err != nil {
 		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Service baseline artifact is corrupt")
 	}
-	mutated, err := controller.MutateEnvironmentServiceArtifact(artifact, controller.ServiceArtifactMutation{
-		Action: controller.ServiceArtifactRemove, Desired: record.Desired,
+	mutated, err := taskplanning.MutateEnvironmentServiceArtifact(artifact, taskplanning.ServiceArtifactMutation{
+		Action: taskplanning.ServiceArtifactRemove, Desired: record.Desired,
 		ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
 		PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
 		RenderGeneration: generation,
@@ -342,14 +342,14 @@ func buildServiceRemovalProjection(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
-	normalizedArtifact, err := controller.NormalizedEnvironmentArtifact(current)
+	normalizedArtifact, err := taskplanning.NormalizedEnvironmentArtifact(current)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
-	normalizedArtifact, err = controller.MutateEnvironmentServiceArtifact(
+	normalizedArtifact, err = taskplanning.MutateEnvironmentServiceArtifact(
 		normalizedArtifact,
-		controller.ServiceArtifactMutation{
-			Action: controller.ServiceArtifactRemove, Desired: record.Desired,
+		taskplanning.ServiceArtifactMutation{
+			Action: taskplanning.ServiceArtifactRemove, Desired: record.Desired,
 			ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
 			PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
 			RenderGeneration: generation,

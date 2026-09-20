@@ -11,10 +11,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -35,7 +35,7 @@ type resolvedBlueprintAttach struct {
 type blueprintAttachProcedure struct {
 	record     attachrecord.Record
 	adapterKey string
-	identity   *controllerpkg.AttachPlanIdentity
+	identity   *taskplanning.AttachPlanIdentity
 }
 
 type preparedBlueprintAttaches struct {
@@ -191,7 +191,7 @@ func (service *Service) prepareBlueprintAttaches(
 			attachIDs[name] = namedID(ids.KindAttach, "attach:"+name)
 		}
 	}
-	identities := make(map[string]*controllerpkg.AttachPlanIdentity)
+	identities := make(map[string]*taskplanning.AttachPlanIdentity)
 	for _, name := range names {
 		item := resolved[name]
 		if _, exists := currentByName[name]; exists || item.spec.Credential.Mode != "new" || item.adapter.Custom() {
@@ -214,7 +214,7 @@ func (service *Service) prepareBlueprintAttaches(
 				return preparedBlueprintAttaches{}, err
 			}
 		}
-		identities[name] = &controllerpkg.AttachPlanIdentity{
+		identities[name] = &taskplanning.AttachPlanIdentity{
 			Authentication: item.authentication,
 			Database:       identityName, Role: role, Password: password,
 		}
@@ -279,7 +279,7 @@ func (service *Service) prepareBlueprintAttaches(
 					Database: database, Role: identity.Role, Password: identity.Password,
 				},
 			})
-			identity.Grants = append(identity.Grants, controllerpkg.AttachPlanGrantIdentity{
+			identity.Grants = append(identity.Grants, taskplanning.AttachPlanGrantIdentity{
 				AttachID: grantID, Database: database,
 			})
 		}
@@ -466,7 +466,7 @@ func (prepared preparedBlueprintAttaches) procedureSteps(
 			ID: taskID, Type: etcd.TaskAttach, Target: procedure.record.ID,
 			Steps: stepRecords, TimeoutSeconds: timeout,
 		}
-		built, err := controllerpkg.BuildAttachProvisionSteps(
+		built, err := taskplanning.BuildAttachProvisionSteps(
 			procedureTask, procedure.record, procedure.adapterKey, *procedure.identity,
 		)
 		if err != nil {

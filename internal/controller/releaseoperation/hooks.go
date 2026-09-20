@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -66,7 +66,7 @@ func (service *Service) prepareReleaseHooks(
 				return preparedReleaseHooks{}, err
 			}
 			stepID, executionID, snapshotID := ids.New(ids.KindStep), ids.NewULID(), ids.NewULID()
-			hook, err := controller.BuildReleaseHookRenderInput(ctx, controller.ManualScriptPlanInput{
+			hook, err := taskplanning.BuildReleaseHookRenderInput(ctx, taskplanning.ManualScriptPlanInput{
 				TaskID: task.ID, OperationID: task.OperationID, PlanID: task.PlanID,
 				StepID: stepID, ExecutionID: executionID, SnapshotID: snapshotID,
 				Sources: sources, Preparation: prepared,

@@ -3,8 +3,8 @@ package blueprint
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
@@ -44,7 +44,7 @@ func environmentBlueprintState(
 func authoredComposeIdentitySnapshot(
 	projection etcd.EnvironmentComposeProjection,
 ) (composeidentity.Snapshot, error) {
-	project, err := controller.LoadNormalizedEnvironmentProject(context.Background(), projection)
+	project, err := taskplanning.LoadNormalizedEnvironmentProject(context.Background(), projection)
 	if err != nil {
 		return composeidentity.Snapshot{}, err
 	}

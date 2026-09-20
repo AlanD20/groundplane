@@ -11,7 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -21,7 +21,7 @@ type attachRuntimeCapture interface {
 	CaptureEntryMutationRuntime(
 		context.Context,
 		etcd.Versioned[etcd.EnvironmentComposeProjection],
-	) (controllerpkg.EntryMutationRuntime, error)
+	) (taskplanning.EntryMutationRuntime, error)
 }
 
 func newAttachMutationTask(
@@ -81,7 +81,7 @@ func attachTaskStepCount(
 
 func buildAttachTaskRenderInput(
 	scope etcd.AttachCreateScope,
-	runtime controllerpkg.EntryMutationRuntime,
+	runtime taskplanning.EntryMutationRuntime,
 	record attachrecord.Record,
 	attaches []etcd.Versioned[attachrecord.Record],
 	task etcd.TaskRecord,
@@ -166,7 +166,7 @@ func buildAttachTaskRenderInput(
 		)
 	}
 
-	joins, err := controllerpkg.ResolveAttachNetworkJoins(
+	joins, err := taskplanning.ResolveAttachNetworkJoins(
 		record.EnvironmentID,
 		scope.ComposeProjection.Record,
 		unionRecords,

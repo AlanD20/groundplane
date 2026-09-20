@@ -4,9 +4,9 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -43,8 +43,8 @@ type entryDesiredMutationService struct {
 	creation    entryCreationIdempotency
 	edit        entryEditIdempotency
 	removal     entryDesiredRemovalIdempotency
-	removePlans *controller.EntryRemovalPlanner
-	plans       *controller.TaskPlanResolver
+	removePlans *taskplanning.EntryRemovalPlanner
+	plans       *taskplanning.TaskPlanResolver
 	now         func() time.Time
 }
 
@@ -56,14 +56,14 @@ func NewDesiredMutationService(
 	creation entryCreationIdempotency,
 	edit entryEditIdempotency,
 	removal entryDesiredRemovalIdempotency,
-	plans *controller.TaskPlanResolver,
+	plans *taskplanning.TaskPlanResolver,
 	hierarchy *etcd.HierarchyRepository,
 ) (*entryDesiredMutationService, error) {
 	if environmentpath.ValidateRoot(volumeRoot) != nil || repository == nil || generator == nil || materials == nil ||
 		creation == nil || edit == nil || removal == nil {
 		return nil, errs.New(errs.KindInternal, "Entry desired mutation service is not configured")
 	}
-	removePlans, err := controller.NewEntryRemovalPlanner(plans, materials, hierarchy)
+	removePlans, err := taskplanning.NewEntryRemovalPlanner(plans, materials, hierarchy)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 			"Entry mutation requires initialized Environment desired state",
 		)
 	}
-	runtime := controller.EntryMutationRuntime{Projection: current.Record}
+	runtime := taskplanning.EntryMutationRuntime{Projection: current.Record}
 	if request.action != entryDesiredMutationRemove {
 		runtime, err = service.plans.CaptureEntryMutationRuntime(ctx, current)
 		if err != nil {
@@ -173,9 +173,9 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	candidate, _, err := controller.ProjectEnvironmentEntryMutation(
+	candidate, _, err := taskplanning.ProjectEnvironmentEntryMutation(
 		runtime.Projection,
-		controller.EnvironmentEntryArtifactMutation{
+		taskplanning.EnvironmentEntryArtifactMutation{
 			RevisionID: candidateTaskID, ArtifactID: entryStableIDFromRevision(ids.KindConfig, candidateTaskID),
 			PlanID: entryStableIDFromRevision(ids.KindPlan, candidateTaskID), RenderGeneration: generation,
 			Entries: replaceProjectedEntry(current.Record.Entries, previous, candidateRecord),
@@ -209,9 +209,9 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		}
 	}
 	entries := replaceProjectedEntry(current.Record.Entries, previous, candidateRecord)
-	candidate, materializations, err := controller.ProjectEnvironmentEntryMutation(
+	candidate, materializations, err := taskplanning.ProjectEnvironmentEntryMutation(
 		runtime.Projection,
-		controller.EnvironmentEntryArtifactMutation{
+		taskplanning.EnvironmentEntryArtifactMutation{
 			RevisionID: claim.RevisionID, ArtifactID: entryStableIDFromRevision(ids.KindConfig, claim.RevisionID),
 			PlanID: entryStableIDFromRevision(ids.KindPlan, claim.RevisionID), RenderGeneration: generation,
 			Entries: entries,

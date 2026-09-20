@@ -6,10 +6,10 @@ import (
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -51,7 +51,7 @@ func (service *Service) prepareBlueprintComponents(
 		currentComponents[index] = component
 		currentByID[component.ID] = versioned
 	}
-	changes, err := controller.ReconcileBlueprintComponents(specs, currentComponents, allocate)
+	changes, err := taskplanning.ReconcileBlueprintComponents(specs, currentComponents, allocate)
 	if err != nil {
 		return etcd.ComponentTaskPreparation{}, nil, nil, err
 	}
@@ -192,8 +192,8 @@ func (service *Service) environmentComponentMaterializations(
 	generation uint64,
 	allocate func(ids.Kind, string) string,
 	runtimeFiles []core.BlueprintFile,
-	projection controller.EnvironmentComponentComposeProjection,
-	entryMaterializations []controller.EnvironmentEntryMaterialization,
+	projection taskplanning.EnvironmentComponentComposeProjection,
+	entryMaterializations []taskplanning.EnvironmentEntryMaterialization,
 	entries []entryrecord.Record,
 ) ([]etcd.TaskMaterializationRecord, []*agentpb.ExecutionStep, error) {
 	inputs := make([]environmentComponentMaterializationInput, 0,

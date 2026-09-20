@@ -1,7 +1,7 @@
 package services
 
 import (
-	"github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -17,7 +17,7 @@ func serviceAPIResponse(record etcd.ServiceRecord) apiTypes.Service {
 		Expose:    append([]string(nil), record.Desired.Expose...), Restart: record.Desired.Restart,
 		Replicas: record.Desired.Replicas, Adapter: record.Desired.Adapter,
 		FactsPrefix: record.Desired.FactsPrefix, Label: record.Desired.Label, BackingNetworkID: record.BackingNetworkID,
-		Hooks: controller.BackingHookConfigurationToAPI(record.Desired.Hooks),
+		Hooks: taskplanning.BackingHookConfigurationToAPI(record.Desired.Hooks),
 	}
 	if record.Desired.Healthcheck != (core.Healthcheck{}) {
 		response.Healthcheck = &apiTypes.ServiceHealthcheck{

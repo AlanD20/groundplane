@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -112,5 +112,5 @@ func (service *Reader) GetServiceNativeCompose(
 	); err != nil {
 		return "", errs.New(errs.KindInternal, "Service desired Compose artifact is corrupt")
 	}
-	return controller.ProjectEnvironmentServiceNativeCompose(artifact, serviceName)
+	return taskplanning.ProjectEnvironmentServiceNativeCompose(artifact, serviceName)
 }

@@ -11,8 +11,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
@@ -205,7 +205,7 @@ func (service *FactService) ResolveHookInput(
 	current etcd.Versioned[attachrecord.Record],
 	task etcd.TaskRecord,
 	hookContext backinghook.Context,
-	consume controllerpkg.BackingHookInputConsumer,
+	consume taskplanning.BackingHookInputConsumer,
 ) error {
 	if ctx == nil || consume == nil || ids.Validate(ids.KindTask, task.ID) != nil ||
 		current.Record.TaskID != task.ID || !current.Record.OwnsCredential() || !current.Record.HookBundle ||
@@ -233,7 +233,7 @@ func (service *FactService) ResolveDraftHookInput(
 	task etcd.TaskRecord,
 	hookInputs *etcd.BackingHookEncryptedInputs,
 	hookContext backinghook.Context,
-	consume controllerpkg.BackingHookInputConsumer,
+	consume taskplanning.BackingHookInputConsumer,
 ) error {
 	if current.Record.TaskID != task.ID || stored != nil && stored.AttachID != current.Record.ID {
 		return errs.New(errs.KindValidationFailed, "Backing hook draft input request is invalid")
@@ -252,7 +252,7 @@ func (service *FactService) ResolveLifecycleHookInput(
 	task etcd.TaskRecord,
 	serviceID string,
 	event backinghook.Event,
-	consume controllerpkg.BackingHookInputConsumer,
+	consume taskplanning.BackingHookInputConsumer,
 ) error {
 	return service.resolveLifecycleHookInput(ctx, task, nil, serviceID, event, consume)
 }
@@ -263,7 +263,7 @@ func (service *FactService) ResolveDraftLifecycleHookInput(
 	stored *etcd.BackingHookEncryptedInputs,
 	serviceID string,
 	event backinghook.Event,
-	consume controllerpkg.BackingHookInputConsumer,
+	consume taskplanning.BackingHookInputConsumer,
 ) error {
 	return service.resolveLifecycleHookInput(ctx, task, stored, serviceID, event, consume)
 }
@@ -274,7 +274,7 @@ func (service *FactService) resolveLifecycleHookInput(
 	draft *etcd.BackingHookEncryptedInputs,
 	serviceID string,
 	event backinghook.Event,
-	consume controllerpkg.BackingHookInputConsumer,
+	consume taskplanning.BackingHookInputConsumer,
 ) error {
 	creationServiceID := task.Params[etcd.TaskBackingServiceCreationParam]
 	ownsService := task.Target == serviceID ||
@@ -306,7 +306,7 @@ func (service *FactService) consumeHookInput(
 	draft *etcd.BackingHookEncryptedInputs,
 	hookContext backinghook.Context,
 	bundle *attachFactBundle,
-	consume controllerpkg.BackingHookInputConsumer,
+	consume taskplanning.BackingHookInputConsumer,
 ) error {
 	input := backinghook.Input{Context: hookContext}
 	input.Values = append(input.Values, backinghook.Value{

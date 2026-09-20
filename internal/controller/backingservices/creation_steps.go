@@ -5,9 +5,9 @@ import (
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -52,11 +52,11 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 	}
 	stepRecords := []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: environmentStepID}}
 	taskParams := map[string]string{
-		etcd.EnvironmentDesiredRevisionParam:         input.TaskID,
-		etcd.TaskMaterializationEnvironmentParam:     environment.ID,
-		etcd.TaskBackingServiceCreationParam:         serviceID,
-		etcd.TaskBackingServiceVolumeDirectoryParam:  environment.VolumeDir,
-		controller.EnvironmentBlueprintArtifactParam: artifactID,
+		etcd.EnvironmentDesiredRevisionParam:           input.TaskID,
+		etcd.TaskMaterializationEnvironmentParam:       environment.ID,
+		etcd.TaskBackingServiceCreationParam:           serviceID,
+		etcd.TaskBackingServiceVolumeDirectoryParam:    environment.VolumeDir,
+		taskplanning.EnvironmentBlueprintArtifactParam: artifactID,
 		taskcontract.EnvironmentBlueprintProcedureParam: string(
 			taskcontract.BlueprintComposeProcedureFullReconcile,
 		),
@@ -82,8 +82,8 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 			},
 		})
 		stepRecords = append(stepRecords, etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: volumeStepID})
-		taskParams[controller.EnvironmentBlueprintManagedVolumesParam] = volumeID
-		taskParams[controller.VolumeTaskIntentSHA256Param] = hex.EncodeToString(intentDigest)
+		taskParams[taskplanning.EnvironmentBlueprintManagedVolumesParam] = volumeID
+		taskParams[taskplanning.VolumeTaskIntentSHA256Param] = hex.EncodeToString(intentDigest)
 	}
 	materializations := []etcd.TaskMaterializationRecord(nil)
 	if spec.HasEnvironment() {
