@@ -1,5 +1,15 @@
 "use client";
 import {
+  createServiceActions,
+  type ServiceActions,
+} from "@/features/service/actions";
+import { findEnvironment } from "@/features/environment/environment-removal-model";
+import {
+  useRunnerStore,
+  type RunnerState,
+  type RunnerActions,
+} from "@/features/runner/use-runner-store";
+import {
   zoneFromAPI,
   listAllZones,
   routeFromAPI,
@@ -58,8 +68,8 @@ import { applyServiceObservations } from "@/features/service/service-observation
 import {
   releaseForServiceName,
   serviceFromAPI,
-  serviceMutationBody,
-  type ServiceMutationInput,
+  listAllServices,
+  type ServiceShowResponse,
 } from "@/features/service/api";
 import {
   createContext,
@@ -93,7 +103,6 @@ import type {
   Project,
   ReleaseGroup,
   Route,
-  Runner,
   Script,
   Service,
   ServiceRuntimeIntent,
@@ -174,22 +183,6 @@ type ProjectRenameRequest =
   operations["project.rename"]["requestBody"]["content"]["application/json"];
 type ProjectRenameResponse =
   operations["project.rename"]["responses"][200]["content"]["application/json"];
-type RunnerPageResponse =
-  operations["runner.list"]["responses"][200]["content"]["application/json"];
-type RunnerCreateRequest =
-  operations["runner.create"]["requestBody"]["content"]["application/json"];
-type RunnerCreateResponse =
-  operations["runner.create"]["responses"][202]["content"]["application/json"];
-type RunnerEditRequest =
-  operations["runner.edit"]["requestBody"]["content"]["application/json"];
-type RunnerEditResponse =
-  operations["runner.edit"]["responses"][200]["content"]["application/json"];
-type RunnerRetryRequest =
-  operations["runner.retry"]["requestBody"]["content"]["application/json"];
-type RunnerRetryResponse =
-  operations["runner.retry"]["responses"][202]["content"]["application/json"];
-type RunnerRemoveResponse =
-  operations["runner.remove"]["responses"][202]["content"]["application/json"];
 type EnvironmentPageResponse =
   operations["environment.list"]["responses"][200]["content"]["application/json"];
 type EnvironmentResponse =
@@ -214,26 +207,12 @@ type TaskRetryResponse =
   operations["task.retry"]["responses"][202]["content"]["application/json"];
 type TaskAbortResponse =
   operations["task.abort"]["responses"][202]["content"]["application/json"];
-type ServiceRuntimeTaskAccepted =
-  operations["service.start"]["responses"][202]["content"]["application/json"];
 type BackingRuntimeTaskAccepted =
   operations["backing-service.start"]["responses"][202]["content"]["application/json"];
 type ScriptPageResponse =
   operations["script.list"]["responses"][200]["content"]["application/json"];
 type ScriptRunResponse =
   operations["script.run"]["responses"][202]["content"]["application/json"];
-type ServicePageResponse =
-  operations["service.list"]["responses"][200]["content"]["application/json"];
-type ServiceCreateRequest =
-  operations["service.create"]["requestBody"]["content"]["application/json"];
-type ServiceCreateResponse =
-  operations["service.create"]["responses"][201]["content"]["application/json"];
-type ServiceEditRequest =
-  operations["service.edit"]["requestBody"]["content"]["application/json"];
-type ServiceEditResponse =
-  operations["service.edit"]["responses"][200]["content"]["application/json"];
-type ServiceShowResponse =
-  operations["service.show"]["responses"][200]["content"]["application/json"];
 type EntryPageResponse =
   operations["entry.list"]["responses"][200]["content"]["application/json"];
 type EntryResponse =
@@ -401,29 +380,6 @@ async function listAllScripts(
     cursor = page.next_cursor ?? "";
   } while (cursor);
   return scripts;
-}
-
-async function listAllServices(
-  environmentId: string,
-  signal?: AbortSignal,
-): Promise<Service[]> {
-  const services: Service[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({
-      environment: environmentId,
-      limit: "200",
-    });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<ServicePageResponse>(
-      `/services?${query}`,
-      200,
-      { signal },
-    );
-    services.push(...(page.items ?? []).map(serviceFromAPI));
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return services;
 }
 
 async function listAllReleaseGroups(
@@ -802,7 +758,8 @@ function refreshReleaseGroupTags(environment: Environment) {
 }
 
 type State = ReusableSecretState &
-  ConnectorState & {
+  ConnectorState &
+  RunnerState & {
     // UI preference: typed confirmation before revealing a secret value
     requireRevealConfirm: boolean;
     tenants: Tenant[];
@@ -815,9 +772,6 @@ type State = ReusableSecretState &
     backingProjects: Project[];
     backingProjectsLoading: boolean;
     backingProjectError: string | null;
-    runners: Runner[];
-    runnersLoading: boolean;
-    runnerError: string | null;
     activity: ActivityEntry[];
     taskJournals: Record<string, TaskJournalState>;
     platform: PlatformInfra;
@@ -883,6 +837,8 @@ type StoreContext = State &
   BlueprintActions &
   ReusableSecretActions &
   ConnectorActions &
+  RunnerActions &
+  ServiceActions &
   ReturnType<typeof useControllerPlatform> &
   ReturnType<typeof useBackupStore> & {
     adapters: typeof seedAdapters;
@@ -1035,22 +991,6 @@ type StoreContext = State &
       zoneId: string,
       impactToken: string,
     ) => Promise<string>;
-    addService: (
-      envId: string,
-      input: ServiceMutationInput,
-    ) => Promise<Service>;
-    updateService: (
-      envId: string,
-      serviceId: string,
-      input: ServiceMutationInput,
-    ) => Promise<Service>;
-    getService: (serviceId: string) => Promise<Service>;
-    deleteService: (envId: string, serviceId: string) => Promise<string>;
-    runServiceRuntimeAction: (
-      envId: string,
-      serviceId: string,
-      action: "start" | "stop" | "destroy",
-    ) => Promise<string>;
     addRoute: (
       envId: string,
       route: Omit<Route, "id" | "environmentId" | "status">,
@@ -1118,21 +1058,6 @@ type StoreContext = State &
     ) => Promise<EnvironmentEntry>;
     removeEntry: (envId: string, entryId: string) => Promise<string>;
     revealEntry: (entryId: string) => Promise<string>;
-    refreshRunners: (tenantId: string, projectIds: string[]) => Promise<void>;
-    createRunner: (input: {
-      slug: string;
-      tenantId?: string;
-      projectId?: string;
-      githubUrl: string;
-      labels: string[];
-      registrationToken: string;
-    }) => Promise<string>;
-    renameRunner: (runnerId: string, slug: string) => Promise<Runner>;
-    retryRunner: (
-      runnerId: string,
-      registrationToken: string,
-    ) => Promise<string>;
-    removeRunner: (runnerId: string) => Promise<string>;
     runBackingRuntimeAction: (
       id: string,
       action: "start" | "stop" | "destroy",
@@ -1203,150 +1128,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     environmentMutationIntents.current.delete(key);
     persistEnvironmentMutationIntents(environmentMutationIntents.current);
   }, []);
-  const refreshRunners = useCallback(
-    async (tenantId: string, projectIds: string[]) => {
-      update((draft) => {
-        draft.runnersLoading = true;
-        draft.runnerError = null;
-      });
-      try {
-        const paths = [
-          `/runners?tenant=${encodeURIComponent(tenantId)}`,
-          ...projectIds.map(
-            (projectId) => `/runners?project=${encodeURIComponent(projectId)}`,
-          ),
-        ];
-        const pages = await Promise.all(
-          paths.map((path) => controllerRequest<RunnerPageResponse>(path, 200)),
-        );
-        const runners = new Map<string, Runner>();
-        for (const page of pages) {
-          for (const runner of page.items ?? []) {
-            runners.set(runner.id, {
-              id: runner.id,
-              slug: runner.slug,
-              tenantId: runner.tenant_id,
-              projectId: runner.project_id ?? null,
-              githubUrl: runner.github_url,
-              name: runner.name,
-              labels: runner.labels ?? [],
-              lifecycle: runner.lifecycle,
-              createTaskId: runner.create_task_id,
-              removeTaskId: runner.remove_task_id,
-              online: runner.online,
-              observedAt: runner.observed_at,
-              createdAt: runner.created_at,
-            });
-          }
-        }
-        update((draft) => {
-          draft.runners = [...runners.values()].sort((left, right) =>
-            left.id.localeCompare(right.id),
-          );
-          draft.runnersLoading = false;
-        });
-      } catch (error) {
-        update((draft) => {
-          draft.runnersLoading = false;
-          draft.runnerError =
-            error instanceof Error ? error.message : "Unable to load Runners";
-        });
-      }
-    },
-    [update],
-  );
-  const createRunner = useCallback(
-    async (input: {
-      slug: string;
-      tenantId?: string;
-      projectId?: string;
-      githubUrl: string;
-      labels: string[];
-      registrationToken: string;
-    }) => {
-      const body: RunnerCreateRequest = {
-        slug: input.slug,
-        github_url: input.githubUrl,
-        labels: input.labels,
-        registration_token: input.registrationToken,
-        ...(input.projectId
-          ? { project_id: input.projectId }
-          : { tenant_id: input.tenantId }),
-      };
-      const response = await controllerRequest<RunnerCreateResponse>(
-        "/runners",
-        202,
-        { method: "POST", body },
-      );
-      body.registration_token = "";
-      if (!response.task_id)
-        throw new Error(
-          "Controller response is missing Runner creation task_id",
-        );
-      return response.task_id;
-    },
-    [],
-  );
-  const renameRunner = useCallback(
-    async (runnerId: string, slug: string) => {
-      const body: RunnerEditRequest = { slug };
-      const response = await controllerRequest<RunnerEditResponse>(
-        `/runners/${encodeURIComponent(runnerId)}`,
-        200,
-        { method: "PATCH", body },
-      );
-      const renamed: Runner = {
-        id: response.id,
-        slug: response.slug,
-        tenantId: response.tenant_id,
-        projectId: response.project_id ?? null,
-        githubUrl: response.github_url,
-        name: response.name,
-        labels: response.labels ?? [],
-        lifecycle: response.lifecycle,
-        createTaskId: response.create_task_id,
-        removeTaskId: response.remove_task_id,
-        online: response.online,
-        observedAt: response.observed_at,
-        createdAt: response.created_at,
-      };
-      update((draft) => {
-        const index = draft.runners.findIndex(
-          (runner) => runner.id === renamed.id,
-        );
-        if (index >= 0) draft.runners[index] = renamed;
-      });
-      return renamed;
-    },
-    [update],
-  );
-  const retryRunner = useCallback(
-    async (runnerId: string, registrationToken: string) => {
-      const body: RunnerRetryRequest = {
-        registration_token: registrationToken,
-      };
-      const response = await controllerRequest<RunnerRetryResponse>(
-        `/runners/${encodeURIComponent(runnerId)}/retry`,
-        202,
-        { method: "POST", body },
-      );
-      body.registration_token = "";
-      if (!response.task_id)
-        throw new Error("Controller response is missing Runner retry task_id");
-      return response.task_id;
-    },
-    [],
-  );
-  const removeRunner = useCallback(async (runnerId: string) => {
-    const response = await controllerRequest<RunnerRemoveResponse>(
-      `/runners/${encodeURIComponent(runnerId)}`,
-      202,
-      { method: "DELETE" },
-    );
-    if (!response.task_id)
-      throw new Error("Controller response is missing Runner removal task_id");
-    return response.task_id;
-  }, []);
+  const {
+    refreshRunners,
+    createRunner,
+    renameRunner,
+    retryRunner,
+    removeRunner,
+  } = useRunnerStore(update);
 
   const requestEnvironmentTask = useCallback(
     (taskId: string, signal?: AbortSignal) =>
@@ -1529,7 +1317,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const refreshEnvironmentReleases = useCallback(
     async (environmentId: string, signal?: AbortSignal) => {
-      const environment = findEnv(state, environmentId);
+      const environment = findEnvironment(state, environmentId);
       if (!environment)
         throw new Error(`Environment ${environmentId} is not loaded`);
       try {
@@ -1538,7 +1326,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           listAllReleaseGroups(environmentId, environment.services, signal),
         ]);
         update((draft) => {
-          const current = findEnv(draft, environmentId);
+          const current = findEnvironment(draft, environmentId);
           if (!current) return;
           Object.assign(current, projectReleaseSummary(deploys));
           current.deploys = deploys;
@@ -1845,14 +1633,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { actions: connectorActions, reconcileConnectorRemoval } =
     useConnectorStore(state, update, connectorEnvironmentIds);
 
-  const findEnv = (draft: State, envId: string): Environment | undefined => {
-    for (const p of [...draft.tenantProjects, ...draft.backingProjects]) {
-      const e = p.environments?.find((x) => x.id === envId);
-      if (e) return e;
-    }
-    return undefined;
-  };
-
   const loadTaskJournal = useCallback<StoreContext["loadTaskJournal"]>(
     async (surface, scope, cursor) => {
       const key = taskJournalKey(scope);
@@ -2019,7 +1799,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }),
       commitDeploy: async (envId, service, tag, strategy) => {
         assertEnvironmentMutable(envId, "deployment");
-        const target = findEnv(state, envId)?.services.find(
+        const target = findEnvironment(state, envId)?.services.find(
           (candidate) => candidate.name === service,
         );
         if (!target) throw new Error(`Service ${service} no longer exists`);
@@ -2041,7 +1821,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       commitRollback: async (envId, service, tag) => {
         assertEnvironmentMutable(envId, "rollback");
-        const target = findEnv(state, envId)?.services.find(
+        const target = findEnvironment(state, envId)?.services.find(
           (candidate) => candidate.name === service,
         );
         if (!target) throw new Error(`Service ${service} no longer exists`);
@@ -2347,14 +2127,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             clearEnvironmentMutationIntent(key);
             throw new Error(`Environment edit ${envId} was superseded`);
           }
-          if (!findEnv(state, envId)) {
+          if (!findEnvironment(state, envId)) {
             clearEnvironmentMutationIntent(key);
             throw new Error(`Environment edit ${envId} was not applied`);
           }
           update((draft) => {
             if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
               return;
-            const environment = findEnv(draft, envId);
+            const environment = findEnvironment(draft, envId);
             if (!environment) return;
             applyAuthoritativeEnvironmentScalars(environment, edited);
           });
@@ -2405,14 +2185,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             clearEnvironmentMutationIntent(key);
             throw new Error(`Environment rename ${envId} was superseded`);
           }
-          if (!findEnv(state, envId)) {
+          if (!findEnvironment(state, envId)) {
             clearEnvironmentMutationIntent(key);
             throw new Error(`Environment rename ${envId} was not applied`);
           }
           update((draft) => {
             if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
               return;
-            const environment = findEnv(draft, envId);
+            const environment = findEnvironment(draft, envId);
             if (!environment) return;
             applyAuthoritativeEnvironmentScalars(environment, renamed);
           });
@@ -2459,7 +2239,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           pendingZoneRemovals.current.delete(taskId);
           if (task.status === "completed") {
             update((draft) => {
-              const environment = findEnv(draft, pending.envId);
+              const environment = findEnvironment(draft, pending.envId);
               if (!environment) return;
               const zone = environment.zones.find(
                 (candidate) => candidate.id === pending.zoneId,
@@ -2536,7 +2316,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           }),
         );
         update((draft) => {
-          findEnv(draft, envId)?.zones.push(zone);
+          findEnvironment(draft, envId)?.zones.push(zone);
         });
         return zone;
       },
@@ -2566,81 +2346,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         pendingZoneRemovals.current.set(accepted.task_id, { envId, zoneId });
         return accepted.task_id;
       },
-      addService: async (envId, input) => {
-        assertEnvironmentMutable(envId, "Service mutation");
-        const body: ServiceCreateRequest = {
-          environment_id: envId,
-          name: input.name,
-          ...serviceMutationBody(input),
-        };
-        const created = serviceFromAPI(
-          await controllerRequest<ServiceCreateResponse>("/services", 201, {
-            method: "POST",
-            body,
-          }),
-        );
-        update((draft) => {
-          findEnv(draft, envId)?.services.push(created);
-        });
-        return created;
-      },
-      updateService: async (envId, serviceId, input) => {
-        assertEnvironmentMutable(envId, "Service mutation");
-        const body: ServiceEditRequest = serviceMutationBody(input);
-        const edited = serviceFromAPI(
-          await controllerRequest<ServiceEditResponse>(
-            `/services/${encodeURIComponent(serviceId)}`,
-            200,
-            { method: "PATCH", body },
-          ),
-        );
-        update((d) => {
-          const e = findEnv(d, envId);
-          if (!e) return;
-          const i = e.services.findIndex((s) => s.id === serviceId);
-          if (i >= 0) e.services[i] = edited;
-        });
-        return edited;
-      },
-      getService: async (serviceId) =>
-        serviceFromAPI(
-          await controllerRequest<ServiceShowResponse>(
-            `/services/${encodeURIComponent(serviceId)}`,
-            200,
-            { method: "GET" },
-          ),
-        ),
-      deleteService: (envId, serviceId) => (
-        assertEnvironmentMutable(envId, "Service mutation"),
-        dispatchResourceRemoval({
-          kind: "service",
-          environmentId: envId,
-          resourceId: serviceId,
-        })
+      ...createServiceActions(
+        update,
+        assertEnvironmentMutable,
+        dispatchResourceRemoval,
       ),
-      runServiceRuntimeAction: async (envId, serviceId, action) => {
-        assertEnvironmentMutable(envId, "Service mutation");
-        const accepted = await controllerRequest<ServiceRuntimeTaskAccepted>(
-          `/services/${encodeURIComponent(serviceId)}/${action}`,
-          202,
-          { method: "POST" },
-        );
-        const taskId = requireTaskId(accepted, `Service ${action}`);
-        const intent: ServiceRuntimeIntent =
-          action === "start"
-            ? "running"
-            : action === "stop"
-              ? "stopped"
-              : "absent";
-        update((d) => {
-          const service = findEnv(d, envId)?.services.find(
-            (candidate) => candidate.id === serviceId,
-          );
-          if (!service) return;
-          service.runtimeIntent = intent;
-        });
-        return taskId;
-      },
       addRoute: async (envId, route) => {
         assertEnvironmentMutable(envId, "Route mutation");
         const generation = nextEnvironmentGeneration(envId, "child");
@@ -2665,7 +2375,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           // Public Routes never auto-enable ingress; Component lifecycle is not authored by C07.
           if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
             return;
-          findEnv(d, envId)?.routes.push(created);
+          findEnvironment(d, envId)?.routes.push(created);
         });
         return created;
       },
@@ -2690,7 +2400,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         update((d) => {
           if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
             return;
-          const route = findEnv(d, envId)?.routes.find(
+          const route = findEnvironment(d, envId)?.routes.find(
             (candidate) => candidate.id === routeId,
           );
           if (!route) return;
@@ -2710,16 +2420,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         assertEnvironmentMutable(envId, "Volume mutation");
         const created = await createVolume(controllerRequest, envId, input);
         update((draft) => {
-          findEnv(draft, envId)?.volumes.push(created);
+          findEnvironment(draft, envId)?.volumes.push(created);
         });
         return created;
       },
       getVolume: async (volumeId) => {
         const volume = await getVolume(controllerRequest, volumeId);
         update((draft) => {
-          const current = findEnv(draft, volume.environmentId)?.volumes.find(
-            (candidate) => candidate.id === volume.id,
-          );
+          const current = findEnvironment(
+            draft,
+            volume.environmentId,
+          )?.volumes.find((candidate) => candidate.id === volume.id);
           if (current) Object.assign(current, volume);
         });
         return volume;
@@ -2732,7 +2443,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           patch.slug,
         );
         update((draft) => {
-          const volume = findEnv(draft, envId)?.volumes.find(
+          const volume = findEnvironment(draft, envId)?.volumes.find(
             (candidate) => candidate.id === volumeId,
           );
           if (volume) Object.assign(volume, edited);
@@ -2770,7 +2481,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         update((d) => {
           if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
             return;
-          findEnv(d, envId)?.scripts.push(created);
+          findEnvironment(d, envId)?.scripts.push(created);
         });
         return created;
       },
@@ -2788,7 +2499,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         update((d) => {
           if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
             return;
-          const script = findEnv(d, envId)?.scripts.find(
+          const script = findEnvironment(d, envId)?.scripts.find(
             (candidate) => candidate.id === scriptId,
           );
           if (script) Object.assign(script, edited);
@@ -2816,7 +2527,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ),
       addReleaseGroup: async (envId, group) => {
         assertEnvironmentMutable(envId, "Release group mutation");
-        const environment = findEnv(state, envId);
+        const environment = findEnvironment(state, envId);
         if (!environment) throw new Error(`Environment ${envId} was not found`);
         const serviceIDs = new Map(
           environment.services.map((service) => [service.name, service.id]),
@@ -2854,13 +2565,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               : "switch_back",
         };
         update((draft) => {
-          findEnv(draft, envId)?.releaseGroups.push(created);
+          findEnvironment(draft, envId)?.releaseGroups.push(created);
         });
         return created;
       },
       updateReleaseGroup: async (envId, groupId, patch) => {
         assertEnvironmentMutable(envId, "Release group mutation");
-        const environment = findEnv(state, envId);
+        const environment = findEnvironment(state, envId);
         if (!environment) throw new Error(`Environment ${envId} was not found`);
         const serviceIDs = new Map(
           environment.services.map((service) => [service.name, service.id]),
@@ -2897,7 +2608,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               : "switch_back",
         };
         update((draft) => {
-          const groups = findEnv(draft, envId)?.releaseGroups;
+          const groups = findEnvironment(draft, envId)?.releaseGroups;
           const index =
             groups?.findIndex((candidate) => candidate.id === groupId) ?? -1;
           if (groups && index >= 0) groups[index] = edited;
@@ -2972,7 +2683,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           { method: "POST", body },
         );
         update((draft) => {
-          const attach = findEnv(draft, envId)?.attaches.find(
+          const attach = findEnvironment(draft, envId)?.attaches.find(
             (candidate) => candidate.id === attachId,
           );
           if (attach) attach.name = response.name;
@@ -3006,7 +2717,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         update((draft) => {
           if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
             return;
-          findEnv(draft, envId)?.entries.push(entry);
+          findEnvironment(draft, envId)?.entries.push(entry);
         });
         return entry;
       },
@@ -3025,7 +2736,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         update((draft) => {
           if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
             return;
-          const environment = findEnv(draft, envId);
+          const environment = findEnvironment(draft, envId);
           if (!environment) return;
           const ids = new Set(entries.map((entry) => entry.id));
           environment.entries = environment.entries.filter(
@@ -3050,7 +2761,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         update((draft) => {
           if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
             return;
-          const environment = findEnv(draft, envId);
+          const environment = findEnvironment(draft, envId);
           if (!environment) return;
           const index = environment.entries.findIndex(
             (candidate) => candidate.id === entryId,

@@ -1,55 +1,116 @@
-import type { components, operations } from '@/lib/api.generated'
-import type { DeployRecord, Service } from '@/lib/types'
-import { serviceObservationFromAPI } from './service-observation'
+import { controllerRequest } from "@/lib/controller-json-request";
+import type { components, operations } from "@/lib/api.generated";
+import type { DeployRecord, Service } from "@/lib/types";
+import { serviceObservationFromAPI } from "./service-observation";
 
-type ServiceDocument = components['schemas']['Service'] | components['schemas']['ServiceDetail']
-type ReleasePageResponse = operations['release.list']['responses'][200]['content']['application/json']
-type ReleasePageItem = NonNullable<ReleasePageResponse['items']>[number]
+type ServiceDocument =
+  components["schemas"]["Service"] | components["schemas"]["ServiceDetail"];
+type ReleasePageResponse =
+  operations["release.list"]["responses"][200]["content"]["application/json"];
+type ReleasePageItem = NonNullable<ReleasePageResponse["items"]>[number];
 
 export type ServiceMutationInput = Pick<
   Service,
-  'name' | 'image' | 'zones' | 'strategy' | 'onFailure' | 'healthcheck' | 'resources' | 'expose' | 'restart' | 'replicas' | 'hooks'
->
+  | "name"
+  | "image"
+  | "zones"
+  | "strategy"
+  | "onFailure"
+  | "healthcheck"
+  | "resources"
+  | "expose"
+  | "restart"
+  | "replicas"
+  | "hooks"
+>;
 
 export function serviceFromAPI(service: ServiceDocument): Service {
-  if (service.runtime_intent !== 'running' && service.runtime_intent !== 'stopped' && service.runtime_intent !== 'absent') {
-    throw new Error(`Controller returned unknown Service runtime intent ${service.runtime_intent}`)
+  if (
+    service.runtime_intent !== "running" &&
+    service.runtime_intent !== "stopped" &&
+    service.runtime_intent !== "absent"
+  ) {
+    throw new Error(
+      `Controller returned unknown Service runtime intent ${service.runtime_intent}`,
+    );
   }
-  const strategy = service.strategy || 'recreate'
-  if (strategy !== 'blue-green' && strategy !== 'recreate' && strategy !== 'rolling') {
-    throw new Error(`Controller returned unknown Service strategy ${strategy}`)
+  const strategy = service.strategy || "recreate";
+  if (
+    strategy !== "blue-green" &&
+    strategy !== "recreate" &&
+    strategy !== "rolling"
+  ) {
+    throw new Error(`Controller returned unknown Service strategy ${strategy}`);
   }
-  const onFailure = service.on_failure ?? 'switch_back'
-  if (onFailure !== 'switch_back' && onFailure !== 'leave_active') {
-    throw new Error(`Controller returned unknown Service failure policy ${onFailure}`)
+  const onFailure = service.on_failure ?? "switch_back";
+  if (onFailure !== "switch_back" && onFailure !== "leave_active") {
+    throw new Error(
+      `Controller returned unknown Service failure policy ${onFailure}`,
+    );
   }
   const healthcheck = service.healthcheck
     ? service.healthcheck.http
-      ? { kind: 'http' as const, target: service.healthcheck.http, interval: service.healthcheck.interval ?? '', timeout: service.healthcheck.timeout ?? '', startPeriod: service.healthcheck.start_period ?? '', retries: service.healthcheck.retries ?? 0 }
+      ? {
+          kind: "http" as const,
+          target: service.healthcheck.http,
+          interval: service.healthcheck.interval ?? "",
+          timeout: service.healthcheck.timeout ?? "",
+          startPeriod: service.healthcheck.start_period ?? "",
+          retries: service.healthcheck.retries ?? 0,
+        }
       : service.healthcheck.tcp
-        ? { kind: 'tcp' as const, target: service.healthcheck.tcp, interval: service.healthcheck.interval ?? '', timeout: service.healthcheck.timeout ?? '', startPeriod: service.healthcheck.start_period ?? '', retries: service.healthcheck.retries ?? 0 }
+        ? {
+            kind: "tcp" as const,
+            target: service.healthcheck.tcp,
+            interval: service.healthcheck.interval ?? "",
+            timeout: service.healthcheck.timeout ?? "",
+            startPeriod: service.healthcheck.start_period ?? "",
+            retries: service.healthcheck.retries ?? 0,
+          }
         : service.healthcheck.pgrep
-          ? { kind: 'pgrep' as const, target: service.healthcheck.pgrep, interval: service.healthcheck.interval ?? '', timeout: service.healthcheck.timeout ?? '', startPeriod: service.healthcheck.start_period ?? '', retries: service.healthcheck.retries ?? 0 }
+          ? {
+              kind: "pgrep" as const,
+              target: service.healthcheck.pgrep,
+              interval: service.healthcheck.interval ?? "",
+              timeout: service.healthcheck.timeout ?? "",
+              startPeriod: service.healthcheck.start_period ?? "",
+              retries: service.healthcheck.retries ?? 0,
+            }
           : null
-    : null
-  const restart = service.restart === 'always' || service.restart === 'unless-stopped' ? service.restart : 'no'
+    : null;
+  const restart =
+    service.restart === "always" || service.restart === "unless-stopped"
+      ? service.restart
+      : "no";
   return {
     id: service.id,
     name: service.name,
     image: service.image,
-    role: service.label ?? '',
+    role: service.label ?? "",
     zones: [...(service.zones ?? [])],
     strategy,
     onFailure,
     healthcheck,
-    resources: { mem: service.resources?.mem ?? '', cpus: String(service.resources?.cpus ?? 0) },
-    command: service.command?.join(' '),
-    mounts: (service.mounts ?? []).map((mount) => mount.volume
-      ? { type: 'volume' as const, volume: mount.volume, mount: mount.mount }
-      : { type: 'file' as const, file: mount.file ?? '', mount: mount.mount, ro: mount.ro ?? false }),
+    resources: {
+      mem: service.resources?.mem ?? "",
+      cpus: String(service.resources?.cpus ?? 0),
+    },
+    command: service.command?.join(" "),
+    mounts: (service.mounts ?? []).map((mount) =>
+      mount.volume
+        ? { type: "volume" as const, volume: mount.volume, mount: mount.mount }
+        : {
+            type: "file" as const,
+            file: mount.file ?? "",
+            mount: mount.mount,
+            ro: mount.ro ?? false,
+          },
+    ),
     envFiles: [],
     environment: [],
-    aliases: Object.values(service.aliases ?? {}).flatMap((values) => values ?? []),
+    aliases: Object.values(service.aliases ?? {}).flatMap(
+      (values) => values ?? [],
+    ),
     dependsOn: Object.keys(service.depends_on ?? {}),
     expose: [...(service.expose ?? [])],
     restart,
@@ -60,53 +121,114 @@ export function serviceFromAPI(service: ServiceDocument): Service {
     hooks: service.hooks,
     serviceName: service.name,
     prefix: service.facts_prefix,
-    nativeCompose: 'native_compose' in service ? service.native_compose : undefined,
-    releaseLedger: 'release_ledger' in service
-      ? (service.release_ledger.items ?? []).map((release) => releaseForServiceName(release, service.name))
-      : undefined,
-  }
+    nativeCompose:
+      "native_compose" in service ? service.native_compose : undefined,
+    releaseLedger:
+      "release_ledger" in service
+        ? (service.release_ledger.items ?? []).map((release) =>
+            releaseForServiceName(release, service.name),
+          )
+        : undefined,
+  };
 }
 
 export function serviceMutationBody(input: ServiceMutationInput) {
-  const healthcheck = input.healthcheck ? {
-    http: input.healthcheck.kind === 'http' ? input.healthcheck.target : undefined,
-    tcp: input.healthcheck.kind === 'tcp' ? input.healthcheck.target : undefined,
-    pgrep: input.healthcheck.kind === 'pgrep' ? input.healthcheck.target : undefined,
-    interval: input.healthcheck.interval,
-    timeout: input.healthcheck.timeout,
-    start_period: input.healthcheck.startPeriod,
-    retries: input.healthcheck.retries,
-  } : {}
+  const healthcheck = input.healthcheck
+    ? {
+        http:
+          input.healthcheck.kind === "http"
+            ? input.healthcheck.target
+            : undefined,
+        tcp:
+          input.healthcheck.kind === "tcp"
+            ? input.healthcheck.target
+            : undefined,
+        pgrep:
+          input.healthcheck.kind === "pgrep"
+            ? input.healthcheck.target
+            : undefined,
+        interval: input.healthcheck.interval,
+        timeout: input.healthcheck.timeout,
+        start_period: input.healthcheck.startPeriod,
+        retries: input.healthcheck.retries,
+      }
+    : {};
   return {
     image: input.image,
     zones: input.zones,
     strategy: input.strategy,
-    on_failure: input.onFailure ?? 'switch_back',
+    on_failure: input.onFailure ?? "switch_back",
     healthcheck,
     resources: { mem: input.resources.mem, cpus: Number(input.resources.cpus) },
     expose: input.expose,
     restart: input.restart,
     replicas: input.replicas,
     hooks: input.hooks,
-  }
+  };
 }
 
-export function releaseFromAPI(release: ReleasePageItem, services: readonly Service[]): DeployRecord {
+export function releaseFromAPI(
+  release: ReleasePageItem,
+  services: readonly Service[],
+): DeployRecord {
   return releaseForServiceName(
     release,
-    services.find((service) => service.id === release.service_id)?.name ?? release.service_id,
-  )
+    services.find((service) => service.id === release.service_id)?.name ??
+      release.service_id,
+  );
 }
 
-export function releaseForServiceName(release: ReleasePageItem, serviceName: string): DeployRecord {
-  const strategy = release.strategy === 'blue-green' ? 'blue-green' : 'recreate'
+export function releaseForServiceName(
+  release: ReleasePageItem,
+  serviceName: string,
+): DeployRecord {
+  const strategy =
+    release.strategy === "blue-green" ? "blue-green" : "recreate";
   return {
     id: release.id,
     service: serviceName,
     tag: release.tag,
-    digest: release.digest ?? '',
+    digest: release.digest ?? "",
     strategy,
     when: release.completed_at ?? release.created_at,
-    status: release.serving ? 'active' : 'superseded',
-  }
+    status: release.serving ? "active" : "superseded",
+  };
+}
+
+export type ServicePageResponse =
+  operations["service.list"]["responses"][200]["content"]["application/json"];
+export type ServiceCreateRequest =
+  operations["service.create"]["requestBody"]["content"]["application/json"];
+export type ServiceCreateResponse =
+  operations["service.create"]["responses"][201]["content"]["application/json"];
+export type ServiceEditRequest =
+  operations["service.edit"]["requestBody"]["content"]["application/json"];
+export type ServiceEditResponse =
+  operations["service.edit"]["responses"][200]["content"]["application/json"];
+export type ServiceShowResponse =
+  operations["service.show"]["responses"][200]["content"]["application/json"];
+export type ServiceRuntimeTaskAccepted =
+  operations["service.start"]["responses"][202]["content"]["application/json"];
+
+export async function listAllServices(
+  environmentId: string,
+  signal?: AbortSignal,
+): Promise<Service[]> {
+  const services: Service[] = [];
+  let cursor = "";
+  do {
+    const query = new URLSearchParams({
+      environment: environmentId,
+      limit: "200",
+    });
+    if (cursor) query.set("cursor", cursor);
+    const page = await controllerRequest<ServicePageResponse>(
+      `/services?${query}`,
+      200,
+      { signal },
+    );
+    services.push(...(page.items ?? []).map(serviceFromAPI));
+    cursor = page.next_cursor ?? "";
+  } while (cursor);
+  return services;
 }
