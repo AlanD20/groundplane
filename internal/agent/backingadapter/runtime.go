@@ -63,7 +63,7 @@ func (runtime *Runtime) ExecuteStep(
 			"agent: adapter procedure is empty or oversized",
 		)
 	}
-	containerID, err := runtime.backingContainer(ctx, procedure.BackingServiceId)
+	containerID, err := runtime.BackingContainer(ctx, procedure.BackingServiceId)
 	if err != nil {
 		return StepResult{}, err
 	}
@@ -107,7 +107,7 @@ func compileAdapterProcedure(
 	}
 }
 
-func (runtime *Runtime) backingContainer(ctx context.Context, runtimeServiceID string) (string, error) {
+func (runtime *Runtime) BackingContainer(ctx context.Context, runtimeServiceID string) (string, error) {
 	if ids.Validate(ids.KindService, runtimeServiceID) != nil &&
 		ids.Validate(ids.KindComponent, runtimeServiceID) != nil {
 		return "", errs.New(errs.KindValidationFailed, "agent: adapter runtime service id is invalid")

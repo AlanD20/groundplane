@@ -67,8 +67,8 @@ type WorkerPool struct {
 	backupSecrets          *backupsecrettransfer.Inbox
 	backupCheckpoints      *checkpointmailbox.BackupInbox
 	scriptCheckpoints      *checkpointmailbox.ScriptInbox
-	backingHookCheckpoints *backingHookCheckpointInbox
-	volumeCheckpoints      *volumeCheckpointInbox
+	backingHookCheckpoints *checkpointmailbox.BackingHookInbox
+	volumeCheckpoints      *checkpointmailbox.VolumeInbox
 	taskEventAcks          *taskEventAckInbox
 
 	mu           sync.Mutex
@@ -91,8 +91,8 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		backupSecrets:          backupsecrettransfer.New(),
 		backupCheckpoints:      checkpointmailbox.NewBackupInbox(),
 		scriptCheckpoints:      checkpointmailbox.NewScriptInbox(),
-		backingHookCheckpoints: newBackingHookCheckpointInbox(),
-		volumeCheckpoints:      &volumeCheckpointInbox{pending: make(map[string]*volumeCheckpointWaiter)},
+		backingHookCheckpoints: checkpointmailbox.NewBackingHookInbox(),
+		volumeCheckpoints:      checkpointmailbox.NewVolumeInbox(),
 		taskEventAcks:          &taskEventAckInbox{receipts: make(map[taskEventAckKey]*taskEventReceipt)},
 		adapter:                backingadapter.New(taskRunner),
 	}

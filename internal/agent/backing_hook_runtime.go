@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	backinghookruntime "github.com/AlanD20/groundplane/internal/agent/backinghookruntime"
+	"github.com/AlanD20/groundplane/internal/agent/checkpointmailbox"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -32,7 +33,7 @@ func (p *WorkerPool) executeBackingHookStep(
 			"agent: backing hook execution already started; explicit Task retry is required",
 		)
 	}
-	containerID, err := p.adapter.backingContainer(ctx, procedure.GetBackingServiceId())
+	containerID, err := p.adapter.BackingContainer(ctx, procedure.GetBackingServiceId())
 	if err != nil {
 		return err
 	}
@@ -42,7 +43,7 @@ func (p *WorkerPool) executeBackingHookStep(
 	}
 	defer output.Clear()
 	result := newBackingHookCheckpointRequest(assignment, step, procedure.GetEvent())
-	defer clearBackingHookCheckpointRequest(result)
+	defer checkpointmailbox.ClearBackingHookRequest(result)
 	result.State = agentpb.BackingHookCheckpointState_BACKING_HOOK_CHECKPOINT_STATE_RESULT
 	for _, fact := range output.Facts {
 		result.Facts = append(result.Facts, &agentpb.BackingHookValue{
@@ -55,19 +56,6 @@ func (p *WorkerPool) executeBackingHookStep(
 	}
 	_, err = p.checkpointBackingHook(ctx, result)
 	return err
-}
-
-func clearBackingHookCheckpointRequest(request *agentpb.BackingHookCheckpointRequest) {
-	if request == nil {
-		return
-	}
-	for _, fact := range request.GetFacts() {
-		if fact != nil {
-			clear(fact.Value)
-			fact.Value = nil
-		}
-	}
-	request.Facts = nil
 }
 
 func newBackingHookCheckpointRequest(
