@@ -9,6 +9,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io/fs"
 	"log/slog"
@@ -96,7 +97,7 @@ type Server struct {
 	console                 fs.FS
 	tasks                   taskQueries
 	taskEventStreams        taskEventStreamOpener
-	logs                    *LogService
+	logs                    *servicelogs.Service
 	routePolicies           map[string]routePolicy
 }
 
@@ -164,7 +165,7 @@ type Options struct {
 	AgentTaskWake           func()
 	Console                 fs.FS
 	Tasks                   *etcd.TaskRepository
-	Logs                    *LogService
+	Logs                    *servicelogs.Service
 }
 
 type taskQueries interface {

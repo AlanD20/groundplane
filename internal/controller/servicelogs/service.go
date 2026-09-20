@@ -1,4 +1,4 @@
-package controller
+package servicelogs
 
 import (
 	"context"
@@ -10,23 +10,27 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type LogService struct {
+type ServiceReader interface {
+	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
+}
+
+type Service struct {
 	environments *environmentcapability.Reader
 	services     ServiceReader
 	releases     *etcd.ReleaseLedger
 	registry     *agentchannel.Registry
 }
 
-func NewLogService(
+func New(
 	environments *environmentcapability.Reader,
 	services ServiceReader,
 	releases *etcd.ReleaseLedger,
 	registry *agentchannel.Registry,
-) *LogService {
-	return &LogService{environments: environments, services: services, releases: releases, registry: registry}
+) *Service {
+	return &Service{environments: environments, services: services, releases: releases, registry: registry}
 }
 
-func (service *LogService) OpenEnvironment(
+func (service *Service) OpenEnvironment(
 	ctx context.Context,
 	environmentID string,
 	tail uint32,
@@ -58,7 +62,7 @@ func (service *LogService) OpenEnvironment(
 	)
 }
 
-func (service *LogService) OpenService(
+func (service *Service) OpenService(
 	ctx context.Context,
 	serviceID string,
 	tail uint32,

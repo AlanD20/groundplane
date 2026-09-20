@@ -1,9 +1,9 @@
 package app
 
 import (
+	servicelogs "github.com/AlanD20/groundplane/internal/controller/servicelogs"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	"github.com/AlanD20/groundplane/internal/controller/environment"
 	"github.com/AlanD20/groundplane/internal/controller/serviceobservation"
@@ -16,7 +16,7 @@ type serviceReadResources struct {
 	environments *environment.Reader
 	services     *serviceread.Reader
 	observations *serviceobservation.Reader
-	logs         *controller.LogService
+	logs         *servicelogs.Service
 }
 
 func newServiceReadResources(
@@ -38,6 +38,6 @@ func newServiceReadResources(
 	environments := environment.NewEtcdReader(environmentetcd.NewRepository(hierarchy, zones))
 	return serviceReadResources{
 		environments: environments, services: reads, observations: observations,
-		logs: controller.NewLogService(environments, reads, releases, channel),
+		logs: servicelogs.New(environments, reads, releases, channel),
 	}, nil
 }
