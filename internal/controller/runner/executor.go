@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -16,25 +17,25 @@ import (
 const controllerRunnerExecutor = "controller"
 
 type executionRepository interface {
-	GetRunner(context.Context, string) (etcd.Versioned[etcd.RunnerRecord], error)
+	GetRunner(context.Context, string) (etcd.Versioned[runnerrecord.RunnerRecord], error)
 	GetRunnerRuntimeOwnership(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.RunnerRuntimeOwnershipRecord], bool, error)
+	) (etcd.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord], bool, error)
 	AttestRunnerRuntimeOwnership(
 		context.Context,
-		etcd.Versioned[etcd.RunnerRecord],
+		etcd.Versioned[runnerrecord.RunnerRecord],
 		string,
-		etcd.RunnerRuntimeOwnershipRecord,
-	) (etcd.Versioned[etcd.RunnerRuntimeOwnershipRecord], error)
+		runnerrecord.RunnerRuntimeOwnershipRecord,
+	) (etcd.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord], error)
 	RecordRunnerReadinessProof(
 		context.Context,
 		string,
 	) (etcd.Versioned[etcd.RunnerReadinessProofRecord], error)
 	DeleteRunnerRuntimeOwnershipAfterCleanup(
 		context.Context,
-		etcd.Versioned[etcd.RunnerRecord],
-		etcd.RunnerRuntimeOwnershipRecord,
+		etcd.Versioned[runnerrecord.RunnerRecord],
+		runnerrecord.RunnerRuntimeOwnershipRecord,
 	) (int64, error)
 }
 
@@ -79,7 +80,7 @@ func (executor *Executor) ExecuteCreate(ctx context.Context, task etcd.TaskRecor
 	if err != nil {
 		return err
 	}
-	if current.Record.ProvisioningState != etcd.RunnerProvisioningProvisioning ||
+	if current.Record.ProvisioningState != runnerrecord.RunnerProvisioningProvisioning ||
 		current.Record.CreateTaskID != task.ID || current.Record.RuntimeEpoch == ^uint64(0) {
 		return errs.New(errs.KindStateConflict, "Runner creation Task does not own provisioning")
 	}
@@ -100,7 +101,7 @@ func (executor *Executor) ExecuteCreate(ctx context.Context, task etcd.TaskRecor
 		ctx,
 		current,
 		evidence.ContainerID,
-		etcd.RunnerRuntimeOwnershipRecord{
+		runnerrecord.RunnerRuntimeOwnershipRecord{
 			RunnerID: current.Record.Desired.ID, RuntimeEpoch: plan.RuntimeEpoch,
 			DaemonSocketEndpoint: plan.Paths.RawSocket, DaemonInstanceNonce: evidence.DaemonNonce,
 			SocketDevice: evidence.SocketDevice, SocketInode: evidence.SocketInode,
@@ -134,7 +135,7 @@ func (executor *Executor) ExecuteRemove(ctx context.Context, task etcd.TaskRecor
 		return err
 	}
 	if !exists {
-		if current.Record.ProvisioningState != etcd.RunnerProvisioningFailed || current.Record.ContainerID != "" {
+		if current.Record.ProvisioningState != runnerrecord.RunnerProvisioningFailed || current.Record.ContainerID != "" {
 			return errs.New(errs.KindStateConflict, "Runner removal lost runtime ownership")
 		}
 		return nil
@@ -158,7 +159,7 @@ func (executor *Executor) ExecuteRemove(ctx context.Context, task etcd.TaskRecor
 	return err
 }
 
-func (executor *Executor) runtimePlan(record etcd.RunnerRecord, epoch uint64) (corerunner.Plan, error) {
+func (executor *Executor) runtimePlan(record runnerrecord.RunnerRecord, epoch uint64) (corerunner.Plan, error) {
 	return corerunner.NewPlan(corerunner.Target{
 		RunnerID: record.Desired.ID, TenantID: record.Desired.TenantID,
 		OwnerKind: corerunner.OwnerKind(record.Desired.OwnerKind), OwnerID: record.Desired.OwnerID,

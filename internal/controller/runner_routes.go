@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"net/http"
 
 	runnercapability "github.com/AlanD20/groundplane/internal/controller/runner"
@@ -12,9 +13,9 @@ import (
 )
 
 type RunnerReader interface {
-	GetRunner(context.Context, string) (etcd.Versioned[etcd.RunnerRecord], error)
-	ListRunners(context.Context, etcd.RunnerFilter, etcd.PageRequest) (etcd.Page[etcd.RunnerRecord], error)
-	GetRunnerObservation(context.Context, string) (etcd.Versioned[etcd.RunnerObservationRecord], bool, error)
+	GetRunner(context.Context, string) (etcd.Versioned[runnerrecord.RunnerRecord], error)
+	ListRunners(context.Context, etcd.RunnerFilter, etcd.PageRequest) (etcd.Page[runnerrecord.RunnerRecord], error)
+	GetRunnerObservation(context.Context, string) (etcd.Versioned[runnerrecord.RunnerObservationRecord], bool, error)
 	GetRunnerDeletionTombstone(context.Context, string) (etcd.Versioned[etcd.DeletionTombstoneRecord], bool, error)
 }
 
@@ -111,7 +112,7 @@ func (s *Server) showRunner(
 	return &runnerOutput{Body: projection}, nil
 }
 
-func (s *Server) runnerProjection(ctx context.Context, record etcd.RunnerRecord) (apiTypes.Runner, error) {
+func (s *Server) runnerProjection(ctx context.Context, record runnerrecord.RunnerRecord) (apiTypes.Runner, error) {
 	observation, observed, err := s.runners.GetRunnerObservation(ctx, record.Desired.ID)
 	if err != nil {
 		return apiTypes.Runner{}, err
@@ -120,7 +121,7 @@ func (s *Server) runnerProjection(ctx context.Context, record etcd.RunnerRecord)
 	if err != nil {
 		return apiTypes.Runner{}, err
 	}
-	var observationRecord *etcd.RunnerObservationRecord
+	var observationRecord *runnerrecord.RunnerObservationRecord
 	if observed {
 		observationRecord = &observation.Record
 	}

@@ -381,7 +381,7 @@ func validateIdempotencyMarker(marker IdempotencyMarker) error {
 	if len(marker.Response.Body) > maximumReplayBody {
 		return corruptIdempotencyMarker()
 	}
-	if !validMarkerTime(marker.CreatedAt) || !validMarkerTime(marker.UpdatedAt) ||
+	if !recordcodec.IsCanonicalUTC(marker.CreatedAt) || !recordcodec.IsCanonicalUTC(marker.UpdatedAt) ||
 		marker.UpdatedAt.Before(marker.CreatedAt) {
 		return corruptIdempotencyMarker()
 	}
@@ -439,13 +439,8 @@ func validEntryMutationTaskResponse(marker IdempotencyMarker) bool {
 	return bytes.Equal(marker.Response.Body, compact.Bytes())
 }
 
-func validMarkerTime(value time.Time) bool {
-	return !value.IsZero() && value.Location() == time.UTC &&
-		value.Format(time.RFC3339Nano) == value.UTC().Format(time.RFC3339Nano)
-}
-
 func validTerminalTimes(marker IdempotencyMarker) bool {
-	return validMarkerTime(marker.TerminalAt) && validMarkerTime(marker.RetainUntil) &&
+	return recordcodec.IsCanonicalUTC(marker.TerminalAt) && recordcodec.IsCanonicalUTC(marker.RetainUntil) &&
 		!marker.TerminalAt.Before(marker.CreatedAt) && marker.UpdatedAt.Equal(marker.TerminalAt) &&
 		marker.RetainUntil.Equal(marker.TerminalAt.Add(markerRetention))
 }
@@ -670,7 +665,7 @@ func decodeRawBase64(value string) ([]byte, error) {
 }
 
 func idempotencyRetentionKey(markerKey string, retainUntil time.Time) (string, error) {
-	if !validMarkerTime(retainUntil) || retainUntil.UnixNano() < 0 ||
+	if !recordcodec.IsCanonicalUTC(retainUntil) || retainUntil.UnixNano() < 0 ||
 		!strings.HasPrefix(markerKey, idempotencyMarkerPrefix) {
 		return "", corruptIdempotencyMarker()
 	}

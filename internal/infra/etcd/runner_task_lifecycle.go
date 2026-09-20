@@ -5,6 +5,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -25,7 +26,7 @@ const (
 
 type runnerRemovalTaskEvidence struct {
 	tenantID    string
-	ownerKind   RunnerOwnerKind
+	ownerKind   runnerrecord.RunnerOwnerKind
 	ownerID     string
 	hostSlot    uint32
 	networkCIDR string
@@ -33,7 +34,7 @@ type runnerRemovalTaskEvidence struct {
 
 // RunnerRemovalTaskParams encodes the canonical durable input for one Runner
 // removal Task. Publication and validation must share this representation.
-func RunnerRemovalTaskParams(record RunnerRecord) map[string]string {
+func RunnerRemovalTaskParams(record runnerrecord.RunnerRecord) map[string]string {
 	return map[string]string{
 		TaskResourceKindParam:  TaskResourceRunner,
 		RunnerTenantIDParam:    record.Desired.TenantID,
@@ -51,15 +52,15 @@ func decodeRunnerRemovalTaskEvidence(task TaskRecord) (runnerRemovalTaskEvidence
 		ids.Validate(ids.KindTenant, task.Params[RunnerTenantIDParam]) != nil {
 		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid durable input")
 	}
-	ownerKind := RunnerOwnerKind(task.Params[RunnerOwnerKindParam])
+	ownerKind := runnerrecord.RunnerOwnerKind(task.Params[RunnerOwnerKindParam])
 	ownerID := task.Params[RunnerOwnerIDParam]
-	if (ownerKind == RunnerOwnerTenant &&
+	if (ownerKind == runnerrecord.RunnerOwnerTenant &&
 		(ids.Validate(ids.KindTenant, ownerID) != nil || ownerID != task.Params[RunnerTenantIDParam])) ||
-		(ownerKind == RunnerOwnerProject && ids.Validate(ids.KindProject, ownerID) != nil) ||
-		(ownerKind != RunnerOwnerTenant && ownerKind != RunnerOwnerProject) {
+		(ownerKind == runnerrecord.RunnerOwnerProject && ids.Validate(ids.KindProject, ownerID) != nil) ||
+		(ownerKind != runnerrecord.RunnerOwnerTenant && ownerKind != runnerrecord.RunnerOwnerProject) {
 		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid durable input")
 	}
-	expectedOwner, err := runnerTaskOwner(RunnerDesiredRecord{
+	expectedOwner, err := runnerTaskOwner(runnerrecord.RunnerDesiredRecord{
 		ID: task.Target, OwnerKind: ownerKind, OwnerID: ownerID, TenantID: task.Params[RunnerTenantIDParam],
 	})
 	if err != nil || task.Owner != expectedOwner {
@@ -69,7 +70,7 @@ func decodeRunnerRemovalTaskEvidence(task TaskRecord) (runnerRemovalTaskEvidence
 	if err != nil {
 		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid durable input")
 	}
-	if _, err := runnerAllocationPrefix(task.Params[RunnerNetworkCIDRParam]); err != nil {
+	if _, err := runnerrecord.RunnerAllocationPrefix(task.Params[RunnerNetworkCIDRParam]); err != nil {
 		return runnerRemovalTaskEvidence{}, errs.New(errs.KindInternal, "runner removal task has invalid durable input")
 	}
 	return runnerRemovalTaskEvidence{
@@ -78,7 +79,7 @@ func decodeRunnerRemovalTaskEvidence(task TaskRecord) (runnerRemovalTaskEvidence
 	}, nil
 }
 
-func (evidence runnerRemovalTaskEvidence) matchesRecord(record RunnerRecord) bool {
+func (evidence runnerRemovalTaskEvidence) matchesRecord(record runnerrecord.RunnerRecord) bool {
 	return evidence.tenantID == record.Desired.TenantID &&
 		evidence.ownerKind == record.Desired.OwnerKind && evidence.ownerID == record.Desired.OwnerID &&
 		evidence.hostSlot == record.Allocation.Slot && evidence.networkCIDR == record.Allocation.NetworkCIDR
@@ -93,7 +94,7 @@ func (evidence runnerRemovalTaskEvidence) matchesIntent(intent RunnerRemovalInte
 type RunnerRemovalIntent struct {
 	RunnerID   string                                      `json:"runner_id"`
 	TaskID     string                                      `json:"task_id"`
-	OwnerKind  RunnerOwnerKind                             `json:"owner_kind"`
+	OwnerKind  runnerrecord.RunnerOwnerKind                `json:"owner_kind"`
 	OwnerID    string                                      `json:"owner_id"`
 	TenantID   string                                      `json:"tenant_id"`
 	Allocation runnerallocation.RunnerHostAllocationRecord `json:"allocation"`
@@ -105,11 +106,11 @@ func runnerRemovalIntentKey(runnerID string) string {
 }
 
 func validateRunnerRemovalIntent(intent RunnerRemovalIntent) error {
-	desired := RunnerDesiredRecord{
+	desired := runnerrecord.RunnerDesiredRecord{
 		ID: intent.RunnerID, OwnerKind: intent.OwnerKind, OwnerID: intent.OwnerID, TenantID: intent.TenantID,
 	}
-	if validateRunnerOwnership(desired) != nil || ids.Validate(ids.KindTask, intent.TaskID) != nil ||
-		intent.Allocation.Validate() != nil || !validMarkerTime(intent.CreatedAt) {
+	if runnerrecord.ValidateRunnerOwnership(desired) != nil || ids.Validate(ids.KindTask, intent.TaskID) != nil ||
+		intent.Allocation.Validate() != nil || !recordcodec.IsCanonicalUTC(intent.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "runner removal intent is invalid")
 	}
 	return nil
@@ -123,7 +124,7 @@ func encodeRunnerRemovalIntent(intent RunnerRemovalIntent) ([]byte, error) {
 }
 
 func decodeRunnerRemovalIntent(value []byte) (RunnerRemovalIntent, error) {
-	if len(value) > maximumRunnerPersistenceBytes {
+	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
 		return RunnerRemovalIntent{}, errs.New(errs.KindInternal, "runner removal intent is corrupt")
 	}
 	intent, err := recordcodec.Decode[RunnerRemovalIntent](value, "runner_removal_intent")
@@ -137,7 +138,7 @@ func validateRunnerDeletionTombstone(record DeletionTombstoneRecord) error {
 	if record.TargetKind != DeletionTargetRunner || ids.Validate(ids.KindRunner, record.TargetID) != nil ||
 		record.TargetRevision <= 0 || ids.Validate(ids.KindTask, record.TaskID) != nil ||
 		record.Phase != DeletionPhaseFinalizing || record.Checkpoint != (DeletionCheckpoint{}) ||
-		!validMarkerTime(record.CreatedAt) || !validMarkerTime(record.UpdatedAt) ||
+		!recordcodec.IsCanonicalUTC(record.CreatedAt) || !recordcodec.IsCanonicalUTC(record.UpdatedAt) ||
 		record.UpdatedAt.Before(record.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "runner deletion tombstone is invalid")
 	}
@@ -152,7 +153,7 @@ func encodeRunnerDeletionTombstone(record DeletionTombstoneRecord) ([]byte, erro
 }
 
 func decodeRunnerDeletionTombstone(value []byte) (DeletionTombstoneRecord, error) {
-	if len(value) > maximumRunnerPersistenceBytes {
+	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
 		return DeletionTombstoneRecord{}, errs.New(errs.KindInternal, "runner deletion tombstone is corrupt")
 	}
 	record, err := recordcodec.Decode[DeletionTombstoneRecord](value, "deletion-tombstone")
@@ -172,7 +173,7 @@ type runnerAllocationEvidence struct {
 
 func (repository *RunnerRepository) readRunnerAllocationEvidence(
 	ctx context.Context,
-	record RunnerRecord,
+	record runnerrecord.RunnerRecord,
 	revision int64,
 ) (runnerAllocationEvidence, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -204,7 +205,7 @@ func (repository *RunnerRepository) readRunnerAllocationEvidence(
 	return evidence, nil
 }
 
-func runnerAllocationEvidenceOwns(record RunnerRecord, evidence runnerAllocationEvidence) error {
+func runnerAllocationEvidenceOwns(record runnerrecord.RunnerRecord, evidence runnerAllocationEvidence) error {
 	if evidence.owner == nil || string(evidence.owner.Value) != record.Desired.ID ||
 		evidence.slug == nil || string(evidence.slug.Value) != record.Desired.ID ||
 		evidence.quota == nil || evidence.host == nil || evidence.system == nil {
@@ -248,7 +249,7 @@ func sortSearchRunnerID(values []string, id string) int {
 // successful terminal acknowledgement.
 func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	ctx context.Context,
-	current Versioned[RunnerRecord],
+	current Versioned[runnerrecord.RunnerRecord],
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -256,11 +257,11 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	if err := validateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateRunnerRecord(current.Record); err != nil {
+	if err := runnerrecord.ValidateRunnerRecord(current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision ||
-		current.Record.ProvisioningState == RunnerProvisioningProvisioning {
+		current.Record.ProvisioningState == runnerrecord.RunnerProvisioningProvisioning {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "runner is not available for removal")
 	}
 	if err := validateRunnerDeletionTask(current, tombstone, task); err != nil {
@@ -305,7 +306,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		)
 	}
 	if runtimeEvidence.Values[0] != nil {
-		ownership, decodeErr := decodeRunnerRuntimeOwnership(runtimeEvidence.Values[0].Value)
+		ownership, decodeErr := runnerrecord.DecodeRunnerRuntimeOwnership(runtimeEvidence.Values[0].Value)
 		if decodeErr != nil || ownership.RunnerID != current.Record.Desired.ID ||
 			ownership.RuntimeEpoch != current.Record.RuntimeEpoch || current.Record.ContainerID == "" {
 			return IdempotencyTransactionResult{}, errs.New(
@@ -316,11 +317,11 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	} else if current.Record.ContainerID != "" {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "runner lifecycle lost runtime ownership")
 	}
-	cleanupLifecycle, err := TakeRunnerRuntimeCleanupOwnership(current.Record)
+	cleanupLifecycle, err := runnerrecord.TakeRunnerRuntimeCleanupOwnership(current.Record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	lifecycleValue, err := encodeRunnerLifecycleRecord(cleanupLifecycle.RunnerLifecycleRecord)
+	lifecycleValue, err := runnerrecord.EncodeRunnerLifecycleRecord(cleanupLifecycle.RunnerLifecycleRecord)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -390,7 +391,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
 		{Key: deletionTombstoneKey(string(DeletionTargetTenant), current.Record.Desired.TenantID)},
 	}
-	if current.Record.Desired.OwnerKind == RunnerOwnerProject {
+	if current.Record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		conditions = append(conditions,
 			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
 			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},
@@ -445,7 +446,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 }
 
 func validateRunnerDeletionTask(
-	current Versioned[RunnerRecord],
+	current Versioned[runnerrecord.RunnerRecord],
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
 ) error {
@@ -515,7 +516,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		if result.Values[3] == nil || proofValue == nil || record.ContainerID == "" {
 			return runnerTaskChange{}, errs.New(errs.KindStateConflict, "exact runner readiness proof is required")
 		}
-		ownership, ownershipErr := decodeRunnerRuntimeOwnership(result.Values[3].Value)
+		ownership, ownershipErr := runnerrecord.DecodeRunnerRuntimeOwnership(result.Values[3].Value)
 		proof, proofErr := decodeRunnerReadinessProof(proofValue.Value)
 		if ownershipErr != nil || proofErr != nil {
 			return runnerTaskChange{}, errs.New(errs.KindInternal, "runner readiness evidence is corrupt")
@@ -528,11 +529,11 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 			)
 		}
 	}
-	replacement, err := CompleteRunnerProvisioning(record, task.ID, terminalStatus == TaskStatusCompleted)
+	replacement, err := runnerrecord.CompleteRunnerProvisioning(record, task.ID, terminalStatus == TaskStatusCompleted)
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	value, err := encodeRunnerLifecycleRecord(replacement.RunnerLifecycleRecord)
+	value, err := runnerrecord.EncodeRunnerLifecycleRecord(replacement.RunnerLifecycleRecord)
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
@@ -743,17 +744,17 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		return runnerTaskChange{}, errs.New(errs.KindStateConflict, "runner removal retry target changed")
 	}
 	if result.Values[4] != nil {
-		ownership, decodeErr := decodeRunnerRuntimeOwnership(result.Values[4].Value)
+		ownership, decodeErr := runnerrecord.DecodeRunnerRuntimeOwnership(result.Values[4].Value)
 		if decodeErr != nil || ownership.RunnerID != record.Desired.ID ||
 			ownership.RuntimeEpoch >= record.RuntimeEpoch || record.ContainerID == "" {
 			return runnerTaskChange{}, errs.New(errs.KindInternal, "runner removal retry ownership is corrupt")
 		}
 	}
-	replacement, err := TakeRunnerRuntimeCleanupOwnership(record)
+	replacement, err := runnerrecord.TakeRunnerRuntimeCleanupOwnership(record)
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	lifecycleValue, err := encodeRunnerLifecycleRecord(replacement.RunnerLifecycleRecord)
+	lifecycleValue, err := runnerrecord.EncodeRunnerLifecycleRecord(replacement.RunnerLifecycleRecord)
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
@@ -767,7 +768,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		hierarchyrecord.TenantKey(record.Desired.TenantID),
 		deletionTombstoneKey(string(DeletionTargetTenant), record.Desired.TenantID),
 	}
-	if record.Desired.OwnerKind == RunnerOwnerProject {
+	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		parentKeys = append(parentKeys,
 			hierarchyrecord.ProjectKey(record.Desired.OwnerID),
 			deletionTombstoneKey(string(DeletionTargetProject), record.Desired.OwnerID),
@@ -790,7 +791,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 	if err != nil || tenant.ID != record.Desired.TenantID {
 		return runnerTaskChange{}, recordcodec.CorruptRecord()
 	}
-	if record.Desired.OwnerKind == RunnerOwnerProject {
+	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		if parents.Values[2] == nil {
 			return runnerTaskChange{}, errs.New(errs.KindProjectNotFound, "project was not found")
 		}
@@ -857,7 +858,7 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		},
 		values: [][]byte{tombstoneValue, intentValue, lifecycleValue},
 	}
-	if record.Desired.OwnerKind == RunnerOwnerProject {
+	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		change.conditions = append(change.conditions,
 			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(record.Desired.OwnerID), ModRevision: parents.Values[2].ModRevision},
 			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), record.Desired.OwnerID)},
@@ -937,9 +938,9 @@ func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 	if err != nil || record.Desired.ID != task.Target || record.CreateTaskID != task.ID {
 		return errs.New(errs.KindStateConflict, "runner creation replay retained corrupt target state")
 	}
-	wantState := RunnerProvisioningFailed
+	wantState := runnerrecord.RunnerProvisioningFailed
 	if terminalStatus == TaskStatusCompleted {
-		wantState = RunnerProvisioningReady
+		wantState = runnerrecord.RunnerProvisioningReady
 	}
 	if record.ProvisioningState != wantState {
 		return errs.New(errs.KindStateConflict, "runner creation replay target state changed")
@@ -1042,7 +1043,7 @@ func taskOwnsRunnerCreation(task TaskRecord) (bool, error) {
 	return true, nil
 }
 
-func runnerIntentMatchesRecord(intent RunnerRemovalIntent, record RunnerRecord, taskID string) bool {
+func runnerIntentMatchesRecord(intent RunnerRemovalIntent, record runnerrecord.RunnerRecord, taskID string) bool {
 	return intent.RunnerID == record.Desired.ID && intent.TaskID == taskID &&
 		intent.OwnerKind == record.Desired.OwnerKind && intent.OwnerID == record.Desired.OwnerID &&
 		intent.TenantID == record.Desired.TenantID && intent.Allocation == record.Allocation

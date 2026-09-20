@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"net/http"
 	"time"
 
@@ -21,8 +22,8 @@ const (
 )
 
 type mutationRepository interface {
-	GetRunner(context.Context, string) (etcd.Versioned[etcd.RunnerRecord], error)
-	GetRunnerObservation(context.Context, string) (etcd.Versioned[etcd.RunnerObservationRecord], bool, error)
+	GetRunner(context.Context, string) (etcd.Versioned[runnerrecord.RunnerRecord], error)
+	GetRunnerObservation(context.Context, string) (etcd.Versioned[runnerrecord.RunnerObservationRecord], bool, error)
 	ReplaceRunnerSlugIdempotent(
 		context.Context,
 		string,
@@ -126,7 +127,7 @@ func (service *MutationService) renameOnce(
 	}
 	replacement := current.Record
 	replacement.Desired.Slug = request.Slug
-	var observationRecord *etcd.RunnerObservationRecord
+	var observationRecord *runnerrecord.RunnerObservationRecord
 	if observed {
 		observationRecord = &observation.Record
 	}
@@ -228,9 +229,9 @@ func (service *MutationService) protectIntent(
 	return service.coordinator.ProtectIntent(ctx, version, digest)
 }
 
-func runnerLocator(desired etcd.RunnerDesiredRecord, key string) etcd.IdempotencyLocator {
+func runnerLocator(desired runnerrecord.RunnerDesiredRecord, key string) etcd.IdempotencyLocator {
 	scopeKind := etcd.IdempotencyScopeTenant
-	if desired.OwnerKind == etcd.RunnerOwnerProject {
+	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		scopeKind = etcd.IdempotencyScopeProject
 	}
 	return etcd.IdempotencyLocator{

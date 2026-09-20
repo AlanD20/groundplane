@@ -241,7 +241,7 @@ func validateComponentObservation(record ComponentObservationRecord) error {
 		record.RenderGeneration == 0 ||
 		record.AgentGeneration == 0 ||
 		record.OwnershipGeneration == 0 ||
-		!validMarkerTime(record.ObservedAt) {
+		!recordcodec.IsCanonicalUTC(record.ObservedAt) {
 		return errs.New(errs.KindValidationFailed, "Component observation identity or generation is invalid")
 	}
 	if record.Enabled {

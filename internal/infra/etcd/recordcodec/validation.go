@@ -34,6 +34,11 @@ func ValidateTimestamp(field string, value time.Time) error {
 	return nil
 }
 
+func IsCanonicalUTC(value time.Time) bool {
+	return !value.IsZero() && value.Location() == time.UTC &&
+		value.Format(time.RFC3339Nano) == value.UTC().Format(time.RFC3339Nano)
+}
+
 func ValidateLabel(field string, value string) error {
 	if value == "" || !utf8.ValidString(value) {
 		return errs.Newf(errs.KindValidationFailed, "%s is required and must be valid UTF-8", field)

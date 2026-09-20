@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"net/http"
 	"strings"
 	"time"
@@ -22,10 +23,10 @@ const (
 )
 
 type removalRepository interface {
-	GetRunner(context.Context, string) (etcd.Versioned[etcd.RunnerRecord], error)
+	GetRunner(context.Context, string) (etcd.Versioned[runnerrecord.RunnerRecord], error)
 	BeginRunnerRemovalWithTask(
 		context.Context,
-		etcd.Versioned[etcd.RunnerRecord],
+		etcd.Versioned[runnerrecord.RunnerRecord],
 		etcd.DeletionTombstoneRecord,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
@@ -79,7 +80,7 @@ func (service *RemovalService) RemoveRunner(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if current.Record.ProvisioningState == etcd.RunnerProvisioningProvisioning {
+	if current.Record.ProvisioningState == runnerrecord.RunnerProvisioningProvisioning {
 		return etcd.IdempotencyResponse{}, errs.New(
 			errs.KindStateConflict,
 			"Runner provisioning must finish before removal",
@@ -197,9 +198,9 @@ func (service *RemovalService) protectIntent(
 	return service.coordinator.ProtectIntent(ctx, version, digest)
 }
 
-func runnerRemovalLocator(desired etcd.RunnerDesiredRecord, key string) etcd.IdempotencyLocator {
+func runnerRemovalLocator(desired runnerrecord.RunnerDesiredRecord, key string) etcd.IdempotencyLocator {
 	scopeKind := etcd.IdempotencyScopeTenant
-	if desired.OwnerKind == etcd.RunnerOwnerProject {
+	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		scopeKind = etcd.IdempotencyScopeProject
 	}
 	return etcd.IdempotencyLocator{
@@ -208,9 +209,9 @@ func runnerRemovalLocator(desired etcd.RunnerDesiredRecord, key string) etcd.Ide
 	}
 }
 
-func newRunnerRemovalTask(record etcd.RunnerRecord, key string, now time.Time) etcd.TaskRecord {
+func newRunnerRemovalTask(record runnerrecord.RunnerRecord, key string, now time.Time) etcd.TaskRecord {
 	owner := etcd.TaskOwner{WorkspaceType: etcd.TaskWorkspaceTenant, TenantID: record.Desired.TenantID}
-	if record.Desired.OwnerKind == etcd.RunnerOwnerProject {
+	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		owner.ProjectID = record.Desired.OwnerID
 	}
 	planInput := strings.Join([]string{

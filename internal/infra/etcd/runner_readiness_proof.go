@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -91,12 +92,12 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 	if err != nil {
 		return Versioned[RunnerReadinessProofRecord]{}, err
 	}
-	ownership, err := decodeRunnerRuntimeOwnership(state.Values[2].Value)
+	ownership, err := runnerrecord.DecodeRunnerRuntimeOwnership(state.Values[2].Value)
 	if err != nil {
 		return Versioned[RunnerReadinessProofRecord]{}, err
 	}
 	if runner.Desired.ID != task.Target || runner.CreateTaskID != task.ID ||
-		runner.ProvisioningState != RunnerProvisioningProvisioning || runner.ContainerID == "" ||
+		runner.ProvisioningState != runnerrecord.RunnerProvisioningProvisioning || runner.ContainerID == "" ||
 		ownership.RunnerID != runner.Desired.ID || ownership.RuntimeEpoch != runner.RuntimeEpoch {
 		return Versioned[RunnerReadinessProofRecord]{}, errs.New(
 			errs.KindStateConflict,
@@ -162,8 +163,8 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 func validateRunnerReadinessProof(record RunnerReadinessProofRecord) error {
 	if ids.Validate(ids.KindRunner, record.RunnerID) != nil ||
 		ids.Validate(ids.KindTask, record.TaskID) != nil || record.RuntimeEpoch == 0 ||
-		!validLowerHex(record.ContainerID, runnerContainerIDEncodedLength) ||
-		record.RuntimeOwnershipRevision <= 0 || !validLowerHex(record.RuntimeOwnershipSHA256, sha256.Size*2) {
+		!runnerrecord.ValidLowerHex(record.ContainerID, runnerrecord.RunnerContainerIDEncodedLength) ||
+		record.RuntimeOwnershipRevision <= 0 || !runnerrecord.ValidLowerHex(record.RuntimeOwnershipSHA256, sha256.Size*2) {
 		return errs.New(errs.KindValidationFailed, "runner readiness proof is invalid")
 	}
 	return nil
@@ -177,7 +178,7 @@ func encodeRunnerReadinessProof(record RunnerReadinessProofRecord) ([]byte, erro
 }
 
 func decodeRunnerReadinessProof(value []byte) (RunnerReadinessProofRecord, error) {
-	if len(value) > maximumRunnerPersistenceBytes {
+	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
 		return RunnerReadinessProofRecord{}, errs.New(errs.KindInternal, "runner readiness proof is corrupt")
 	}
 	record, err := recordcodec.Decode[RunnerReadinessProofRecord](value, "runner_readiness_proof")
@@ -195,7 +196,7 @@ func runnerRuntimeOwnershipSHA256(value []byte) string {
 func runnerReadinessProofMatches(
 	proof RunnerReadinessProofRecord,
 	task TaskRecord,
-	runner RunnerRecord,
+	runner runnerrecord.RunnerRecord,
 	ownership *etcdstore.KeyValue,
 ) bool {
 	return ownership != nil && proof.RunnerID == runner.Desired.ID && proof.TaskID == task.ID &&

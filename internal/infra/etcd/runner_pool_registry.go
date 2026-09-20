@@ -3,6 +3,7 @@ package etcd
 import (
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -52,7 +53,7 @@ func encodeRunnerHostSlotRecord(record RunnerHostSlotRecord) ([]byte, error) {
 }
 
 func decodeRunnerHostSlotRecord(value []byte) (RunnerHostSlotRecord, error) {
-	if len(value) > maximumRunnerPersistenceBytes {
+	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
 		return RunnerHostSlotRecord{}, corruptRunnerHostSlotRecord()
 	}
 	record, err := recordcodec.Decode[RunnerHostSlotRecord](value, "runner_host_slot")
@@ -63,7 +64,7 @@ func decodeRunnerHostSlotRecord(value []byte) (RunnerHostSlotRecord, error) {
 }
 
 func decodeRunnerTenantQuota(value []byte) (runnerallocation.RunnerTenantQuota, error) {
-	if len(value) > maximumRunnerPersistenceBytes {
+	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
 		return runnerallocation.RunnerTenantQuota{}, corruptRunnerTenantQuota()
 	}
 	quota, err := recordcodec.Decode[runnerallocation.RunnerTenantQuota](value, "runner_tenant_quota")
@@ -78,7 +79,7 @@ func corruptRunnerHostSlotRecord() error {
 }
 
 func decodeSystemPoolRegistry(value []byte) (runnerallocation.SystemPoolRegistry, error) {
-	if len(value) > maximumRunnerPersistenceBytes {
+	if len(value) > runnerrecord.MaximumRunnerPersistenceBytes {
 		return runnerallocation.SystemPoolRegistry{}, corruptSystemPoolRegistry()
 	}
 	registry, err := recordcodec.Decode[runnerallocation.SystemPoolRegistry](value, "system_pool_registry")

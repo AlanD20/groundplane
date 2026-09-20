@@ -105,7 +105,7 @@ func validateHostResolverBaseline(record HostResolverBaselineRecord) error {
 	if record.Generation != 1 || len(record.Content) == 0 ||
 		len(record.Content) > maximumHostResolverBaselineBytes ||
 		!bytes.HasSuffix(record.Content, []byte("\n")) || !recordcodec.ValidSHA256(record.SHA256) ||
-		!validMarkerTime(record.CapturedAt) {
+		!recordcodec.IsCanonicalUTC(record.CapturedAt) {
 		return errs.New(errs.KindValidationFailed, "host resolver baseline is invalid")
 	}
 	digest := sha256.Sum256(record.Content)

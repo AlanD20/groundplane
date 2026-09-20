@@ -34,7 +34,7 @@ func (repository *IdempotencyRepository) PruneExpired(ctx context.Context, now t
 	if repository == nil || repository.store == nil {
 		return 0, errs.New(errs.KindInternal, "idempotency repository is not initialized")
 	}
-	if !validMarkerTime(now) {
+	if !recordcodec.IsCanonicalUTC(now) {
 		return 0, errs.New(errs.KindValidationFailed, "idempotency prune time must be UTC")
 	}
 	for attempt := 0; attempt < maximumPruneCASAttempts; attempt++ {
@@ -224,7 +224,7 @@ func (repository *IdempotencyRepository) pruneExpiredWithFences(
 	if repository == nil || repository.store == nil {
 		return 0, errs.New(errs.KindInternal, "idempotency repository is not initialized")
 	}
-	if !validMarkerTime(now) {
+	if !recordcodec.IsCanonicalUTC(now) {
 		return 0, errs.New(errs.KindValidationFailed, "idempotency prune time must be UTC")
 	}
 	if len(candidates) == 0 && len(extraMutations) == 0 || len(candidates) > maximumPruneMarkers {

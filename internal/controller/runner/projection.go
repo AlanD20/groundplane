@@ -1,6 +1,7 @@
 package runner
 
 import (
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -8,16 +9,16 @@ import (
 )
 
 func PublicProjection(
-	record etcd.RunnerRecord,
-	observation *etcd.RunnerObservationRecord,
+	record runnerrecord.RunnerRecord,
+	observation *runnerrecord.RunnerObservationRecord,
 	tombstone *etcd.DeletionTombstoneRecord,
 ) (apiTypes.Runner, error) {
-	name, err := etcd.RunnerName(record.Desired.ID)
+	name, err := runnerrecord.RunnerName(record.Desired.ID)
 	if err != nil {
 		return apiTypes.Runner{}, err
 	}
 	projectID := ""
-	if record.Desired.OwnerKind == etcd.RunnerOwnerProject {
+	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		projectID = record.Desired.OwnerID
 	}
 	lifecycle := apiTypes.RunnerLifecycle(record.ProvisioningState)

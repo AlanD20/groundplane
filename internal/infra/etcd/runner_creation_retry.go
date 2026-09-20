@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -103,7 +104,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	if err := validateRunnerRetryMarker(current.Record.Desired, retry, marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	replacement, err := RetryRunnerProvisioning(current.Record, source.ID, retry.ID)
+	replacement, err := runnerrecord.RetryRunnerProvisioning(current.Record, source.ID, retry.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -115,7 +116,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	recordValue, err := encodeRunnerLifecycleRecord(replacement.RunnerLifecycleRecord)
+	recordValue, err := runnerrecord.EncodeRunnerLifecycleRecord(replacement.RunnerLifecycleRecord)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -158,7 +159,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		{Key: deletionTombstoneKey(string(DeletionTargetRunner), current.Record.Desired.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetTenant), current.Record.Desired.TenantID)},
 	}
-	if current.Record.Desired.OwnerKind == RunnerOwnerProject {
+	if current.Record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
 		conditions = append(conditions,
 			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(current.Record.Desired.OwnerID), ModRevision: parents.project.Revision},
 			etcdstore.Condition{Key: deletionTombstoneKey(string(DeletionTargetProject), current.Record.Desired.OwnerID)},

@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/agentmanagement"
@@ -30,7 +31,7 @@ type backingZoneCascadeExecutor interface {
 }
 
 type controllerTaskRunners interface {
-	GetRunner(context.Context, string) (etcd.Versioned[etcd.RunnerRecord], error)
+	GetRunner(context.Context, string) (etcd.Versioned[runnerrecord.RunnerRecord], error)
 }
 
 type controllerTaskRunnerLifecycle interface {
@@ -155,7 +156,7 @@ func (handler *ResourceHandler) executeRunnerRemoval(ctx context.Context, task e
 	if err != nil {
 		return err
 	}
-	if current.Record.ProvisioningState != etcd.RunnerProvisioningFailed || current.Record.ContainerID != "" {
+	if current.Record.ProvisioningState != runnerrecord.RunnerProvisioningFailed || current.Record.ContainerID != "" {
 		return errs.New(errs.KindStateConflict, "Runner host cleanup requires the Controller lifecycle executor")
 	}
 	return nil

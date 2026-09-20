@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"time"
@@ -301,7 +302,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionTenantFin
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
 	prefixes := []string{
-		hierarchyrecord.ProjectTenantOwnerPrefix(record.ID), runnerOwnerPrefix(RunnerOwnerTenant, record.ID),
+		hierarchyrecord.ProjectTenantOwnerPrefix(record.ID), runnerOwnerPrefix(runnerrecord.RunnerOwnerTenant, record.ID),
 	}
 	if _, err := repository.requireHierarchyDeletionPrefixesEmpty(ctx, prefixes); err != nil {
 		return hierarchyDeletionControllerEffects{}, err
@@ -610,7 +611,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionProjectFi
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
 	prefixes := []string{
-		hierarchyrecord.EnvironmentOwnerPrefix(record.ID), runnerOwnerPrefix(RunnerOwnerProject, record.ID),
+		hierarchyrecord.EnvironmentOwnerPrefix(record.ID), runnerOwnerPrefix(runnerrecord.RunnerOwnerProject, record.ID),
 		secretOwnerCollectionPrefix(core.SecretScopeProject, record.ID),
 	}
 	if _, err := repository.requireHierarchyDeletionPrefixesEmpty(ctx, prefixes); err != nil {

@@ -8,6 +8,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"strings"
@@ -185,7 +186,7 @@ func (repository *HierarchyDeletionRepository) freezeTenantMembership(
 	runners, err := repository.freezeIndexedResource(ctx, operation, operation.Tombstone.TargetID,
 		hierarchyDeletionIndexedResource{
 			targetKind: "runner", actionKind: HierarchyDeletionRunnerLocalRemove,
-			ownerPrefix: func(owner string) string { return runnerOwnerPrefix(RunnerOwnerTenant, owner) },
+			ownerPrefix: func(owner string) string { return runnerOwnerPrefix(runnerrecord.RunnerOwnerTenant, owner) },
 			primaryKey:  runnerKey, stableIDKind: ids.KindRunner, controller: true,
 			validateOwner: validateHierarchyDeletionRunnerOwner,
 		})
@@ -237,7 +238,7 @@ func (repository *HierarchyDeletionRepository) freezeProjectMembership(
 		runners, freezeErr := repository.freezeIndexedResource(ctx, operation, projectID,
 			hierarchyDeletionIndexedResource{
 				targetKind: "runner", actionKind: HierarchyDeletionRunnerLocalRemove,
-				ownerPrefix: func(owner string) string { return runnerOwnerPrefix(RunnerOwnerProject, owner) },
+				ownerPrefix: func(owner string) string { return runnerOwnerPrefix(runnerrecord.RunnerOwnerProject, owner) },
 				primaryKey:  runnerKey, stableIDKind: ids.KindRunner, controller: true,
 				validateOwner: validateHierarchyDeletionRunnerOwner,
 			})
