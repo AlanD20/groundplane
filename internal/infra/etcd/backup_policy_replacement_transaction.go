@@ -1,0 +1,270 @@
+package etcd
+
+import (
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+)
+
+func mustBackupPolicyScheduleTransition(
+	candidate backupPolicyReplacementCandidate,
+) EnvironmentCoordinationRecord {
+	next, _, err := replaceEnvironmentCoordinationSchedule(
+		candidate.Coordination.Record, candidate.Replacement, candidate.Replacement.UpdatedAt,
+	)
+	if err != nil {
+		return EnvironmentCoordinationRecord{}
+	}
+	return next
+}
+
+func prepareBackupPolicyReplacement(
+	candidate backupPolicyReplacementCandidate,
+) (backupPolicyReplacementPlan, error) {
+	policyValue, err := backuppolicy.EncodeBackupPolicyRecord(candidate.Replacement)
+	if err != nil {
+		return backupPolicyReplacementPlan{}, err
+	}
+	coordinationValue, err := encodeEnvironmentCoordinationRecord(candidate.NextCoordination)
+	if err != nil {
+		clear(policyValue)
+		return backupPolicyReplacementPlan{}, err
+	}
+	plan := backupPolicyReplacementPlan{
+		conditions: make([]etcdstore.Condition, 0, 18+len(candidate.Sources)*3),
+		mutations: []etcdstore.Mutation{
+			{
+				Type: etcdstore.MutationPut, Key: backuppolicy.BackupPolicyKey(candidate.Replacement.EnvironmentID), Value: policyValue,
+			},
+			{
+				Type: etcdstore.MutationPut, Key: environmentCoordinationKey(candidate.Replacement.EnvironmentID),
+				Value: coordinationValue,
+			},
+		},
+		evidence: make([]backupPolicyReplacementCompare, 0, 18+len(candidate.Sources)*3),
+	}
+	policyRevision := int64(0)
+	if candidate.Current != nil {
+		policyRevision = candidate.Current.Revision
+	}
+	plan.compare(
+		backupPolicyComparePolicy,
+		candidate.Replacement.EnvironmentID,
+		backuppolicy.BackupPolicyKey(candidate.Replacement.EnvironmentID),
+		policyRevision,
+	)
+	plan.compare(
+		backupPolicyCompareEnvironment,
+		candidate.Environment.Record.ID,
+		hierarchyrecord.EnvironmentKey(candidate.Environment.Record.ID),
+		candidate.Environment.Revision,
+	)
+	plan.compare(
+		backupPolicyCompareProject,
+		candidate.Project.Record.ID,
+		hierarchyrecord.ProjectKey(candidate.Project.Record.ID),
+		candidate.Project.Revision,
+	)
+	plan.compare(
+		backupPolicyCompareCoordination,
+		candidate.Replacement.EnvironmentID,
+		environmentCoordinationKey(candidate.Replacement.EnvironmentID),
+		candidate.Coordination.Revision,
+	)
+	plan.compare(
+		backupPolicyCompareOperationLock,
+		candidate.Replacement.EnvironmentID,
+		hierarchyrecord.EnvironmentOperationLockKey(candidate.Replacement.EnvironmentID),
+		0,
+	)
+	for _, fence := range []struct {
+		kind DeletionTargetKind
+		id   string
+	}{
+		{kind: DeletionTargetEnvironment, id: candidate.Environment.Record.ID},
+		{kind: DeletionTargetProject, id: candidate.Project.Record.ID},
+		{kind: DeletionTargetTenant, id: candidate.Project.Record.TenantID},
+	} {
+		plan.compare(
+			backupPolicyCompareHierarchyTombstone,
+			fence.id,
+			deletionTombstoneKey(string(fence.kind), fence.id),
+			0,
+		)
+	}
+	for _, source := range candidate.Sources {
+		plan.compare(
+			backupPolicyCompareSource,
+			source.Source.Record.ID,
+			backuppolicy.BackupSourceKey(source.Source.Record.ID),
+			source.Source.Revision,
+		)
+		plan.compare(
+			backupPolicyCompareSourceEnvironmentIndex,
+			source.Source.Record.ID,
+			source.EnvironmentIndex.Key,
+			source.EnvironmentIndex.ModRevision,
+		)
+		plan.compare(
+			backupPolicyCompareSourceIdentityIndex,
+			source.Source.Record.ID,
+			source.IdentityIndex.Key,
+			source.IdentityIndex.ModRevision,
+		)
+		switch string(source.Source.Record.Kind) {
+		case "attach":
+			plan.compare(
+				backupPolicyCompareAttach,
+				source.Attach.Record.ID,
+				attachrecord.AttachKey(source.Attach.Record.ID),
+				source.Attach.Revision,
+			)
+			plan.compare(
+				backupPolicyCompareTargetOwnerIndex,
+				source.Attach.Record.ID,
+				source.TargetOwnerIndex.Key,
+				source.TargetOwnerIndex.ModRevision,
+			)
+			plan.compare(
+				backupPolicyCompareTargetTombstone,
+				source.Attach.Record.ID,
+				deletionTombstoneKey("attach", source.Attach.Record.ID),
+				0,
+			)
+		case "volume":
+			plan.compare(
+				backupPolicyCompareVolume,
+				source.Volume.Volume.ID,
+				environmentBlueprintHeadKey(source.Source.Record.EnvironmentID),
+				source.Volume.Projection.Revision,
+			)
+			plan.compare(
+				backupPolicyCompareVolumeRoot,
+				source.Volume.Volume.ID,
+				environmentBlueprintRootKey(
+					source.Source.Record.EnvironmentID,
+					source.Volume.Projection.Record.RevisionID,
+				),
+				source.Volume.ProjectionRoot,
+			)
+		}
+	}
+	if candidate.Connector != nil {
+		connectorID := candidate.Connector.Record.Connector.ID
+		plan.compare(
+			backupPolicyCompareConnector,
+			connectorID,
+			connectorrecord.RecordKey(connectorID),
+			candidate.Connector.Revision,
+		)
+		plan.compare(
+			backupPolicyCompareConnectorOwnerIndex,
+			connectorID,
+			candidate.ConnectorOwnerIndex.Key,
+			candidate.ConnectorOwnerIndex.ModRevision,
+		)
+		plan.compare(
+			backupPolicyCompareConnectorTombstone,
+			connectorID,
+			deletionTombstoneKey(string(DeletionTargetConnector), connectorID),
+			0,
+		)
+	}
+	for _, reference := range candidate.ConnectorReferences {
+		revision := int64(0)
+		if reference.Entry != nil {
+			revision = reference.Entry.ModRevision
+		}
+		plan.compare(
+			backupPolicyCompareConnectorReference,
+			reference.ConnectorID,
+			backuppolicy.BackupPolicyConnectorReferenceKey(reference.ConnectorID, candidate.Replacement.EnvironmentID),
+			revision,
+		)
+	}
+	oldConnectorID := ""
+	if candidate.Current != nil && candidate.Current.Record.Enabled {
+		oldConnectorID = candidate.Current.Record.ConnectorID
+	}
+	newConnectorID := ""
+	if candidate.Replacement.Enabled {
+		newConnectorID = candidate.Replacement.ConnectorID
+	}
+	if oldConnectorID != "" && oldConnectorID != newConnectorID {
+		plan.mutations = append(plan.mutations, etcdstore.Mutation{
+			Type: etcdstore.MutationDelete,
+			Key:  backuppolicy.BackupPolicyConnectorReferenceKey(oldConnectorID, candidate.Replacement.EnvironmentID),
+		})
+	}
+	if newConnectorID != "" && newConnectorID != oldConnectorID {
+		plan.mutations = append(plan.mutations, etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   backuppolicy.BackupPolicyConnectorReferenceKey(newConnectorID, candidate.Replacement.EnvironmentID),
+			Value: []byte(candidate.Replacement.EnvironmentID),
+		})
+	}
+	keyRecordRevision := int64(0)
+	keyValueRevision := int64(0)
+	if candidate.ExistingKey != nil {
+		keyRecordRevision = candidate.ExistingKey.RecordRevision
+		keyValueRevision = candidate.ExistingKey.EncryptedRevision
+	}
+	plan.compare(
+		backupPolicyCompareKey,
+		candidate.Replacement.EnvironmentID,
+		backuppolicy.BackupKeyKey(candidate.Replacement.EnvironmentID),
+		keyRecordRevision,
+	)
+	plan.compare(
+		backupPolicyCompareKey,
+		candidate.Replacement.EnvironmentID,
+		backuppolicy.BackupKeyValueKey(candidate.Replacement.EnvironmentID),
+		keyValueRevision,
+	)
+	if candidate.InitialKey != nil {
+		initial := backupPolicyInitialKey{
+			Record:    candidate.InitialKey.Record,
+			Encrypted: candidate.InitialKey.Encrypted,
+		}
+		initial.Encrypted.Ciphertext = append([]byte(nil), candidate.InitialKey.Encrypted.Ciphertext...)
+		defer clear(initial.Encrypted.Ciphertext)
+		recordValue, encodeErr := backuppolicy.EncodeBackupKeyRecord(initial.Record)
+		if encodeErr != nil {
+			clearMutationValues(plan.mutations)
+			return backupPolicyReplacementPlan{}, encodeErr
+		}
+		encryptedValue, encodeErr := backuppolicy.EncodeBackupKeyEncryptedValue(initial.Encrypted)
+		if encodeErr != nil {
+			clear(recordValue)
+			clearMutationValues(plan.mutations)
+			return backupPolicyReplacementPlan{}, encodeErr
+		}
+		plan.mutations = append(
+			plan.mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupKeyKey(candidate.Replacement.EnvironmentID), Value: recordValue},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   backuppolicy.BackupKeyValueKey(candidate.Replacement.EnvironmentID),
+				Value: encryptedValue,
+			},
+		)
+	}
+	return plan, nil
+}
+
+func backupPolicyReplacementOperationCount(
+	plan backupPolicyReplacementPlan,
+	marker idempotencyrecord.IdempotencyMarker,
+) int {
+	count := len(plan.conditions) + len(plan.mutations) + 2
+	if marker.ReplayTarget != nil {
+		count += 2
+	}
+	if !marker.RetainUntil.IsZero() {
+		count++
+	}
+	return count
+}
