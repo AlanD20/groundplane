@@ -1,5 +1,22 @@
 "use client";
 import {
+  createBackingServiceActions,
+  type BackingServiceActions,
+} from "@/features/backing-service/actions";
+import { listAllBackingProjects } from "@/features/backing-service/workspace-read";
+import { backingConsumerRevision } from "@/features/backing-service/consumer-projection";
+import {
+  createTenantActions,
+  type TenantActions,
+} from "@/features/tenant/actions";
+import { listAllTenants } from "@/features/tenant/api";
+import {
+  createProjectActions,
+  type ProjectActions,
+} from "@/features/project/actions";
+import { listAllTenantProjects } from "@/features/project/api";
+import { listAllEnvironments } from "@/features/environment/workspace-read";
+import {
   createComponentActions,
   type ComponentActions,
 } from "@/features/component/actions";
@@ -12,7 +29,6 @@ import {
   createAttachActions,
   type AttachActions,
 } from "@/features/attach/actions";
-import { listAllAttaches } from "@/features/attach/api";
 import {
   createEntryActions,
   type EntryActions,
@@ -51,7 +67,6 @@ import {
   listAllZones,
   listAllRoutes,
 } from "@/features/environment/network-api";
-import { listAllComponents } from "@/features/component/api";
 import { listAllReleases, projectReleaseSummary } from "@/features/release/api";
 import { listAllAgents } from "@/features/agent/api";
 import {
@@ -79,12 +94,7 @@ import {
 } from "@/features/secrets/secret-store";
 import { controllerUpdateRejected } from "./controller-request-errors";
 import { applyServiceObservations } from "@/features/service/service-observation";
-import {
-  releaseForServiceName,
-  serviceFromAPI,
-  listAllServices,
-  type ServiceShowResponse,
-} from "@/features/service/api";
+import { releaseForServiceName, listAllServices } from "@/features/service/api";
 import {
   createContext,
   useCallback,
@@ -100,10 +110,6 @@ import {
   type LogTarget,
   type TransientLogEvent,
 } from "./transient-logs";
-import type {
-  BackingServiceCreateRequest,
-  BackingServiceCreatedResponse,
-} from "@/features/backing-service/api";
 import { useControllerPlatform } from "@/features/platform-controller/use-controller-platform";
 import type {
   ActivityEntry,
@@ -111,7 +117,6 @@ import type {
   Environment,
   Project,
   Service,
-  ServiceRuntimeIntent,
   TaskJournalScope,
   TaskJournalState,
   TaskJournalSurface,
@@ -145,42 +150,7 @@ import {
 } from "./environment-hydration";
 import { environmentDeletionGuard } from "./environment-guard";
 import { observeEnvironmentTask } from "./environment-task-observation";
-import { listAllVolumes } from "@/features/volume/api";
 import { newId, newULID } from "./utils";
-type TenantPageResponse =
-  operations["tenant.list"]["responses"][200]["content"]["application/json"];
-type TenantCreateRequest =
-  operations["tenant.create"]["requestBody"]["content"]["application/json"];
-type TenantCreateResponse =
-  operations["tenant.create"]["responses"][201]["content"]["application/json"];
-type TenantEditRequest =
-  operations["tenant.edit"]["requestBody"]["content"]["application/json"];
-type TenantEditResponse =
-  operations["tenant.edit"]["responses"][200]["content"]["application/json"];
-type TenantRenameRequest =
-  operations["tenant.rename"]["requestBody"]["content"]["application/json"];
-type TenantRenameResponse =
-  operations["tenant.rename"]["responses"][200]["content"]["application/json"];
-type ProjectPageResponse =
-  operations["project.list"]["responses"][200]["content"]["application/json"];
-type ProjectCreateRequest =
-  operations["project.create"]["requestBody"]["content"]["application/json"];
-type ProjectCreateResponse =
-  operations["project.create"]["responses"][201]["content"]["application/json"];
-type ProjectShowResponse =
-  operations["project.show"]["responses"][200]["content"]["application/json"];
-type ProjectEditRequest =
-  operations["project.edit"]["requestBody"]["content"]["application/json"];
-type ProjectEditResponse =
-  operations["project.edit"]["responses"][200]["content"]["application/json"];
-type ProjectRenameRequest =
-  operations["project.rename"]["requestBody"]["content"]["application/json"];
-type ProjectRenameResponse =
-  operations["project.rename"]["responses"][200]["content"]["application/json"];
-type EnvironmentPageResponse =
-  operations["environment.list"]["responses"][200]["content"]["application/json"];
-type EnvironmentResponse =
-  operations["environment.show"]["responses"][200]["content"]["application/json"];
 type EnvironmentCreateRequest =
   operations["environment.create"]["requestBody"]["content"]["application/json"];
 type EnvironmentTaskAccepted =
@@ -201,275 +171,12 @@ type TaskRetryResponse =
   operations["task.retry"]["responses"][202]["content"]["application/json"];
 type TaskAbortResponse =
   operations["task.abort"]["responses"][202]["content"]["application/json"];
-type BackingRuntimeTaskAccepted =
-  operations["backing-service.start"]["responses"][202]["content"]["application/json"];
-type BackingServicePageResponse =
-  operations["backing-service.list"]["responses"][200]["content"]["application/json"];
-type BackingServiceResponse = NonNullable<
-  BackingServicePageResponse["items"]
->[number];
 type AgentTaskAccepted =
   operations["agent.join"]["responses"][202]["content"]["application/json"];
 type AgentConfigResponse =
   operations["agent.config.show"]["responses"][200]["content"]["application/json"];
 type AgentConfigRequest =
   operations["agent.config.set"]["requestBody"]["content"]["application/json"];
-type HierarchyTaskAccepted = { task_id: string };
-function tenantFromAPI(tenant: TenantCreateResponse): Tenant {
-  return {
-    id: tenant.id,
-    slug: tenant.slug,
-    name: tenant.name,
-    description: tenant.description,
-    deletionTaskId: tenant.deletion_task_id,
-  };
-}
-
-async function listAllTenants(signal: AbortSignal): Promise<Tenant[]> {
-  const tenants: Tenant[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({ limit: "200" });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<TenantPageResponse>(
-      `/tenants?${query}`,
-      200,
-      { signal },
-    );
-    tenants.push(...(page.items ?? []).map(tenantFromAPI));
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return tenants;
-}
-
-function projectFromAPI(
-  project: ProjectCreateResponse | ProjectShowResponse,
-): Project {
-  if (project.kind !== "tenant" && project.kind !== "backing") {
-    throw new Error(`Controller returned unknown project kind ${project.kind}`);
-  }
-  return {
-    id: project.id,
-    tenantId: project.tenant_id ?? null,
-    slug: project.slug,
-    name: project.name,
-    description: project.description,
-    kind: project.kind,
-    deletionTaskId: project.deletion_task_id,
-  };
-}
-
-async function listAllEnvironments(
-  projectId: string,
-  signal?: AbortSignal,
-): Promise<Environment[]> {
-  const environments: Environment[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({ project: projectId, limit: "200" });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<EnvironmentPageResponse>(
-      `/environments?${query}`,
-      200,
-      { signal },
-    );
-    for (const item of page.items ?? []) {
-      const environment = environmentFromAPI(item);
-      environments.push(environment);
-    }
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return Promise.all(
-    environments.map(async (environment) => {
-      const [zones, routes, services, entries, scripts, volumes, components] =
-        await Promise.all([
-          listAllZones(environment.id, signal),
-          listAllRoutes(environment.id, signal),
-          listAllServices(environment.id, signal),
-          listAllEntries(environment.id, signal),
-          listAllScripts(environment.id, signal),
-          listAllVolumes(controllerRequest, environment.id, signal),
-          listAllComponents(environment.id, signal),
-        ]);
-      const [attaches, deploys, releaseGroups] = await Promise.all([
-        listAllAttaches(environment.id, services, signal),
-        listAllReleases(environment.id, services, signal),
-        listAllReleaseGroups(environment.id, services, signal),
-      ]);
-      return {
-        ...environment,
-        ...projectReleaseSummary(deploys),
-        zones,
-        routes,
-        services,
-        entries,
-        scripts,
-        attaches,
-        deploys,
-        releaseGroups,
-        volumes,
-        components,
-      };
-    }),
-  );
-}
-
-async function listAllTenantProjects(signal: AbortSignal): Promise<Project[]> {
-  const projects: Project[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({ kind: "tenant", limit: "200" });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<ProjectPageResponse>(
-      `/projects?${query}`,
-      200,
-      { signal },
-    );
-    projects.push(...(page.items ?? []).map(projectFromAPI));
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return Promise.all(
-    projects.map(async (project) => ({
-      ...project,
-      environments: await listAllEnvironments(project.id, signal),
-    })),
-  );
-}
-
-function backingConsumers(
-  backingProjectId: string,
-  projects: Project[],
-  tenants: Tenant[],
-): NonNullable<Project["consumers"]> {
-  return projects.flatMap((project) => {
-    const tenant = tenants.find(
-      (candidate) => candidate.id === project.tenantId,
-    );
-    return (project.environments ?? []).flatMap((environment) =>
-      environment.attaches
-        .filter((attach) => attach.backingProjectId === backingProjectId)
-        .flatMap((attach) => {
-          const connectionFactKey = attach.factSets
-            .find((set) => !set.grantAttachId)
-            ?.facts.find((fact) => fact.key.endsWith("_URL"))?.key;
-          return [
-            {
-              tenant: tenant?.slug ?? project.tenantId ?? "",
-              project: project.slug,
-              environment: environment.name,
-              service: attach.service,
-              attachId: attach.id,
-              database: attach.database,
-              role: attach.role,
-              connectionFactKey,
-            },
-          ];
-        }),
-    );
-  });
-}
-
-function backingConsumerRevision(
-  projects: Project[],
-  tenants: Tenant[],
-): string {
-  return JSON.stringify({
-    tenants: tenants.map((tenant) => [tenant.id, tenant.slug]),
-    projects: projects.map((project) => [
-      project.id,
-      project.tenantId ?? "",
-      project.slug,
-      (project.environments ?? []).map((environment) => [
-        environment.id,
-        environment.name,
-        environment.attaches.map((attach) => [
-          attach.id,
-          attach.backingProjectId,
-          attach.service,
-          attach.database,
-          attach.role,
-          attach.factSets.map((set) => [
-            set.grantAttachId ?? "",
-            set.facts
-              .filter((fact) => fact.key.endsWith("_URL"))
-              .map((fact) => fact.key),
-          ]),
-        ]),
-      ]),
-    ]),
-  });
-}
-
-async function listAllBackingProjects(
-  tenantProjects: Project[],
-  tenants: Tenant[],
-  signal: AbortSignal,
-): Promise<Project[]> {
-  const facades: BackingServiceResponse[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({ limit: "200" });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<BackingServicePageResponse>(
-      `/backing-services?${query}`,
-      200,
-      { signal },
-    );
-    facades.push(...(page.items ?? []));
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return Promise.all(
-    facades.map(async (facade) => {
-      const [
-        projectResponse,
-        environmentResponse,
-        serviceResponse,
-        zones,
-        entries,
-      ] = await Promise.all([
-        controllerRequest<ProjectShowResponse>(
-          `/projects/${encodeURIComponent(facade.project_id)}`,
-          200,
-          { signal },
-        ),
-        controllerRequest<EnvironmentResponse>(
-          `/environments/${encodeURIComponent(facade.environment_id)}`,
-          200,
-          { signal },
-        ),
-        controllerRequest<ServiceShowResponse>(
-          `/services/${encodeURIComponent(facade.service_id)}`,
-          200,
-          { signal },
-        ),
-        listAllZones(facade.environment_id, signal),
-        listAllEntries(facade.environment_id, signal),
-      ]);
-      const service = {
-        ...serviceFromAPI(serviceResponse),
-        authentication: facade.authentication,
-      };
-      const environment = {
-        ...environmentFromAPI(environmentResponse),
-        zones,
-        services: [service],
-        entries,
-        routes: [],
-        attaches: [],
-        components: [],
-        backup: undefined,
-      };
-      const project = projectFromAPI(projectResponse);
-      return {
-        ...project,
-        environments: [environment],
-        status: environment.status,
-        consumers: backingConsumers(facade.project_id, tenantProjects, tenants),
-      };
-    }),
-  );
-}
-
 type State = ReusableSecretState &
   ConnectorState &
   RunnerState &
@@ -554,6 +261,9 @@ type StoreContext = State &
   ReleaseGroupActions &
   AttachActions &
   EntryActions &
+  TenantActions &
+  ProjectActions &
+  BackingServiceActions &
   ComponentActions &
   ComponentRefreshActions &
   ReturnType<typeof useControllerPlatform> &
@@ -620,26 +330,6 @@ type StoreContext = State &
       service: string,
       tag: string,
     ) => Promise<string>;
-    addTenant: (t: {
-      slug: string;
-      name: string;
-      description: string;
-    }) => Promise<Tenant>;
-    updateTenant: (
-      slug: string,
-      patch: { name: string; description: string },
-    ) => Promise<Tenant>;
-    renameTenant: (slug: string, nextSlug: string) => Promise<Tenant>;
-    removeTenant: (tenantId: string) => Promise<string>;
-    addProject: (p: {
-      tenantId: string;
-      slug: string;
-      name: string;
-      description: string;
-    }) => Promise<Project>;
-    editProject: (projectId: string, name: string) => Promise<Project>;
-    renameProject: (projectId: string, slug: string) => Promise<Project>;
-    deleteProject: (projectId: string) => Promise<string>;
     addEnvironment: (
       projectId: string,
       name: string,
@@ -658,13 +348,6 @@ type StoreContext = State &
       onMalformed: (message: string) => void,
     ) => () => void;
     deleteEnvironment: (envId: string) => Promise<string>;
-    runBackingRuntimeAction: (
-      id: string,
-      action: "start" | "stop" | "destroy",
-    ) => Promise<string>;
-    addBackingProject: (
-      input: BackingServiceCreateRequest,
-    ) => Promise<BackingServiceCreatedResponse>;
   };
 
 const Ctx = createContext<StoreContext | null>(null);
@@ -1364,129 +1047,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           throw new Error("Controller response is missing rollback task_id");
         return accepted.task_id;
       },
-      addTenant: async (tenant) => {
-        const body: TenantCreateRequest = tenant;
-        const created = tenantFromAPI(
-          await controllerRequest<TenantCreateResponse>("/tenants", 201, {
-            method: "POST",
-            body,
-          }),
-        );
-        update((draft) => {
-          draft.tenants.push(created);
-        });
-        return created;
-      },
-      updateTenant: async (slug, patch) => {
-        const current = state.tenants.find((tenant) => tenant.slug === slug);
-        if (!current) throw new Error(`Tenant ${slug} no longer exists`);
-        const body: TenantEditRequest = patch;
-        const updated = tenantFromAPI(
-          await controllerRequest<TenantEditResponse>(
-            `/tenants/${encodeURIComponent(current.id)}`,
-            200,
-            { method: "PATCH", body },
-          ),
-        );
-        update((draft) => {
-          const index = draft.tenants.findIndex(
-            (tenant) => tenant.id === updated.id,
-          );
-          if (index >= 0) draft.tenants[index] = updated;
-        });
-        return updated;
-      },
-      renameTenant: async (slug, nextSlug) => {
-        const current = state.tenants.find((tenant) => tenant.slug === slug);
-        if (!current) throw new Error(`Tenant ${slug} no longer exists`);
-        const body: TenantRenameRequest = { slug: nextSlug };
-        const renamed = tenantFromAPI(
-          await controllerRequest<TenantRenameResponse>(
-            `/tenants/${encodeURIComponent(current.id)}/rename`,
-            200,
-            { method: "POST", body },
-          ),
-        );
-        update((draft) => {
-          const index = draft.tenants.findIndex(
-            (tenant) => tenant.id === renamed.id,
-          );
-          if (index >= 0) draft.tenants[index] = renamed;
-        });
-        return renamed;
-      },
-      removeTenant: async (tenantId) => {
-        const accepted = await controllerRequest<HierarchyTaskAccepted>(
-          `/tenants/${encodeURIComponent(tenantId)}`,
-          202,
-          { method: "DELETE" },
-        );
-        if (!accepted.task_id)
-          throw new Error("Controller response is missing task_id");
-        return accepted.task_id;
-      },
-      addProject: async (project) => {
-        const body: ProjectCreateRequest = {
-          tenant_id: project.tenantId,
-          slug: project.slug,
-          name: project.name,
-          description: project.description,
-        };
-        const created = projectFromAPI(
-          await controllerRequest<ProjectCreateResponse>("/projects", 201, {
-            method: "POST",
-            body,
-          }),
-        );
-        update((draft) => {
-          draft.tenantProjects.push(created);
-        });
-        return created;
-      },
-      editProject: async (projectId, name) => {
-        const body: ProjectEditRequest = { name };
-        const updated = projectFromAPI(
-          await controllerRequest<ProjectEditResponse>(
-            `/projects/${encodeURIComponent(projectId)}`,
-            200,
-            { method: "PATCH", body },
-          ),
-        );
-        update((draft) => {
-          const index = draft.tenantProjects.findIndex(
-            (project) => project.id === updated.id,
-          );
-          if (index >= 0) draft.tenantProjects[index] = updated;
-        });
-        return updated;
-      },
-      renameProject: async (projectId, slug) => {
-        const body: ProjectRenameRequest = { slug };
-        const renamed = projectFromAPI(
-          await controllerRequest<ProjectRenameResponse>(
-            `/projects/${encodeURIComponent(projectId)}/rename`,
-            200,
-            { method: "POST", body },
-          ),
-        );
-        update((draft) => {
-          const index = draft.tenantProjects.findIndex(
-            (project) => project.id === renamed.id,
-          );
-          if (index >= 0) draft.tenantProjects[index] = renamed;
-        });
-        return renamed;
-      },
-      deleteProject: async (projectId) => {
-        const accepted = await controllerRequest<HierarchyTaskAccepted>(
-          `/projects/${encodeURIComponent(projectId)}`,
-          202,
-          { method: "DELETE" },
-        );
-        if (!accepted.task_id)
-          throw new Error("Controller response is missing task_id");
-        return accepted.task_id;
-      },
+      ...createTenantActions(state, update),
+      ...createProjectActions(update),
       addEnvironment: async (projectId, name, networkPool) => {
         const body: EnvironmentCreateRequest = {
           project_id: projectId,
@@ -1834,48 +1396,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       renameRunner,
       retryRunner,
       removeRunner,
-      runBackingRuntimeAction: async (id, action) => {
-        const accepted = await controllerRequest<BackingRuntimeTaskAccepted>(
-          `/backing-services/${encodeURIComponent(id)}/${action}`,
-          202,
-          { method: "POST" },
-        );
-        const intent: ServiceRuntimeIntent =
-          action === "start"
-            ? "running"
-            : action === "stop"
-              ? "stopped"
-              : "absent";
-        update((d) => {
-          const project = d.backingProjects.find(
-            (candidate) => candidate.id === id,
-          );
-          project?.environments?.forEach((environment) => {
-            environment.services.forEach((service) => {
-              service.runtimeIntent = intent;
-            });
-          });
-        });
-        return requireTaskId(accepted, `Backing service ${action}`);
-      },
-      addBackingProject: async (input) => {
-        const created = await controllerRequest<BackingServiceCreatedResponse>(
-          "/backing-services",
-          201,
-          { method: "POST", body: input },
-        );
-        requireTaskId(created, "Backing service creation");
-        const backingProjects = await listAllBackingProjects(
-          state.tenantProjects,
-          state.tenants,
-          new AbortController().signal,
-        );
-        update((draft) => {
-          draft.backingProjects = backingProjects;
-          draft.backingProjectError = null;
-        });
-        return created;
-      },
+      ...createBackingServiceActions(state, update),
       ...createComponentActions(),
     };
   }, [
