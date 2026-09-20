@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -70,8 +71,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		} else if (step.GetEnvironmentDirectoryCreate() != nil || step.GetEnvironmentDirectoryRemove() != nil ||
 			step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetManagedVolumeDirectoryRemove() != nil) &&
 			p.environmentDirectories != nil {
-			var stepResult environmentDirectoryStepResult
-			stepResult, err = p.environmentDirectories.executeStep(stepCtx, reservation.assignment, step, p.CheckpointVolumeRemoval)
+			var stepResult directoryruntime.StepResult
+			stepResult, err = p.environmentDirectories.ExecuteStep(stepCtx, reservation.assignment, step, p.CheckpointVolumeRemoval)
 			if stepResult.ExitCode != 0 {
 				exitCode = stepResult.ExitCode
 			}

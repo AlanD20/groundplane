@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	scriptruntime "github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	"github.com/AlanD20/groundplane/internal/componentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
@@ -51,7 +52,7 @@ type ownedComposeObserver interface {
 }
 
 type ownedEnvironmentDirectoryHelper interface {
-	agent.EnvironmentDirectoryHelper
+	directoryruntime.Helper
 	io.Closer
 }
 
@@ -125,7 +126,7 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, resources.Close())
 	}
-	directories, err := agent.NewEnvironmentDirectoryRuntime(directoryHelper)
+	directories, err := directoryruntime.New(directoryHelper)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err, errors.Join(directoryHelper.Close(), resources.Close()))
 	}

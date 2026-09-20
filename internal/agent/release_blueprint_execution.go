@@ -28,7 +28,7 @@ func (p *WorkerPool) executeBlueprintReleaseSetup(
 		result, err := p.adapter.ExecuteStep(ctx, step)
 		return composeStepResult{ExitCode: result.ExitCode}, err
 	case *agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure, *agentpb.ExecutionStep_EnvironmentDirectoryCreate:
-		result, err := p.environmentDirectories.executeStep(ctx, assignment, step, p.CheckpointVolumeRemoval)
+		result, err := p.environmentDirectories.ExecuteStep(ctx, assignment, step, p.CheckpointVolumeRemoval)
 		return composeStepResult{ExitCode: result.ExitCode}, err
 	default:
 		return composeStepResult{}, errs.New(errs.KindInternal, "agent: unsupported Blueprint Release setup step")

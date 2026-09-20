@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"log/slog"
@@ -50,7 +51,7 @@ type WorkerPool struct {
 	outputs                chan WorkerOutput
 	executeStep            func(context.Context, *agentpb.ExecutionStep) error
 	compose                *ComposeRuntime
-	environmentDirectories *EnvironmentDirectoryRuntime
+	environmentDirectories *directoryruntime.Runtime
 	materializer           *MaterializationRuntime
 	adapter                *backingadapter.Runtime
 	componentActions       ComponentActionRuntime
@@ -100,7 +101,7 @@ func NewWorkerPoolWithRuntimes(
 	taskRunner runner.Runner,
 	logger *slog.Logger,
 	compose *ComposeRuntime,
-	environmentDirectories *EnvironmentDirectoryRuntime,
+	environmentDirectories *directoryruntime.Runtime,
 	materializer *MaterializationRuntime,
 ) *WorkerPool {
 	pool := NewWorkerPool(size, volumeRoot, taskRunner, logger)

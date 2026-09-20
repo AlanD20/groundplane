@@ -21,7 +21,7 @@ func (runtime *ComposeRuntime) ensureManagedComposeResource(
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID,
 		TaskId: assignment.TaskID, OperationId: assignment.OperationID,
 		Plan: assignment.Plan, StepId: step.GetStepId(),
-		TimeoutSeconds: remainingSeconds(ctx, step.GetTimeoutSeconds()),
+		TimeoutSeconds: taskassignment.RemainingSeconds(ctx, step.GetTimeoutSeconds()),
 	})
 	if err != nil {
 		result.ReconciliationRequired = true

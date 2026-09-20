@@ -22,7 +22,7 @@ func (runtime *ComposeRuntime) candidateRestoration(
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
 		OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.GetStepId(),
-		TimeoutSeconds: remainingSeconds(
+		TimeoutSeconds: taskassignment.RemainingSeconds(
 			ctx,
 			step.GetTimeoutSeconds(),
 		), RestorationAuthority: assignment.RestorationAuthority,
@@ -67,7 +67,7 @@ func (runtime *ComposeRuntime) proxyProcedure(
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
 		OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.GetStepId(),
-		TimeoutSeconds: remainingSeconds(ctx, step.GetTimeoutSeconds()),
+		TimeoutSeconds: taskassignment.RemainingSeconds(ctx, step.GetTimeoutSeconds()),
 	})
 	if err != nil || response == nil {
 		result.ReconciliationRequired = true

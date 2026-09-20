@@ -202,7 +202,7 @@ func (runtime *ComposeRuntime) removeManagedVolume(
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID,
 		TaskId: assignment.TaskID, OperationId: assignment.OperationID,
 		Plan: assignment.Plan, StepId: step.GetStepId(),
-		TimeoutSeconds: remainingSeconds(ctx, step.GetTimeoutSeconds()),
+		TimeoutSeconds: taskassignment.RemainingSeconds(ctx, step.GetTimeoutSeconds()),
 	})
 	if err != nil {
 		result.ReconciliationRequired = true
@@ -232,7 +232,7 @@ func (runtime *ComposeRuntime) removeManagedNetwork(
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID,
 		TaskId: assignment.TaskID, OperationId: assignment.OperationID,
 		Plan: assignment.Plan, StepId: step.GetStepId(),
-		TimeoutSeconds: remainingSeconds(ctx, step.GetTimeoutSeconds()),
+		TimeoutSeconds: taskassignment.RemainingSeconds(ctx, step.GetTimeoutSeconds()),
 	})
 	if err != nil {
 		result.ReconciliationRequired = true
@@ -278,7 +278,7 @@ func (runtime *ComposeRuntime) mutate(
 		OperationId:    assignment.OperationID,
 		Plan:           assignment.Plan,
 		StepId:         step.GetStepId(),
-		TimeoutSeconds: remainingSeconds(ctx, step.GetTimeoutSeconds()),
+		TimeoutSeconds: taskassignment.RemainingSeconds(ctx, step.GetTimeoutSeconds()),
 	})
 
 	observed, observeErr := runtime.observeAfterMutation(ctx, assignment.Plan, artifactID)
@@ -471,20 +471,4 @@ func selectedIncludes(selected map[string]struct{}, serviceID string) bool {
 	}
 	_, ok := selected[serviceID]
 	return ok
-}
-
-func remainingSeconds(ctx context.Context, maximum uint32) uint32 {
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		return maximum
-	}
-	remaining := time.Until(deadline)
-	if remaining <= 0 {
-		return 1
-	}
-	seconds := uint32((remaining + time.Second - 1) / time.Second)
-	if seconds > maximum {
-		return maximum
-	}
-	return seconds
 }

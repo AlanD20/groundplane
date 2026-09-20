@@ -1,4 +1,4 @@
-package agent
+package environmentdirectory
 
 import (
 	"bytes"
@@ -14,11 +14,11 @@ import (
 
 type volumeRemovalCheckpoint func(context.Context, *agentpb.VolumeRemovalCheckpointRequest) (*agentpb.VolumeRemovalCheckpointAck, error)
 
-func (runtime *EnvironmentDirectoryRuntime) executeVolumeRemoval(
+func (runtime *Runtime) executeVolumeRemoval(
 	ctx context.Context, assignment taskassignment.Assignment, step *agentpb.ExecutionStep, checkpoint volumeRemovalCheckpoint,
-) (environmentDirectoryStepResult, error) {
+) (StepResult, error) {
 	if checkpoint == nil || runtime == nil || runtime.helper == nil || step.GetManagedVolumeDirectoryRemove() == nil {
-		return environmentDirectoryStepResult{}, errs.New(
+		return StepResult{}, errs.New(
 			errs.KindInternal,
 			"agent: Volume removal checkpoint runtime is required",
 		)
@@ -27,7 +27,7 @@ func (runtime *EnvironmentDirectoryRuntime) executeVolumeRemoval(
 		RequestId: ids.NewULID(), TaskId: assignment.TaskID, OperationId: assignment.OperationID,
 		AssignmentId: assignment.AssignmentID, StepId: step.StepId, PlanHash: assignment.Plan.PlanHash, ConsumersDetached: true,
 	}
-	var result environmentDirectoryStepResult
+	var result StepResult
 	for {
 		ack, err := checkpoint(ctx, request)
 		if err != nil {
@@ -51,7 +51,7 @@ func (runtime *EnvironmentDirectoryRuntime) executeVolumeRemoval(
 			AssignmentId: assignment.AssignmentID, StepId: step.StepId, Plan: assignment.Plan,
 			TimeoutSeconds: min(
 				uint32(30),
-				remainingSeconds(ctx, step.TimeoutSeconds),
+				taskassignment.RemainingSeconds(ctx, step.TimeoutSeconds),
 			), VolumeRemovalPendingPath: ack.PendingPath,
 		})
 		if err != nil {
@@ -73,7 +73,7 @@ func (runtime *EnvironmentDirectoryRuntime) executeVolumeRemoval(
 		}
 		// Never report completion until the Controller has acknowledged the
 		// exact helper result. On failure the durable pending call stays retained.
-		result = environmentDirectoryStepResult{MutationCount: completion.MutationCount,
+		result = StepResult{MutationCount: completion.MutationCount,
 			NextCursor: append(
 				[]byte(nil),
 				completion.NextCursor...), ResponseSHA256: append([]byte(nil), completion.ResponseSHA256[:]...)}

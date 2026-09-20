@@ -1,4 +1,4 @@
-package agent
+package environmentdirectory
 
 import (
 	"context"
@@ -10,18 +10,18 @@ import (
 
 const environmentDirectoryHelperSchema = 1
 
-type EnvironmentDirectoryHelper interface {
+type Helper interface {
 	Execute(
 		context.Context,
 		*agentpb.EnvironmentDirectoryHelperRequest,
 	) (*agentpb.EnvironmentDirectoryHelperResponse, error)
 }
 
-type EnvironmentDirectoryRuntime struct {
-	helper EnvironmentDirectoryHelper
+type Runtime struct {
+	helper Helper
 }
 
-type environmentDirectoryStepResult struct {
+type StepResult struct {
 	ExitCode       int32
 	FailedStepID   string
 	NextCursor     []byte
@@ -30,36 +30,36 @@ type environmentDirectoryStepResult struct {
 	ResponseSHA256 []byte
 }
 
-func NewEnvironmentDirectoryRuntime(
-	helper EnvironmentDirectoryHelper,
-) (*EnvironmentDirectoryRuntime, error) {
+func New(
+	helper Helper,
+) (*Runtime, error) {
 	if helper == nil {
 		return nil, errs.New(errs.KindValidationFailed, "agent: Environment directory helper is required")
 	}
-	return &EnvironmentDirectoryRuntime{helper: helper}, nil
+	return &Runtime{helper: helper}, nil
 }
 
-func (runtime *EnvironmentDirectoryRuntime) executeStep(
+func (runtime *Runtime) ExecuteStep(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	checkpoint volumeRemovalCheckpoint,
-) (environmentDirectoryStepResult, error) {
+) (StepResult, error) {
 	if runtime == nil || runtime.helper == nil {
-		return environmentDirectoryStepResult{}, errs.New(
+		return StepResult{}, errs.New(
 			errs.KindInternal,
 			"agent: Environment directory runtime is not configured",
 		)
 	}
 	if err := ctx.Err(); err != nil {
-		return environmentDirectoryStepResult{}, err
+		return StepResult{}, err
 	}
 	if step.GetManagedVolumeDirectoryRemove() != nil {
 		return runtime.executeVolumeRemoval(ctx, assignment, step, checkpoint)
 	}
 	if step.GetEnvironmentDirectoryCreate() == nil && step.GetEnvironmentDirectoryRemove() == nil &&
 		step.GetManagedVolumeDirectoriesEnsure() == nil && step.GetManagedVolumeDirectoryRemove() == nil {
-		return environmentDirectoryStepResult{}, errs.New(
+		return StepResult{}, errs.New(
 			errs.KindInternal,
 			"agent: Environment directory runtime received an unsupported step",
 		)
@@ -69,18 +69,18 @@ func (runtime *EnvironmentDirectoryRuntime) executeStep(
 		AssignmentId: assignment.AssignmentID,
 		TaskId:       assignment.TaskID, OperationId: assignment.OperationID,
 		Plan: assignment.Plan, StepId: step.StepId,
-		TimeoutSeconds: remainingSeconds(ctx, step.TimeoutSeconds),
+		TimeoutSeconds: taskassignment.RemainingSeconds(ctx, step.TimeoutSeconds),
 	})
 	if err != nil {
-		return environmentDirectoryStepResult{}, err
+		return StepResult{}, err
 	}
 	if response == nil || response.Schema != environmentDirectoryHelperSchema || response.ExitCode < 0 {
-		return environmentDirectoryStepResult{}, errs.New(
+		return StepResult{}, errs.New(
 			errs.KindInternal,
 			"agent: Environment directory helper returned an invalid response",
 		)
 	}
-	result := environmentDirectoryStepResult{
+	result := StepResult{
 		ExitCode: response.ExitCode, FailedStepID: response.FailedStepId,
 		NextCursor: append([]byte(nil), response.NextCursor...), MutationCount: response.MutationCount,
 		Complete: response.Complete, ResponseSHA256: append([]byte(nil), response.ResponseSha256...),
