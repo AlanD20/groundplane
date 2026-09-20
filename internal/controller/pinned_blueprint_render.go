@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
+	"maps"
 )
 
 type pinnedEnvironmentBlueprintArtifact struct {
@@ -215,7 +216,7 @@ func (resolver *TaskPlanResolver) parsePinnedEnvironmentBlueprint(
 	bundle := core.BlueprintBundle{
 		RootPath:       revision.Record.RootPath,
 		ComposeSources: append([]string(nil), revision.Record.ComposeSources...),
-		Interpolation:  cloneBlueprintInterpolation(revision.Record.Interpolation),
+		Interpolation:  maps.Clone(revision.Record.Interpolation),
 		Files:          make([]core.BlueprintFile, len(revision.Record.Files)),
 	}
 	for index, file := range revision.Record.Files {

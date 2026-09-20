@@ -8,7 +8,9 @@ import (
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	backupcapability "github.com/AlanD20/groundplane/internal/controller/backup"
 	taskdispatch "github.com/AlanD20/groundplane/internal/controller/controllertask/dispatch"
+	handlers "github.com/AlanD20/groundplane/internal/controller/handlers"
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
+	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"log/slog"
 	"os"
@@ -1197,7 +1199,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Service reads: %w", err)
 	}
-	srv := controller.New(store, logger, controller.Options{
+	srv := handlers.New(store, logger, handlers.Options{
 		Host: platform.host, ControllerConfig: controllerConfig, ControllerUpdates: platform.upgrades,
 		OnHTTPReady: platform.readiness.MarkHTTPReady, MutationAdmission: platform.upgrades,
 		Agents: platform.reads, AgentMutations: platform.mutations, Tenants: hierarchyService,
@@ -1261,7 +1263,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Logger:          logger,
 		server:          srv,
 		agent:           agentRuntime,
-		scheduler:       controller.NewScheduler(srv, tick, tasks, idempotency, staleTasks, backupSchedules),
+		scheduler:       scheduler.New(logger, platform.upgrades, tick, tasks, idempotency, staleTasks, backupSchedules),
 		controllerTasks: controllerTaskRunner,
 		localAgent:      platform.reconciliation,
 		attachMutations: attachMutations,

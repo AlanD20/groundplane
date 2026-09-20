@@ -5,9 +5,8 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	handlers "github.com/AlanD20/groundplane/internal/controller/handlers"
 	"os"
-
-	"github.com/AlanD20/groundplane/internal/controller"
 )
 
 func main() {
@@ -23,7 +22,7 @@ func run() error {
 	if *output == "" {
 		return errors.New("-output is required")
 	}
-	document, err := controller.New(nil, nil, controller.Options{}).OpenAPIDocument()
+	document, err := handlers.New(nil, nil, handlers.Options{}).OpenAPIDocument()
 	if err != nil {
 		return err
 	}
