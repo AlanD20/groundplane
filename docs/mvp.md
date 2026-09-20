@@ -146,7 +146,7 @@ docker recovery is systemd's job (`docker.service` restarts itself), and the
 Controller reconciles the Agent container when Docker returns. It updates
 itself through a native Controller Task using a digest-pinned staged release,
 bounded active-work drain and predecessor-owned recovery (ADR0074). The normal
-surfaces are Update on `/platform/controller`, `groundplane controller update
+surfaces are Update on `/platform/host/controller`, `groundplane controller update
 --release sha256:<digest>` and `POST /controller/update`. An immutable manifest
 pins the Controller binary and Agent image; storage epoch and channel schema
 must match before activation. The 600-second Task survives the brief API
@@ -185,8 +185,10 @@ The Console shows this on the **Platform page**: an overview
 (components, bootstrap chain, agents), and **one page per Component with
 its own settings** (`/platform/components/coredns`). Agent configuration
 remains on the Agent resource and never creates a Component projection.
-The native Controller has its own `/platform/controller` page for the exact
-startup YAML document, while the Agent has its own `/platform/agents/{id}`
+The Host page owns Controller settings and the Agent table, including join,
+update and removal actions. Components does not duplicate Agent management.
+The Controller uses `/platform/host/controller` for the exact
+startup YAML document, while the Agent uses `/platform/host/agents/{id}`
 page for durable runtime configuration. The Platform Host page is health and
 capacity only and never duplicates either settings editor.
 Platform Component settings live here, never in the

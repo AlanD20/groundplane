@@ -27,7 +27,7 @@ export function resolveTaskOperationSurface(
   const target = task.target
 
   if (task.workspaceType === 'platform' && task.type === 'update' && target === 'controller') {
-    return exact('/platform/controller', 'Open Controller')
+    return exact('/platform/host/controller', 'Open Controller')
   }
 
   // Immutable Environment ownership always selects the Environment Tasks tab.
@@ -52,7 +52,7 @@ export function resolveTaskOperationSurface(
   }
 
   const agent = context.platform.agents.find((candidate) => candidate.id === target)
-  if (agent) return exact(`/platform/agents/${segment(agent.id)}`, 'Open Agent')
+  if (agent) return exact(`/platform/host/agents/${segment(agent.id)}`, 'Open Agent')
 
   const component = context.platform.components.find((candidate) => candidate.id === target)
   if (component) {

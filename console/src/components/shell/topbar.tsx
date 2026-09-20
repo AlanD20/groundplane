@@ -34,8 +34,6 @@ function buildCrumbs(
       overview: 'Overview',
       'backing-services': 'Backing services',
       components: 'Components',
-      controller: 'Controller',
-      agents: 'Agent',
       activity: 'Activity',
       secrets: 'Secret store',
       host: 'Host',
@@ -43,6 +41,11 @@ function buildCrumbs(
     }
     const crumbs: Crumb[] = [{ label: 'Platform', href: '/platform/overview' }]
     if (parts[1]) crumbs.push({ label: map[parts[1]] ?? parts[1], href: `/platform/${parts[1]}` })
+    if (parts[1] === 'host') {
+      if (parts[2] === 'controller') crumbs.push({ label: 'Controller' })
+      if (parts[2] === 'agents' && parts[3]) crumbs.push({ label: `Agent / ${lookups.agentName(parts[3])}` })
+      return crumbs
+    }
     if (parts[2]) {
       crumbs.push({
         label: parts[1] === 'agents' ? lookups.agentName(parts[2]) : lookups.backingProjectName(parts[2]),
@@ -71,8 +74,6 @@ const PLATFORM_SECTIONS: CrumbOption[] = [
   { label: 'Overview', href: '/platform/overview' },
   { label: 'Backing services', href: '/platform/backing-services' },
   { label: 'Components', href: '/platform/components' },
-  { label: 'Controller', href: '/platform/controller' },
-  { label: 'Agent', href: '/platform/agents' },
   { label: 'Activity', href: '/platform/activity' },
   { label: 'Secret store', href: '/platform/secrets' },
   { label: 'Host', href: '/platform/host' },
@@ -108,7 +109,11 @@ function attachOptions(
 
     if (parts[0] === 'platform') {
       if (i === 1) return { ...c, options: PLATFORM_SECTIONS }
-      if (i === 2) return { ...c, options: backingProjects }
+      if (i === 2 && parts[1] === 'host') return { ...c, options: [
+        { label: 'Controller', href: '/platform/host/controller' },
+        ...store.platform.agents.map(agent => ({ label: `Agent / ${agent.host}`, href: `/platform/host/agents/${agent.id}` })),
+      ] }
+      if (i === 2 && parts[1] === 'backing-services') return { ...c, options: backingProjects }
     }
 
     if (parts[0] === 't') {

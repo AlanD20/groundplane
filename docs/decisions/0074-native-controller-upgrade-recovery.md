@@ -23,7 +23,7 @@ Equal storage epoch and channel schema are mandatory; this operation does not
 migrate incompatible state. Distribution and signatures remain deployment
 concerns. No HTTP upload, arbitrary path/URL, shell command or plugin input.
 
-Normal surfaces: Update on `/platform/controller`, `groundplane controller
+Normal surfaces: Update on `/platform/host/controller`, `groundplane controller
 update --release sha256:<digest>`, and `POST /controller/update` with
 `{release:"sha256:<digest>"}` → `202 {task_id}`. Existing Host reads expose
 installed Controller digest, staged candidate and latest update summary. The

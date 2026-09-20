@@ -67,7 +67,9 @@ These display-grade values do not replace monitoring or alerting.
 
 ### Controller and Agent settings
 
-Dedicated Console pages are `/platform/controller` and `/platform/agents/{id}`.
+Host owns the Agent table and links to `/platform/host/controller` and
+`/platform/host/agents/{id}`. Controller and Agent have no standalone sidebar
+entries; Components does not duplicate their management.
 The Agent config singleton remains the sole Agent authority with immediate
 drain-and-reconfigure semantics; configuration does not restart running Tasks.
 

@@ -6,16 +6,17 @@ import { useStore } from '@/lib/store'
 import { PageHeader } from '@/components/common/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { StatusBadge } from '@/components/common/status-badge'
+import { HostAgentsTable } from './host-agents-table'
 import { MetaPill } from '@/components/common/meta-pill'
 
 export default function PlatformHostPage() {
-  const { host, hostLoading, hostError, platform } = useStore()
+  const { host, hostLoading, hostError } = useStore()
   if (!host) {
     return (
       <div className="flex flex-col gap-6">
         <PageHeader
           title="Host"
-          description="The Controller and Agent on this machine — one host, one control plane, one execution plane."
+          description="Machine health, Controller settings and local Agents."
           icon={<Server />}
         />
         <Card>
@@ -23,15 +24,16 @@ export default function PlatformHostPage() {
             {hostLoading ? 'Loading live Host health…' : (hostError ?? 'Host health is unavailable.')}
           </CardContent>
         </Card>
+        <Link to="/platform/host/controller" className="text-sm text-primary">Controller settings</Link>
+        <HostAgentsTable />
       </div>
     )
   }
-  const agent = platform.agents[0]
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Host"
-        description="The Controller and Agent on this machine — one host, one control plane, one execution plane."
+        description="Machine health, Controller settings and local Agents."
         icon={<Server />}
         meta={
           <>
@@ -48,7 +50,7 @@ export default function PlatformHostPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid gap-4">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center justify-between text-sm">
@@ -59,31 +61,12 @@ export default function PlatformHostPage() {
                 <Row label="Runtime" value={host.controller.service} mono />
                 <Row label="Version" value={host.controller.version} mono />
                 <Row label="Storage" value={`etcd · ${host.etcd.node}`} mono />
-                <Link to="/platform/controller" className="mt-2 text-xs font-medium text-primary hover:underline">
+                <Link to="/platform/host/controller" className="mt-2 text-xs font-medium text-primary hover:underline">
                   Open Controller settings
                 </Link>
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between text-sm">
-                  Agent <StatusBadge status={host.agent.status} />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-1.5 text-sm">
-                <Row label="Runtime" value="container · ECS-agent pattern" />
-                <Row label="Lifecycle owner" value="Controller daemon" />
-                <Row label="Task model" value="pulls tasks · acks on completion" />
-                <Row label="Max concurrent tasks" value={`${host.agent.maxConcurrent} · controller-config`} mono />
-                <Row label="Pull interval" value={`${host.agent.pullInterval} · heartbeat`} mono />
-                <Link
-                  to={agent ? `/platform/agents/${agent.id}` : '/platform/agents'}
-                  className="mt-2 text-xs font-medium text-primary hover:underline"
-                >
-                  Open Agent settings
-                </Link>
-              </CardContent>
-            </Card>
+
           </div>
 
           <Card>
@@ -130,6 +113,7 @@ export default function PlatformHostPage() {
           </Card>
         </div>
       </div>
+      <HostAgentsTable />
     </div>
   )
 }

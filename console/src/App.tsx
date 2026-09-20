@@ -10,9 +10,8 @@ const PlatformSecrets = lazy(() => import('@/routes/platform/secrets/page'))
 const PlatformHost = lazy(() => import('@/routes/platform/host/page'))
 const PlatformComponents = lazy(() => import('@/routes/platform/components/page'))
 const PlatformComponent = lazy(() => import('@/routes/platform/components/[component]/page'))
-const PlatformController = lazy(() => import('@/routes/platform/controller/page'))
-const PlatformAgents = lazy(() => import('@/routes/platform/agents/page'))
-const PlatformAgent = lazy(() => import('@/routes/platform/agents/[id]/page'))
+const PlatformController = lazy(() => import('@/routes/platform/host/controller/page'))
+const PlatformAgent = lazy(() => import('@/routes/platform/host/agents/[id]/page'))
 const PlatformSettings = lazy(() => import('@/routes/platform/settings/page'))
 const TenantOverview = lazy(() => import('@/routes/t/[tenant]/page'))
 const TenantRunners = lazy(() => import('@/routes/t/[tenant]/runners/page'))
@@ -40,9 +39,8 @@ export default function App() {
           <Route path="/platform/host" element={<PlatformHost />} />
           <Route path="/platform/components" element={<PlatformComponents />} />
           <Route path="/platform/components/:component" element={<PlatformComponent />} />
-          <Route path="/platform/controller" element={<PlatformController />} />
-          <Route path="/platform/agents" element={<PlatformAgents />} />
-          <Route path="/platform/agents/:id" element={<PlatformAgent />} />
+          <Route path="/platform/host/controller" element={<PlatformController />} />
+          <Route path="/platform/host/agents/:id" element={<PlatformAgent />} />
           <Route path="/platform/settings" element={<PlatformSettings />} />
           <Route path="/t/:tenant" element={<TenantOverview />} />
           <Route path="/t/:tenant/runners" element={<TenantRunners />} />

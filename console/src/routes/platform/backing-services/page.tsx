@@ -224,8 +224,9 @@ export default function PlatformBackingServicesPage() {
             </div>
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
               <Checkbox checked={zoneInternal} onChange={(event) => setZoneInternal(event.target.checked)} />
-              Isolate this backing Zone from outbound host traffic
+              Internal network (no external access through this zone)
             </label>
+            <p className="text-xs text-muted-foreground sm:col-span-2">Services on this zone can communicate with each other. External access requires another, non-internal zone. This does not change the host&apos;s internet access.</p>
             {adapter === 'valkey:9' && authentication === 'none' && (
               <p role="status" className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning sm:col-span-2">
                 Any client that can reach this backing service can access it without authentication.
