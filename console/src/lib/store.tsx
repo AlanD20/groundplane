@@ -2,10 +2,10 @@
 import { listAllReleases, projectReleaseSummary } from "@/features/release/api";
 import { listAllAgents } from "@/features/agent/api";
 import {
-  loadPendingConnectorRemovals,
-  persistPendingConnectorRemovals,
-  type PendingConnectorRemoval,
-} from "@/features/connectors/removal-storage";
+  useConnectorStore,
+  type ConnectorState,
+  type ConnectorActions,
+} from "@/features/connectors/use-connector-store";
 import {
   scriptFromAPI,
   scriptCreateToAPI,
@@ -33,10 +33,7 @@ import {
   type ReusableSecretState,
   type ReusableSecretActions,
 } from "@/features/secrets/secret-store";
-import {
-  controllerUpdateRejected,
-  isTaskNotFoundError,
-} from "./controller-request-errors";
+import { controllerUpdateRejected } from "./controller-request-errors";
 import { applyServiceObservations } from "@/features/service/service-observation";
 import {
   releaseForServiceName,
@@ -65,15 +62,10 @@ import type {
 } from "@/features/backing-service/api";
 import { hydratePlatformComponents } from "./platform-component-hydration";
 import { useControllerPlatform } from "@/features/platform-controller/use-controller-platform";
-import type { ConnectorMutationIntent } from "./connector-intent";
 import type {
   HealthState,
   ActivityEntry,
   Attach,
-  Connector,
-  ConnectorCreateInput,
-  ConnectorCredential,
-  ConnectorCredentialInput,
   EnvFile,
   Environment,
   EnvironmentEntry,
@@ -279,14 +271,6 @@ type BackingServicePageResponse =
 type BackingServiceResponse = NonNullable<
   BackingServicePageResponse["items"]
 >[number];
-type ConnectorPageResponse =
-  operations["connector.list"]["responses"][200]["content"]["application/json"];
-type ConnectorResponse =
-  operations["connector.create"]["responses"][201]["content"]["application/json"];
-type ConnectorCreateRequest =
-  operations["connector.create"]["requestBody"]["content"]["application/json"];
-type ConnectorTaskAccepted =
-  operations["connector.remove"]["responses"][202]["content"]["application/json"];
 type AgentTaskAccepted =
   operations["agent.join"]["responses"][202]["content"]["application/json"];
 type AgentConfigResponse =
@@ -1038,77 +1022,6 @@ async function listAllBackingProjects(
   );
 }
 
-function connectorFromAPI(connector: ConnectorResponse): Connector {
-  const credential = (
-    name: "access_key" | "secret_key",
-  ): ConnectorCredential => {
-    const source = connector.credentials[name];
-    if (!source)
-      throw new Error(
-        `Controller returned Connector ${connector.id} without ${name}`,
-      );
-    if (source.kind === "secret_ref" && source.secret_ref)
-      return { kind: "ref", name: source.secret_ref };
-    if (source.kind === "direct") return { kind: "direct" };
-    throw new Error(`Controller returned invalid Connector credential ${name}`);
-  };
-  if (connector.kind !== "s3-compatible") {
-    throw new Error(
-      `Controller returned unknown Connector kind ${connector.kind}`,
-    );
-  }
-  return {
-    id: connector.id,
-    name: connector.name,
-    kind: connector.kind,
-    scope: "environment",
-    scopeRef: connector.environment_id,
-    endpoint: connector.endpoint,
-    bucket: connector.bucket,
-    prefix: connector.prefix ?? "",
-    region: connector.region,
-    pathStyle: connector.path_style,
-    credentials: {
-      accessKey: credential("access_key"),
-      secretKey: credential("secret_key"),
-    },
-  };
-}
-
-async function listEnvironmentConnectors(
-  environmentId: string,
-  signal: AbortSignal,
-): Promise<Connector[]> {
-  const connectors: Connector[] = [];
-  let cursor = "";
-  do {
-    const query = new URLSearchParams({
-      environment: environmentId,
-      limit: "200",
-    });
-    if (cursor) query.set("cursor", cursor);
-    const page = await controllerRequest<ConnectorPageResponse>(
-      `/connectors?${query}`,
-      200,
-      { signal },
-    );
-    connectors.push(...(page.items ?? []).map(connectorFromAPI));
-    cursor = page.next_cursor ?? "";
-  } while (cursor);
-  return connectors;
-}
-
-async function listAllConnectors(
-  environmentIds: string[],
-  signal: AbortSignal,
-): Promise<Connector[]> {
-  return (
-    await Promise.all(
-      environmentIds.map((id) => listEnvironmentConnectors(id, signal)),
-    )
-  ).flat();
-}
-
 function refreshReleaseGroupTags(environment: Environment) {
   for (const group of environment.releaseGroups) {
     const activeTags = group.order.map(
@@ -1125,39 +1038,37 @@ function refreshReleaseGroupTags(environment: Environment) {
   }
 }
 
-type State = ReusableSecretState & {
-  // UI preference: typed confirmation before revealing a secret value
-  requireRevealConfirm: boolean;
-  tenants: Tenant[];
-  tenantsLoading: boolean;
-  tenantError: string | null;
-  tenantProjects: Project[];
-  projectsLoading: boolean;
-  projectError: string | null;
-  environmentDeletionRevision: number;
-  backingProjects: Project[];
-  backingProjectsLoading: boolean;
-  backingProjectError: string | null;
-  runners: Runner[];
-  runnersLoading: boolean;
-  runnerError: string | null;
-  connectors: Connector[];
-  connectorsLoading: boolean;
-  connectorError: string | null;
-  activity: ActivityEntry[];
-  taskJournals: Record<string, TaskJournalState>;
-  platform: PlatformInfra;
-  platformComponentsLoading: boolean;
-  platformComponentError: string | null;
-  managedConfigFiles: ManagedConfigFile[];
-  managedConfigLoading: boolean;
-  managedConfigError: string | null;
-  agentsLoading: boolean;
-  agentError: string | null;
-  agentConfig: AgentConfigResponse | null;
-  agentConfigLoading: boolean;
-  agentConfigError: string | null;
-};
+type State = ReusableSecretState &
+  ConnectorState & {
+    // UI preference: typed confirmation before revealing a secret value
+    requireRevealConfirm: boolean;
+    tenants: Tenant[];
+    tenantsLoading: boolean;
+    tenantError: string | null;
+    tenantProjects: Project[];
+    projectsLoading: boolean;
+    projectError: string | null;
+    environmentDeletionRevision: number;
+    backingProjects: Project[];
+    backingProjectsLoading: boolean;
+    backingProjectError: string | null;
+    runners: Runner[];
+    runnersLoading: boolean;
+    runnerError: string | null;
+    activity: ActivityEntry[];
+    taskJournals: Record<string, TaskJournalState>;
+    platform: PlatformInfra;
+    platformComponentsLoading: boolean;
+    platformComponentError: string | null;
+    managedConfigFiles: ManagedConfigFile[];
+    managedConfigLoading: boolean;
+    managedConfigError: string | null;
+    agentsLoading: boolean;
+    agentError: string | null;
+    agentConfig: AgentConfigResponse | null;
+    agentConfigLoading: boolean;
+    agentConfigError: string | null;
+  };
 
 function seed(): State {
   let requireRevealConfirm = false;
@@ -1208,6 +1119,7 @@ function seed(): State {
 type StoreContext = State &
   BlueprintActions &
   ReusableSecretActions &
+  ConnectorActions &
   ReturnType<typeof useControllerPlatform> &
   ReturnType<typeof useBackupStore> & {
     adapters: typeof seedAdapters;
@@ -1443,14 +1355,6 @@ type StoreContext = State &
     ) => Promise<EnvironmentEntry>;
     removeEntry: (envId: string, entryId: string) => Promise<string>;
     revealEntry: (entryId: string) => Promise<string>;
-    addConnector: (
-      c: ConnectorCreateInput,
-      intent: ConnectorMutationIntent,
-    ) => Promise<Connector>;
-    removeConnector: (
-      id: string,
-      intent: ConnectorMutationIntent,
-    ) => Promise<string>;
     refreshRunners: (tenantId: string, projectIds: string[]) => Promise<void>;
     createRunner: (input: {
       slug: string;
@@ -1499,15 +1403,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     new Map<string, { envId: string; zoneId: string }>(),
   );
   const taskEventSources = useRef(new Set<EventSource>());
-  const pendingConnectorRemovals = useRef(loadPendingConnectorRemovals());
   const environmentMutationIntents = useRef(loadEnvironmentMutationIntents());
-  const connectorRemovalPolls = useRef(new Set<string>());
-  const connectorRemovalRequests = useRef(new Map<string, Promise<string>>());
-  const connectorFullLoadGeneration = useRef(0);
-  const connectorEnvironmentGenerations = useRef(new Map<string, number>());
-  const connectorRemovalPollBackoff = useRef(
-    new Map<string, { failures: number; nextAttemptAt: number }>(),
-  );
   const taskJournalEpochs = useRef(new Map<string, number>());
 
   const update = useCallback((fn: (draft: State) => void) => {
@@ -1793,148 +1689,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     },
     [],
   );
-
-  const clearPendingConnectorRemoval = useCallback((taskId: string) => {
-    pendingConnectorRemovals.current.delete(taskId);
-    connectorRemovalPollBackoff.current.delete(taskId);
-    persistPendingConnectorRemovals(pendingConnectorRemovals.current);
-  }, []);
-
-  const refreshConnectorEnvironment = useCallback(
-    async (environmentId: string) => {
-      const refreshGeneration =
-        (connectorEnvironmentGenerations.current.get(environmentId) ?? 0) + 1;
-      connectorEnvironmentGenerations.current.set(
-        environmentId,
-        refreshGeneration,
-      );
-      try {
-        const refreshed = await listEnvironmentConnectors(
-          environmentId,
-          new AbortController().signal,
-        );
-        if (
-          connectorEnvironmentGenerations.current.get(environmentId) !==
-          refreshGeneration
-        ) {
-          return;
-        }
-        update((draft) => {
-          draft.connectors = [
-            ...draft.connectors.filter(
-              (connector) => connector.scopeRef !== environmentId,
-            ),
-            ...refreshed,
-          ];
-          draft.connectorError = null;
-        });
-      } catch (error) {
-        if (
-          connectorEnvironmentGenerations.current.get(environmentId) !==
-          refreshGeneration
-        ) {
-          return;
-        }
-        update((draft) => {
-          draft.connectorError =
-            error instanceof Error
-              ? error.message
-              : "Unable to refresh Connectors";
-        });
-      }
-    },
-    [update],
-  );
-
-  const reconcileConnectorRemoval = useCallback(
-    async (taskId: string, task: TaskResponse) => {
-      const pending = pendingConnectorRemovals.current.get(taskId);
-      if (!pending) return;
-      if (
-        task.type !== "remove" ||
-        task.target !== pending.connectorId ||
-        task.environment_id !== pending.environmentId
-      ) {
-        clearPendingConnectorRemoval(taskId);
-        await refreshConnectorEnvironment(pending.environmentId);
-        return;
-      }
-      if (
-        !["completed", "failed", "timed_out", "aborted"].includes(task.status)
-      )
-        return;
-      clearPendingConnectorRemoval(taskId);
-      if (task.status !== "completed") return;
-      update((draft) => {
-        draft.connectors = draft.connectors.filter(
-          (candidate) => candidate.id !== pending.connectorId,
-        );
-        draft.connectorError = null;
-      });
-      await refreshConnectorEnvironment(pending.environmentId);
-    },
-    [clearPendingConnectorRemoval, refreshConnectorEnvironment, update],
-  );
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = Date.now();
-      for (const taskId of pendingConnectorRemovals.current.keys()) {
-        const backoff = connectorRemovalPollBackoff.current.get(taskId);
-        if (
-          connectorRemovalPolls.current.has(taskId) ||
-          (backoff && backoff.nextAttemptAt > now)
-        ) {
-          continue;
-        }
-        connectorRemovalPolls.current.add(taskId);
-        void controllerRequest<TaskResponse>(
-          `/tasks/${encodeURIComponent(taskId)}`,
-          200,
-        )
-          .then(async (task) => {
-            connectorRemovalPollBackoff.current.delete(taskId);
-            update((draft) => {
-              draft.connectorError = null;
-            });
-            await reconcileConnectorRemoval(taskId, task);
-          })
-          .catch(async (error: unknown) => {
-            const pending = pendingConnectorRemovals.current.get(taskId);
-            if (!pending) return;
-            if (isTaskNotFoundError(error)) {
-              clearPendingConnectorRemoval(taskId);
-              await refreshConnectorEnvironment(pending.environmentId);
-              return;
-            }
-            const failures =
-              (connectorRemovalPollBackoff.current.get(taskId)?.failures ?? 0) +
-              1;
-            const delay = Math.min(
-              30_000,
-              1_000 * 2 ** Math.min(failures - 1, 5),
-            );
-            connectorRemovalPollBackoff.current.set(taskId, {
-              failures,
-              nextAttemptAt: Date.now() + delay,
-            });
-            update((draft) => {
-              draft.connectorError =
-                error instanceof Error
-                  ? error.message
-                  : "Unable to observe Connector removal Task";
-            });
-          })
-          .finally(() => connectorRemovalPolls.current.delete(taskId));
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [
-    clearPendingConnectorRemoval,
-    reconcileConnectorRemoval,
-    refreshConnectorEnvironment,
-    update,
-  ]);
 
   const refreshPlatformComponents = useCallback(
     async (signal?: AbortSignal) => {
@@ -2325,69 +2079,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     state.projectsLoading,
   ]);
 
-  useEffect(() => {
-    if (state.projectsLoading || state.backingProjectsLoading) return;
-    const controller = new AbortController();
-    const environmentIds = connectorEnvironmentIds
-      ? connectorEnvironmentIds.split(",")
-      : [];
-    const loadGeneration = connectorFullLoadGeneration.current + 1;
-    connectorFullLoadGeneration.current = loadGeneration;
-    const environmentGenerations = new Map(
-      environmentIds.map((environmentId) => [
-        environmentId,
-        connectorEnvironmentGenerations.current.get(environmentId) ?? 0,
-      ]),
-    );
-    void listAllConnectors(environmentIds, controller.signal).then(
-      (connectors) => {
-        if (connectorFullLoadGeneration.current !== loadGeneration) return;
-        const unchangedEnvironments = new Set(
-          environmentIds.filter(
-            (environmentId) =>
-              (connectorEnvironmentGenerations.current.get(environmentId) ??
-                0) === environmentGenerations.get(environmentId),
-          ),
-        );
-        const requestedEnvironments = new Set(environmentIds);
-        update((draft) => {
-          draft.connectors = [
-            ...draft.connectors.filter(
-              (connector) =>
-                requestedEnvironments.has(connector.scopeRef) &&
-                !unchangedEnvironments.has(connector.scopeRef),
-            ),
-            ...connectors.filter((connector) =>
-              unchangedEnvironments.has(connector.scopeRef),
-            ),
-          ];
-          draft.connectorsLoading = false;
-          draft.connectorError = null;
-        });
-      },
-      (error: unknown) => {
-        if (
-          controller.signal.aborted ||
-          connectorFullLoadGeneration.current !== loadGeneration
-        ) {
-          return;
-        }
-        update((draft) => {
-          draft.connectorsLoading = false;
-          draft.connectorError =
-            error instanceof Error
-              ? error.message
-              : "Unable to load Connectors";
-        });
-      },
-    );
-    return () => controller.abort();
-  }, [
-    connectorEnvironmentIds,
-    state.backingProjectsLoading,
-    state.projectsLoading,
-    update,
-  ]);
+  const { actions: connectorActions, reconcileConnectorRemoval } =
+    useConnectorStore(state, update, connectorEnvironmentIds);
 
   const findEnv = (draft: State, envId: string): Environment | undefined => {
     for (const p of [...draft.tenantProjects, ...draft.backingProjects]) {
@@ -3619,108 +3312,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         return value.value;
       },
       ...createSecretActions(state, update, refreshReusableSecrets),
-      addConnector: async (connector, intent) => {
-        const toAPI = (credential: ConnectorCredentialInput) =>
-          credential.kind === "ref"
-            ? { secret_ref: credential.name }
-            : { value: credential.value };
-        const body: ConnectorCreateRequest = {
-          name: connector.name,
-          kind: connector.kind,
-          endpoint: connector.endpoint,
-          bucket: connector.bucket,
-          prefix: connector.prefix || undefined,
-          region: connector.region,
-          path_style: connector.pathStyle,
-          credentials: {
-            access_key: toAPI(connector.credentials.accessKey),
-            secret_key: toAPI(connector.credentials.secretKey),
-          },
-        };
-        const query = new URLSearchParams({ environment: connector.scopeRef });
-        try {
-          const created = connectorFromAPI(
-            await controllerRequest<ConnectorResponse>(
-              `/connectors?${query}`,
-              201,
-              {
-                method: "POST",
-                body,
-                idempotencyKey: intent.idempotencyKey,
-              },
-            ),
-          );
-          connectorEnvironmentGenerations.current.set(
-            connector.scopeRef,
-            (connectorEnvironmentGenerations.current.get(connector.scopeRef) ??
-              0) + 1,
-          );
-          update((draft) => {
-            draft.connectors = draft.connectors.filter(
-              (candidate) => candidate.id !== created.id,
-            );
-            draft.connectors.push(created);
-            draft.connectorError = null;
-          });
-          return created;
-        } catch (error) {
-          update((draft) => {
-            draft.connectorError =
-              error instanceof Error
-                ? error.message
-                : "Unable to create Connector";
-          });
-          throw error;
-        }
-      },
-      removeConnector: async (id, intent) => {
-        const pendingTask = [
-          ...pendingConnectorRemovals.current.entries(),
-        ].find(([, pending]) => pending.connectorId === id);
-        if (pendingTask) return pendingTask[0];
-        const inFlight = connectorRemovalRequests.current.get(id);
-        if (inFlight) return inFlight;
-        const request = (async () => {
-          try {
-            const connector = state.connectors.find(
-              (candidate) => candidate.id === id,
-            );
-            if (!connector) throw new Error("Connector was not found");
-            const accepted = await controllerRequest<ConnectorTaskAccepted>(
-              `/connectors/${encodeURIComponent(id)}`,
-              202,
-              { method: "DELETE", idempotencyKey: intent.idempotencyKey },
-            );
-            if (!accepted.task_id)
-              throw new Error("Controller response is missing task_id");
-            pendingConnectorRemovals.current.set(accepted.task_id, {
-              connectorId: id,
-              environmentId: connector.scopeRef,
-            });
-            persistPendingConnectorRemovals(pendingConnectorRemovals.current);
-            update((draft) => {
-              draft.connectorError = null;
-            });
-            return accepted.task_id;
-          } catch (error) {
-            update((draft) => {
-              draft.connectorError =
-                error instanceof Error
-                  ? error.message
-                  : "Unable to remove Connector";
-            });
-            throw error;
-          }
-        })();
-        connectorRemovalRequests.current.set(id, request);
-        try {
-          return await request;
-        } finally {
-          if (connectorRemovalRequests.current.get(id) === request) {
-            connectorRemovalRequests.current.delete(id);
-          }
-        }
-      },
+      ...connectorActions,
       refreshRunners,
       createRunner,
       renameRunner,
