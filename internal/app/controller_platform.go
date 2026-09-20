@@ -15,7 +15,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/config"
 	commandrunner "github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/internal/common/version"
-	"github.com/AlanD20/groundplane/internal/controller"
+
 	"github.com/AlanD20/groundplane/internal/controller/controllertask"
 	"github.com/AlanD20/groundplane/internal/controller/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/controller/host"
@@ -49,7 +49,7 @@ type controllerPlatform struct {
 	agents         *localagent.Manager
 	mutations      *agentmanagement.MutationService
 	reads          *agentmanagement.ReadService
-	host           *controller.HostService
+	host           *host.HostService
 	reconciliation controllerScheduler
 	upgrades       *controllerupgrade.Service
 	native         controllertask.UpdateExecutor
@@ -208,7 +208,7 @@ func newControllerPlatform(
 	if err != nil {
 		return nil, err
 	}
-	platform.host, err = controller.NewHostService(controller.HostDependencies{
+	platform.host, err = host.NewHostService(host.HostDependencies{
 		System:            host.NewSystemSource(hoststats.New(), container),
 		Etcd:              host.NewEtcdSource(dependencies.EtcdEndpoints, etcd.ProbeEndpoints),
 		Agent:             host.NewAgentSource(platform.agents, defaults),

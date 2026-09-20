@@ -9,6 +9,10 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
+type HostReader interface {
+	Show(ctx context.Context) (api.Host, error)
+}
+
 type hostOutput struct {
 	Body api.Host
 }

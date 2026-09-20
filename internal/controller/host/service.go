@@ -1,4 +1,4 @@
-package controller
+package host
 
 import (
 	"context"
@@ -53,13 +53,6 @@ type AgentSnapshotSource interface {
 
 type ControllerUpdateSource interface {
 	ControllerUpdateSnapshot(context.Context) (api.ControllerUpdateState, error)
-}
-
-// HostReader is the narrow handler dependency. HostService is its sole
-// production implementation; the interface keeps HTTP independent from the
-// future live collectors.
-type HostReader interface {
-	Show(ctx context.Context) (api.Host, error)
 }
 
 type HostDependencies struct {

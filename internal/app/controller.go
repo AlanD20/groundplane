@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/AlanD20/groundplane/internal/componentregistration"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
+	backupcapability "github.com/AlanD20/groundplane/internal/controller/backup"
 	taskdispatch "github.com/AlanD20/groundplane/internal/controller/controllertask/dispatch"
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -411,7 +412,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup runtime repository: %w", err)
 	}
-	backupCheckpoints, err := controller.NewBackupCheckpointService(backupRuntimeRecords)
+	backupCheckpoints, err := backupcapability.NewBackupCheckpointService(backupRuntimeRecords)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Backup checkpoint service: %w", err)
@@ -421,7 +422,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script checkpoint service: %w", err)
 	}
-	backupPolicyRepository, err := controller.NewDurableBackupPolicyRepository(backupPolicyRecords)
+	backupPolicyRepository, err := backupcapability.NewDurableBackupPolicyRepository(backupPolicyRecords)
 	if err != nil {
 		closeErr := store.Close()
 		return nil, errs.Wrap(errs.KindInternal, errors.Join(
@@ -503,7 +504,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	backupSecrets, err := controller.NewBackupSecretResolver(backupSecretEvidence, intentProtector)
+	backupSecrets, err := backupcapability.NewBackupSecretResolver(backupSecretEvidence, intentProtector)
 	if err != nil {
 		// Rationale: initialization is already failing; store shutdown is
 		// best-effort and must not replace the primary typed error.
@@ -640,7 +641,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize hierarchy deletion runtime: %w", err)
 	}
-	backupPolicyIdempotency, err := controller.NewDurableBackupPolicyIdempotency(intentCoordinator, idempotency)
+	backupPolicyIdempotency, err := backupcapability.NewDurableBackupPolicyIdempotency(intentCoordinator, idempotency)
 	if err != nil {
 		closeErr := store.Close()
 		return nil, errs.Wrap(errs.KindInternal, errors.Join(
@@ -648,7 +649,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	backupPolicyKeys, err := controller.NewAgeBackupPolicyKeyFactory(intentProtector)
+	backupPolicyKeys, err := backupcapability.NewAgeBackupPolicyKeyFactory(intentProtector)
 	if err != nil {
 		closeErr := store.Close()
 		return nil, errs.Wrap(errs.KindInternal, errors.Join(
@@ -656,7 +657,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	backupPolicies, err := controller.NewBackupPolicyService(
+	backupPolicies, err := backupcapability.NewBackupPolicyService(
 		backupPolicyRepository,
 		backupPolicyKeys,
 		backupPolicyIdempotency,
@@ -668,7 +669,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
-	backupPointReads, err := controller.NewRecoveryPointReadService(
+	backupPointReads, err := backupcapability.NewRecoveryPointReadService(
 		hierarchyRecords,
 		backupRuntimeRecords,
 		secretvalue.NewControllerKeyCipher(controllerKey),
@@ -698,7 +699,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		controller.BackupRunPlanBuilderFunc(controller.BuildBackupRunPlan),
 		backupRunIdempotency,
 	)
-	backupSchedules, err := controller.NewBackupScheduleService(backupRuntimeRecords, backupRuns, logger)
+	backupSchedules, err := backupcapability.NewBackupScheduleService(backupRuntimeRecords, backupRuns, logger)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup scheduler: %w", err)

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/localdiag"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/agentmanagement"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/hoststats"
@@ -40,22 +39,22 @@ func NewSystemSource(system hoststats.Source, docker hostDockerVersionSource) *S
 	return &SystemSource{system: system, docker: docker}
 }
 
-func (source *SystemSource) SystemSnapshot(ctx context.Context) (controller.SystemSnapshot, error) {
+func (source *SystemSource) SystemSnapshot(ctx context.Context) (SystemSnapshot, error) {
 	if source == nil || source.system == nil || source.docker == nil {
-		return controller.SystemSnapshot{}, errs.New(errs.KindInternal, "host system source is incomplete")
+		return SystemSnapshot{}, errs.New(errs.KindInternal, "host system source is incomplete")
 	}
 	snapshot, err := source.system.Snapshot(ctx)
 	if err != nil {
-		return controller.SystemSnapshot{}, err
+		return SystemSnapshot{}, err
 	}
 	dockerVersion, err := source.docker.DockerVersion(ctx)
 	if err != nil {
 		if contextErr := ctx.Err(); contextErr != nil {
-			return controller.SystemSnapshot{}, contextErr
+			return SystemSnapshot{}, contextErr
 		}
 		dockerVersion = hostUnavailable
 	}
-	return controller.SystemSnapshot{
+	return SystemSnapshot{
 		Hostname: snapshot.Hostname,
 		Arch:     snapshot.Arch,
 		OS:       snapshot.OS,
@@ -83,19 +82,19 @@ func NewEtcdSource(endpoints []string, probe hostEtcdProbe) *EtcdSource {
 	return &EtcdSource{endpoints: append([]string(nil), endpoints...), probe: probe}
 }
 
-func (source *EtcdSource) EtcdSnapshot(ctx context.Context) (controller.EtcdSnapshot, error) {
+func (source *EtcdSource) EtcdSnapshot(ctx context.Context) (EtcdSnapshot, error) {
 	if source == nil || len(source.endpoints) == 0 || source.probe == nil {
-		return controller.EtcdSnapshot{}, errs.New(errs.KindInternal, "host etcd source is incomplete")
+		return EtcdSnapshot{}, errs.New(errs.KindInternal, "host etcd source is incomplete")
 	}
 	rows, err := source.probe(ctx, append([]string(nil), source.endpoints...))
 	if contextErr := ctx.Err(); contextErr != nil {
-		return controller.EtcdSnapshot{}, contextErr
+		return EtcdSnapshot{}, contextErr
 	}
 	if err != nil && !errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) {
-		return controller.EtcdSnapshot{}, err
+		return EtcdSnapshot{}, err
 	}
 	if len(rows) != len(source.endpoints) {
-		return controller.EtcdSnapshot{}, errs.New(
+		return EtcdSnapshot{}, errs.New(
 			errs.KindInternal,
 			"host etcd probe returned an incomplete result set",
 		)
@@ -108,7 +107,7 @@ func (source *EtcdSource) EtcdSnapshot(ctx context.Context) (controller.EtcdSnap
 		}
 		healthy++
 		if row.DBSizeBytes == nil || *row.DBSizeBytes < 0 {
-			return controller.EtcdSnapshot{}, errs.New(errs.KindInternal, "host etcd probe returned an invalid DB size")
+			return EtcdSnapshot{}, errs.New(errs.KindInternal, "host etcd probe returned an invalid DB size")
 		}
 		if size := uint64(*row.DBSizeBytes); size > maximumDBSize {
 			maximumDBSize = size
@@ -123,7 +122,7 @@ func (source *EtcdSource) EtcdSnapshot(ctx context.Context) (controller.EtcdSnap
 	if healthy == len(rows) {
 		status = apiTypes.HealthHealthy
 	}
-	return controller.EtcdSnapshot{Node: hostEtcdNodeLabel, Status: status, DBSize: dbSize}, nil
+	return EtcdSnapshot{Node: hostEtcdNodeLabel, Status: status, DBSize: dbSize}, nil
 }
 
 type hostAgentHealthSource interface {
@@ -139,34 +138,34 @@ func NewAgentSource(health hostAgentHealthSource, fallback localagent.Config) *A
 	return &AgentSource{health: health, fallback: fallback}
 }
 
-func (source *AgentSource) AgentSnapshot(ctx context.Context) (controller.AgentSnapshot, error) {
+func (source *AgentSource) AgentSnapshot(ctx context.Context) (AgentSnapshot, error) {
 	if source == nil || source.health == nil {
-		return controller.AgentSnapshot{}, errs.New(errs.KindInternal, "host Agent source is incomplete")
+		return AgentSnapshot{}, errs.New(errs.KindInternal, "host Agent source is incomplete")
 	}
 	health, err := source.health.ListHealth(ctx)
 	if err != nil {
-		return controller.AgentSnapshot{}, err
+		return AgentSnapshot{}, err
 	}
 	if len(health) > 1 {
-		return controller.AgentSnapshot{}, errs.New(errs.KindInternal, "local Agent singleton invariant is violated")
+		return AgentSnapshot{}, errs.New(errs.KindInternal, "local Agent singleton invariant is violated")
 	}
 	if len(health) == 0 {
 		return hostAgentConfigSnapshot(apiTypes.HealthStopped, source.fallback), nil
 	}
 	status, err := agentmanagement.ProjectStatus(health[0])
 	if err != nil {
-		return controller.AgentSnapshot{}, err
+		return AgentSnapshot{}, err
 	}
 	return hostAgentConfigSnapshot(apiTypes.HealthState(status), health[0].Agent.Config), nil
 }
 
-func hostAgentConfigSnapshot(status apiTypes.HealthState, config localagent.Config) controller.AgentSnapshot {
+func hostAgentConfigSnapshot(status apiTypes.HealthState, config localagent.Config) AgentSnapshot {
 	labels := make([]string, 0, len(config.Labels))
 	for key, value := range config.Labels {
 		labels = append(labels, key+"="+value)
 	}
 	sort.Strings(labels)
-	return controller.AgentSnapshot{
+	return AgentSnapshot{
 		Status:        status,
 		PullInterval:  (time.Duration(config.PullIntervalSeconds) * time.Second).String(),
 		MaxConcurrent: int(config.MaxConcurrentTasks),
