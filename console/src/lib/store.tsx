@@ -1,5 +1,13 @@
 "use client";
 import {
+  createVolumeActions,
+  type VolumeActions,
+} from "@/features/volume/actions";
+import {
+  useNetworkActions,
+  type NetworkActions,
+} from "@/features/environment/use-network-actions";
+import {
   createServiceActions,
   type ServiceActions,
 } from "@/features/service/actions";
@@ -10,20 +18,8 @@ import {
   type RunnerActions,
 } from "@/features/runner/use-runner-store";
 import {
-  zoneFromAPI,
   listAllZones,
-  routeFromAPI,
   listAllRoutes,
-  type ZoneCreateRequest,
-  type ZoneCreateResponse,
-  type ZoneRemoveResponse,
-  type ZoneRemovalImpactResponse,
-  type RouteCreateRequest,
-  type RouteCreateAccepted,
-  type RouteEditRequest,
-  type RouteEditAccepted,
-  type RouteShowResponse,
-  type ZoneShowResponse,
 } from "@/features/environment/network-api";
 import {
   listAllComponents,
@@ -102,7 +98,6 @@ import type {
   EnvironmentComponent,
   Project,
   ReleaseGroup,
-  Route,
   Script,
   Service,
   ServiceRuntimeIntent,
@@ -110,9 +105,6 @@ import type {
   TaskJournalState,
   TaskJournalSurface,
   Tenant,
-  Volume,
-  VolumeDeletionImpactPage,
-  Zone,
   PlatformInfra,
   ManagedConfigFile,
 } from "./types";
@@ -144,14 +136,7 @@ import {
 } from "./environment-hydration";
 import { environmentDeletionGuard } from "./environment-guard";
 import { observeEnvironmentTask } from "./environment-task-observation";
-import {
-  createVolume,
-  editVolume,
-  getVolume,
-  getVolumeDeletionImpact,
-  listAllVolumes,
-  removeVolume,
-} from "@/features/volume/api";
+import { listAllVolumes } from "@/features/volume/api";
 import { newId, newULID } from "./utils";
 type TenantPageResponse =
   operations["tenant.list"]["responses"][200]["content"]["application/json"];
@@ -839,6 +824,8 @@ type StoreContext = State &
   ConnectorActions &
   RunnerActions &
   ServiceActions &
+  NetworkActions &
+  VolumeActions &
   ReturnType<typeof useControllerPlatform> &
   ReturnType<typeof useBackupStore> & {
     adapters: typeof seedAdapters;
@@ -978,51 +965,6 @@ type StoreContext = State &
       onMalformed: (message: string) => void,
     ) => () => void;
     deleteEnvironment: (envId: string) => Promise<string>;
-    addZone: (
-      envId: string,
-      input: { name: string; subnet: string; internal: boolean },
-    ) => Promise<Zone>;
-    getZone: (zoneId: string) => Promise<Zone>;
-    getZoneRemovalImpact: (
-      zoneId: string,
-    ) => Promise<ZoneRemovalImpactResponse>;
-    removeZone: (
-      envId: string,
-      zoneId: string,
-      impactToken: string,
-    ) => Promise<string>;
-    addRoute: (
-      envId: string,
-      route: Omit<Route, "id" | "environmentId" | "status">,
-    ) => Promise<Route>;
-    getRoute: (routeId: string) => Promise<Route>;
-    updateRoute: (
-      envId: string,
-      routeId: string,
-      patch: Pick<Route, "exposure">,
-    ) => Promise<Route>;
-    removeRoute: (envId: string, routeId: string) => Promise<string>;
-    addVolume: (
-      envId: string,
-      input: { slug: string; key?: string },
-    ) => Promise<Volume>;
-    getVolume: (volumeId: string) => Promise<Volume>;
-    updateVolume: (
-      envId: string,
-      volumeId: string,
-      patch: Pick<Volume, "slug">,
-    ) => Promise<Volume>;
-    getVolumeDeletionImpact: (
-      volumeId: string,
-      cursor?: string,
-      limit?: number,
-    ) => Promise<VolumeDeletionImpactPage>;
-    removeVolume: (
-      envId: string,
-      volumeId: string,
-      impactToken: string,
-      confirmKey: string,
-    ) => Promise<string>;
     addScript: (envId: string, script: ScriptInput) => Promise<Script>;
     updateScript: (
       envId: string,
@@ -1087,9 +1029,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const providerActive = useRef(true);
   const environmentTaskControllers = useRef(new Set<AbortController>());
   const [state, setState] = useState<State>(seed);
-  const pendingZoneRemovals = useRef(
-    new Map<string, { envId: string; zoneId: string }>(),
-  );
   const taskEventSources = useRef(new Set<EventSource>());
   const environmentMutationIntents = useRef(loadEnvironmentMutationIntents());
   const taskJournalEpochs = useRef(new Map<string, number>());
@@ -1213,6 +1152,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     },
     [isEnvironmentDeletionPending, state.backingProjects, state.tenantProjects],
   );
+
+  const { actions: networkActions, reconcileZoneRemoval } = useNetworkActions({
+    update,
+    assertEnvironmentMutable,
+    nextEnvironmentGeneration,
+    environmentGenerations,
+    dispatchResourceRemoval,
+  });
 
   const requestBackupKeyRotation = useCallback(
     (environmentId: string) =>
@@ -2231,31 +2178,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               200,
               { signal },
             );
-        const pending = pendingZoneRemovals.current.get(taskId);
-        if (
-          pending &&
-          ["completed", "failed", "timed_out", "aborted"].includes(task.status)
-        ) {
-          pendingZoneRemovals.current.delete(taskId);
-          if (task.status === "completed") {
-            update((draft) => {
-              const environment = findEnvironment(draft, pending.envId);
-              if (!environment) return;
-              const zone = environment.zones.find(
-                (candidate) => candidate.id === pending.zoneId,
-              );
-              if (!zone) return;
-              environment.zones = environment.zones.filter(
-                (candidate) => candidate.id !== pending.zoneId,
-              );
-              environment.services.forEach((service) => {
-                service.zones = service.zones.filter(
-                  (name) => name !== zone.name,
-                );
-              });
-            });
-          }
-        }
+        reconcileZoneRemoval(taskId, task);
         if (pendingResourceRemovals.current.has(taskId)) {
           monitorResourceRemoval(taskId);
           void reconcileResourceRemoval(taskId, task).catch(() => undefined);
@@ -2301,166 +2224,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
         return taskId;
       },
-      addZone: async (envId, input) => {
-        assertEnvironmentMutable(envId, "Zone mutation");
-        const body: ZoneCreateRequest = {
-          environment_id: envId,
-          name: input.name,
-          subnet: input.subnet,
-          internal: input.internal,
-        };
-        const zone = zoneFromAPI(
-          await controllerRequest<ZoneCreateResponse>("/zones", 201, {
-            method: "POST",
-            body,
-          }),
-        );
-        update((draft) => {
-          findEnvironment(draft, envId)?.zones.push(zone);
-        });
-        return zone;
-      },
-      getZone: async (zoneId) =>
-        zoneFromAPI(
-          await controllerRequest<ZoneShowResponse>(
-            `/zones/${encodeURIComponent(zoneId)}`,
-            200,
-            { method: "GET" },
-          ),
-        ),
-      getZoneRemovalImpact: (zoneId) =>
-        controllerRequest<ZoneRemovalImpactResponse>(
-          `/zones/${encodeURIComponent(zoneId)}/removal-impact`,
-          200,
-          { method: "GET" },
-        ),
-      removeZone: async (envId, zoneId, impactToken) => {
-        assertEnvironmentMutable(envId, "Zone mutation");
-        const accepted = await controllerRequest<ZoneRemoveResponse>(
-          `/zones/${encodeURIComponent(zoneId)}${impactToken ? `?impact_token=${encodeURIComponent(impactToken)}` : ""}`,
-          202,
-          { method: "DELETE" },
-        );
-        if (!accepted.task_id)
-          throw new Error("Controller response is missing task_id");
-        pendingZoneRemovals.current.set(accepted.task_id, { envId, zoneId });
-        return accepted.task_id;
-      },
+      ...networkActions,
       ...createServiceActions(
         update,
         assertEnvironmentMutable,
         dispatchResourceRemoval,
       ),
-      addRoute: async (envId, route) => {
-        assertEnvironmentMutable(envId, "Route mutation");
-        const generation = nextEnvironmentGeneration(envId, "child");
-        const body: RouteCreateRequest = {
-          environment_id: envId,
-          host: route.host || undefined,
-          path: route.path,
-          exposure: route.exposure,
-          target_service_id: route.targetServiceId,
-          target_port: route.targetPort,
-        };
-        const accepted = await controllerRequest<RouteCreateAccepted>(
-          "/routes",
-          202,
-          {
-            method: "POST",
-            body,
-          },
-        );
-        const created = routeFromAPI(accepted.route);
-        update((d) => {
-          // Public Routes never auto-enable ingress; Component lifecycle is not authored by C07.
-          if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
-            return;
-          findEnvironment(d, envId)?.routes.push(created);
-        });
-        return created;
-      },
-      getRoute: async (routeId) =>
-        routeFromAPI(
-          await controllerRequest<RouteShowResponse>(
-            `/routes/${encodeURIComponent(routeId)}`,
-            200,
-            { method: "GET" },
-          ),
-        ),
-      updateRoute: async (envId, routeId, patch) => {
-        assertEnvironmentMutable(envId, "Route mutation");
-        const generation = nextEnvironmentGeneration(envId, "child");
-        const body: RouteEditRequest = { exposure: patch.exposure };
-        const accepted = await controllerRequest<RouteEditAccepted>(
-          `/routes/${encodeURIComponent(routeId)}`,
-          202,
-          { method: "PATCH", body },
-        );
-        const edited = routeFromAPI(accepted.route);
-        update((d) => {
-          if ((environmentGenerations.current.get(envId) ?? 0) !== generation)
-            return;
-          const route = findEnvironment(d, envId)?.routes.find(
-            (candidate) => candidate.id === routeId,
-          );
-          if (!route) return;
-          Object.assign(route, edited);
-        });
-        return edited;
-      },
-      removeRoute: (envId, routeId) => (
-        assertEnvironmentMutable(envId, "Route mutation"),
-        dispatchResourceRemoval({
-          kind: "route",
-          environmentId: envId,
-          resourceId: routeId,
-        })
-      ),
-      addVolume: async (envId, input) => {
-        assertEnvironmentMutable(envId, "Volume mutation");
-        const created = await createVolume(controllerRequest, envId, input);
-        update((draft) => {
-          findEnvironment(draft, envId)?.volumes.push(created);
-        });
-        return created;
-      },
-      getVolume: async (volumeId) => {
-        const volume = await getVolume(controllerRequest, volumeId);
-        update((draft) => {
-          const current = findEnvironment(
-            draft,
-            volume.environmentId,
-          )?.volumes.find((candidate) => candidate.id === volume.id);
-          if (current) Object.assign(current, volume);
-        });
-        return volume;
-      },
-      updateVolume: async (envId, volumeId, patch) => {
-        assertEnvironmentMutable(envId, "Volume mutation");
-        const edited = await editVolume(
-          controllerRequest,
-          volumeId,
-          patch.slug,
-        );
-        update((draft) => {
-          const volume = findEnvironment(draft, envId)?.volumes.find(
-            (candidate) => candidate.id === volumeId,
-          );
-          if (volume) Object.assign(volume, edited);
-        });
-        return edited;
-      },
-      getVolumeDeletionImpact: (volumeId, cursor = "", limit = 40) =>
-        getVolumeDeletionImpact(controllerRequest, volumeId, cursor, limit),
-      removeVolume: (envId, volumeId, impactToken, confirmKey) => {
-        assertEnvironmentMutable(envId, "Volume mutation");
-        return removeVolume(
-          controllerRequest,
-          volumeId,
-          impactToken,
-          confirmKey,
-        );
-      },
+      ...createVolumeActions(update, assertEnvironmentMutable),
       addScript: async (envId, script) => {
         assertEnvironmentMutable(envId, "Script mutation");
         const generation = nextEnvironmentGeneration(envId, "child");
