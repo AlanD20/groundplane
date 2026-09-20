@@ -2,13 +2,14 @@ package taskmaterialization
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type componentMaterializationContentRepository interface {
-	Stage(context.Context, etcd.TaskMaterializationRecord, uint64, []byte) error
-	Load(context.Context, etcd.TaskMaterializationRecord, uint64) ([]byte, error)
+	Stage(context.Context, materializationrecord.Record, uint64, []byte) error
+	Load(context.Context, materializationrecord.Record, uint64) ([]byte, error)
 }
 
 func (resolver *TaskMaterializationResolver) EnableComponentMaterializationContent(
@@ -25,7 +26,7 @@ func (resolver *TaskMaterializationResolver) EnableComponentMaterializationConte
 // bytes. Blueprint and secret-derived sources remain in their owning stores.
 func (resolver *TaskMaterializationResolver) RetainComponentFile(
 	ctx context.Context,
-	record etcd.TaskMaterializationRecord,
+	record materializationrecord.Record,
 	generation uint64,
 	content []byte,
 ) error {

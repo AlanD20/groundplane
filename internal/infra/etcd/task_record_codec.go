@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -23,7 +24,7 @@ type taskRecordData struct {
 	Target             string                                `json:"target"`
 	Params             map[string]string                     `json:"params,omitempty"`
 	Steps              []TaskStepRecord                      `json:"steps,omitempty"`
-	Materializations   []TaskMaterializationRecord           `json:"materializations,omitempty"`
+	Materializations   []materializationrecord.Record        `json:"materializations,omitempty"`
 	EntryRuntime       *EntryTaskRuntime                     `json:"entry_runtime,omitempty"`
 	Configuration      *TaskConfiguration                    `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                                 `json:"timeout_seconds"`
@@ -91,7 +92,7 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		Steps: cloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
 		ComponentActionStepIDs:          append([]string(nil), record.ComponentActionStepIDs...),
 		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources),
-		Materializations:                cloneTaskMaterializationReferences(record.Materializations),
+		Materializations:                materializationrecord.Clone(record.Materializations),
 		EntryRuntime:                    cloneEntryTaskRuntime(record.EntryRuntime),
 		Configuration:                   cloneTaskConfiguration(record.Configuration),
 		Status:                          record.Status, NextEventSequence: record.NextEventSequence,
@@ -160,7 +161,7 @@ func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned.ManagedComponentTeardownSources = cloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources)
 	cloned.Params = cloneStringMap(record.Params)
 	cloned.Steps = cloneTaskSteps(record.Steps)
-	cloned.Materializations = cloneTaskMaterializationReferences(record.Materializations)
+	cloned.Materializations = materializationrecord.Clone(record.Materializations)
 	cloned.EntryRuntime = cloneEntryTaskRuntime(record.EntryRuntime)
 	cloned.Configuration = cloneTaskConfiguration(record.Configuration)
 	cloned.StartedAt = cloneTimePointer(record.StartedAt)

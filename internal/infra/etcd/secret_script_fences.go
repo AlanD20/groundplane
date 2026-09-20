@@ -4,14 +4,15 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func secretScriptSource(secretID string) ScriptSourceIdentity {
-	return ScriptSourceIdentity{
-		Kind:              ScriptSourceSecretValue,
+func secretScriptSource(secretID string) sourceref.SourceIdentity {
+	return sourceref.SourceIdentity{
+		Kind:              sourceref.SourceSecretValue,
 		SecretID:          secretID,
 		ValueGenerationID: secretID,
 	}
@@ -21,7 +22,7 @@ func secretScriptAbsenceConditions(secretID string) []etcdstore.Condition {
 	source := secretScriptSource(secretID)
 	return []etcdstore.Condition{
 		{Key: scriptSourceCountKey(source)},
-		{Key: scriptSourceForwardReferencePrefix + scriptSourceSuffix(source) + "/", Prefix: true},
+		{Key: sourceref.ForwardReferencePrefix + scriptSourceSuffix(source) + "/", Prefix: true},
 		{Key: tasksecretpinrecord.SecretPrefix(secretID), Prefix: true},
 	}
 }
@@ -37,7 +38,7 @@ func classifySecretScriptReferences(secretID string, values []*etcdstore.KeyValu
 			count.ReferencedExecutionCount == 0 {
 			return errs.New(errs.KindInternal, "Secret Script reference count is corrupt")
 		}
-		reference, err := recordcodec.Decode[ScriptSourceReference](
+		reference, err := recordcodec.Decode[sourceref.Reference](
 			values[1].Value,
 			"script-source-reference",
 		)

@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -45,7 +46,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		return false, corruptTaskPruneIntent()
 	}
 	if execution.CurrentTaskID != task.ID || (root.Phase == ScriptOperationSourceActive &&
-		(root.RetryDisposition == ScriptRetryDispositionUndecided || root.RetryDisposition == ScriptRetryDispositionTransferred)) {
+		(root.RetryDisposition == sourceref.RetryDispositionUndecided || root.RetryDisposition == sourceref.RetryDispositionTransferred)) {
 		return true, nil
 	}
 	if root.RetryExpiresAt == nil || task.RetainUntil == nil || !root.RetryExpiresAt.Equal(*task.RetainUntil) ||
@@ -64,7 +65,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 	if err != nil {
 		return false, err
 	}
-	if root.Phase == ScriptOperationSourceActive && root.RetryDisposition == ScriptRetryDispositionAvailable {
+	if root.Phase == ScriptOperationSourceActive && root.RetryDisposition == sourceref.RetryDispositionAvailable {
 		next, err := expireManualScriptExecution(execution, now)
 		if err != nil {
 			return false, err
@@ -92,7 +93,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		}
 		guards[len(guards)-1].ModRevision = transaction.Revision
 	} else if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseRetryExpiry ||
-		root.RetryDisposition != ScriptRetryDispositionExpired || !manualScriptExpiryExecutionMatches(execution, *root.RetryExpiresAt) {
+		root.RetryDisposition != sourceref.RetryDispositionExpired || !manualScriptExpiryExecutionMatches(execution, *root.RetryExpiresAt) {
 		return false, corruptTaskPruneIntent()
 	}
 	for {

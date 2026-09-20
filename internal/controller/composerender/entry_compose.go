@@ -3,10 +3,11 @@ package composerender
 import (
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -21,11 +22,11 @@ type EnvironmentEntryMaterialization struct {
 	Destination string
 	ServiceID   string
 	ServiceName string
-	OutputKind  etcd.TaskMaterializationOutputKind
+	OutputKind  materializationrecord.OutputKind
 	UID         uint32
 	GID         uint32
 	Mode        entrymaterialization.Mode
-	Source      etcd.TaskMaterializationSource
+	Source      materializationrecord.Source
 }
 
 // EnvironmentEntryComposeProjection is the Entry-derived addition to one
@@ -80,8 +81,8 @@ func ProjectEnvironmentEntries(
 		serviceIDs[identity.Name] = identity.ID
 	}
 
-	allValues := make([]etcd.TaskGeneratedEnvironmentEntryReference, 0)
-	serviceValues := make(map[string][]etcd.TaskGeneratedEnvironmentEntryReference)
+	allValues := make([]materializationrecord.GeneratedEnvironmentEntryReference, 0)
+	serviceValues := make(map[string][]materializationrecord.GeneratedEnvironmentEntryReference)
 	materializations := make([]EnvironmentEntryMaterialization, 0, len(entries)+1)
 	for _, record := range entries {
 		if record.EnvironmentID != environmentID || record.Entry.Validate() != nil ||
@@ -92,15 +93,15 @@ func ProjectEnvironmentEntries(
 			)
 		}
 		entry := record.Entry
-		storage := etcd.TaskEntryValueStoragePlain
+		storage := materializationrecord.EntryValueStoragePlain
 		if entry.Secret {
-			storage = etcd.TaskEntryValueStorageSecret
+			storage = materializationrecord.EntryValueStorageSecret
 		}
-		value := etcd.TaskEntryValueReference{
+		value := materializationrecord.EntryValueReference{
 			EntryID: entry.ID, ValueGenerationID: record.CurrentValueGenerationID, Storage: storage,
 		}
 		if entry.Kind == core.EntryKindEnv {
-			reference := etcd.TaskGeneratedEnvironmentEntryReference{Name: entry.Key, Value: value}
+			reference := materializationrecord.GeneratedEnvironmentEntryReference{Name: entry.Key, Value: value}
 			if entry.ExposesAll() {
 				allValues = append(allValues, reference)
 				continue
@@ -125,16 +126,16 @@ func ProjectEnvironmentEntries(
 				"Environment file Entry projection is invalid",
 			)
 		}
-		outputKind := etcd.TaskMaterializationOutputPlainFile
+		outputKind := materializationrecord.OutputPlainFile
 		mode := entrymaterialization.ModeReadOnly
 		if entry.Secret {
-			outputKind = etcd.TaskMaterializationOutputSecretFile
+			outputKind = materializationrecord.OutputSecretFile
 			mode = entrymaterialization.ModePrivate
 		}
 		materializations = append(materializations, EnvironmentEntryMaterialization{
 			Destination: entry.Path, OutputKind: outputKind, UID: *entry.UID, GID: *entry.GID, Mode: mode,
-			Source: etcd.TaskMaterializationSource{
-				Kind: etcd.TaskMaterializationSourceEntryValue, EntryValue: &value,
+			Source: materializationrecord.Source{
+				Kind: materializationrecord.SourceEntryValue, EntryValue: &value,
 			},
 		})
 		targets := entry.Exposure
@@ -181,11 +182,11 @@ func ProjectEnvironmentEntries(
 	canonicalDestination := environmentfile.EnvFileName(environmentID)
 	materializations = append(materializations, EnvironmentEntryMaterialization{
 		Destination: canonicalDestination,
-		OutputKind:  etcd.TaskMaterializationOutputGeneratedEnvironment,
+		OutputKind:  materializationrecord.OutputGeneratedEnvironment,
 		Mode:        entrymaterialization.ModePrivate,
-		Source: etcd.TaskMaterializationSource{
-			Kind: etcd.TaskMaterializationSourceGeneratedEnvironment,
-			GeneratedEnvironment: &etcd.TaskGeneratedEnvironmentValueReference{
+		Source: materializationrecord.Source{
+			Kind: materializationrecord.SourceGeneratedEnvironment,
+			GeneratedEnvironment: &materializationrecord.GeneratedEnvironmentValueReference{
 				FormatVersion: 1, Values: allValues,
 			},
 		},
@@ -214,11 +215,11 @@ func ProjectEnvironmentEntries(
 		destination := environmentfile.ServiceEnvFileName(environmentID, serviceName)
 		materializations = append(materializations, EnvironmentEntryMaterialization{
 			Destination: destination, ServiceID: serviceIDs[serviceName], ServiceName: serviceName,
-			OutputKind: etcd.TaskMaterializationOutputGeneratedEnvironment,
+			OutputKind: materializationrecord.OutputGeneratedEnvironment,
 			Mode:       entrymaterialization.ModePrivate,
-			Source: etcd.TaskMaterializationSource{
-				Kind: etcd.TaskMaterializationSourceGeneratedEnvironment,
-				GeneratedEnvironment: &etcd.TaskGeneratedEnvironmentValueReference{
+			Source: materializationrecord.Source{
+				Kind: materializationrecord.SourceGeneratedEnvironment,
+				GeneratedEnvironment: &materializationrecord.GeneratedEnvironmentValueReference{
 					FormatVersion: 1, Values: values,
 				},
 			},
@@ -281,11 +282,11 @@ func setEnvironmentComposeService(
 	project.DisabledServices[name] = service
 }
 
-func sortGeneratedEnvironmentValues(values []etcd.TaskGeneratedEnvironmentEntryReference) {
+func sortGeneratedEnvironmentValues(values []materializationrecord.GeneratedEnvironmentEntryReference) {
 	sort.Slice(values, func(left int, right int) bool { return values[left].Name < values[right].Name })
 }
 
-func duplicateGeneratedEnvironmentName(values []etcd.TaskGeneratedEnvironmentEntryReference) bool {
+func duplicateGeneratedEnvironmentName(values []materializationrecord.GeneratedEnvironmentEntryReference) bool {
 	for index := 1; index < len(values); index++ {
 		if values[index].Name == values[index-1].Name {
 			return true

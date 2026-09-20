@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -216,7 +217,7 @@ func runnerTaskStepsEqual(left []TaskStepRecord, right []TaskStepRecord) bool {
 	return true
 }
 
-func runnerTaskMaterializationsEqual(left []TaskMaterializationRecord, right []TaskMaterializationRecord) bool {
+func runnerTaskMaterializationsEqual(left []materializationrecord.Record, right []materializationrecord.Record) bool {
 	if len(left) != len(right) {
 		return false
 	}
@@ -228,7 +229,7 @@ func runnerTaskMaterializationsEqual(left []TaskMaterializationRecord, right []T
 	return true
 }
 
-func runnerTaskMaterializationEqual(left TaskMaterializationRecord, right TaskMaterializationRecord) bool {
+func runnerTaskMaterializationEqual(left materializationrecord.Record, right materializationrecord.Record) bool {
 	if left.StepID != right.StepID || left.MaterializationID != right.MaterializationID ||
 		left.EnvironmentID != right.EnvironmentID || left.Destination != right.Destination ||
 		left.ServiceID != right.ServiceID || left.ServiceName != right.ServiceName ||
@@ -253,8 +254,8 @@ func runnerComparablePointersEqual[T comparable](left *T, right *T) bool {
 }
 
 func runnerGeneratedEnvironmentPointersEqual(
-	left *TaskGeneratedEnvironmentValueReference,
-	right *TaskGeneratedEnvironmentValueReference,
+	left *materializationrecord.GeneratedEnvironmentValueReference,
+	right *materializationrecord.GeneratedEnvironmentValueReference,
 ) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil

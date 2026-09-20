@@ -8,6 +8,7 @@ import (
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -58,13 +59,13 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 		return ScriptSourceReleaseFragment{}, false, corruptReleaseRecord()
 	}
 	if root.Phase == ScriptOperationSourceReleasing && root.ReleasePath == ScriptSourceReleaseNormal &&
-		(root.RetryDisposition == ScriptRetryDispositionAbandoned ||
-			root.RetryDisposition == ScriptRetryDispositionForbidden) {
+		(root.RetryDisposition == sourceref.RetryDispositionAbandoned ||
+			root.RetryDisposition == sourceref.RetryDispositionForbidden) {
 		return ScriptSourceReleaseFragment{}, false, nil
 	}
 	if root.Phase != ScriptOperationSourceActive || root.ReleasePath != ScriptSourceReleaseAbsent ||
-		(root.RetryDisposition != ScriptRetryDispositionUndecided &&
-			root.RetryDisposition != ScriptRetryDispositionTransferred) ||
+		(root.RetryDisposition != sourceref.RetryDispositionUndecided &&
+			root.RetryDisposition != sourceref.RetryDispositionTransferred) ||
 		read.Values[0].ModRevision != taskRevision {
 		return ScriptSourceReleaseFragment{}, false, corruptReleaseRecord()
 	}
@@ -82,7 +83,7 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 				"manual Script claim source authority is corrupt",
 			)
 		}
-		if root.RetryDisposition == ScriptRetryDispositionTransferred {
+		if root.RetryDisposition == sourceref.RetryDispositionTransferred {
 			authority, err := newScriptSourceReferenceAuthority(repository.store)
 			if err != nil {
 				return ScriptSourceReleaseFragment{}, false, err
@@ -141,15 +142,15 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 	}
 	if root.Phase == ScriptOperationSourceActive {
 		if root.ReleasePath != ScriptSourceReleaseAbsent ||
-			(root.RetryDisposition != ScriptRetryDispositionUndecided &&
-				root.RetryDisposition != ScriptRetryDispositionTransferred) ||
+			(root.RetryDisposition != sourceref.RetryDispositionUndecided &&
+				root.RetryDisposition != sourceref.RetryDispositionTransferred) ||
 			read.Values[0].ModRevision != task.Revision {
 			return pendingScriptAbortChange{}, corruptReleaseRecord()
 		}
 		return repository.beginPendingScriptAbort(ctx, task, requestedTerminalAt, steps, executions, read.Values)
 	}
 	if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal ||
-		root.RetryDisposition != ScriptRetryDispositionAbandoned {
+		root.RetryDisposition != sourceref.RetryDispositionAbandoned {
 		return pendingScriptAbortChange{}, corruptReleaseRecord()
 	}
 	terminalAt, err := pendingScriptAbortTerminalAt(task.Record, steps, executions)
@@ -211,7 +212,7 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 	release, err := authority.PrepareNormalRelease(
 		ctx,
 		task.Record.OperationID,
-		ScriptRetryDispositionAbandoned,
+		sourceref.RetryDispositionAbandoned,
 	)
 	if err != nil {
 		return pendingScriptAbortChange{}, err

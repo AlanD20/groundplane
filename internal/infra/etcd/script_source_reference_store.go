@@ -79,7 +79,7 @@ func (adapter *scriptSourceReferenceStore) AdjustScriptPrimary(
 	delta int64,
 ) ([]byte, error) {
 	record, err := scriptrecord.DecodeRecord(value)
-	if err != nil || source.Kind != ScriptSourceBody || record.EnvironmentID != source.EnvironmentID ||
+	if err != nil || source.Kind != ref.SourceBody || record.EnvironmentID != source.EnvironmentID ||
 		record.ScriptSetGeneration != source.ScriptSetGeneration || record.Desired.ID != source.ScriptID {
 		return nil, errs.New(errs.KindInternal, "Script source primary is corrupt")
 	}

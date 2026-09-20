@@ -1,6 +1,7 @@
 package operations
 
 import (
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
@@ -10,7 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -48,17 +49,17 @@ func PlanEntryRemovals(
 			if entry.UID == nil || entry.GID == nil {
 				return nil, errs.New(errs.KindInternal, "removed Blueprint file Entry ownership is missing")
 			}
-			output := etcd.TaskMaterializationOutputRemovePlainFile
+			output := materializationrecord.OutputRemovePlainFile
 			mode := entrymaterialization.ModeReadOnly
 			if entry.Secret {
-				output = etcd.TaskMaterializationOutputRemoveSecretFile
+				output = materializationrecord.OutputRemoveSecretFile
 				mode = entrymaterialization.ModePrivate
 			}
 			if _, duplicate := seen[entry.Path]; !duplicate {
 				seen[entry.Path] = struct{}{}
 				result = append(result, composerender.EnvironmentEntryMaterialization{
 					Destination: entry.Path, OutputKind: output, UID: *entry.UID, GID: *entry.GID, Mode: mode,
-					Source: etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceRemoval},
+					Source: materializationrecord.Source{Kind: materializationrecord.SourceRemoval},
 				})
 			}
 			continue
@@ -81,9 +82,9 @@ func PlanEntryRemovals(
 			seen[destination] = struct{}{}
 			result = append(result, composerender.EnvironmentEntryMaterialization{
 				Destination: destination, ServiceID: identity.ID, ServiceName: identity.Name,
-				OutputKind: etcd.TaskMaterializationOutputRemoveGeneratedEnv,
+				OutputKind: materializationrecord.OutputRemoveGeneratedEnv,
 				Mode:       entrymaterialization.ModePrivate,
-				Source:     etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceRemoval},
+				Source:     materializationrecord.Source{Kind: materializationrecord.SourceRemoval},
 			})
 		}
 	}

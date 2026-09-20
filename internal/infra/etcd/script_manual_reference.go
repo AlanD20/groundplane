@@ -8,6 +8,7 @@ import (
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -37,12 +38,12 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 		snapshot.ReleaseId != execution.ReleaseID {
 		return nil, errs.New(errs.KindValidationFailed, "manual Script snapshot does not match its execution")
 	}
-	base := ScriptSourceReference{
+	base := sourceref.Reference{
 		OperationID: execution.OperationID, ScriptExecutionID: execution.ID, SourceOwnerID: execution.EnvironmentID,
 	}
 	body := base
-	body.Source = ScriptSourceIdentity{
-		Kind: ScriptSourceBody, EnvironmentID: execution.EnvironmentID,
+	body.Source = sourceref.SourceIdentity{
+		Kind: sourceref.SourceBody, EnvironmentID: execution.EnvironmentID,
 		ScriptSetGeneration: sources.Script.Record.ScriptSetGeneration,
 		ScriptID:            execution.ScriptID, BodyGeneration: execution.ScriptGeneration,
 	}
@@ -52,7 +53,7 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 	))}
 	snapshotKey := scriptRunnerSnapshotKey(execution.SnapshotID)
 	service := base
-	service.Source = ScriptSourceIdentity{Kind: ScriptSourceService, ServiceID: execution.ServiceID}
+	service.Source = sourceref.SourceIdentity{Kind: sourceref.SourceService, ServiceID: execution.ServiceID}
 	service.SourceModRevision, service.SourceDigest = snapshotRevision, execution.SnapshotSHA256
 	members = append(members, manualScriptExistingMember(service, snapshotKey))
 	releaseKey := releaseIntentStagingKey("", execution.ReleaseID)
@@ -62,21 +63,21 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 	}
 	releaseDigest := sha256.Sum256(releaseValue.Value)
 	release := base
-	release.Source = ScriptSourceIdentity{Kind: ScriptSourceRelease, ReleaseID: execution.ReleaseID}
+	release.Source = sourceref.SourceIdentity{Kind: sourceref.SourceRelease, ReleaseID: execution.ReleaseID}
 	release.SourceModRevision, release.SourceDigest = releaseValue.ModRevision, hex.EncodeToString(releaseDigest[:])
 	members = append(members, manualScriptExistingMember(release, releaseKey))
 
 	snapshotReference := base
-	snapshotReference.Source = ScriptSourceIdentity{Kind: ScriptSourceRunnerSnapshot, SnapshotID: execution.SnapshotID}
+	snapshotReference.Source = sourceref.SourceIdentity{Kind: sourceref.SourceRunnerSnapshot, SnapshotID: execution.SnapshotID}
 	snapshotReference.SourceModRevision, snapshotReference.SourceDigest = snapshotRevision, execution.SnapshotSHA256
 	members = append(members, manualScriptExistingMember(snapshotReference, snapshotKey))
-	seen := make(map[ScriptSourceIdentity]struct{})
+	seen := make(map[sourceref.SourceIdentity]struct{})
 	for _, network := range snapshot.Networks {
 		if network == nil {
 			return nil, errs.New(errs.KindValidationFailed, "manual Script Network source is invalid")
 		}
 		reference := snapshotReference
-		reference.Source = ScriptSourceIdentity{Kind: ScriptSourceNetwork, NetworkID: network.NetworkId}
+		reference.Source = sourceref.SourceIdentity{Kind: sourceref.SourceNetwork, NetworkID: network.NetworkId}
 		reference.SourceOwnerID = network.OwnerEnvironmentId
 		if _, duplicate := seen[reference.Source]; !duplicate {
 			members = append(members, manualScriptExistingMember(reference, snapshotKey))
@@ -88,7 +89,7 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 			return nil, errs.New(errs.KindValidationFailed, "manual Script Volume source is invalid")
 		}
 		reference := snapshotReference
-		reference.Source = ScriptSourceIdentity{Kind: ScriptSourceVolume, VolumeID: mount.SourceId}
+		reference.Source = sourceref.SourceIdentity{Kind: sourceref.SourceVolume, VolumeID: mount.SourceId}
 		if _, duplicate := seen[reference.Source]; !duplicate {
 			members = append(members, manualScriptExistingMember(reference, snapshotKey))
 			seen[reference.Source] = struct{}{}
@@ -104,7 +105,7 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 	ctx context.Context,
 	sources ScriptExecutionSources,
-	base ScriptSourceReference,
+	base sourceref.Reference,
 	bindings []*agentpb.ScriptRunnerEntryBinding,
 ) ([]ScriptSourcePreparationMember, error) {
 	execution := sources.Script.Record.Desired.Execution
@@ -157,8 +158,8 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 			return nil, err
 		}
 		reference := base
-		reference.Source = ScriptSourceIdentity{
-			Kind: ScriptSourceEntryValue, EntryID: binding.EntryId, ValueGenerationID: binding.ValueGenerationId,
+		reference.Source = sourceref.SourceIdentity{
+			Kind: sourceref.SourceEntryValue, EntryID: binding.EntryId, ValueGenerationID: binding.ValueGenerationId,
 		}
 		reference.SourceModRevision = value.ModRevision
 		if binding.Secret {
@@ -197,7 +198,7 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	ctx context.Context,
 	sources ScriptExecutionSources,
-	base ScriptSourceReference,
+	base sourceref.Reference,
 	reference string,
 ) (ScriptSourcePreparationMember, error) {
 	secrets, err := newSecretRepository(repository.store)
@@ -220,8 +221,8 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	}
 	defer clear(secret.Ciphertext)
 	member := base
-	member.Source = ScriptSourceIdentity{
-		Kind:              ScriptSourceSecretValue,
+	member.Source = sourceref.SourceIdentity{
+		Kind:              sourceref.SourceSecretValue,
 		SecretID:          secretID,
 		ValueGenerationID: secretID,
 	}
@@ -233,7 +234,7 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	return manualScriptExistingMember(member, secretrecord.ValueKey(secretID)), nil
 }
 
-func manualScriptExistingMember(reference ScriptSourceReference, key string) ScriptSourcePreparationMember {
+func manualScriptExistingMember(reference sourceref.Reference, key string) ScriptSourcePreparationMember {
 	return ScriptSourcePreparationMember{
 		Reference: reference,
 		Evidence:  ScriptSourceEvidence{Existing: &ScriptExistingSourceEvidence{SourceKey: key}},

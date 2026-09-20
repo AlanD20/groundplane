@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"context"
 	"encoding/hex"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
@@ -57,7 +58,7 @@ func (runtime EntryMutationRuntime) PrepareTask(
 		EntryMutationBaselineRevisionParam:       baseline.RevisionID,
 		etcd.TaskEntryRuntimeEpochParam:          strconv.FormatInt(runtime.EpochRevision, 10),
 	}
-	references := append([]etcd.TaskMaterializationRecord(nil), task.Materializations...)
+	references := append([]materializationrecord.Record(nil), task.Materializations...)
 	sort.Slice(
 		references,
 		func(left, right int) bool { return references[left].Destination < references[right].Destination },
@@ -203,7 +204,7 @@ func buildEntryMutationPlan(
 	if len(task.Materializations) == 0 || len(task.Steps) != expectedSteps {
 		return nil, errs.New(errs.KindInternal, "Entry mutation Task step count is invalid")
 	}
-	references := make(map[string]etcd.TaskMaterializationRecord, len(task.Materializations))
+	references := make(map[string]materializationrecord.Record, len(task.Materializations))
 	for _, reference := range task.Materializations {
 		references[reference.StepID] = reference
 	}

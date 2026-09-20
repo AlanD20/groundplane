@@ -2,6 +2,7 @@ package taskplanning
 
 import (
 	"context"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -21,8 +22,8 @@ func (resolver *TaskPlanResolver) EnableComponentPlans(componentPlans ComponentT
 }
 
 type componentMaterializationContentRepository interface {
-	Stage(context.Context, etcd.TaskMaterializationRecord, uint64, []byte) error
-	Load(context.Context, etcd.TaskMaterializationRecord, uint64) ([]byte, error)
+	Stage(context.Context, materializationrecord.Record, uint64, []byte) error
+	Load(context.Context, materializationrecord.Record, uint64) ([]byte, error)
 }
 
 func (resolver *TaskPlanResolver) EnableComponentMaterializationContent(
@@ -37,7 +38,7 @@ func (resolver *TaskPlanResolver) EnableComponentMaterializationContent(
 
 func (resolver *TaskPlanResolver) retainComponentMaterialization(
 	ctx context.Context,
-	record etcd.TaskMaterializationRecord,
+	record materializationrecord.Record,
 	generation uint64,
 	content []byte,
 ) error {
@@ -49,7 +50,7 @@ func (resolver *TaskPlanResolver) retainComponentMaterialization(
 
 func (resolver *TaskPlanResolver) loadComponentMaterialization(
 	ctx context.Context,
-	record etcd.TaskMaterializationRecord,
+	record materializationrecord.Record,
 	generation uint64,
 ) ([]byte, error) {
 	if resolver == nil || resolver.materializations == nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -11,7 +12,7 @@ import (
 // manualScriptRootMatches binds the source-set digest to the same durable
 // execution authority that seals the plan bytes and hash. Checkpoints and retry
 // may transfer execution ownership but never change this pair.
-func manualScriptRootMatches(execution ScriptExecutionRecord, root ScriptOperationSourceRoot) bool {
+func manualScriptRootMatches(execution ScriptExecutionRecord, root sourceref.OperationSourceRoot) bool {
 	return execution.SourceMembershipCount > 0 && execution.OperationID == root.OperationID &&
 		execution.SourceMembershipCount == root.MembershipCount &&
 		execution.SourceMembershipSHA256 == root.MembershipSHA256
@@ -61,7 +62,7 @@ func (repository *ScriptRepository) manualScriptExecutionAuthority(
 		return nil, errs.New(errs.KindInternal, "manual Script source root does not match its sealed plan")
 	}
 	if root.Phase != ScriptOperationSourceActive || root.ReleasePath != ScriptSourceReleaseAbsent ||
-		(root.RetryDisposition != ScriptRetryDispositionUndecided && root.RetryDisposition != ScriptRetryDispositionTransferred) {
+		(root.RetryDisposition != sourceref.RetryDispositionUndecided && root.RetryDisposition != sourceref.RetryDispositionTransferred) {
 		return nil, errs.New(errs.KindStateConflict, "manual Script source authority is closed to execution")
 	}
 	return []etcdstore.Condition{{Key: key, ModRevision: value.ModRevision}}, nil

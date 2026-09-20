@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 )
 
@@ -95,5 +96,5 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 		return false, corruptTaskPruneIntent()
 	}
 	return execution.CurrentTaskID != task.ID || (root.Phase == ScriptOperationSourceActive &&
-		(root.RetryDisposition == ScriptRetryDispositionUndecided || root.RetryDisposition == ScriptRetryDispositionTransferred)), nil
+		(root.RetryDisposition == sourceref.RetryDispositionUndecided || root.RetryDisposition == sourceref.RetryDispositionTransferred)), nil
 }

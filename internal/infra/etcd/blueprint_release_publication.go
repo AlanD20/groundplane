@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"slices"
 	"time"
 
@@ -361,11 +362,11 @@ func (prepared PreparedBlueprintReleaseHooks) SnapshotRevision(id string) int64 
 
 type blueprintStagedMember struct {
 	Evidence  ScriptSourceEvidence
-	Reference ScriptSourceReference
+	Reference sourceref.Reference
 }
 
 func (member blueprintStagedMember) withReference(
-	reference ScriptSourceReference,
+	reference sourceref.Reference,
 ) ScriptSourcePreparationMember {
 	reference.SourceModRevision = 0
 	return ScriptSourcePreparationMember{

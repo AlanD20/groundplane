@@ -3,6 +3,7 @@ package materializationproof
 import (
 	"bytes"
 	"context"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 
@@ -202,7 +203,7 @@ func validateSemanticAuthority(
 	for _, entry := range projection.Entries {
 		entries[entry.Entry.ID] = entry.CurrentValueGenerationID
 	}
-	references := make(map[string]base.TaskMaterializationRecord, len(task.Materializations))
+	references := make(map[string]materializationrecord.Record, len(task.Materializations))
 	for _, reference := range task.Materializations {
 		references[reference.MaterializationID] = reference
 	}
@@ -223,7 +224,7 @@ func validateSemanticAuthority(
 
 func memberMatchesTask(
 	member coreproof.MemberRecord,
-	reference base.TaskMaterializationRecord,
+	reference materializationrecord.Record,
 	appliedEntries map[string]string,
 ) bool {
 	if reference.EnvironmentID == "" || reference.Destination != member.Destination ||
@@ -260,15 +261,15 @@ type taskEntrySource struct {
 	storage    string
 }
 
-func taskSources(source base.TaskMaterializationSource) (
+func taskSources(source materializationrecord.Source) (
 	map[string]taskEntrySource,
-	map[string]base.TaskSecretValueReference,
+	map[string]materializationrecord.SecretValueReference,
 	bool,
 ) {
 	entries := make(map[string]taskEntrySource)
-	secrets := make(map[string]base.TaskSecretValueReference)
+	secrets := make(map[string]materializationrecord.SecretValueReference)
 	valid := true
-	addEntry := func(value base.TaskEntryValueReference) {
+	addEntry := func(value materializationrecord.EntryValueReference) {
 		candidate := taskEntrySource{
 			generation: value.ValueGenerationID, storage: string(value.Storage),
 		}
@@ -302,18 +303,18 @@ func taskSources(source base.TaskMaterializationSource) (
 func outputMatches(
 	outcome coreproof.Outcome,
 	kind coreproof.OutputKind,
-	taskKind base.TaskMaterializationOutputKind,
+	taskKind materializationrecord.OutputKind,
 ) bool {
 	if outcome == coreproof.OutcomePresent {
 		return (kind == coreproof.OutputGeneratedEnvironment &&
-			taskKind == base.TaskMaterializationOutputGeneratedEnvironment) ||
-			(kind == coreproof.OutputPlainFile && taskKind == base.TaskMaterializationOutputPlainFile) ||
-			(kind == coreproof.OutputSecretFile && taskKind == base.TaskMaterializationOutputSecretFile)
+			taskKind == materializationrecord.OutputGeneratedEnvironment) ||
+			(kind == coreproof.OutputPlainFile && taskKind == materializationrecord.OutputPlainFile) ||
+			(kind == coreproof.OutputSecretFile && taskKind == materializationrecord.OutputSecretFile)
 	}
 	return (kind == coreproof.OutputGeneratedEnvironment &&
-		taskKind == base.TaskMaterializationOutputRemoveGeneratedEnv) ||
-		(kind == coreproof.OutputPlainFile && taskKind == base.TaskMaterializationOutputRemovePlainFile) ||
-		(kind == coreproof.OutputSecretFile && taskKind == base.TaskMaterializationOutputRemoveSecretFile)
+		taskKind == materializationrecord.OutputRemoveGeneratedEnv) ||
+		(kind == coreproof.OutputPlainFile && taskKind == materializationrecord.OutputRemovePlainFile) ||
+		(kind == coreproof.OutputSecretFile && taskKind == materializationrecord.OutputRemoveSecretFile)
 }
 
 func authorityConflict() error {

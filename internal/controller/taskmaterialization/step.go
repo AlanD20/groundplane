@@ -3,8 +3,8 @@ package taskmaterialization
 import (
 	"bytes"
 	"encoding/hex"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -12,7 +12,7 @@ import (
 // BuildTaskMaterializationStep projects one validated durable record into the
 // authenticated Agent plan without resolving its content bytes.
 func BuildTaskMaterializationStep(
-	reference etcd.TaskMaterializationRecord,
+	reference materializationrecord.Record,
 	artifactID string,
 	timeoutSeconds uint32,
 ) (*agentpb.ExecutionStep, error) {
@@ -37,20 +37,20 @@ func BuildTaskMaterializationStep(
 }
 
 func taskMaterializationOutputKind(
-	value etcd.TaskMaterializationOutputKind,
+	value materializationrecord.OutputKind,
 ) (agentpb.MaterializationOutputKind, error) {
 	switch value {
-	case etcd.TaskMaterializationOutputGeneratedEnvironment:
+	case materializationrecord.OutputGeneratedEnvironment:
 		return agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_GENERATED_ENV, nil
-	case etcd.TaskMaterializationOutputPlainFile:
+	case materializationrecord.OutputPlainFile:
 		return agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_PLAIN_FILE, nil
-	case etcd.TaskMaterializationOutputSecretFile:
+	case materializationrecord.OutputSecretFile:
 		return agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_SECRET_FILE, nil
-	case etcd.TaskMaterializationOutputRemoveGeneratedEnv:
+	case materializationrecord.OutputRemoveGeneratedEnv:
 		return agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_GENERATED_ENV, nil
-	case etcd.TaskMaterializationOutputRemovePlainFile:
+	case materializationrecord.OutputRemovePlainFile:
 		return agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_PLAIN_FILE, nil
-	case etcd.TaskMaterializationOutputRemoveSecretFile:
+	case materializationrecord.OutputRemoveSecretFile:
 		return agentpb.MaterializationOutputKind_MATERIALIZATION_OUTPUT_KIND_REMOVE_SECRET_FILE, nil
 	default:
 		return 0, errs.New(errs.KindInternal, "durable materialization output kind is corrupt")
@@ -58,7 +58,7 @@ func taskMaterializationOutputKind(
 }
 
 func taskMaterializationMetadataMatches(
-	reference etcd.TaskMaterializationRecord,
+	reference materializationrecord.Record,
 	materialization *agentpb.MaterializeFile,
 ) bool {
 	if materialization == nil {

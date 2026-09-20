@@ -5,12 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
@@ -50,9 +51,9 @@ func (service *entryDesiredMutationService) entryMaterializations(
 	environmentID string,
 	allocator *controllerrevision.BlueprintIdentityAllocator,
 	inputs []composerender.EnvironmentEntryMaterialization,
-) ([]etcd.TaskMaterializationRecord, error) {
+) ([]materializationrecord.Record, error) {
 	sort.Slice(inputs, func(left, right int) bool { return inputs[left].Destination < inputs[right].Destination })
-	records := make([]etcd.TaskMaterializationRecord, 0, len(inputs))
+	records := make([]materializationrecord.Record, 0, len(inputs))
 	previous := ""
 	for _, input := range inputs {
 		if input.Destination == previous {
@@ -64,7 +65,7 @@ func (service *entryDesiredMutationService) entryMaterializations(
 			return nil, err
 		}
 		digest := sha256.Sum256(content)
-		record := etcd.TaskMaterializationRecord{
+		record := materializationrecord.Record{
 			StepID:            allocator.Named(ids.KindStep, "entry-materialization-step/"+input.Destination),
 			MaterializationID: allocator.Named(ids.KindConfig, "entry-materialization/"+input.Destination),
 			EnvironmentID:     environmentID, Destination: input.Destination,

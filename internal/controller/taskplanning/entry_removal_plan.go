@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
@@ -35,7 +36,7 @@ type EntryRemovalMaterializationResolver interface {
 	ResolveTaskMaterializationSource(
 		context.Context,
 		string,
-		etcd.TaskMaterializationSource,
+		materializationrecord.Source,
 	) ([]byte, error)
 }
 
@@ -122,7 +123,7 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	task.Steps = make([]etcd.TaskStepRecord, len(templates))
-	task.Materializations = make([]etcd.TaskMaterializationRecord, len(templates))
+	task.Materializations = make([]materializationrecord.Record, len(templates))
 	seenMaterializations := make(map[string]struct{}, len(templates))
 	seenSteps := make(map[string]struct{}, len(templates))
 	for index, template := range templates {
@@ -208,10 +209,10 @@ func entryRemovalTaskPlan(task etcd.TaskRecord) (entrycapability.RemovalTaskPlan
 }
 
 func entryRemovalMaterialization(
-	input etcd.TaskMaterializationRecord,
+	input materializationrecord.Record,
 ) (entrycapability.RemovalMaterialization, error) {
 	source := entrycapability.RemovalSource{Kind: entrycapability.RemovalSourceKind(input.Source.Kind)}
-	if input.Source.Kind == etcd.TaskMaterializationSourceGeneratedEnvironment {
+	if input.Source.Kind == materializationrecord.SourceGeneratedEnvironment {
 		if input.Source.GeneratedEnvironment == nil {
 			return entrycapability.RemovalMaterialization{}, errs.New(
 				errs.KindInternal, "entry removal generated source is incomplete",
@@ -233,7 +234,7 @@ func entryRemovalMaterialization(
 			}
 		}
 		source.GeneratedEnvironment = generated
-	} else if input.Source.Kind != etcd.TaskMaterializationSourceRemoval {
+	} else if input.Source.Kind != materializationrecord.SourceRemoval {
 		return entrycapability.RemovalMaterialization{}, errs.New(
 			errs.KindInternal, "entry removal source kind is invalid",
 		)
@@ -251,11 +252,11 @@ func entryRemovalMaterialization(
 	}, nil
 }
 
-func entryRemovalValueStorage(input etcd.TaskEntryValueStorage) (entrycapability.RemovalValueStorage, error) {
+func entryRemovalValueStorage(input materializationrecord.EntryValueStorage) (entrycapability.RemovalValueStorage, error) {
 	switch input {
-	case etcd.TaskEntryValueStoragePlain:
+	case materializationrecord.EntryValueStoragePlain:
 		return entrycapability.RemovalValueStoragePlain, nil
-	case etcd.TaskEntryValueStorageSecret:
+	case materializationrecord.EntryValueStorageSecret:
 		return entrycapability.RemovalValueStorageSecret, nil
 	default:
 		return "", errs.New(errs.KindInternal, "durable Entry removal value storage is invalid")
@@ -263,20 +264,20 @@ func entryRemovalValueStorage(input etcd.TaskEntryValueStorage) (entrycapability
 }
 
 func entryRemovalOutputKind(
-	input etcd.TaskMaterializationOutputKind,
+	input materializationrecord.OutputKind,
 ) (entrycapability.RemovalOutputKind, error) {
 	switch input {
-	case etcd.TaskMaterializationOutputGeneratedEnvironment:
+	case materializationrecord.OutputGeneratedEnvironment:
 		return entrycapability.RemovalOutputGeneratedEnvironment, nil
-	case etcd.TaskMaterializationOutputPlainFile:
+	case materializationrecord.OutputPlainFile:
 		return entrycapability.RemovalOutputPlainFile, nil
-	case etcd.TaskMaterializationOutputSecretFile:
+	case materializationrecord.OutputSecretFile:
 		return entrycapability.RemovalOutputSecretFile, nil
-	case etcd.TaskMaterializationOutputRemoveGeneratedEnv:
+	case materializationrecord.OutputRemoveGeneratedEnv:
 		return entrycapability.RemovalOutputRemoveGeneratedEnv, nil
-	case etcd.TaskMaterializationOutputRemovePlainFile:
+	case materializationrecord.OutputRemovePlainFile:
 		return entrycapability.RemovalOutputRemovePlainFile, nil
-	case etcd.TaskMaterializationOutputRemoveSecretFile:
+	case materializationrecord.OutputRemoveSecretFile:
 		return entrycapability.RemovalOutputRemoveSecretFile, nil
 	default:
 		return "", errs.New(errs.KindInternal, "durable Entry removal output kind is invalid")
@@ -326,7 +327,7 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 	if err != nil || len(task.Steps) != len(templates) || len(task.Materializations) != len(templates) {
 		return nil, errs.New(errs.KindInternal, "durable Entry removal materialization count changed")
 	}
-	references := make(map[string]etcd.TaskMaterializationRecord, len(task.Materializations))
+	references := make(map[string]materializationrecord.Record, len(task.Materializations))
 	for _, reference := range task.Materializations {
 		if _, duplicate := references[reference.StepID]; duplicate {
 			return nil, errs.New(errs.KindInternal, "durable Entry removal step binding is duplicated")
@@ -398,7 +399,7 @@ func pinnedEntryRemovalIdentity(
 
 func entryRemovalMaterializationTemplates(
 	intent etcd.EntryRemovalIntent,
-) ([]etcd.TaskMaterializationRecord, error) {
+) ([]materializationrecord.Record, error) {
 	if intent.CurrentProjection == nil || intent.CandidateProjection == nil ||
 		intent.CurrentProjection.EnvironmentID != intent.EnvironmentID ||
 		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID {
@@ -424,17 +425,17 @@ func entryRemovalMaterializationTemplates(
 		if removed.Entry.UID == nil || removed.Entry.GID == nil {
 			return nil, errs.New(errs.KindInternal, "file Entry removal metadata is incomplete")
 		}
-		kind := etcd.TaskMaterializationOutputRemovePlainFile
+		kind := materializationrecord.OutputRemovePlainFile
 		mode := entrymaterialization.ModeReadOnly
 		if removed.Entry.Secret {
-			kind = etcd.TaskMaterializationOutputRemoveSecretFile
+			kind = materializationrecord.OutputRemoveSecretFile
 			mode = entrymaterialization.ModePrivate
 		}
-		return []etcd.TaskMaterializationRecord{{
+		return []materializationrecord.Record{{
 			EnvironmentID: intent.EnvironmentID, Destination: removed.Entry.Path,
 			OutputKind: kind, UID: *removed.Entry.UID, GID: *removed.Entry.GID, Mode: uint32(mode),
 			SHA256: hex.EncodeToString(sha256.New().Sum(nil)),
-			Source: etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceRemoval},
+			Source: materializationrecord.Source{Kind: materializationrecord.SourceRemoval},
 		}}, nil
 	}
 	if removed.Entry.Kind != core.EntryKindEnv {
@@ -451,7 +452,7 @@ func entryRemovalMaterializationTemplates(
 			}
 		}
 	}
-	result := make([]etcd.TaskMaterializationRecord, len(scopes))
+	result := make([]materializationrecord.Record, len(scopes))
 	for index, scope := range scopes {
 		template, err := entryRemovalEnvironmentTemplate(intent, scope)
 		if err != nil {
@@ -468,9 +469,9 @@ func entryRemovalMaterializationTemplates(
 func entryRemovalEnvironmentTemplate(
 	intent etcd.EntryRemovalIntent,
 	scope string,
-) (etcd.TaskMaterializationRecord, error) {
-	reference := etcd.TaskMaterializationRecord{
-		EnvironmentID: intent.EnvironmentID, OutputKind: etcd.TaskMaterializationOutputGeneratedEnvironment,
+) (materializationrecord.Record, error) {
+	reference := materializationrecord.Record{
+		EnvironmentID: intent.EnvironmentID, OutputKind: materializationrecord.OutputGeneratedEnvironment,
 		Mode: uint32(entrymaterialization.ModePrivate),
 	}
 	if scope == "all" {
@@ -478,7 +479,7 @@ func entryRemovalEnvironmentTemplate(
 	} else {
 		services, err := entryRemovalEnvironmentServiceIdentities(*intent.CandidateProjection)
 		if err != nil {
-			return etcd.TaskMaterializationRecord{}, err
+			return materializationrecord.Record{}, err
 		}
 		for _, service := range services {
 			if service.Name == scope {
@@ -488,27 +489,27 @@ func entryRemovalEnvironmentTemplate(
 			}
 		}
 		if reference.ServiceID == "" {
-			return etcd.TaskMaterializationRecord{}, errs.New(
+			return materializationrecord.Record{}, errs.New(
 				errs.KindInternal,
 				"entry removal exposure Service is absent from its pinned projection",
 			)
 		}
 		reference.Destination = environmentfile.ServiceEnvFileName(intent.EnvironmentID, scope)
 	}
-	values := make([]etcd.TaskGeneratedEnvironmentEntryReference, 0)
+	values := make([]materializationrecord.GeneratedEnvironmentEntryReference, 0)
 	for _, record := range intent.CandidateProjection.Entries {
 		entry := record.Entry
 		if entry.Kind != core.EntryKindEnv || scope == "all" && !entry.ExposesAll() ||
 			scope != "all" && (entry.ExposesAll() || !entryExposesService(entry, scope)) {
 			continue
 		}
-		storage := etcd.TaskEntryValueStoragePlain
+		storage := materializationrecord.EntryValueStoragePlain
 		if entry.Secret {
-			storage = etcd.TaskEntryValueStorageSecret
+			storage = materializationrecord.EntryValueStorageSecret
 		}
-		values = append(values, etcd.TaskGeneratedEnvironmentEntryReference{
+		values = append(values, materializationrecord.GeneratedEnvironmentEntryReference{
 			Name: entry.Key,
-			Value: etcd.TaskEntryValueReference{
+			Value: materializationrecord.EntryValueReference{
 				EntryID: entry.ID, ValueGenerationID: record.CurrentValueGenerationID, Storage: storage,
 			},
 		})
@@ -516,21 +517,21 @@ func entryRemovalEnvironmentTemplate(
 	sort.Slice(values, func(left int, right int) bool { return values[left].Name < values[right].Name })
 	for index := 1; index < len(values); index++ {
 		if values[index].Name == values[index-1].Name {
-			return etcd.TaskMaterializationRecord{}, errs.New(
+			return materializationrecord.Record{}, errs.New(
 				errs.KindInternal,
 				"entry removal generated Environment contains a duplicate key",
 			)
 		}
 	}
 	if scope != "all" && len(values) == 0 {
-		reference.OutputKind = etcd.TaskMaterializationOutputRemoveGeneratedEnv
+		reference.OutputKind = materializationrecord.OutputRemoveGeneratedEnv
 		reference.SHA256 = hex.EncodeToString(sha256.New().Sum(nil))
-		reference.Source = etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceRemoval}
+		reference.Source = materializationrecord.Source{Kind: materializationrecord.SourceRemoval}
 		return reference, nil
 	}
-	reference.Source = etcd.TaskMaterializationSource{
-		Kind:                 etcd.TaskMaterializationSourceGeneratedEnvironment,
-		GeneratedEnvironment: &etcd.TaskGeneratedEnvironmentValueReference{FormatVersion: 1, Values: values},
+	reference.Source = materializationrecord.Source{
+		Kind:                 materializationrecord.SourceGeneratedEnvironment,
+		GeneratedEnvironment: &materializationrecord.GeneratedEnvironmentValueReference{FormatVersion: 1, Values: values},
 	}
 	return reference, nil
 }
@@ -635,8 +636,8 @@ func entryExposesService(entry core.EnvEntry, serviceName string) bool {
 }
 
 func sameEntryRemovalMaterializationTemplate(
-	reference etcd.TaskMaterializationRecord,
-	template etcd.TaskMaterializationRecord,
+	reference materializationrecord.Record,
+	template materializationrecord.Record,
 ) bool {
 	if reference.EnvironmentID != template.EnvironmentID || reference.Destination != template.Destination ||
 		reference.ServiceID != template.ServiceID || reference.ServiceName != template.ServiceName ||
@@ -652,13 +653,13 @@ func sameEntryRemovalMaterializationTemplate(
 }
 
 func sameEntryRemovalMaterializationSource(
-	left etcd.TaskMaterializationSource,
-	right etcd.TaskMaterializationSource,
+	left materializationrecord.Source,
+	right materializationrecord.Source,
 ) bool {
 	if left.Kind != right.Kind {
 		return false
 	}
-	if left.Kind == etcd.TaskMaterializationSourceRemoval {
+	if left.Kind == materializationrecord.SourceRemoval {
 		return left.BlueprintFile == nil && left.ComponentFile == nil && left.EntryValue == nil &&
 			left.GeneratedEnvironment == nil && right.BlueprintFile == nil && right.ComponentFile == nil &&
 			right.EntryValue == nil && right.GeneratedEnvironment == nil
@@ -676,8 +677,8 @@ func sameEntryRemovalMaterializationSource(
 	return true
 }
 
-func entryRemovalOutputRemoves(kind etcd.TaskMaterializationOutputKind) bool {
-	return kind == etcd.TaskMaterializationOutputRemoveGeneratedEnv ||
-		kind == etcd.TaskMaterializationOutputRemovePlainFile ||
-		kind == etcd.TaskMaterializationOutputRemoveSecretFile
+func entryRemovalOutputRemoves(kind materializationrecord.OutputKind) bool {
+	return kind == materializationrecord.OutputRemoveGeneratedEnv ||
+		kind == materializationrecord.OutputRemovePlainFile ||
+		kind == materializationrecord.OutputRemoveSecretFile
 }

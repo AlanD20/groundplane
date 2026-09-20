@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -108,14 +109,14 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	if err != nil {
 		return scriptTerminalSourceRelease{}, false, err
 	}
-	disposition := ScriptRetryDispositionForbidden
+	disposition := sourceref.RetryDispositionForbidden
 	if status == TaskStatusAborted {
-		disposition = ScriptRetryDispositionAbandoned
+		disposition = sourceref.RetryDispositionAbandoned
 	}
 	if root.Phase == ScriptOperationSourceActive {
 		if (!preparedAbort && (!execution.ActiveReference || !terminalAt.After(execution.UpdatedAt))) ||
 			root.ReleasePath != ScriptSourceReleaseAbsent ||
-			(root.RetryDisposition != ScriptRetryDispositionUndecided && root.RetryDisposition != ScriptRetryDispositionTransferred) {
+			(root.RetryDisposition != sourceref.RetryDispositionUndecided && root.RetryDisposition != sourceref.RetryDispositionTransferred) {
 			return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
 		}
 		release, err := authority.PrepareNormalRelease(ctx, task.OperationID, disposition)

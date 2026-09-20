@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -39,7 +40,7 @@ type materializationComponentFileReader interface {
 	ResolveComponentFile(
 		context.Context,
 		string,
-		etcd.TaskComponentFileValueReference,
+		materializationrecord.ComponentFileValueReference,
 	) ([]byte, error)
 }
 
@@ -80,7 +81,7 @@ func NewTaskMaterializationResolver(
 func (resolver *TaskMaterializationResolver) ResolveTaskMaterializationSource(
 	ctx context.Context,
 	environmentID string,
-	source etcd.TaskMaterializationSource,
+	source materializationrecord.Source,
 ) ([]byte, error) {
 	if ctx == nil || resolver == nil || resolver.blueprints == nil || resolver.values == nil ||
 		resolver.secrets == nil ||
@@ -128,7 +129,7 @@ func (resolver *TaskMaterializationResolver) ResolveMaterialization(
 		return nil, errs.New(errs.KindInternal, "materialization Task and plan metadata are inconsistent")
 	}
 	var content []byte
-	if reference.Source.Kind == etcd.TaskMaterializationSourceComponentFile {
+	if reference.Source.Kind == materializationrecord.SourceComponentFile {
 		if resolver.materializations == nil {
 			return nil, errs.New(errs.KindInternal, "Component materialization content repository is unavailable")
 		}
@@ -156,14 +157,14 @@ func (resolver *TaskMaterializationResolver) ResolveMaterialization(
 func taskMaterializationReference(
 	task etcd.TaskRecord,
 	stepID string,
-) (etcd.TaskMaterializationRecord, error) {
-	var selected *etcd.TaskMaterializationRecord
+) (materializationrecord.Record, error) {
+	var selected *materializationrecord.Record
 	for index := range task.Materializations {
 		if task.Materializations[index].StepID != stepID {
 			continue
 		}
 		if selected != nil {
-			return etcd.TaskMaterializationRecord{}, errs.New(
+			return materializationrecord.Record{}, errs.New(
 				errs.KindInternal,
 				"materialization Task contains duplicate step references",
 			)
@@ -171,7 +172,7 @@ func taskMaterializationReference(
 		selected = &task.Materializations[index]
 	}
 	if selected == nil {
-		return etcd.TaskMaterializationRecord{}, errs.New(
+		return materializationrecord.Record{}, errs.New(
 			errs.KindInternal,
 			"materialization Task is missing its source reference",
 		)
@@ -182,34 +183,34 @@ func taskMaterializationReference(
 func (resolver *TaskMaterializationResolver) resolveSource(
 	ctx context.Context,
 	environmentID string,
-	source etcd.TaskMaterializationSource,
+	source materializationrecord.Source,
 ) ([]byte, error) {
 	switch source.Kind {
-	case etcd.TaskMaterializationSourceBlueprintFile:
+	case materializationrecord.SourceBlueprintFile:
 		if source.BlueprintFile == nil || source.ComponentFile != nil || source.EntryValue != nil ||
 			source.GeneratedEnvironment != nil {
 			return nil, CorruptSource()
 		}
 		return resolver.resolveBlueprintFile(ctx, environmentID, *source.BlueprintFile)
-	case etcd.TaskMaterializationSourceComponentFile:
+	case materializationrecord.SourceComponentFile:
 		if source.ComponentFile == nil || source.BlueprintFile != nil || source.EntryValue != nil ||
 			source.GeneratedEnvironment != nil {
 			return nil, CorruptSource()
 		}
 		return resolver.components.ResolveComponentFile(ctx, environmentID, *source.ComponentFile)
-	case etcd.TaskMaterializationSourceEntryValue:
+	case materializationrecord.SourceEntryValue:
 		if source.EntryValue == nil || source.BlueprintFile != nil || source.ComponentFile != nil ||
 			source.GeneratedEnvironment != nil {
 			return nil, CorruptSource()
 		}
 		return resolver.resolveEntryValue(ctx, environmentID, *source.EntryValue)
-	case etcd.TaskMaterializationSourceGeneratedEnvironment:
+	case materializationrecord.SourceGeneratedEnvironment:
 		if source.GeneratedEnvironment == nil || source.BlueprintFile != nil || source.ComponentFile != nil ||
 			source.EntryValue != nil {
 			return nil, CorruptSource()
 		}
 		return resolver.resolveGeneratedEnvironment(ctx, environmentID, *source.GeneratedEnvironment)
-	case etcd.TaskMaterializationSourceRemoval:
+	case materializationrecord.SourceRemoval:
 		if source.BlueprintFile != nil || source.ComponentFile != nil || source.EntryValue != nil ||
 			source.GeneratedEnvironment != nil {
 			return nil, CorruptSource()
@@ -223,7 +224,7 @@ func (resolver *TaskMaterializationResolver) resolveSource(
 func (resolver *TaskMaterializationResolver) resolveBlueprintFile(
 	ctx context.Context,
 	environmentID string,
-	reference etcd.TaskBlueprintFileValueReference,
+	reference materializationrecord.BlueprintFileValueReference,
 ) ([]byte, error) {
 	revision, found, err := resolver.blueprints.GetEnvironmentComposeProjectionRevision(
 		ctx,
@@ -251,10 +252,10 @@ func (resolver *TaskMaterializationResolver) resolveBlueprintFile(
 func (resolver *TaskMaterializationResolver) resolveEntryValue(
 	ctx context.Context,
 	environmentID string,
-	reference etcd.TaskEntryValueReference,
+	reference materializationrecord.EntryValueReference,
 ) ([]byte, error) {
 	switch reference.Storage {
-	case etcd.TaskEntryValueStoragePlain:
+	case materializationrecord.EntryValueStoragePlain:
 		record, found, err := resolver.values.GetPlain(ctx, reference.EntryID, reference.ValueGenerationID)
 		if err != nil {
 			return nil, err
@@ -265,7 +266,7 @@ func (resolver *TaskMaterializationResolver) resolveEntryValue(
 			return nil, CorruptSource()
 		}
 		return record.Content, nil
-	case etcd.TaskEntryValueStorageSecret:
+	case materializationrecord.EntryValueStorageSecret:
 		record, found, err := resolver.values.GetSecret(ctx, reference.EntryID, reference.ValueGenerationID)
 		if err != nil {
 			return nil, err
@@ -306,7 +307,7 @@ func (resolver *TaskMaterializationResolver) resolveEntryValue(
 func (resolver *TaskMaterializationResolver) resolveGeneratedEnvironment(
 	ctx context.Context,
 	environmentID string,
-	reference etcd.TaskGeneratedEnvironmentValueReference,
+	reference materializationrecord.GeneratedEnvironmentValueReference,
 ) ([]byte, error) {
 	if reference.FormatVersion != 1 {
 		return nil, CorruptSource()
@@ -355,43 +356,43 @@ func (resolver *TaskMaterializationResolver) PinSecretValue(
 	ctx context.Context,
 	projectID string,
 	secretID string,
-) (etcd.TaskSecretValueReference, error) {
+) (materializationrecord.SecretValueReference, error) {
 	if ctx == nil || resolver == nil || resolver.secrets == nil || ids.Validate(ids.KindProject, projectID) != nil ||
 		ids.Validate(ids.KindSecret, secretID) != nil {
-		return etcd.TaskSecretValueReference{}, errs.New(
+		return materializationrecord.SecretValueReference{}, errs.New(
 			errs.KindValidationFailed,
 			"Component Secret reference is invalid",
 		)
 	}
 	current, err := resolver.secrets.GetSecret(ctx, secretID)
 	if err != nil {
-		return etcd.TaskSecretValueReference{}, err
+		return materializationrecord.SecretValueReference{}, err
 	}
 	secret := current.Record.Secret
 	if current.Revision <= 0 || secret.ID != secretID || secret.Kind != core.SecretKindEnvVar ||
 		secret.Scope == core.SecretScopeProject && secret.ProjectID != projectID ||
 		secret.Scope != core.SecretScopeProject && secret.Scope != core.SecretScopePlatform {
-		return etcd.TaskSecretValueReference{}, errs.New(
+		return materializationrecord.SecretValueReference{}, errs.New(
 			errs.KindValidationFailed,
 			"Component Secret is unavailable in this Project",
 		)
 	}
 	value, err := resolver.secrets.GetSecretValue(ctx, current)
 	if err != nil {
-		return etcd.TaskSecretValueReference{}, err
+		return materializationrecord.SecretValueReference{}, err
 	}
 	defer clear(value.Ciphertext)
 	if value.SecretID != secretID || len(value.Ciphertext) == 0 || len(value.CiphertextSHA256) != sha256.Size*2 {
-		return etcd.TaskSecretValueReference{}, CorruptSource()
+		return materializationrecord.SecretValueReference{}, CorruptSource()
 	}
-	return etcd.TaskSecretValueReference{
+	return materializationrecord.SecretValueReference{
 		SecretID: secretID, Revision: current.Revision, CiphertextSHA256: value.CiphertextSHA256,
 	}, nil
 }
 
 func (resolver *TaskMaterializationResolver) resolveSecretValue(
 	ctx context.Context,
-	reference etcd.TaskSecretValueReference,
+	reference materializationrecord.SecretValueReference,
 ) ([]byte, error) {
 	current, err := resolver.secrets.GetSecret(ctx, reference.SecretID)
 	if err != nil {

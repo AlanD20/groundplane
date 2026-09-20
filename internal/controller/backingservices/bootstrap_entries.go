@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -199,18 +200,18 @@ func backingEnvironmentMaterialization(
 	entries []entryrecord.Record,
 	resolved map[string]string,
 	allocator *desiredrevision.BlueprintIdentityAllocator,
-) (etcd.TaskMaterializationRecord, *agentpb.ExecutionStep, error) {
+) (materializationrecord.Record, *agentpb.ExecutionStep, error) {
 	desired := make([]core.EnvEntry, len(entries))
-	references := make([]etcd.TaskGeneratedEnvironmentEntryReference, len(entries))
+	references := make([]materializationrecord.GeneratedEnvironmentEntryReference, len(entries))
 	for index, entry := range entries {
 		desired[index] = entry.Entry
-		storage := etcd.TaskEntryValueStoragePlain
+		storage := materializationrecord.EntryValueStoragePlain
 		if entry.Entry.Secret {
-			storage = etcd.TaskEntryValueStorageSecret
+			storage = materializationrecord.EntryValueStorageSecret
 		}
-		references[index] = etcd.TaskGeneratedEnvironmentEntryReference{
+		references[index] = materializationrecord.GeneratedEnvironmentEntryReference{
 			Name: entry.Entry.Key,
-			Value: etcd.TaskEntryValueReference{
+			Value: materializationrecord.EntryValueReference{
 				EntryID:           entry.Entry.ID,
 				ValueGenerationID: entry.CurrentValueGenerationID,
 				Storage:           storage,
@@ -220,32 +221,32 @@ func backingEnvironmentMaterialization(
 	sort.Slice(references, func(left, right int) bool { return references[left].Name < references[right].Name })
 	content, err := environmentfile.RenderEnvFile(desired, resolved)
 	if err != nil {
-		return etcd.TaskMaterializationRecord{}, nil, err
+		return materializationrecord.Record{}, nil, err
 	}
 	defer clear(content)
 	digest := sha256.Sum256(content)
 	destination, err := entrymaterialization.GeneratedEnvDestination(environmentID, "")
 	if err != nil {
-		return etcd.TaskMaterializationRecord{}, nil, err
+		return materializationrecord.Record{}, nil, err
 	}
-	record := etcd.TaskMaterializationRecord{
+	record := materializationrecord.Record{
 		StepID:            allocator.Named(ids.KindStep, "bootstrap-environment"),
 		MaterializationID: allocator.Named(ids.KindConfig, "bootstrap-environment-materialization"),
 		EnvironmentID:     environmentID, Destination: destination,
-		OutputKind: etcd.TaskMaterializationOutputGeneratedEnvironment,
+		OutputKind: materializationrecord.OutputGeneratedEnvironment,
 		Mode: uint32(
 			entrymaterialization.ModePrivate,
 		), Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]),
-		Source: etcd.TaskMaterializationSource{
-			Kind: etcd.TaskMaterializationSourceGeneratedEnvironment,
-			GeneratedEnvironment: &etcd.TaskGeneratedEnvironmentValueReference{
+		Source: materializationrecord.Source{
+			Kind: materializationrecord.SourceGeneratedEnvironment,
+			GeneratedEnvironment: &materializationrecord.GeneratedEnvironmentValueReference{
 				FormatVersion: 1, Values: references,
 			},
 		},
 	}
 	step, err := taskmaterialization.BuildTaskMaterializationStep(record, artifactID, uint32(desiredrevision.TaskTimeoutSeconds))
 	if err != nil {
-		return etcd.TaskMaterializationRecord{}, nil, err
+		return materializationrecord.Record{}, nil, err
 	}
 	return record, step, nil
 }

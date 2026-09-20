@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -190,7 +191,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	}
 	if root.Phase == ScriptOperationSourceActive {
 		if root.ReleasePath != ScriptSourceReleaseAbsent ||
-			(root.RetryDisposition != ScriptRetryDispositionUndecided && root.RetryDisposition != ScriptRetryDispositionTransferred) {
+			(root.RetryDisposition != sourceref.RetryDispositionUndecided && root.RetryDisposition != sourceref.RetryDispositionTransferred) {
 			return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 		}
 		release, releaseErr := repository.beginBlueprintTerminalScriptSourceRelease(
@@ -218,7 +219,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		return scriptTerminalSourceRelease{}, true, nil
 	}
 	if root.Phase != ScriptOperationSourceReleasing || root.ReleasePath != ScriptSourceReleaseNormal ||
-		root.RetryDisposition != ScriptRetryDispositionForbidden {
+		root.RetryDisposition != sourceref.RetryDispositionForbidden {
 		return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 	}
 	for _, execution := range executions {
@@ -278,7 +279,7 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 	if err != nil {
 		return scriptTerminalSourceRelease{}, err
 	}
-	release, err := authority.PrepareNormalRelease(ctx, task.OperationID, ScriptRetryDispositionForbidden)
+	release, err := authority.PrepareNormalRelease(ctx, task.OperationID, sourceref.RetryDispositionForbidden)
 	if err != nil {
 		return scriptTerminalSourceRelease{}, err
 	}

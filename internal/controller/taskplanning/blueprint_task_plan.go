@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
@@ -183,7 +184,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if volumePrecedesMaterialization {
 		appendVolumeStep()
 	}
-	materializations := make(map[string]etcd.TaskMaterializationRecord, len(task.Materializations))
+	materializations := make(map[string]materializationrecord.Record, len(task.Materializations))
 	for _, reference := range task.Materializations {
 		materializations[reference.StepID] = reference
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -242,7 +243,7 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	var references []etcd.TaskMaterializationRecord
+	var references []materializationrecord.Record
 	if request.action != entryDesiredMutationRemove {
 		references, err = service.entryMaterializations(ctx, request.environmentID, allocator, materializations)
 		if err != nil {

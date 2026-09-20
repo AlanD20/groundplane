@@ -4,19 +4,20 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func serviceScriptSource(serviceID string) ScriptSourceIdentity {
-	return ScriptSourceIdentity{Kind: ScriptSourceService, ServiceID: serviceID}
+func serviceScriptSource(serviceID string) sourceref.SourceIdentity {
+	return sourceref.SourceIdentity{Kind: sourceref.SourceService, ServiceID: serviceID}
 }
 
 func serviceScriptAbsenceConditions(serviceID string) []etcdstore.Condition {
 	source := serviceScriptSource(serviceID)
 	return []etcdstore.Condition{
 		{Key: scriptSourceCountKey(source)},
-		{Key: scriptSourceForwardReferencePrefix + scriptSourceSuffix(source) + "/", Prefix: true},
+		{Key: sourceref.ForwardReferencePrefix + scriptSourceSuffix(source) + "/", Prefix: true},
 	}
 }
 
@@ -33,7 +34,7 @@ func classifyServiceScriptReferences(serviceID string, values []*etcdstore.KeyVa
 		count.ReferencedExecutionCount == 0 {
 		return errs.New(errs.KindInternal, "Service Script reference count is corrupt")
 	}
-	reference, err := recordcodec.Decode[ScriptSourceReference](values[1].Value, "script-source-reference")
+	reference, err := recordcodec.Decode[sourceref.Reference](values[1].Value, "script-source-reference")
 	if err != nil || reference.Source != source || scriptSourceForwardReferenceKey(reference) != values[1].Key {
 		return errs.New(errs.KindInternal, "Service Script source membership is corrupt")
 	}

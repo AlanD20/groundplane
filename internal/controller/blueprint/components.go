@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
@@ -176,11 +177,11 @@ type environmentComponentMaterializationInput struct {
 	destination string
 	serviceID   string
 	serviceName string
-	outputKind  etcd.TaskMaterializationOutputKind
+	outputKind  materializationrecord.OutputKind
 	uid         uint32
 	gid         uint32
 	mode        entrymaterialization.Mode
-	source      etcd.TaskMaterializationSource
+	source      materializationrecord.Source
 	content     []byte
 	resolve     bool
 }
@@ -197,7 +198,7 @@ func (service *Service) environmentComponentMaterializations(
 	projection composerender.EnvironmentComponentComposeProjection,
 	entryMaterializations []composerender.EnvironmentEntryMaterialization,
 	entries []entryrecord.Record,
-) ([]etcd.TaskMaterializationRecord, []*agentpb.ExecutionStep, error) {
+) ([]materializationrecord.Record, []*agentpb.ExecutionStep, error) {
 	inputs := make([]environmentComponentMaterializationInput, 0,
 		len(runtimeFiles)+len(projection.PlainFiles)+len(projection.EnvironmentFiles)+len(entryMaterializations))
 	for _, materialization := range entryMaterializations {
@@ -215,11 +216,11 @@ func (service *Service) environmentComponentMaterializations(
 	}
 	for _, file := range runtimeFiles {
 		inputs = append(inputs, environmentComponentMaterializationInput{
-			destination: file.Path, outputKind: etcd.TaskMaterializationOutputPlainFile,
+			destination: file.Path, outputKind: materializationrecord.OutputPlainFile,
 			mode: entrymaterialization.ModeReadOnly,
-			source: etcd.TaskMaterializationSource{
-				Kind: etcd.TaskMaterializationSourceBlueprintFile,
-				BlueprintFile: &etcd.TaskBlueprintFileValueReference{
+			source: materializationrecord.Source{
+				Kind: materializationrecord.SourceBlueprintFile,
+				BlueprintFile: &materializationrecord.BlueprintFileValueReference{
 					RevisionID: revisionID, Path: file.Path,
 				},
 			},
@@ -228,11 +229,11 @@ func (service *Service) environmentComponentMaterializations(
 	}
 	for _, file := range projection.PlainFiles {
 		inputs = append(inputs, environmentComponentMaterializationInput{
-			destination: file.Path, outputKind: etcd.TaskMaterializationOutputPlainFile,
+			destination: file.Path, outputKind: materializationrecord.OutputPlainFile,
 			mode: entrymaterialization.ModeReadOnly,
-			source: etcd.TaskMaterializationSource{
-				Kind: etcd.TaskMaterializationSourceComponentFile,
-				ComponentFile: &etcd.TaskComponentFileValueReference{
+			source: materializationrecord.Source{
+				Kind: materializationrecord.SourceComponentFile,
+				ComponentFile: &materializationrecord.ComponentFileValueReference{
 					RevisionID: revisionID, ComponentID: file.ComponentID, Path: file.Path,
 				},
 			},
@@ -240,31 +241,31 @@ func (service *Service) environmentComponentMaterializations(
 		})
 	}
 	for _, file := range projection.EnvironmentFiles {
-		values := make([]etcd.TaskGeneratedEnvironmentEntryReference, len(file.Values))
+		values := make([]materializationrecord.GeneratedEnvironmentEntryReference, len(file.Values))
 		for index, binding := range file.Values {
 			secret, err := service.materials.PinSecretValue(ctx, projectID, binding.SecretID)
 			if err != nil {
 				return nil, nil, err
 			}
-			values[index] = etcd.TaskGeneratedEnvironmentEntryReference{
+			values[index] = materializationrecord.GeneratedEnvironmentEntryReference{
 				Name: binding.Name, Secret: &secret,
 			}
 		}
 		sort.Slice(values, func(left int, right int) bool { return values[left].Name < values[right].Name })
 		inputs = append(inputs, environmentComponentMaterializationInput{
 			destination: file.Destination, serviceID: file.ServiceID, serviceName: file.ServiceName,
-			outputKind: etcd.TaskMaterializationOutputGeneratedEnvironment,
+			outputKind: materializationrecord.OutputGeneratedEnvironment,
 			mode:       entrymaterialization.ModePrivate, resolve: true,
-			source: etcd.TaskMaterializationSource{
-				Kind: etcd.TaskMaterializationSourceGeneratedEnvironment,
-				GeneratedEnvironment: &etcd.TaskGeneratedEnvironmentValueReference{
+			source: materializationrecord.Source{
+				Kind: materializationrecord.SourceGeneratedEnvironment,
+				GeneratedEnvironment: &materializationrecord.GeneratedEnvironmentValueReference{
 					FormatVersion: 1, Values: values,
 				},
 			},
 		})
 	}
 	sort.Slice(inputs, func(left int, right int) bool { return inputs[left].destination < inputs[right].destination })
-	references := make([]etcd.TaskMaterializationRecord, 0, len(inputs))
+	references := make([]materializationrecord.Record, 0, len(inputs))
 	steps := make([]*agentpb.ExecutionStep, 0, len(inputs))
 	previousDestination := ""
 	for _, input := range inputs {
@@ -281,7 +282,7 @@ func (service *Service) environmentComponentMaterializations(
 			}
 		}
 		digest := sha256.Sum256(content)
-		reference := etcd.TaskMaterializationRecord{
+		reference := materializationrecord.Record{
 			StepID:            allocate(ids.KindStep, "materialization-step/"+input.destination),
 			MaterializationID: allocate(ids.KindConfig, "materialization/"+input.destination),
 			EnvironmentID:     environmentID, Destination: input.destination,
@@ -289,7 +290,7 @@ func (service *Service) environmentComponentMaterializations(
 			OutputKind: input.outputKind, UID: input.uid, GID: input.gid, Mode: uint32(input.mode),
 			Length: uint64(len(content)), SHA256: hex.EncodeToString(digest[:]), Source: input.source,
 		}
-		if input.source.Kind == etcd.TaskMaterializationSourceComponentFile {
+		if input.source.Kind == materializationrecord.SourceComponentFile {
 			err = service.materials.RetainComponentFile(ctx, reference, generation, content)
 		}
 		clear(content)

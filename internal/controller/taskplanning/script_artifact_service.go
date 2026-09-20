@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"path"
@@ -33,7 +34,7 @@ type scriptEntryValueResolver interface {
 	ResolveTaskMaterializationSource(
 		context.Context,
 		string,
-		etcd.TaskMaterializationSource,
+		materializationrecord.Source,
 	) ([]byte, error)
 }
 
@@ -157,16 +158,16 @@ func (service *ScriptArtifactService) ResolveScriptAssignmentArtifacts(
 				continue
 			}
 			seenBindings[identity] = binding
-			reference := etcd.TaskEntryValueReference{
+			reference := materializationrecord.EntryValueReference{
 				EntryID: binding.EntryId, ValueGenerationID: binding.ValueGenerationId,
-				Storage: etcd.TaskEntryValueStoragePlain,
+				Storage: materializationrecord.EntryValueStoragePlain,
 			}
 			if binding.Secret {
-				reference.Storage = etcd.TaskEntryValueStorageSecret
+				reference.Storage = materializationrecord.EntryValueStorageSecret
 			}
 			value, resolveErr := service.values.ResolveTaskMaterializationSource(
-				ctx, snapshot.EnvironmentId, etcd.TaskMaterializationSource{
-					Kind: etcd.TaskMaterializationSourceEntryValue, EntryValue: &reference,
+				ctx, snapshot.EnvironmentId, materializationrecord.Source{
+					Kind: materializationrecord.SourceEntryValue, EntryValue: &reference,
 				},
 			)
 			if resolveErr != nil {
@@ -332,15 +333,15 @@ func (service *ScriptArtifactService) resolveScriptEntryValue(
 	environmentID string,
 	record entryrecord.Record,
 ) ([]byte, error) {
-	storage := etcd.TaskEntryValueStoragePlain
+	storage := materializationrecord.EntryValueStoragePlain
 	if record.Entry.Secret {
-		storage = etcd.TaskEntryValueStorageSecret
+		storage = materializationrecord.EntryValueStorageSecret
 	}
-	reference := etcd.TaskEntryValueReference{
+	reference := materializationrecord.EntryValueReference{
 		EntryID: record.Entry.ID, ValueGenerationID: record.CurrentValueGenerationID, Storage: storage,
 	}
-	return service.values.ResolveTaskMaterializationSource(ctx, environmentID, etcd.TaskMaterializationSource{
-		Kind: etcd.TaskMaterializationSourceEntryValue, EntryValue: &reference,
+	return service.values.ResolveTaskMaterializationSource(ctx, environmentID, materializationrecord.Source{
+		Kind: materializationrecord.SourceEntryValue, EntryValue: &reference,
 	})
 }
 

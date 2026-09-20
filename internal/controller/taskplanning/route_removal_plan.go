@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
@@ -75,7 +76,7 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 	}
 	digest := sha256.Sum256(content)
 	length := len(content)
-	reference := etcd.TaskComponentFileValueReference{
+	reference := materializationrecord.ComponentFileValueReference{
 		RevisionID:  intent.CandidateProjection.RevisionID,
 		ComponentID: pin.ComponentID,
 		Path:        pin.Destination,
@@ -94,17 +95,17 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 		{Kind: etcd.TaskStepOperation, ID: procedure.ComposeApplyStepID},
 		{Kind: etcd.TaskStepOperation, ID: procedure.ActivateStepID},
 	}
-	materialization := etcd.TaskMaterializationRecord{
+	materialization := materializationrecord.Record{
 		StepID:            procedure.MaterializeStepID,
 		MaterializationID: procedure.MaterializationID,
 		EnvironmentID:     intent.EnvironmentID,
 		Destination:       pin.Destination,
-		OutputKind:        etcd.TaskMaterializationOutputPlainFile,
+		OutputKind:        materializationrecord.OutputPlainFile,
 		Mode:              uint32(entrymaterialization.ModeReadOnly),
 		Length:            uint64(length),
 		SHA256:            hex.EncodeToString(digest[:]),
-		Source: etcd.TaskMaterializationSource{
-			Kind:          etcd.TaskMaterializationSourceComponentFile,
+		Source: materializationrecord.Source{
+			Kind:          materializationrecord.SourceComponentFile,
 			ComponentFile: &reference,
 		},
 	}
@@ -115,7 +116,7 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 	if err != nil {
 		return etcd.RouteRemovalTaskPreparation{}, err
 	}
-	task.Materializations = []etcd.TaskMaterializationRecord{materialization}
+	task.Materializations = []materializationrecord.Record{materialization}
 	plan, err := resolver.buildRouteRemovalPlan(ctx, task, intent)
 	if err != nil {
 		return etcd.RouteRemovalTaskPreparation{}, err
@@ -185,11 +186,11 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 		reference.Destination != pin.Destination ||
 		reference.ServiceID != "" ||
 		reference.ServiceName != "" ||
-		reference.OutputKind != etcd.TaskMaterializationOutputPlainFile ||
+		reference.OutputKind != materializationrecord.OutputPlainFile ||
 		reference.UID != 0 ||
 		reference.GID != 0 ||
 		reference.Mode != uint32(entrymaterialization.ModeReadOnly) ||
-		reference.Source.Kind != etcd.TaskMaterializationSourceComponentFile ||
+		reference.Source.Kind != materializationrecord.SourceComponentFile ||
 		componentFile == nil ||
 		componentFile.RevisionID != revisionID ||
 		componentFile.ComponentID != pin.ComponentID ||

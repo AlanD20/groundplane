@@ -7,6 +7,7 @@ import (
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -49,14 +50,14 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		if err := validateScriptContextSources(sources, &snapshot); err != nil {
 			return nil, err
 		}
-		base := ScriptSourceReference{
+		base := sourceref.Reference{
 			OperationID:       execution.OperationID,
 			ScriptExecutionID: execution.ID,
 			SourceOwnerID:     execution.EnvironmentID,
 		}
 		body := base
-		body.Source = ScriptSourceIdentity{
-			Kind:                ScriptSourceBody,
+		body.Source = sourceref.SourceIdentity{
+			Kind:                sourceref.SourceBody,
 			EnvironmentID:       execution.EnvironmentID,
 			ScriptSetGeneration: sources.Script.Record.ScriptSetGeneration,
 			ScriptID:            execution.ScriptID,
@@ -81,8 +82,8 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			return nil, err
 		}
 		service := base
-		service.Source = ScriptSourceIdentity{
-			Kind:      ScriptSourceService,
+		service.Source = sourceref.SourceIdentity{
+			Kind:      sourceref.SourceService,
 			ServiceID: execution.ServiceID,
 		}
 		serviceEvidence, err := blueprintStagedSourceEvidence(
@@ -112,8 +113,8 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		}
 		releaseDigest := sha256.Sum256(releaseValue.Value)
 		release := base
-		release.Source = ScriptSourceIdentity{
-			Kind:      ScriptSourceRelease,
+		release.Source = sourceref.SourceIdentity{
+			Kind:      sourceref.SourceRelease,
 			ReleaseID: execution.ReleaseID,
 		}
 		release.SourceModRevision = releaseValue.ModRevision
@@ -130,8 +131,8 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			return nil, err
 		}
 		snapshotReference := base
-		snapshotReference.Source = ScriptSourceIdentity{
-			Kind:       ScriptSourceRunnerSnapshot,
+		snapshotReference.Source = sourceref.SourceIdentity{
+			Kind:       sourceref.SourceRunnerSnapshot,
 			SnapshotID: execution.SnapshotID,
 		}
 		snapshotReference.SourceDigest = execution.SnapshotSHA256
@@ -165,8 +166,8 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			seenNetworks[network.NetworkId] = struct{}{}
 			reference := base
 			reference.SourceOwnerID = network.OwnerEnvironmentId
-			reference.Source = ScriptSourceIdentity{
-				Kind:      ScriptSourceNetwork,
+			reference.Source = sourceref.SourceIdentity{
+				Kind:      sourceref.SourceNetwork,
 				NetworkID: network.NetworkId,
 			}
 			reference.SourceModRevision = hook.SnapshotRevision
@@ -191,8 +192,8 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			}
 			seenVolumes[mount.SourceId] = struct{}{}
 			reference := base
-			reference.Source = ScriptSourceIdentity{
-				Kind:     ScriptSourceVolume,
+			reference.Source = sourceref.SourceIdentity{
+				Kind:     sourceref.SourceVolume,
 				VolumeID: mount.SourceId,
 			}
 			reference.SourceModRevision = hook.SnapshotRevision
@@ -242,8 +243,8 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 				clear(generation.Content)
 			}
 			reference := base
-			reference.Source = ScriptSourceIdentity{
-				Kind:              ScriptSourceEntryValue,
+			reference.Source = sourceref.SourceIdentity{
+				Kind:              sourceref.SourceEntryValue,
 				EntryID:           binding.EntryId,
 				ValueGenerationID: binding.ValueGenerationId,
 			}
@@ -268,8 +269,8 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 				return nil, readErr
 			}
 			reference := base
-			reference.Source = ScriptSourceIdentity{
-				Kind:              ScriptSourceSecretValue,
+			reference.Source = sourceref.SourceIdentity{
+				Kind:              sourceref.SourceSecretValue,
 				SecretID:          secret.ValueGenerationId,
 				ValueGenerationID: secret.ValueGenerationId,
 			}

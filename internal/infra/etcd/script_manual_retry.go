@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -86,7 +87,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 	}
 	root, err := decodeScriptOperationSourceRoot(read.Values[0].Value)
 	if err != nil || !manualScriptRootMatches(execution, root) ||
-		root.RetryDisposition != ScriptRetryDispositionAvailable ||
+		root.RetryDisposition != sourceref.RetryDispositionAvailable ||
 		root.RetryExpiresAt == nil ||
 		!root.RetryExpiresAt.Equal(*source.RetainUntil) {
 		return scriptTaskChange{}, scriptRetryUnsafe("manual Script retry sources changed")

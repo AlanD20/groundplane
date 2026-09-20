@@ -2,6 +2,7 @@ package taskplanning
 
 import (
 	"context"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -16,7 +17,7 @@ import (
 func (resolver *TaskPlanResolver) ResolveComponentFile(
 	ctx context.Context,
 	environmentID string,
-	reference etcd.TaskComponentFileValueReference,
+	reference materializationrecord.ComponentFileValueReference,
 ) ([]byte, error) {
 	if ctx == nil || resolver == nil || resolver.blueprints == nil ||
 		ids.Validate(ids.KindEnvironment, environmentID) != nil ||
@@ -74,7 +75,7 @@ func (resolver *TaskPlanResolver) ResolveComponentFile(
 func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
 	ctx context.Context,
 	environmentID string,
-	reference etcd.TaskComponentFileValueReference,
+	reference materializationrecord.ComponentFileValueReference,
 	projection etcd.EnvironmentComposeProjection,
 ) ([]byte, error) {
 	if projection.EnvironmentID != environmentID || projection.RevisionID != reference.RevisionID {

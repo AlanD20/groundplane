@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -29,7 +30,7 @@ type backingCreationSteps struct {
 	steps            []*agentpb.ExecutionStep
 	records          []etcd.TaskStepRecord
 	params           map[string]string
-	materializations []etcd.TaskMaterializationRecord
+	materializations []materializationrecord.Record
 }
 
 func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreationSteps, error) {
@@ -85,7 +86,7 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 		taskParams[taskplanning.EnvironmentBlueprintManagedVolumesParam] = volumeID
 		taskParams[taskplanning.VolumeTaskIntentSHA256Param] = hex.EncodeToString(intentDigest)
 	}
-	materializations := []etcd.TaskMaterializationRecord(nil)
+	materializations := []materializationrecord.Record(nil)
 	if spec.HasEnvironment() {
 		materialization, materializeStep, materializeErr := backingEnvironmentMaterialization(
 			environment.ID, artifactID, entries, resolved, allocator,
@@ -98,7 +99,7 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 			stepRecords,
 			etcd.TaskStepRecord{Kind: etcd.TaskStepOperation, ID: materializeStep.StepId},
 		)
-		materializations = []etcd.TaskMaterializationRecord{materialization}
+		materializations = []materializationrecord.Record{materialization}
 	}
 	steps = append(steps, &agentpb.ExecutionStep{
 		StepId:         applyStepID,

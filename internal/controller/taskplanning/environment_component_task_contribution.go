@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 
@@ -20,7 +21,7 @@ type EnvironmentManagedConfigApplyInput struct {
 	RenderGeneration uint64
 	Components       []componentrecord.Record
 	ComponentCatalog []componentrender.EnvironmentComponentRegistration
-	Materializations []etcd.TaskMaterializationRecord
+	Materializations []materializationrecord.Record
 	Artifact         *agentpb.ComposeArtifact
 }
 
@@ -233,7 +234,7 @@ func environmentComponentRegistration(
 }
 
 func resolveEnvironmentManagedConfigMaterialization(
-	materializations []etcd.TaskMaterializationRecord,
+	materializations []materializationrecord.Record,
 	componentID string,
 	managed *componentrender.EnvironmentManagedConfigurationRegistration,
 	catalog []componentrender.EnvironmentComponentRegistration,
@@ -304,7 +305,7 @@ func requireEnvironmentManagedConfigArtifactService(
 }
 
 func validateEnvironmentManagedConfigMaterialization(
-	reference etcd.TaskMaterializationRecord,
+	reference materializationrecord.Record,
 	revisionID string,
 	candidate componentrecord.Record,
 	managed *componentrender.EnvironmentManagedConfigurationRegistration,
@@ -315,10 +316,10 @@ func validateEnvironmentManagedConfigMaterialization(
 		reference.EnvironmentID != candidate.Desired.OwnerID ||
 		reference.Destination != managed.SourcePath ||
 		reference.ServiceID != "" || reference.ServiceName != "" ||
-		reference.OutputKind != etcd.TaskMaterializationOutputPlainFile ||
+		reference.OutputKind != materializationrecord.OutputPlainFile ||
 		reference.UID != 0 || reference.GID != 0 ||
 		reference.Mode != uint32(entrymaterialization.ModeReadOnly) ||
-		reference.Source.Kind != etcd.TaskMaterializationSourceComponentFile ||
+		reference.Source.Kind != materializationrecord.SourceComponentFile ||
 		componentFile == nil || reference.Source.BlueprintFile != nil ||
 		reference.Source.EntryValue != nil || reference.Source.GeneratedEnvironment != nil ||
 		componentFile.RevisionID != revisionID ||

@@ -15,51 +15,16 @@ import (
 )
 
 const (
-	scriptSourcePreparationPrefix      = ref.PreparationPrefix
-	scriptSourceRootPrefix             = ref.RootPrefix
-	scriptSourceForwardReferencePrefix = ref.ForwardReferencePrefix
-	scriptSourceCountPrefix            = ref.CountPrefix
-	scriptSourcePlatformOwner          = "platform/-"
-	scriptSourceMaterializationPrefix  = "/v1/records/materialization-proofs/"
+	scriptSourcePlatformOwner         = "platform/-"
+	scriptSourceMaterializationPrefix = "/v1/records/materialization-proofs/"
 )
 
-type ScriptSourceKind = ref.SourceKind
-
 const (
-	ScriptSourceBody            = ref.SourceBody
-	ScriptSourceRunnerSnapshot  = ref.SourceRunnerSnapshot
-	ScriptSourceService         = ref.SourceService
-	ScriptSourceRelease         = ref.SourceRelease
-	ScriptSourceNetwork         = ref.SourceNetwork
-	ScriptSourceVolume          = ref.SourceVolume
-	ScriptSourceEntryValue      = ref.SourceEntryValue
-	ScriptSourceSecretValue     = ref.SourceSecretValue
-	ScriptSourceMaterialization = ref.SourceMaterialization
-)
-
-type ScriptSourceIdentity = ref.SourceIdentity
-type ScriptSourceReference = ref.Reference
-type ScriptSourceCount = ref.Count
-type ScriptSourcePreparation = ref.Preparation
-type ScriptOperationSourceRoot = ref.OperationSourceRoot
-type ScriptRetryDisposition = ref.RetryDisposition
-type ScriptSourcePreparationPhase = ref.PreparationPhase
-
-const (
-	ScriptSourcePreparationPreparing  = ref.PreparationPreparing
-	ScriptSourcePreparationSealed     = ref.PreparationSealed
-	ScriptSourcePreparationAbandoning = ref.PreparationAbandoning
-	ScriptOperationSourceActive       = "active"
-	ScriptOperationSourceReleasing    = "releasing"
-	ScriptSourceReleaseAbsent         = "absent"
-	ScriptSourceReleaseNormal         = "normal_completion"
-	ScriptSourceReleaseRetryExpiry    = "retry_expiry"
-	ScriptRetryDispositionUndecided   = ref.RetryDispositionUndecided
-	ScriptRetryDispositionAvailable   = ref.RetryDispositionAvailable
-	ScriptRetryDispositionTransferred = ref.RetryDispositionTransferred
-	ScriptRetryDispositionForbidden   = ref.RetryDispositionForbidden
-	ScriptRetryDispositionAbandoned   = ref.RetryDispositionAbandoned
-	ScriptRetryDispositionExpired     = ref.RetryDispositionExpired
+	ScriptOperationSourceActive    = "active"
+	ScriptOperationSourceReleasing = "releasing"
+	ScriptSourceReleaseAbsent      = "absent"
+	ScriptSourceReleaseNormal      = "normal_completion"
+	ScriptSourceReleaseRetryExpiry = "retry_expiry"
 )
 
 type ScriptExistingSourceEvidence struct{ SourceKey string }
@@ -86,7 +51,7 @@ type ScriptSourceEvidence struct {
 }
 
 type ScriptSourcePreparationMember struct {
-	Reference ScriptSourceReference
+	Reference ref.Reference
 	Evidence  ScriptSourceEvidence
 }
 
@@ -100,7 +65,7 @@ type PreparedSourceSet struct {
 func (prepared PreparedSourceSet) IsZero() bool { return prepared.prepared.IsZero() }
 
 type ScriptStagedSourceRequirement struct {
-	Source        ScriptSourceIdentity
+	Source        ref.SourceIdentity
 	SourceKey     string
 	SourceOwnerID string
 	SourceDigest  string
@@ -280,7 +245,7 @@ func (authority *ScriptSourceReferenceAuthority) FinalPublicationFragment(
 func (authority *ScriptSourceReferenceAuthority) PrepareNormalRelease(
 	ctx context.Context,
 	operationID string,
-	disposition ScriptRetryDisposition,
+	disposition ref.RetryDisposition,
 ) (ScriptSourceReleaseFragment, error) {
 	fragment, err := authority.repository.PrepareNormalRelease(ctx, operationID, disposition)
 	if err != nil {
@@ -497,10 +462,10 @@ func sameScriptCandidateStage(left, right ScriptCandidateSourceStage) bool {
 		left.RenderGeneration == right.RenderGeneration && left.FixedReadRevision == right.FixedReadRevision
 }
 
-func scriptSourceKindMayBeBlueprintStaged(kind ScriptSourceKind) bool {
+func scriptSourceKindMayBeBlueprintStaged(kind ref.SourceKind) bool {
 	switch kind {
-	case ScriptSourceRunnerSnapshot, ScriptSourceService, ScriptSourceRelease,
-		ScriptSourceEntryValue:
+	case ref.SourceRunnerSnapshot, ref.SourceService, ref.SourceRelease,
+		ref.SourceEntryValue:
 		return true
 	default:
 		return false
@@ -555,7 +520,7 @@ func (authority *ScriptSourceReferenceAuthority) validateExistingSource(ctx cont
 	if err := validateScriptSourceRecord(member.SourceKey, read.Values[0].Value, member.Reference); err != nil {
 		return err
 	}
-	if member.Reference.Source.Kind != ScriptSourceSecretValue {
+	if member.Reference.Source.Kind != ref.SourceSecretValue {
 		return nil
 	}
 	metadata, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{

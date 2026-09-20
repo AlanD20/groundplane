@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
@@ -42,7 +43,7 @@ func cloneRetryTask(source TaskRecord, id string, actor TaskActor, createdAt tim
 		Steps: cloneTaskSteps(source.Steps), TimeoutSeconds: source.TimeoutSeconds,
 		ComponentActionStepIDs:          append([]string(nil), source.ComponentActionStepIDs...),
 		ManagedComponentTeardownSources: cloneManagedComponentRuntimeSources(source.ManagedComponentTeardownSources),
-		Materializations:                cloneTaskMaterializationReferences(source.Materializations),
+		Materializations:                materializationrecord.Clone(source.Materializations),
 		EntryRuntime:                    cloneEntryTaskRuntime(source.EntryRuntime),
 		Configuration:                   cloneTaskConfiguration(source.Configuration),
 		Status:                          TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
