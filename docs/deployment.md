@@ -13,7 +13,9 @@ Build from the intended source commit with the repository-pinned toolchains.
 ### Publish through GitHub Actions
 
 `.github/workflows/release.yml` runs on a pushed `vMAJOR.MINOR.PATCH` tag whose
-commit belongs to `main`. All external Actions use version tags, not commit hashes.
+commit belongs to `main`. All external Actions use supported major-version tags
+(such as `@v7`), not patch-version pins or commit hashes. Check upstream releases
+and migration requirements when adopting a new major.
 The first selected release is `0.0.1`. After local `make ci` passes, commit the
 reviewed changes on `main`, push that commit, then create and push `v0.0.1`.
 Review the matching [changelog entry](../CHANGELOG.md) before publication;

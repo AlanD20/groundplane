@@ -20,7 +20,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       repository: ${{ steps.version.outputs.repository }}
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: version
@@ -59,8 +59,8 @@ jobs:
       IMAGE_ROOT: ghcr.io/${{ needs.version.outputs.repository }}
       ARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -74,7 +74,7 @@ jobs:
           docker push "$IMAGE_ROOT-runner:$VERSION-$ARCH"
           docker image inspect "$IMAGE_ROOT-runner:$VERSION-$ARCH" \
             --format '{{index .RepoDigests 0}}' > ".tmp/release-images/runner-$ARCH"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: images-${{ matrix.arch }}
           path: .tmp/release-images/*
@@ -93,13 +93,13 @@ jobs:
       agent: ${{ steps.indexes.outputs.agent }}
       runner: ${{ steps.indexes.outputs.runner }}
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: images-*
           merge-multiple: true
           path: .tmp/release-images
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -136,12 +136,12 @@ jobs:
       AGENT_IMAGE: ${{ needs.indexes.outputs.agent }}
       RUNNER_IMAGE: ${{ needs.indexes.outputs.runner }}
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: actions/setup-go@v5.0.2
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: false
-      - uses: actions/setup-node@v4.4.0
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
       - name: Build native bundle with the pinned npm version
@@ -151,7 +151,7 @@ jobs:
             --agent-image "$AGENT_IMAGE" --runner-image "$RUNNER_IMAGE"
           cd .tmp/releases
           sha256sum --check -- *.sha256
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: bundle-${{ matrix.arch }}
           path: .tmp/releases/*
@@ -166,8 +166,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           pattern: bundle-*
           merge-multiple: true

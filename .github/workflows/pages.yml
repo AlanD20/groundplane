@@ -27,7 +27,7 @@ jobs:
     env:
       VERSION: ${{ inputs.version }}
     steps:
-      - uses: actions/checkout@v4.2.2
+      - uses: actions/checkout@v7
         with:
           ref: v${{ inputs.version }}
       - name: Validate release and public downloads
@@ -51,9 +51,10 @@ jobs:
           cmp install.sh .tmp/pages-build/published-install.sh
           cd .tmp/pages-build/site
           sha256sum --check install.sh.sha256
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: .tmp/pages-build/site
+          include-hidden-files: true
   deploy:
     needs: build
     runs-on: ubuntu-24.04
@@ -65,6 +66,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
