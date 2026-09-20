@@ -1,4 +1,4 @@
-package agent
+package backingadapter
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"

@@ -24,7 +24,7 @@ func (p *WorkerPool) executeBlueprintReleaseSetup(
 		}
 		return composeStepResult{}, p.materializer.executeStep(ctx, assignment, step, payload)
 	case *agentpb.ExecutionStep_AdapterProcedure:
-		result, err := p.adapter.executeStep(ctx, step)
+		result, err := p.adapter.ExecuteStep(ctx, step)
 		return composeStepResult{ExitCode: result.ExitCode}, err
 	case *agentpb.ExecutionStep_ManagedVolumeDirectoriesEnsure, *agentpb.ExecutionStep_EnvironmentDirectoryCreate:
 		result, err := p.environmentDirectories.executeStep(ctx, assignment, step, p.CheckpointVolumeRemoval)

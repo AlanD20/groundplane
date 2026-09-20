@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	"strconv"
 	"strings"
 	"time"
@@ -73,7 +74,7 @@ func ExecuteBackingHook(
 	input backinghook.Input,
 	schema []backinghook.FactDefinition,
 ) (output backinghook.Output, resultErr error) {
-	if ctx == nil || taskRunner == nil || !validContainerID(containerID) {
+	if ctx == nil || taskRunner == nil || !ids.ValidContainerID(containerID) {
 		return output, errs.New(errs.KindValidationFailed, "agent: backing hook runtime is invalid")
 	}
 	if err := backinghook.Validate(definition, input, schema); err != nil {

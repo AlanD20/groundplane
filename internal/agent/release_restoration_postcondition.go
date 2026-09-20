@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/workloadimage"
@@ -357,7 +358,7 @@ func releaseRestorationWorkloadTargetProven(
 			continue
 		}
 		containerID := container.GetContainerId()
-		if len(containerID) != 64 || !validContainerID(containerID) {
+		if len(containerID) != 64 || !ids.ValidContainerID(containerID) {
 			return errs.New(errs.KindStateConflict, "agent: predecessor workload container identity is invalid")
 		}
 		if _, duplicate := containerIDs[containerID]; duplicate {

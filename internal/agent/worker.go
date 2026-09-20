@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
 	"log/slog"
 	"sort"
 	"strconv"
@@ -118,7 +119,7 @@ type WorkerPool struct {
 	compose                *ComposeRuntime
 	environmentDirectories *EnvironmentDirectoryRuntime
 	materializer           *MaterializationRuntime
-	adapter                *AdapterRuntime
+	adapter                *backingadapter.Runtime
 	componentActions       ComponentActionRuntime
 	hostResolution         HostResolutionRuntime
 	scriptRuntime          ScriptRuntime
@@ -154,7 +155,7 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		backingHookCheckpoints: newBackingHookCheckpointInbox(),
 		volumeCheckpoints:      &volumeCheckpointInbox{pending: make(map[string]*volumeCheckpointWaiter)},
 		taskEventAcks:          &taskEventAckInbox{receipts: make(map[taskEventAckKey]*taskEventReceipt)},
-		adapter:                NewAdapterRuntime(taskRunner),
+		adapter:                backingadapter.New(taskRunner),
 	}
 	pool.executeStep = pool.runStep
 	return pool
@@ -289,8 +290,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 				}
 			}
 		} else if step.GetAdapterProcedure() != nil {
-			var stepResult adapterStepResult
-			stepResult, err = p.adapter.executeStep(stepCtx, step)
+			var stepResult backingadapter.StepResult
+			stepResult, err = p.adapter.ExecuteStep(stepCtx, step)
 			if stepResult.ExitCode != 0 {
 				exitCode = stepResult.ExitCode
 			}

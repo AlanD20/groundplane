@@ -1,4 +1,4 @@
-package agent
+package backingadapter
 
 import (
 	"context"
@@ -14,38 +14,38 @@ import (
 
 const maximumCompiledAdapterSteps = 16
 
-type AdapterRuntime struct {
+type Runtime struct {
 	runner runner.Runner
 }
 
-type adapterStepResult struct {
+type StepResult struct {
 	ExitCode int32
 }
 
-func NewAdapterRuntime(taskRunner runner.Runner) *AdapterRuntime {
-	return &AdapterRuntime{runner: taskRunner}
+func New(taskRunner runner.Runner) *Runtime {
+	return &Runtime{runner: taskRunner}
 }
 
-func (runtime *AdapterRuntime) executeStep(
+func (runtime *Runtime) ExecuteStep(
 	ctx context.Context,
 	step *agentpb.ExecutionStep,
-) (adapterStepResult, error) {
+) (StepResult, error) {
 	if runtime == nil || runtime.runner == nil {
-		return adapterStepResult{}, errs.New(errs.KindInternal, "agent: adapter runtime is not configured")
+		return StepResult{}, errs.New(errs.KindInternal, "agent: adapter runtime is not configured")
 	}
 	procedure := step.GetAdapterProcedure()
 	if procedure == nil {
-		return adapterStepResult{}, errs.New(errs.KindInternal, "agent: adapter procedure is required")
+		return StepResult{}, errs.New(errs.KindInternal, "agent: adapter procedure is required")
 	}
 	adapter, found := adapters.Get(procedure.AdapterKey)
 	if !found || adapter.Custom() {
-		return adapterStepResult{}, errs.New(errs.KindValidationFailed, "agent: adapter procedure is not registered")
+		return StepResult{}, errs.New(errs.KindValidationFailed, "agent: adapter procedure is not registered")
 	}
 	authentication, err := decodeBackingAuthentication(
 		procedure.Authentication, adapter.SupportsAuthenticationModes(),
 	)
 	if err != nil || authentication == core.BackingAuthenticationNone {
-		return adapterStepResult{}, errs.New(errs.KindValidationFailed, "agent: adapter authentication mode is invalid")
+		return StepResult{}, errs.New(errs.KindValidationFailed, "agent: adapter authentication mode is invalid")
 	}
 	params := adapters.Input{
 		Authentication: authentication,
@@ -58,16 +58,16 @@ func (runtime *AdapterRuntime) executeStep(
 	compiled := compileAdapterProcedure(adapter, procedure.Phase, params)
 	defer adapters.ClearSteps(compiled)
 	if len(compiled) == 0 || len(compiled) > maximumCompiledAdapterSteps {
-		return adapterStepResult{}, errs.New(
+		return StepResult{}, errs.New(
 			errs.KindValidationFailed,
 			"agent: adapter procedure is empty or oversized",
 		)
 	}
 	containerID, err := runtime.backingContainer(ctx, procedure.BackingServiceId)
 	if err != nil {
-		return adapterStepResult{}, err
+		return StepResult{}, err
 	}
-	result := adapterStepResult{}
+	result := StepResult{}
 	for _, operation := range compiled {
 		command, args, input, err := adapterCommand(operation)
 		if err != nil {
@@ -107,7 +107,7 @@ func compileAdapterProcedure(
 	}
 }
 
-func (runtime *AdapterRuntime) backingContainer(ctx context.Context, runtimeServiceID string) (string, error) {
+func (runtime *Runtime) backingContainer(ctx context.Context, runtimeServiceID string) (string, error) {
 	if ids.Validate(ids.KindService, runtimeServiceID) != nil &&
 		ids.Validate(ids.KindComponent, runtimeServiceID) != nil {
 		return "", errs.New(errs.KindValidationFailed, "agent: adapter runtime service id is invalid")
@@ -126,7 +126,7 @@ func (runtime *AdapterRuntime) backingContainer(ctx context.Context, runtimeServ
 		return "", errs.New(errs.KindInternal, "agent: backing container lookup failed")
 	}
 	containers := strings.Fields(string(result.Stdout))
-	if len(containers) != 1 || !validContainerID(containers[0]) {
+	if len(containers) != 1 || !ids.ValidContainerID(containers[0]) {
 		return "", errs.New(errs.KindStateConflict, "agent: backing runtime service is not uniquely running")
 	}
 	return containers[0], nil
@@ -167,18 +167,6 @@ func validCompiledProgram(value string) bool {
 			continue
 		}
 		return false
-	}
-	return true
-}
-
-func validContainerID(value string) bool {
-	if len(value) < 12 || len(value) > 64 {
-		return false
-	}
-	for _, character := range []byte(value) {
-		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
-			return false
-		}
 	}
 	return true
 }
