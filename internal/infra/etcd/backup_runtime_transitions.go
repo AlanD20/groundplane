@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -10,11 +11,11 @@ import (
 func (repository *BackupRuntimeRepository) TransitionBackupRun(
 	ctx context.Context,
 	authority BackupAssignmentInput,
-	current etcdstore.Versioned[BackupRunRecord],
-	next BackupRunRecord,
-) (etcdstore.Versioned[BackupRunRecord], error) {
+	current etcdstore.Versioned[backupruntime.BackupRunRecord],
+	next backupruntime.BackupRunRecord,
+) (etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
 	if terminalBackupRunState(next.State) {
-		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"terminal backup run requires atomic Task completion",
 		)
@@ -24,10 +25,10 @@ func (repository *BackupRuntimeRepository) TransitionBackupRun(
 		next,
 		backupRunTransitionOrdinary,
 	); err != nil {
-		return etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
 	if backupRunTransitionRequiresCheckpoint(current.Record, next) {
-		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup source transition requires a checkpoint",
 		)
@@ -38,15 +39,15 @@ func (repository *BackupRuntimeRepository) TransitionBackupRun(
 func (repository *BackupRuntimeRepository) CheckpointBackupRun(
 	ctx context.Context,
 	checkpoint BackupCheckpointInput,
-	current etcdstore.Versioned[BackupRunRecord],
-	next BackupRunRecord,
-) (etcdstore.Versioned[BackupRunRecord], error) {
+	current etcdstore.Versioned[backupruntime.BackupRunRecord],
+	next backupruntime.BackupRunRecord,
+) (etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
 	if terminalBackupRunState(next.State) || validateBackupRunTransition(
 		current.Record,
 		next,
 		backupRunTransitionOrdinary,
 	) != nil {
-		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"checkpointed backup run transition is invalid",
 		)
@@ -57,7 +58,7 @@ func (repository *BackupRuntimeRepository) CheckpointBackupRun(
 		current.Record.Sources[ordinal],
 		next.Sources[ordinal],
 	) {
-		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup run checkpoint does not match its source transition",
 		)
@@ -65,54 +66,54 @@ func (repository *BackupRuntimeRepository) CheckpointBackupRun(
 	return repository.replaceBackupRun(ctx, current, next, nil, nil, nil, nil, &checkpoint)
 }
 
-func backupRunTransitionRequiresCheckpoint(current BackupRunRecord, next BackupRunRecord) bool {
+func backupRunTransitionRequiresCheckpoint(current backupruntime.BackupRunRecord, next backupruntime.BackupRunRecord) bool {
 	ordinal, changed := changedBackupSourceOrdinal(current, next)
 	if !changed {
 		return false
 	}
 	from := current.Sources[ordinal]
 	to := next.Sources[ordinal]
-	return (from.State == BackupSourceAttemptReady && to.State == BackupSourceAttemptStaged) ||
-		((from.State == BackupSourceAttemptStaged || from.State == BackupSourceAttemptOrphaned) &&
+	return (from.State == backupruntime.BackupSourceAttemptReady && to.State == backupruntime.BackupSourceAttemptStaged) ||
+		((from.State == backupruntime.BackupSourceAttemptStaged || from.State == backupruntime.BackupSourceAttemptOrphaned) &&
 			to.State == from.State &&
-			from.Phase == BackupSourcePhaseUpload && to.Phase == BackupSourcePhaseHeadVerification) ||
-		((from.State == BackupSourceAttemptStaged || from.State == BackupSourceAttemptOrphaned) &&
-			to.State == from.State && from.Phase == BackupSourcePhaseHeadVerification &&
-			to.Phase == BackupSourcePhasePointCommit) ||
-		(from.State == BackupSourceAttemptCleanupPending && to.State == BackupSourceAttemptSucceeded)
+			from.Phase == backupruntime.BackupSourcePhaseUpload && to.Phase == backupruntime.BackupSourcePhaseHeadVerification) ||
+		((from.State == backupruntime.BackupSourceAttemptStaged || from.State == backupruntime.BackupSourceAttemptOrphaned) &&
+			to.State == from.State && from.Phase == backupruntime.BackupSourcePhaseHeadVerification &&
+			to.Phase == backupruntime.BackupSourcePhasePointCommit) ||
+		(from.State == backupruntime.BackupSourceAttemptCleanupPending && to.State == backupruntime.BackupSourceAttemptSucceeded)
 }
 
 func backupRunCheckpointMatchesTransition(
 	payload BackupCheckpointPayload,
-	current BackupRunSourceAttemptRecord,
-	next BackupRunSourceAttemptRecord,
+	current backupruntime.BackupRunSourceAttemptRecord,
+	next backupruntime.BackupRunSourceAttemptRecord,
 ) bool {
-	if current.State == BackupSourceAttemptReady && next.State == BackupSourceAttemptStaged {
+	if current.State == backupruntime.BackupSourceAttemptReady && next.State == backupruntime.BackupSourceAttemptStaged {
 		return payload.Kind == BackupCheckpointArtifactPrepared &&
 			payload.PointID == next.RecoveryPointID &&
 			payload.StoredSizeBytes == uint64(next.SizeBytes) &&
 			payload.StoredSHA256 == next.SHA256
 	}
-	if (current.State == BackupSourceAttemptStaged || current.State == BackupSourceAttemptOrphaned) &&
+	if (current.State == backupruntime.BackupSourceAttemptStaged || current.State == backupruntime.BackupSourceAttemptOrphaned) &&
 		next.State == current.State &&
-		current.Phase == BackupSourcePhaseUpload &&
-		next.Phase == BackupSourcePhaseHeadVerification {
+		current.Phase == backupruntime.BackupSourcePhaseUpload &&
+		next.Phase == backupruntime.BackupSourcePhaseHeadVerification {
 		return payload.Kind == BackupCheckpointUploadCompleted &&
 			payload.PointID == next.RecoveryPointID &&
 			payload.StoredSizeBytes == uint64(next.SizeBytes) &&
 			payload.StoredSHA256 == next.SHA256
 	}
-	if (current.State == BackupSourceAttemptStaged || current.State == BackupSourceAttemptOrphaned) &&
+	if (current.State == backupruntime.BackupSourceAttemptStaged || current.State == backupruntime.BackupSourceAttemptOrphaned) &&
 		next.State == current.State &&
-		current.Phase == BackupSourcePhaseHeadVerification &&
-		next.Phase == BackupSourcePhasePointCommit {
+		current.Phase == backupruntime.BackupSourcePhaseHeadVerification &&
+		next.Phase == backupruntime.BackupSourcePhasePointCommit {
 		return payload.Kind == BackupCheckpointUploadVerified &&
 			payload.PointID == next.RecoveryPointID &&
 			payload.StoredSizeBytes == uint64(next.SizeBytes) &&
 			payload.StoredSHA256 == next.SHA256
 	}
-	if current.State == BackupSourceAttemptCleanupPending &&
-		next.State == BackupSourceAttemptSucceeded {
+	if current.State == backupruntime.BackupSourceAttemptCleanupPending &&
+		next.State == backupruntime.BackupSourceAttemptSucceeded {
 		return payload.Kind == BackupCheckpointSourceCleanupCompleted &&
 			payload.PointID == next.RecoveryPointID
 	}
@@ -131,11 +132,11 @@ const (
 )
 
 func validateBackupRunTransition(
-	current BackupRunRecord,
-	next BackupRunRecord,
+	current backupruntime.BackupRunRecord,
+	next backupruntime.BackupRunRecord,
 	mode backupRunTransitionMode,
 ) error {
-	if validateBackupRunRecord(current) != nil || validateBackupRunRecord(next) != nil ||
+	if backupruntime.ValidateBackupRunRecord(current) != nil || backupruntime.ValidateBackupRunRecord(next) != nil ||
 		!next.UpdatedAt.After(current.UpdatedAt) || !backupRunImmutableEqual(current, next) ||
 		!validBackupRunStateTransition(current.State, next.State) {
 		return errs.New(errs.KindValidationFailed, "backup run transition is invalid")
@@ -163,98 +164,98 @@ func validateBackupRunTransition(
 	return nil
 }
 
-func validBackupRunStateTransition(current BackupRunState, next BackupRunState) bool {
+func validBackupRunStateTransition(current backupruntime.BackupRunState, next backupruntime.BackupRunState) bool {
 	if current == next {
-		return current == BackupRunQueued || current == BackupRunRunning
+		return current == backupruntime.BackupRunQueued || current == backupruntime.BackupRunRunning
 	}
 	switch current {
 	case BackupRunQueued:
-		return next == BackupRunRunning || next == BackupRunFailed || next == BackupRunAborted ||
-			next == BackupRunTimedOut
+		return next == backupruntime.BackupRunRunning || next == backupruntime.BackupRunFailed || next == backupruntime.BackupRunAborted ||
+			next == backupruntime.BackupRunTimedOut
 	case BackupRunRunning:
-		return next == BackupRunFailed || next == BackupRunCompleted || next == BackupRunAborted ||
-			next == BackupRunTimedOut
+		return next == backupruntime.BackupRunFailed || next == backupruntime.BackupRunCompleted || next == backupruntime.BackupRunAborted ||
+			next == backupruntime.BackupRunTimedOut
 	default:
 		return false
 	}
 }
 
 func validBackupSourceTransition(
-	current BackupRunSourceAttemptRecord,
-	next BackupRunSourceAttemptRecord,
+	current backupruntime.BackupRunSourceAttemptRecord,
+	next backupruntime.BackupRunSourceAttemptRecord,
 	mode backupRunTransitionMode,
 ) bool {
-	if sourceAttemptRequiresArtifact(current.State, current.Phase) &&
+	if backupruntime.SourceAttemptRequiresArtifact(current.State, current.Phase) &&
 		(current.SizeBytes != next.SizeBytes || current.SHA256 != next.SHA256) {
 		return false
 	}
 	if mode == backupRunTransitionOrphanCreate {
-		return current.State == BackupSourceAttemptStaged &&
-			(current.Phase == BackupSourcePhaseUpload ||
-				current.Phase == BackupSourcePhaseHeadVerification ||
-				current.Phase == BackupSourcePhasePointCommit) &&
-			next.State == BackupSourceAttemptOrphaned && next.Phase == current.Phase
+		return current.State == backupruntime.BackupSourceAttemptStaged &&
+			(current.Phase == backupruntime.BackupSourcePhaseUpload ||
+				current.Phase == backupruntime.BackupSourcePhaseHeadVerification ||
+				current.Phase == backupruntime.BackupSourcePhasePointCommit) &&
+			next.State == backupruntime.BackupSourceAttemptOrphaned && next.Phase == current.Phase
 	}
 	if mode == backupRunTransitionOrphanDelete {
-		return current.State == BackupSourceAttemptOrphaned &&
-			(current.Phase == BackupSourcePhaseUpload ||
-				current.Phase == BackupSourcePhaseHeadVerification ||
-				current.Phase == BackupSourcePhasePointCommit) &&
-			next.State == BackupSourceAttemptFailed && next.Phase == current.Phase
+		return current.State == backupruntime.BackupSourceAttemptOrphaned &&
+			(current.Phase == backupruntime.BackupSourcePhaseUpload ||
+				current.Phase == backupruntime.BackupSourcePhaseHeadVerification ||
+				current.Phase == backupruntime.BackupSourcePhasePointCommit) &&
+			next.State == backupruntime.BackupSourceAttemptFailed && next.Phase == current.Phase
 	}
 	if mode == backupRunTransitionOrphanTerminal {
-		return current.State == BackupSourceAttemptOrphaned &&
-			next.State == BackupSourceAttemptOrphaned && next.Phase == current.Phase &&
+		return current.State == backupruntime.BackupSourceAttemptOrphaned &&
+			next.State == backupruntime.BackupSourceAttemptOrphaned && next.Phase == current.Phase &&
 			current.FailureCode == "" && next.FailureCode != ""
 	}
 	if mode == backupRunTransitionPointCommit {
-		return ((current.State == BackupSourceAttemptStaged && current.Phase == BackupSourcePhasePointCommit) ||
-			(current.State == BackupSourceAttemptOrphaned && current.Phase == BackupSourcePhasePointCommit)) &&
-			next.State == BackupSourceAttemptPointCommitted &&
-			next.Phase == BackupSourcePhaseRetention
+		return ((current.State == backupruntime.BackupSourceAttemptStaged && current.Phase == backupruntime.BackupSourcePhasePointCommit) ||
+			(current.State == backupruntime.BackupSourceAttemptOrphaned && current.Phase == backupruntime.BackupSourcePhasePointCommit)) &&
+			next.State == backupruntime.BackupSourceAttemptPointCommitted &&
+			next.Phase == backupruntime.BackupSourcePhaseRetention
 	}
 	if mode == backupRunTransitionRetentionComplete {
-		return current.State == BackupSourceAttemptPointCommitted &&
-			current.Phase == BackupSourcePhaseRetention &&
-			next.State == BackupSourceAttemptCleanupPending &&
-			next.Phase == BackupSourcePhaseCleanup
+		return current.State == backupruntime.BackupSourceAttemptPointCommitted &&
+			current.Phase == backupruntime.BackupSourcePhaseRetention &&
+			next.State == backupruntime.BackupSourceAttemptCleanupPending &&
+			next.Phase == backupruntime.BackupSourcePhaseCleanup
 	}
-	if next.State == BackupSourceAttemptFailed {
-		return activeBackupSourceAttemptState(current.State) &&
-			current.State != BackupSourceAttemptOrphaned && next.Phase == current.Phase
+	if next.State == backupruntime.BackupSourceAttemptFailed {
+		return backupruntime.ActiveBackupSourceAttemptState(current.State) &&
+			current.State != backupruntime.BackupSourceAttemptOrphaned && next.Phase == current.Phase
 	}
 	switch current.State {
 	case BackupSourceAttemptPending:
-		return current.Phase == BackupSourcePhaseCapture &&
-			next.State == BackupSourceAttemptCapturing && next.Phase == current.Phase
+		return current.Phase == backupruntime.BackupSourcePhaseCapture &&
+			next.State == backupruntime.BackupSourceAttemptCapturing && next.Phase == current.Phase
 	case BackupSourceAttemptCapturing:
-		return current.Phase == BackupSourcePhaseCapture &&
-			next.State == BackupSourceAttemptReady && next.Phase == BackupSourcePhaseStaging
+		return current.Phase == backupruntime.BackupSourcePhaseCapture &&
+			next.State == backupruntime.BackupSourceAttemptReady && next.Phase == backupruntime.BackupSourcePhaseStaging
 	case BackupSourceAttemptReady:
-		return current.Phase == BackupSourcePhaseStaging &&
-			next.State == BackupSourceAttemptStaged && next.Phase == BackupSourcePhaseUpload
+		return current.Phase == backupruntime.BackupSourcePhaseStaging &&
+			next.State == backupruntime.BackupSourceAttemptStaged && next.Phase == backupruntime.BackupSourcePhaseUpload
 	case BackupSourceAttemptStaged:
 		return next.State == current.State &&
-			((current.Phase == BackupSourcePhaseUpload && next.Phase == BackupSourcePhaseHeadVerification) ||
-				(current.Phase == BackupSourcePhaseHeadVerification && next.Phase == BackupSourcePhasePointCommit))
+			((current.Phase == backupruntime.BackupSourcePhaseUpload && next.Phase == backupruntime.BackupSourcePhaseHeadVerification) ||
+				(current.Phase == backupruntime.BackupSourcePhaseHeadVerification && next.Phase == backupruntime.BackupSourcePhasePointCommit))
 	case BackupSourceAttemptOrphaned:
 		return next.State == current.State &&
-			((current.Phase == BackupSourcePhaseUpload &&
-				next.Phase == BackupSourcePhaseHeadVerification) ||
-				(current.Phase == BackupSourcePhaseHeadVerification &&
-					next.Phase == BackupSourcePhasePointCommit))
+			((current.Phase == backupruntime.BackupSourcePhaseUpload &&
+				next.Phase == backupruntime.BackupSourcePhaseHeadVerification) ||
+				(current.Phase == backupruntime.BackupSourcePhaseHeadVerification &&
+					next.Phase == backupruntime.BackupSourcePhasePointCommit))
 	case BackupSourceAttemptPointCommitted:
 		return next.State == current.State && next.Phase == current.Phase &&
-			next.FailureCode == BackupFailureRetention
+			next.FailureCode == backupruntime.BackupFailureRetention
 	case BackupSourceAttemptCleanupPending:
-		return next.Phase == current.Phase && (next.State == BackupSourceAttemptSucceeded ||
-			(next.State == current.State && next.FailureCode == BackupFailureCleanup))
+		return next.Phase == current.Phase && (next.State == backupruntime.BackupSourceAttemptSucceeded ||
+			(next.State == current.State && next.FailureCode == backupruntime.BackupFailureCleanup))
 	default:
 		return false
 	}
 }
 
-func backupRunCheckpointBinding(run BackupRunRecord, ordinal uint32) backupCheckpointBinding {
+func backupRunCheckpointBinding(run backupruntime.BackupRunRecord, ordinal uint32) backupCheckpointBinding {
 	if int(ordinal) >= len(run.Sources) {
 		return backupCheckpointBinding{}
 	}
@@ -263,14 +264,14 @@ func backupRunCheckpointBinding(run BackupRunRecord, ordinal uint32) backupCheck
 	}
 }
 
-func backupRunImmutableEqual(current BackupRunRecord, next BackupRunRecord) bool {
+func backupRunImmutableEqual(current backupruntime.BackupRunRecord, next backupruntime.BackupRunRecord) bool {
 	if len(current.Sources) != len(next.Sources) {
 		return false
 	}
 	normalized := next
 	normalized.State = current.State
 	normalized.UpdatedAt = current.UpdatedAt
-	normalized.Sources = append([]BackupRunSourceAttemptRecord(nil), next.Sources...)
+	normalized.Sources = append([]backupruntime.BackupRunSourceAttemptRecord(nil), next.Sources...)
 	for index := range normalized.Sources {
 		normalized.Sources[index].State = current.Sources[index].State
 		normalized.Sources[index].Phase = current.Sources[index].Phase
@@ -282,8 +283,8 @@ func backupRunImmutableEqual(current BackupRunRecord, next BackupRunRecord) bool
 }
 
 func backupRunSourceMutableEqual(
-	left BackupRunSourceAttemptRecord,
-	right BackupRunSourceAttemptRecord,
+	left backupruntime.BackupRunSourceAttemptRecord,
+	right backupruntime.BackupRunSourceAttemptRecord,
 ) bool {
 	return left.State == right.State && left.Phase == right.Phase &&
 		left.SizeBytes == right.SizeBytes &&
@@ -291,15 +292,15 @@ func backupRunSourceMutableEqual(
 		left.FailureCode == right.FailureCode
 }
 
-func backupRunRecordsEqual(left BackupRunRecord, right BackupRunRecord) bool {
-	leftValue, leftErr := encodeBackupRunRecord(left)
-	rightValue, rightErr := encodeBackupRunRecord(right)
+func backupRunRecordsEqual(left backupruntime.BackupRunRecord, right backupruntime.BackupRunRecord) bool {
+	leftValue, leftErr := backupruntime.EncodeBackupRunRecord(left)
+	rightValue, rightErr := backupruntime.EncodeBackupRunRecord(right)
 	defer clear(leftValue)
 	defer clear(rightValue)
 	return leftErr == nil && rightErr == nil && bytes.Equal(leftValue, rightValue)
 }
 
-func terminalBackupRunState(state BackupRunState) bool {
-	return state == BackupRunFailed || state == BackupRunCompleted || state == BackupRunAborted ||
-		state == BackupRunTimedOut
+func terminalBackupRunState(state backupruntime.BackupRunState) bool {
+	return state == backupruntime.BackupRunFailed || state == backupruntime.BackupRunCompleted || state == backupruntime.BackupRunAborted ||
+		state == backupruntime.BackupRunTimedOut
 }

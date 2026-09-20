@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -152,7 +153,7 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 		task.Target,
 		page.ReadRevision,
 		environmentMutationFenceOwner{
-			Kind: BackupOperationDeletion, OperationID: task.OperationID, TaskID: task.ID,
+			Kind: backupruntime.BackupOperationDeletion, OperationID: task.OperationID, TaskID: task.ID,
 		},
 	)
 	if err != nil {
@@ -303,7 +304,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		environment.ID,
 		readRevision,
 		environmentMutationFenceOwner{
-			Kind: BackupOperationDeletion, OperationID: task.OperationID, TaskID: task.ID,
+			Kind: backupruntime.BackupOperationDeletion, OperationID: task.OperationID, TaskID: task.ID,
 		},
 	)
 	if err != nil {
@@ -463,7 +464,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(environment.ID), Prefix: true},
 		)
 	} else {
-		epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)
+		epochValue, err := backupruntime.EncodeEnvironmentMutationEpochRecord(epoch)
 		if err != nil {
 			return nil, nil, err
 		}

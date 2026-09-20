@@ -1,4 +1,4 @@
-package etcd
+package backupruntime
 
 import (
 	"filippo.io/age"
@@ -155,7 +155,7 @@ func validBackupObjectKey(
 
 func recoveryPointIDMatchesInstant(recoveryPointID string, instant time.Time) bool {
 	if recordcodec.ValidateID(ids.KindRecoveryPoint, recoveryPointID) != nil ||
-		!validBackupRuntimeInstant(instant) || instant.Nanosecond()%int(time.Millisecond) != 0 {
+		!ValidBackupRuntimeInstant(instant) || instant.Nanosecond()%int(time.Millisecond) != 0 {
 		return false
 	}
 	parsed, err := ulid.ParseStrict(strings.TrimPrefix(recoveryPointID, string(ids.KindRecoveryPoint)+"_"))

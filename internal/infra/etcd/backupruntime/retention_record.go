@@ -1,4 +1,4 @@
-package etcd
+package backupruntime
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -55,7 +55,7 @@ type BackupRecoveryPointPruneDispatchRecord struct {
 }
 
 func validateBackupOrphanRecord(record BackupOrphanRecord) error {
-	if err := validateBackupRecoveryPointSnapshot(record.Point); err != nil {
+	if err := ValidateBackupRecoveryPointSnapshot(record.Point); err != nil {
 		return err
 	}
 	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
@@ -102,7 +102,7 @@ func validateBackupRetentionSweepRecord(record BackupRetentionSweepRecord) error
 }
 
 func validateBackupRecoveryPointPruneRecord(record BackupRecoveryPointPruneRecord) error {
-	if err := validateBackupRecoveryPointSnapshot(record.Point); err != nil {
+	if err := ValidateBackupRecoveryPointSnapshot(record.Point); err != nil {
 		return err
 	}
 	if record.PointRevision <= 0 ||
@@ -126,14 +126,14 @@ func validateBackupRecoveryPointPruneRecord(record BackupRecoveryPointPruneRecor
 	return nil
 }
 
-func validateBackupRecoveryPointPruneDispatchRecord(
+func ValidateBackupRecoveryPointPruneDispatchRecord(
 	record BackupRecoveryPointPruneDispatchRecord,
 ) error {
 	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
 		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		!validBackupRuntimeInstant(record.CreatedAt) || len(record.RecoveryPointIDs) == 0 ||
-		len(record.RecoveryPointIDs) > maximumBackupPruneDispatchPoints {
+		!ValidBackupRuntimeInstant(record.CreatedAt) || len(record.RecoveryPointIDs) == 0 ||
+		len(record.RecoveryPointIDs) > MaximumBackupPruneDispatchPoints {
 		return invalidBackupRuntimeRecord("recovery point prune dispatch is invalid")
 	}
 	seen := make(map[string]struct{}, len(record.RecoveryPointIDs))

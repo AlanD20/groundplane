@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -102,7 +103,7 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 		string(indexes.Values[0].Value) != group.ID || string(indexes.Values[1].Value) != group.ID {
 		return releaseGroupTaskChange{}, errs.New(errs.KindResourceInUse, "release group owner is unavailable")
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(indexes.Values[3].Value)
+	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(indexes.Values[3].Value)
 	if err != nil || epoch.EnvironmentID != group.EnvironmentID {
 		return releaseGroupTaskChange{}, recordcodec.CorruptRecord()
 	}
@@ -186,11 +187,11 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 		string(indexes.Values[1].Value) != group.ID {
 		return releaseGroupTaskChange{}, errs.New(errs.KindInternal, "release group deletion indexes are corrupt")
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(indexes.Values[2].Value)
+	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(indexes.Values[2].Value)
 	if err != nil || epoch.EnvironmentID != group.EnvironmentID {
 		return releaseGroupTaskChange{}, recordcodec.CorruptRecord()
 	}
-	epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)
+	epochValue, err := backupruntime.EncodeEnvironmentMutationEpochRecord(epoch)
 	if err != nil {
 		return releaseGroupTaskChange{}, err
 	}

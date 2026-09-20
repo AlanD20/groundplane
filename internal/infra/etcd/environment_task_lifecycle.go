@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
@@ -137,7 +138,7 @@ func (repository *TaskRepository) readTaskEnvironmentMutationState(
 			"environment mutation fence returned the wrong Environment",
 		)
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(epochValue.Value)
+	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(epochValue.Value)
 	if err != nil || epoch.EnvironmentID != environmentID {
 		return taskEnvironmentMutationState{}, errs.New(
 			errs.KindInternal,
@@ -145,7 +146,7 @@ func (repository *TaskRepository) readTaskEnvironmentMutationState(
 		)
 	}
 	if result.Values[2] != nil {
-		lock, lockErr := decodeBackupOperationLockRecord(result.Values[2].Value)
+		lock, lockErr := backupruntime.DecodeBackupOperationLockRecord(result.Values[2].Value)
 		if lockErr != nil || lock.EnvironmentID != environmentID {
 			return taskEnvironmentMutationState{}, errs.New(
 				errs.KindInternal,
@@ -159,7 +160,7 @@ func (repository *TaskRepository) readTaskEnvironmentMutationState(
 			)
 		}
 	}
-	canonicalEpoch, err := encodeEnvironmentMutationEpochRecord(epoch)
+	canonicalEpoch, err := backupruntime.EncodeEnvironmentMutationEpochRecord(epoch)
 	if err != nil {
 		return taskEnvironmentMutationState{}, err
 	}

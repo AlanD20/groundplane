@@ -1,4 +1,4 @@
-package etcd
+package backupruntime
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -34,12 +34,12 @@ type BackupRecoveryPointRecord struct {
 	VerifiedAt time.Time `json:"verified_at"`
 }
 
-func validateBackupRecoveryPointSnapshot(record BackupRecoveryPointSnapshot) error {
+func ValidateBackupRecoveryPointSnapshot(record BackupRecoveryPointSnapshot) error {
 	if recordcodec.ValidateID(ids.KindRecoveryPoint, record.ID) != nil ||
 		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		recordcodec.ValidateID(ids.KindBackupSource, record.SourceID) != nil ||
 		recordcodec.ValidateID(ids.KindConnector, record.ConnectorID) != nil || record.SizeBytes <= 0 ||
-		!recordcodec.ValidSHA256(record.SHA256) || !validBackupRuntimeInstant(record.CreatedAt) ||
+		!recordcodec.ValidSHA256(record.SHA256) || !ValidBackupRuntimeInstant(record.CreatedAt) ||
 		!recoveryPointIDMatchesInstant(record.ID, record.CreatedAt) ||
 		!validBackupObjectKey(
 			record.ObjectKey,
@@ -89,10 +89,10 @@ func validateBackupRecoveryPointSnapshot(record BackupRecoveryPointSnapshot) err
 }
 
 func validateBackupRecoveryPointRecord(record BackupRecoveryPointRecord) error {
-	if err := validateBackupRecoveryPointSnapshot(record.BackupRecoveryPointSnapshot); err != nil {
+	if err := ValidateBackupRecoveryPointSnapshot(record.BackupRecoveryPointSnapshot); err != nil {
 		return err
 	}
-	if !validBackupRuntimeInstant(record.VerifiedAt) || record.VerifiedAt.Before(record.CreatedAt) {
+	if !ValidBackupRuntimeInstant(record.VerifiedAt) || record.VerifiedAt.Before(record.CreatedAt) {
 		return invalidBackupRuntimeRecord("recovery point verification time is invalid")
 	}
 	return nil

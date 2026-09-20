@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
@@ -8,23 +9,23 @@ import (
 )
 
 func backupRunExclusionRecords(
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	at time.Time,
-) ([]BackupSourceTargetExclusionRecord, error) {
-	if validateBackupRunRecord(run) != nil || !validBackupRuntimeInstant(at) {
+) ([]backupruntime.BackupSourceTargetExclusionRecord, error) {
+	if backupruntime.ValidateBackupRunRecord(run) != nil || !backupruntime.ValidBackupRuntimeInstant(at) {
 		return nil, errs.New(errs.KindValidationFailed, "backup run exclusion input is invalid")
 	}
-	byKey := make(map[string]BackupSourceTargetExclusionRecord)
-	add := func(kind BackupSourceTargetKind, targetID string) error {
-		key, err := backupSourceTargetExclusionKey(kind, targetID)
+	byKey := make(map[string]backupruntime.BackupSourceTargetExclusionRecord)
+	add := func(kind backupruntime.BackupSourceTargetKind, targetID string) error {
+		key, err := backupruntime.BackupSourceTargetExclusionKey(kind, targetID)
 		if err != nil {
 			return err
 		}
-		byKey[key] = BackupSourceTargetExclusionRecord{
+		byKey[key] = backupruntime.BackupSourceTargetExclusionRecord{
 			EnvironmentID: run.EnvironmentID,
 			OperationID:   run.OperationID,
 			TaskID:        run.TaskID,
-			OperationKind: BackupOperationBackup,
+			OperationKind: backupruntime.BackupOperationBackup,
 			TargetKind:    kind,
 			TargetID:      targetID,
 			CreatedAt:     at,
@@ -35,11 +36,11 @@ func backupRunExclusionRecords(
 	for _, source := range run.Sources {
 		switch source.Kind {
 		case BackupRuntimeSourceAttach:
-			if err := add(BackupSourceTargetAttach, source.TargetID); err != nil {
+			if err := add(backupruntime.BackupSourceTargetAttach, source.TargetID); err != nil {
 				return nil, err
 			}
 		case BackupRuntimeSourceVolume:
-			if err := add(BackupSourceTargetVolume, source.TargetID); err != nil {
+			if err := add(backupruntime.BackupSourceTargetVolume, source.TargetID); err != nil {
 				return nil, err
 			}
 		}
@@ -49,7 +50,7 @@ func backupRunExclusionRecords(
 		keys = append(keys, key)
 	}
 	slices.Sort(keys)
-	result := make([]BackupSourceTargetExclusionRecord, len(keys))
+	result := make([]backupruntime.BackupSourceTargetExclusionRecord, len(keys))
 	for index, key := range keys {
 		result[index] = byKey[key]
 	}
@@ -58,7 +59,7 @@ func backupRunExclusionRecords(
 
 func exactBackupExclusions(
 	values []*etcdstore.KeyValue,
-	records []BackupSourceTargetExclusionRecord,
+	records []backupruntime.BackupSourceTargetExclusionRecord,
 	resultRevision int64,
 ) bool {
 	if len(values) != len(records) {
@@ -68,7 +69,7 @@ func exactBackupExclusions(
 		if value == nil || value.ModRevision != resultRevision {
 			return false
 		}
-		stored, err := decodeBackupSourceTargetExclusionRecord(value.Value)
+		stored, err := backupruntime.DecodeBackupSourceTargetExclusionRecord(value.Value)
 		if err != nil || !sameBackupExclusionOwner(stored, records[index]) {
 			return false
 		}
@@ -77,8 +78,8 @@ func exactBackupExclusions(
 }
 
 func sameBackupExclusionOwner(
-	left BackupSourceTargetExclusionRecord,
-	right BackupSourceTargetExclusionRecord,
+	left backupruntime.BackupSourceTargetExclusionRecord,
+	right backupruntime.BackupSourceTargetExclusionRecord,
 ) bool {
 	return left.EnvironmentID == right.EnvironmentID && left.OperationID == right.OperationID &&
 		left.TaskID == right.TaskID && left.OperationKind == right.OperationKind &&

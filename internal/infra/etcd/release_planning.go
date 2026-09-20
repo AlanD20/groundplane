@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -153,7 +154,7 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 	if err != nil || tenant.ID != project.TenantID {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(loaded.Values[3].Value)
+	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(loaded.Values[3].Value)
 	if err != nil || epoch.EnvironmentID != environmentID {
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}

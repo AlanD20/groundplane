@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -483,7 +484,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
-	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
+	epochValue, err := backupruntime.EncodeEnvironmentMutationEpochRecord(backupruntime.EnvironmentMutationEpochRecord{
 		EnvironmentID: record.ID,
 	})
 	if err != nil {

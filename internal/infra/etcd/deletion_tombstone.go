@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -224,7 +225,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)
+	epochValue, err := backupruntime.EncodeEnvironmentMutationEpochRecord(epoch)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -258,15 +259,15 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			"environment Blueprint state changed",
 		)
 	}
-	lock := BackupOperationLockRecord{
+	lock := backupruntime.BackupOperationLockRecord{
 		EnvironmentID: environment.Record.ID,
 		OperationID:   task.OperationID,
 		TaskID:        task.ID,
-		Kind:          BackupOperationDeletion,
+		Kind:          backupruntime.BackupOperationDeletion,
 		CreatedAt:     task.CreatedAt,
 		UpdatedAt:     task.CreatedAt,
 	}
-	lockValue, err := encodeBackupOperationLockRecord(lock)
+	lockValue, err := backupruntime.EncodeBackupOperationLockRecord(lock)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -530,16 +531,16 @@ func classifyEnvironmentDeletionStartConflict(
 func decodeEnvironmentDeletionEpoch(
 	value *etcdstore.KeyValue,
 	environmentID string,
-) (EnvironmentMutationEpochRecord, error) {
+) (backupruntime.EnvironmentMutationEpochRecord, error) {
 	if value == nil {
-		return EnvironmentMutationEpochRecord{}, errs.New(
+		return backupruntime.EnvironmentMutationEpochRecord{}, errs.New(
 			errs.KindInternal,
 			"environment mutation epoch is missing",
 		)
 	}
-	record, err := decodeEnvironmentMutationEpochRecord(value.Value)
+	record, err := backupruntime.DecodeEnvironmentMutationEpochRecord(value.Value)
 	if err != nil || record.EnvironmentID != environmentID {
-		return EnvironmentMutationEpochRecord{}, errs.New(
+		return backupruntime.EnvironmentMutationEpochRecord{}, errs.New(
 			errs.KindInternal,
 			"environment mutation epoch is corrupt",
 		)
@@ -550,16 +551,16 @@ func decodeEnvironmentDeletionEpoch(
 func decodeEnvironmentOperationLock(
 	value *etcdstore.KeyValue,
 	environmentID string,
-) (BackupOperationLockRecord, error) {
+) (backupruntime.BackupOperationLockRecord, error) {
 	if value == nil {
-		return BackupOperationLockRecord{}, errs.New(
+		return backupruntime.BackupOperationLockRecord{}, errs.New(
 			errs.KindStateConflict,
 			"environment operation lock is missing",
 		)
 	}
-	record, err := decodeBackupOperationLockRecord(value.Value)
+	record, err := backupruntime.DecodeBackupOperationLockRecord(value.Value)
 	if err != nil || record.EnvironmentID != environmentID {
-		return BackupOperationLockRecord{}, errs.New(
+		return backupruntime.BackupOperationLockRecord{}, errs.New(
 			errs.KindInternal,
 			"environment operation lock is corrupt",
 		)
@@ -570,14 +571,14 @@ func decodeEnvironmentOperationLock(
 func decodeOwnedEnvironmentDeletionLock(
 	value *etcdstore.KeyValue,
 	task TaskRecord,
-) (BackupOperationLockRecord, error) {
+) (backupruntime.BackupOperationLockRecord, error) {
 	record, err := decodeEnvironmentOperationLock(value, task.Target)
 	if err != nil {
-		return BackupOperationLockRecord{}, err
+		return backupruntime.BackupOperationLockRecord{}, err
 	}
-	if record.Kind != BackupOperationDeletion || record.OperationID != task.OperationID ||
+	if record.Kind != backupruntime.BackupOperationDeletion || record.OperationID != task.OperationID ||
 		record.TaskID != task.ID {
-		return BackupOperationLockRecord{}, errs.New(
+		return backupruntime.BackupOperationLockRecord{}, errs.New(
 			errs.KindStateConflict,
 			"environment deletion operation lock ownership changed",
 		)

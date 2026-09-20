@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -18,7 +19,7 @@ const maximumBackupSourceEnsureAttempts = 3
 type backupSourceCreationEvidence struct {
 	environment   etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	project       etcdstore.Versioned[hierarchyrecord.ProjectRecord]
-	mutationEpoch etcdstore.Versioned[EnvironmentMutationEpochRecord]
+	mutationEpoch etcdstore.Versioned[backupruntime.EnvironmentMutationEpochRecord]
 }
 
 // BackupPolicyRepository owns the Environment singleton and immutable source
@@ -180,7 +181,7 @@ func (repository *BackupPolicyRepository) createBackupSource(
 		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 	}
 	defer clear(value)
-	epochValue, err := encodeEnvironmentMutationEpochRecord(evidence.mutationEpoch.Record)
+	epochValue, err := backupruntime.EncodeEnvironmentMutationEpochRecord(evidence.mutationEpoch.Record)
 	if err != nil {
 		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 	}
@@ -303,7 +304,7 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 			"environment mutation epoch is missing",
 		)
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(result.Values[6].Value)
+	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(result.Values[6].Value)
 	if err != nil || epoch.EnvironmentID != environment.Record.ID {
 		return backupSourceCreationEvidence{}, errs.New(
 			errs.KindInternal,
@@ -317,7 +318,7 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 		project: etcdstore.Versioned[hierarchyrecord.ProjectRecord]{
 			Record: currentProject, Revision: result.Values[2].ModRevision, ReadRevision: result.ReadRevision,
 		},
-		mutationEpoch: etcdstore.Versioned[EnvironmentMutationEpochRecord]{
+		mutationEpoch: etcdstore.Versioned[backupruntime.EnvironmentMutationEpochRecord]{
 			Record: epoch, Revision: result.Values[6].ModRevision, ReadRevision: result.ReadRevision,
 		},
 	}, nil
@@ -440,7 +441,7 @@ func classifyBackupSourceCreateConflict(
 	if values[8] == nil {
 		return errs.New(errs.KindInternal, "environment mutation epoch is missing")
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(values[8].Value)
+	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(values[8].Value)
 	if err != nil || epoch.EnvironmentID != environment.Record.ID {
 		return errs.New(errs.KindInternal, "environment mutation epoch is corrupt")
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -171,7 +172,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 	defer clearKeyValues(taskRead.Values)
 	task, err := decodeTaskRecord(taskRead.Values[0].Value)
 	if err != nil || task.ID != input.TaskID {
-		return backupCheckpointPlan{}, corruptBackupRuntimeRecord()
+		return backupCheckpointPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if task.Status != TaskStatusRunning || !taskContainsStep(task, input.StepID) {
 		return backupCheckpointPlan{}, errs.New(
@@ -251,7 +252,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 		if decodeErr != nil || cursor.TaskID != input.TaskID ||
 			cursor.AssignmentID != input.AssignmentID ||
 			cursor.StepID != input.StepID {
-			return backupCheckpointPlan{}, corruptBackupRuntimeRecord()
+			return backupCheckpointPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		nextSequence = cursor.NextSequence
 	}
@@ -271,7 +272,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			dedup.StepID != input.StepID ||
 			dedup.Sequence != input.Sequence ||
 			dedup.Kind != input.Payload.Kind {
-			return backupCheckpointPlan{}, corruptBackupRuntimeRecord()
+			return backupCheckpointPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		if dedup.PayloadSHA256 != digest {
 			return backupCheckpointPlan{}, errs.New(
@@ -375,7 +376,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 	defer clearKeyValues(taskResult.Values)
 	task, err := decodeTaskRecord(taskResult.Values[0].Value)
 	if err != nil || task.ID != input.TaskID {
-		return nil, corruptBackupRuntimeRecord()
+		return nil, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if task.Status != TaskStatusRunning || !taskContainsStep(task, input.StepID) {
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
@@ -613,7 +614,7 @@ func backupCheckpointDigest(payload BackupCheckpointPayload) (string, error) {
 }
 
 func encodeBackupCheckpointCursorRecord(record backupCheckpointCursorRecord) ([]byte, error) {
-	return encodeBackupRuntimeRecord(
+	return backupruntime.EncodeBackupRuntimeRecord(
 		"backup-checkpoint-cursor",
 		record,
 		validateBackupCheckpointCursorRecord,
@@ -621,7 +622,7 @@ func encodeBackupCheckpointCursorRecord(record backupCheckpointCursorRecord) ([]
 }
 
 func decodeBackupCheckpointCursorRecord(value []byte) (backupCheckpointCursorRecord, error) {
-	return decodeBackupRuntimeRecord(
+	return backupruntime.DecodeBackupRuntimeRecord(
 		value,
 		"backup-checkpoint-cursor",
 		validateBackupCheckpointCursorRecord,
@@ -638,7 +639,7 @@ func validateBackupCheckpointCursorRecord(record backupCheckpointCursorRecord) e
 }
 
 func encodeBackupCheckpointDedupRecord(record backupCheckpointDedupRecord) ([]byte, error) {
-	return encodeBackupRuntimeRecord(
+	return backupruntime.EncodeBackupRuntimeRecord(
 		"backup-checkpoint-dedup",
 		record,
 		validateBackupCheckpointDedupRecord,
@@ -646,7 +647,7 @@ func encodeBackupCheckpointDedupRecord(record backupCheckpointDedupRecord) ([]by
 }
 
 func decodeBackupCheckpointDedupRecord(value []byte) (backupCheckpointDedupRecord, error) {
-	return decodeBackupRuntimeRecord(
+	return backupruntime.DecodeBackupRuntimeRecord(
 		value,
 		"backup-checkpoint-dedup",
 		validateBackupCheckpointDedupRecord,

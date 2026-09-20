@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -258,8 +259,8 @@ func requireConnectorReferencePrefixesEmpty(
 ) ([]etcdstore.Condition, error) {
 	prefixes := []string{
 		backuppolicy.BackupPolicyConnectorReferencePrefix(connectorID),
-		backupRecoveryPointConnectorPrefix + connectorID + "/",
-		backupOrphanConnectorPrefix + connectorID + "/",
+		backupruntime.BackupRecoveryPointConnectorPrefix + connectorID + "/",
+		backupruntime.BackupOrphanConnectorPrefix + connectorID + "/",
 	}
 	conditions := make([]etcdstore.Condition, 0, len(prefixes))
 	for index, prefix := range prefixes {
@@ -295,14 +296,14 @@ func classifyConnectorReference(
 		return errs.New(errs.KindResourceInUse, "connector is referenced by an enabled backup policy")
 	case 1:
 		recoveryPointID := string(value.Value)
-		expectedKey, err := backupRecoveryPointConnectorIndexKey(connectorID, recoveryPointID)
+		expectedKey, err := backupruntime.BackupRecoveryPointConnectorIndexKey(connectorID, recoveryPointID)
 		if err != nil || value.Key != expectedKey {
 			return errs.New(errs.KindInternal, "connector recovery point reference is corrupt")
 		}
 		return errs.New(errs.KindResourceInUse, "connector is referenced by a recovery point")
 	case 2:
 		recoveryPointID := string(value.Value)
-		expectedKey, err := backupOrphanConnectorIndexKey(connectorID, recoveryPointID)
+		expectedKey, err := backupruntime.BackupOrphanConnectorIndexKey(connectorID, recoveryPointID)
 		if err != nil || value.Key != expectedKey {
 			return errs.New(errs.KindInternal, "connector orphan reference is corrupt")
 		}

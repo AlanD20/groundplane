@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -115,13 +116,13 @@ func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID 
 		connectorEnvironmentPrefix(environmentID),
 		environmentReleaseGroupOwnerPrefix + environmentID + "/",
 		backuppolicy.BackupSourceEnvironmentPrefix(environmentID),
-		backupScheduleCursorPrefix + environmentID + "/",
-		backupDueOutcomePrefix + environmentID + "/",
-		backupRecoveryPointEnvironmentPrefix + environmentID + "/",
-		backupRunEnvironmentPrefix + environmentID + "/",
-		backupOrphanEnvironmentPrefix + environmentID + "/",
-		backupRestoreEnvironmentPrefix + environmentID + "/",
-		backupKeyRotationEnvironmentPrefix + environmentID + "/",
+		backupruntime.BackupScheduleCursorPrefix + environmentID + "/",
+		backupruntime.BackupDueOutcomePrefix + environmentID + "/",
+		backupruntime.BackupRecoveryPointEnvironmentPrefix + environmentID + "/",
+		backupruntime.BackupRunEnvironmentPrefix + environmentID + "/",
+		backupruntime.BackupOrphanEnvironmentPrefix + environmentID + "/",
+		backupruntime.BackupRestoreEnvironmentPrefix + environmentID + "/",
+		backupruntime.BackupKeyRotationEnvironmentPrefix + environmentID + "/",
 		environmentDeletionWorkOperationPrefix(operationID),
 	}
 }

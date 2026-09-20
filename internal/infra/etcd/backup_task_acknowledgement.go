@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
@@ -227,64 +228,64 @@ func (repository *TaskRepository) loadBackupPruneTerminalAuthority(
 	ctx context.Context,
 	task TaskRecord,
 ) (
-	etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord],
-	[]etcdstore.Versioned[BackupRecoveryPointPruneRecord],
+	etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord],
+	[]etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 	error,
 ) {
 	taskID := task.ID
-	dispatchRead, err := repository.store.Get(ctx, backupRecoveryPointPruneDispatchKey(taskID))
+	dispatchRead, err := repository.store.Get(ctx, backupruntime.BackupRecoveryPointPruneDispatchKey(taskID))
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{}, nil, err
 	}
 	if dispatchRead == nil || dispatchRead.Entry == nil || dispatchRead.ReadRevision <= 0 {
-		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
 			errs.KindInternal,
 			"backup prune dispatch is missing for its active Task",
 		)
 	}
 	defer clear(dispatchRead.Entry.Value)
-	dispatchRecord, err := decodeBackupRecoveryPointPruneDispatchRecord(dispatchRead.Entry.Value)
+	dispatchRecord, err := backupruntime.DecodeBackupRecoveryPointPruneDispatchRecord(dispatchRead.Entry.Value)
 	if err != nil || dispatchRecord.TaskID != taskID {
-		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if err := validateBackupPruneTaskBinding(task, dispatchRecord); err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{}, nil, err
 	}
-	dispatch := etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{
+	dispatch := etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{
 		Record: dispatchRecord, Revision: dispatchRead.Entry.ModRevision,
 		ReadRevision: dispatchRead.ReadRevision,
 	}
 	keys := make([]string, len(dispatchRecord.RecoveryPointIDs))
 	for index, pointID := range dispatchRecord.RecoveryPointIDs {
-		keys[index] = backupRecoveryPointPruneKey(pointID)
+		keys[index] = backupruntime.BackupRecoveryPointPruneKey(pointID)
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{}, nil, err
 	}
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) != len(keys) {
-		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
 			errs.KindInternal,
 			"backup prune authority read is incomplete",
 		)
 	}
 	defer clearKeyValues(read.Values)
-	prunes := make([]etcdstore.Versioned[BackupRecoveryPointPruneRecord], len(keys))
+	prunes := make([]etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord], len(keys))
 	for index, value := range read.Values {
 		if value == nil {
-			return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
+			return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
 				errs.KindInternal,
 				"backup prune authority is missing for its active Task",
 			)
 		}
-		record, decodeErr := decodeBackupRecoveryPointPruneRecord(value.Value)
+		record, decodeErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(value.Value)
 		if decodeErr != nil || record.Point.ID != dispatchRecord.RecoveryPointIDs[index] ||
 			record.Point.EnvironmentID != dispatchRecord.EnvironmentID ||
 			record.OperationID != dispatchRecord.OperationID || record.TaskID != taskID ||
-			(record.State != BackupPruneAssigned && record.State != BackupPruneVerifiedAbsent) {
-			return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, corruptBackupRuntimeRecord()
+			(record.State != backupruntime.BackupPruneAssigned && record.State != backupruntime.BackupPruneVerifiedAbsent) {
+			return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		prunes[index] = etcdstore.Versioned[BackupRecoveryPointPruneRecord]{
+		prunes[index] = etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{
 			Record: record, Revision: value.ModRevision, ReadRevision: read.ReadRevision,
 		}
 	}
@@ -292,66 +293,66 @@ func (repository *TaskRepository) loadBackupPruneTerminalAuthority(
 }
 
 func backupRunForTaskTerminal(
-	current BackupRunRecord,
+	current backupruntime.BackupRunRecord,
 	terminalStatus TaskStatus,
 	terminalAt time.Time,
-) (BackupRunRecord, error) {
+) (backupruntime.BackupRunRecord, error) {
 	next := current
-	next.Sources = append([]BackupRunSourceAttemptRecord(nil), current.Sources...)
+	next.Sources = append([]backupruntime.BackupRunSourceAttemptRecord(nil), current.Sources...)
 	next.UpdatedAt = terminalAt
 	switch terminalStatus {
 	case TaskStatusCompleted:
-		next.State = BackupRunCompleted
+		next.State = backupruntime.BackupRunCompleted
 		return next, nil
 	case TaskStatusFailed:
-		next.State = BackupRunFailed
+		next.State = backupruntime.BackupRunFailed
 	case TaskStatusAborted:
-		next.State = BackupRunAborted
+		next.State = backupruntime.BackupRunAborted
 	case TaskStatusTimedOut:
-		next.State = BackupRunTimedOut
+		next.State = backupruntime.BackupRunTimedOut
 	default:
-		return BackupRunRecord{}, errs.New(
+		return backupruntime.BackupRunRecord{}, errs.New(
 			errs.KindValidationFailed,
 			"backup Task terminal status is invalid",
 		)
 	}
 	boundary := -1
 	for index := range next.Sources {
-		if next.Sources[index].State != BackupSourceAttemptSucceeded {
+		if next.Sources[index].State != backupruntime.BackupSourceAttemptSucceeded {
 			boundary = index
 			break
 		}
 	}
 	if boundary < 0 {
-		return BackupRunRecord{}, errs.New(
+		return backupruntime.BackupRunRecord{}, errs.New(
 			errs.KindStateConflict,
 			"non-success Backup acknowledgement has no active source",
 		)
 	}
 	source := &next.Sources[boundary]
-	if source.State == BackupSourceAttemptStaged &&
-		(source.Phase == BackupSourcePhaseUpload ||
-			source.Phase == BackupSourcePhaseHeadVerification ||
-			source.Phase == BackupSourcePhasePointCommit) {
-		source.State = BackupSourceAttemptOrphaned
-	} else if source.State != BackupSourceAttemptOrphaned {
-		source.State = BackupSourceAttemptFailed
+	if source.State == backupruntime.BackupSourceAttemptStaged &&
+		(source.Phase == backupruntime.BackupSourcePhaseUpload ||
+			source.Phase == backupruntime.BackupSourcePhaseHeadVerification ||
+			source.Phase == backupruntime.BackupSourcePhasePointCommit) {
+		source.State = backupruntime.BackupSourceAttemptOrphaned
+	} else if source.State != backupruntime.BackupSourceAttemptOrphaned {
+		source.State = backupruntime.BackupSourceAttemptFailed
 	}
 	switch terminalStatus {
 	case TaskStatusAborted:
-		source.FailureCode = BackupFailureAborted
+		source.FailureCode = backupruntime.BackupFailureAborted
 	case TaskStatusTimedOut:
-		source.FailureCode = BackupFailureTimedOut
+		source.FailureCode = backupruntime.BackupFailureTimedOut
 	default:
 		failureCode, err := backupFailureCodeForPhase(source.Phase)
 		if err != nil {
-			return BackupRunRecord{}, err
+			return backupruntime.BackupRunRecord{}, err
 		}
 		source.FailureCode = failureCode
 	}
 	for index := boundary + 1; index < len(next.Sources); index++ {
-		next.Sources[index].State = BackupSourceAttemptUnstarted
-		next.Sources[index].Phase = BackupSourcePhaseCapture
+		next.Sources[index].State = backupruntime.BackupSourceAttemptUnstarted
+		next.Sources[index].Phase = backupruntime.BackupSourcePhaseCapture
 		next.Sources[index].SizeBytes = 0
 		next.Sources[index].SHA256 = ""
 		next.Sources[index].FailureCode = ""
@@ -359,7 +360,7 @@ func backupRunForTaskTerminal(
 	return next, nil
 }
 
-func validateBackupRunTaskBinding(task TaskRecord, run BackupRunRecord) error {
+func validateBackupRunTaskBinding(task TaskRecord, run backupruntime.BackupRunRecord) error {
 	if task.Type != TaskBackup || task.ID != run.TaskID || task.OperationID != run.OperationID ||
 		task.Owner.EnvironmentID == "" || task.Owner.EnvironmentID != run.EnvironmentID ||
 		task.Target != run.EnvironmentID || !task.CreatedAt.Equal(run.CreatedAt) ||
@@ -371,7 +372,7 @@ func validateBackupRunTaskBinding(task TaskRecord, run BackupRunRecord) error {
 
 func validateBackupPruneTaskBinding(
 	task TaskRecord,
-	dispatch BackupRecoveryPointPruneDispatchRecord,
+	dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
 ) error {
 	if task.Type != TaskBackupPrune || task.ID != dispatch.TaskID ||
 		task.OperationID != dispatch.OperationID || task.Owner.EnvironmentID == "" ||
@@ -382,22 +383,22 @@ func validateBackupPruneTaskBinding(
 	return nil
 }
 
-func backupFailureCodeForPhase(phase BackupSourceAttemptPhase) (BackupFailureCode, error) {
+func backupFailureCodeForPhase(phase backupruntime.BackupSourceAttemptPhase) (backupruntime.BackupFailureCode, error) {
 	switch phase {
 	case BackupSourcePhaseCapture:
-		return BackupFailureCapture, nil
+		return backupruntime.BackupFailureCapture, nil
 	case BackupSourcePhaseStaging:
-		return BackupFailureStaging, nil
+		return backupruntime.BackupFailureStaging, nil
 	case BackupSourcePhaseUpload:
-		return BackupFailureUpload, nil
+		return backupruntime.BackupFailureUpload, nil
 	case BackupSourcePhaseHeadVerification:
-		return BackupFailureHeadVerification, nil
+		return backupruntime.BackupFailureHeadVerification, nil
 	case BackupSourcePhasePointCommit:
-		return BackupFailurePointCommit, nil
+		return backupruntime.BackupFailurePointCommit, nil
 	case BackupSourcePhaseCleanup:
-		return BackupFailureCleanup, nil
+		return backupruntime.BackupFailureCleanup, nil
 	case BackupSourcePhaseRetention:
-		return BackupFailureRetention, nil
+		return backupruntime.BackupFailureRetention, nil
 	default:
 		return "", errs.New(errs.KindInternal, "backup source phase is corrupt")
 	}
@@ -432,16 +433,16 @@ func (repository *TaskRepository) validateBackupTaskTerminalReplay(
 	return repository.validateBackupTerminalReceiptReplay(ctx, task)
 }
 
-func backupRunStateForTaskStatus(status TaskStatus) (BackupRunState, error) {
+func backupRunStateForTaskStatus(status TaskStatus) (backupruntime.BackupRunState, error) {
 	switch status {
 	case TaskStatusCompleted:
-		return BackupRunCompleted, nil
+		return backupruntime.BackupRunCompleted, nil
 	case TaskStatusFailed:
-		return BackupRunFailed, nil
+		return backupruntime.BackupRunFailed, nil
 	case TaskStatusAborted:
-		return BackupRunAborted, nil
+		return backupruntime.BackupRunAborted, nil
 	case TaskStatusTimedOut:
-		return BackupRunTimedOut, nil
+		return backupruntime.BackupRunTimedOut, nil
 	default:
 		return "", errs.New(errs.KindValidationFailed, "backup Task terminal status is invalid")
 	}

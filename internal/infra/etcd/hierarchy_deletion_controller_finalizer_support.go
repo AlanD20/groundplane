@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
@@ -129,8 +130,8 @@ func (repository *HierarchyDeletionRepository) requireHierarchyDeletionPrefixesE
 func hierarchyDeletionConnectorReferencePrefixes(connectorID string) []string {
 	return []string{
 		backuppolicy.BackupPolicyConnectorReferencePrefix(connectorID),
-		backupRecoveryPointConnectorPrefix + connectorID + "/",
-		backupOrphanConnectorPrefix + connectorID + "/",
+		backupruntime.BackupRecoveryPointConnectorPrefix + connectorID + "/",
+		backupruntime.BackupOrphanConnectorPrefix + connectorID + "/",
 	}
 }
 

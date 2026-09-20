@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -226,7 +227,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	backupPruneDispatchIndex := -1
 	if task.Type == TaskBackupPrune {
 		backupPruneDispatchIndex = len(companionKeys)
-		companionKeys = append(companionKeys, backupRecoveryPointPruneDispatchKey(task.ID))
+		companionKeys = append(companionKeys, backupruntime.BackupRecoveryPointPruneDispatchKey(task.ID))
 	}
 	backupTerminalReceiptIndex := -1
 	if task.Type == TaskBackup || task.Type == TaskBackupPrune {
@@ -411,7 +412,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		conditions = append(conditions, condition)
 	}
 	if backupPruneDispatchIndex >= 0 {
-		conditions = append(conditions, etcdstore.Condition{Key: backupRecoveryPointPruneDispatchKey(task.ID)})
+		conditions = append(conditions, etcdstore.Condition{Key: backupruntime.BackupRecoveryPointPruneDispatchKey(task.ID)})
 	}
 	conditions = backupReceiptCompanion.appendStartCondition(conditions)
 	mutations := []etcdstore.Mutation{

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -1175,7 +1176,7 @@ func requireAttachBackupSourceExclusionAbsent(
 	attachID string,
 	revision int64,
 ) (etcdstore.Condition, error) {
-	key, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, attachID)
+	key, err := backupruntime.BackupSourceTargetExclusionKey(backupruntime.BackupSourceTargetAttach, attachID)
 	if err != nil {
 		return etcdstore.Condition{}, err
 	}
@@ -1198,12 +1199,12 @@ func classifyAttachBackupSourceExclusionEvidence(evidence *etcdstore.KeyValue, a
 	if evidence == nil {
 		return nil
 	}
-	expectedKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, attachID)
+	expectedKey, err := backupruntime.BackupSourceTargetExclusionKey(backupruntime.BackupSourceTargetAttach, attachID)
 	if err != nil || evidence.Key != expectedKey {
 		return errs.New(errs.KindInternal, "attach backup source exclusion is misbucketed")
 	}
-	exclusion, decodeErr := decodeBackupSourceTargetExclusionRecord(evidence.Value)
-	if decodeErr != nil || exclusion.TargetKind != BackupSourceTargetAttach || exclusion.TargetID != attachID {
+	exclusion, decodeErr := backupruntime.DecodeBackupSourceTargetExclusionRecord(evidence.Value)
+	if decodeErr != nil || exclusion.TargetKind != backupruntime.BackupSourceTargetAttach || exclusion.TargetID != attachID {
 		return errs.New(errs.KindInternal, "attach backup source exclusion is corrupt")
 	}
 	return errs.New(errs.KindResourceInUse, "attach is an active backup source")
@@ -1557,11 +1558,11 @@ func classifyAttachDetachTaskConflict(_ int64, reads []*etcdstore.KeyValue) erro
 	}
 	if reads[5] != nil {
 		exclusion := reads[5]
-		record, err := decodeBackupSourceTargetExclusionRecord(exclusion.Value)
-		if err != nil || record.TargetKind != BackupSourceTargetAttach {
+		record, err := backupruntime.DecodeBackupSourceTargetExclusionRecord(exclusion.Value)
+		if err != nil || record.TargetKind != backupruntime.BackupSourceTargetAttach {
 			return errs.New(errs.KindInternal, "attach detach Task exclusion evidence is corrupt")
 		}
-		expectedKey, err := backupSourceTargetExclusionKey(record.TargetKind, record.TargetID)
+		expectedKey, err := backupruntime.BackupSourceTargetExclusionKey(record.TargetKind, record.TargetID)
 		if err != nil || exclusion.Key != expectedKey {
 			return errs.New(errs.KindInternal, "attach detach Task exclusion evidence is misbucketed")
 		}

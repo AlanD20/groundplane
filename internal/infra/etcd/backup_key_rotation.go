@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -47,7 +48,7 @@ func (prepared *PreparedBackupKeyRotation) Clear() {
 type backupKeyRotationPublicationPlan struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
-	record     BackupKeyRotationRecord
+	record     backupruntime.BackupKeyRotationRecord
 }
 
 type preparedBackupKeyRotationState struct {
@@ -155,26 +156,26 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	if err != nil {
 		return PreparedBackupKeyRotation{}, err
 	}
-	indexKey, err := backupKeyRotationEnvironmentIndexKey(input.EnvironmentID, input.TaskID)
+	indexKey, err := backupruntime.BackupKeyRotationEnvironmentIndexKey(input.EnvironmentID, input.TaskID)
 	if err != nil {
 		return PreparedBackupKeyRotation{}, err
 	}
-	record := BackupKeyRotationRecord{
+	record := backupruntime.BackupKeyRotationRecord{
 		TaskID: input.TaskID, OperationID: input.OperationID, EnvironmentID: input.EnvironmentID,
 		ExpectedCurrentRecordRevision: anchor.Values[1].ModRevision,
 		ExpectedCurrentValueRevision:  anchor.Values[2].ModRevision,
 		CurrentKeyEra:                 current.KeyEra, NextKeyEra: current.KeyEra + 1,
 		NextRecipient: material.Recipient, NextEncryptedIdentity: append([]byte(nil), material.Ciphertext...),
-		State: BackupKeyRotationPrepared, CreatedAt: input.CreatedAt.UTC(), UpdatedAt: input.CreatedAt.UTC(),
+		State: backupruntime.BackupKeyRotationPrepared, CreatedAt: input.CreatedAt.UTC(), UpdatedAt: input.CreatedAt.UTC(),
 	}
-	rotationValue, err := encodeBackupKeyRotationRecord(record)
+	rotationValue, err := backupruntime.EncodeBackupKeyRotationRecord(record)
 	if err != nil {
 		clear(record.NextEncryptedIdentity)
 		return PreparedBackupKeyRotation{}, err
 	}
-	lockValue, err := encodeBackupOperationLockRecord(BackupOperationLockRecord{
+	lockValue, err := backupruntime.EncodeBackupOperationLockRecord(backupruntime.BackupOperationLockRecord{
 		EnvironmentID: input.EnvironmentID, OperationID: input.OperationID, TaskID: input.TaskID,
-		Kind: BackupOperationRotation, CreatedAt: input.CreatedAt.UTC(), UpdatedAt: input.CreatedAt.UTC(),
+		Kind: backupruntime.BackupOperationRotation, CreatedAt: input.CreatedAt.UTC(), UpdatedAt: input.CreatedAt.UTC(),
 	})
 	if err != nil {
 		clear(rotationValue)
@@ -182,13 +183,13 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		return PreparedBackupKeyRotation{}, err
 	}
 	conditions := []etcdstore.Condition{
-		{Key: backupKeyRotationKey(input.TaskID)}, {Key: indexKey},
+		{Key: backupruntime.BackupKeyRotationKey(input.TaskID)}, {Key: indexKey},
 		{Key: backuppolicy.BackupKeyKey(input.EnvironmentID), ModRevision: anchor.Values[1].ModRevision},
 		{Key: backuppolicy.BackupKeyValueKey(input.EnvironmentID), ModRevision: anchor.Values[2].ModRevision},
 	}
 	conditions = append(conditions, fence.transactionConditions()...)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: backupKeyRotationKey(input.TaskID), Value: rotationValue},
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupKeyRotationKey(input.TaskID), Value: rotationValue},
 		{Type: etcdstore.MutationPut, Key: indexKey, Value: []byte(input.TaskID)},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(input.EnvironmentID), Value: lockValue},
 	}
@@ -387,7 +388,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		)
 	}
 	keys := []string{
-		backupKeyRotationKey(task.ID),
+		backupruntime.BackupKeyRotationKey(task.ID),
 		backuppolicy.BackupKeyKey(task.Target),
 		backuppolicy.BackupKeyValueKey(task.Target),
 		hierarchyrecord.EnvironmentOperationLockKey(task.Target),
@@ -404,7 +405,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		)
 	}
 	defer clearKeyValues(read.Values)
-	rotation, err := decodeBackupKeyRotationRecord(read.Values[0].Value)
+	rotation, err := backupruntime.DecodeBackupKeyRotationRecord(read.Values[0].Value)
 	if err != nil {
 		return backupKeyRotationTaskChange{}, corruptBackupKey()
 	}
@@ -418,8 +419,8 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		return backupKeyRotationTaskChange{}, corruptBackupKey()
 	}
 	defer clear(currentValue.Ciphertext)
-	lock, err := decodeBackupOperationLockRecord(read.Values[3].Value)
-	if err != nil || rotation.State != BackupKeyRotationPrepared ||
+	lock, err := backupruntime.DecodeBackupOperationLockRecord(read.Values[3].Value)
+	if err != nil || rotation.State != backupruntime.BackupKeyRotationPrepared ||
 		rotation.TaskID != task.ID || rotation.OperationID != task.OperationID ||
 		rotation.EnvironmentID != task.Target || current.EnvironmentID != task.Target ||
 		currentValue.EnvironmentID != task.Target || current.KeyEra != rotation.CurrentKeyEra ||
@@ -427,7 +428,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		read.Values[1].ModRevision != rotation.ExpectedCurrentRecordRevision ||
 		read.Values[2].ModRevision != rotation.ExpectedCurrentValueRevision ||
 		lock.TaskID != task.ID || lock.OperationID != task.OperationID ||
-		lock.Kind != BackupOperationRotation {
+		lock.Kind != backupruntime.BackupOperationRotation {
 		return backupKeyRotationTaskChange{}, errs.New(
 			errs.KindStateConflict,
 			"backup key rotation acknowledgement authority changed",
@@ -439,14 +440,14 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		task.Target,
 		readRevision,
 		environmentMutationFenceOwner{
-			Kind: BackupOperationRotation, OperationID: task.OperationID, TaskID: task.ID,
+			Kind: backupruntime.BackupOperationRotation, OperationID: task.OperationID, TaskID: task.ID,
 		},
 	)
 	if err != nil {
 		return backupKeyRotationTaskChange{}, err
 	}
 	conditions := []etcdstore.Condition{
-		{Key: backupKeyRotationKey(task.ID), ModRevision: read.Values[0].ModRevision},
+		{Key: backupruntime.BackupKeyRotationKey(task.ID), ModRevision: read.Values[0].ModRevision},
 		{Key: backuppolicy.BackupKeyKey(task.Target), ModRevision: read.Values[1].ModRevision},
 		{Key: backuppolicy.BackupKeyValueKey(task.Target), ModRevision: read.Values[2].ModRevision},
 	}
@@ -475,11 +476,11 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 			clear(recordValue)
 			return backupKeyRotationTaskChange{}, encodeErr
 		}
-		rotation.State = BackupKeyRotationApplied
+		rotation.State = backupruntime.BackupKeyRotationApplied
 		rotation.UpdatedAt = terminalAt.UTC()
 		clear(rotation.NextEncryptedIdentity)
 		rotation.NextEncryptedIdentity = nil
-		rotationValue, encodeErr := encodeBackupKeyRotationRecord(rotation)
+		rotationValue, encodeErr := backupruntime.EncodeBackupKeyRotationRecord(rotation)
 		if encodeErr != nil {
 			clear(recordValue)
 			clear(valueValue)
@@ -489,7 +490,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 			mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupKeyKey(task.Target), Value: recordValue},
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupKeyValueKey(task.Target), Value: valueValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupKeyRotationKey(task.ID), Value: rotationValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupruntime.BackupKeyRotationKey(task.ID), Value: rotationValue},
 		)
 	}
 	mutations = append(
@@ -515,7 +516,7 @@ func (repository *TaskRepository) validateBackupKeyRotationTaskAcknowledgementRe
 		return nil
 	}
 	keys := []string{
-		backupKeyRotationKey(task.ID),
+		backupruntime.BackupKeyRotationKey(task.ID),
 		backuppolicy.BackupKeyKey(task.Target),
 		backuppolicy.BackupKeyValueKey(task.Target),
 		hierarchyrecord.EnvironmentOperationLockKey(task.Target),
@@ -529,7 +530,7 @@ func (repository *TaskRepository) validateBackupKeyRotationTaskAcknowledgementRe
 		return errs.New(errs.KindStateConflict, "backup key rotation terminal replay changed")
 	}
 	defer clearKeyValues(read.Values)
-	rotation, err := decodeBackupKeyRotationRecord(read.Values[0].Value)
+	rotation, err := backupruntime.DecodeBackupKeyRotationRecord(read.Values[0].Value)
 	if err != nil {
 		return corruptBackupKey()
 	}
@@ -549,13 +550,13 @@ func (repository *TaskRepository) validateBackupKeyRotationTaskAcknowledgementRe
 		return errs.New(errs.KindStateConflict, "backup key rotation terminal replay changed")
 	}
 	if status == TaskStatusCompleted {
-		if rotation.State != BackupKeyRotationApplied || len(rotation.NextEncryptedIdentity) != 0 ||
+		if rotation.State != backupruntime.BackupKeyRotationApplied || len(rotation.NextEncryptedIdentity) != 0 ||
 			current.KeyEra != rotation.NextKeyEra || current.Recipient != rotation.NextRecipient {
 			return errs.New(errs.KindStateConflict, "backup key rotation completion replay changed")
 		}
 		return nil
 	}
-	if rotation.State != BackupKeyRotationPrepared || current.KeyEra != rotation.CurrentKeyEra ||
+	if rotation.State != backupruntime.BackupKeyRotationPrepared || current.KeyEra != rotation.CurrentKeyEra ||
 		read.Values[1].ModRevision != rotation.ExpectedCurrentRecordRevision ||
 		read.Values[2].ModRevision != rotation.ExpectedCurrentValueRevision {
 		return errs.New(errs.KindStateConflict, "backup key rotation failed-attempt replay changed")
@@ -592,9 +593,9 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	}
 	retry.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		backupKeyRotationKey(source.Record.ID),
+		backupruntime.BackupKeyRotationKey(source.Record.ID),
 		backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, source.Record.ID),
-		backupKeyRotationKey(retry.ID),
+		backupruntime.BackupKeyRotationKey(retry.ID),
 		backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, retry.ID),
 		backuppolicy.BackupKeyKey(source.Record.Owner.EnvironmentID), backuppolicy.BackupKeyValueKey(source.Record.Owner.EnvironmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(source.Record.Owner.EnvironmentID),
@@ -613,8 +614,8 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		)
 	}
 	defer clearKeyValues(read.Values)
-	rotation, err := decodeBackupKeyRotationRecord(read.Values[0].Value)
-	if err != nil || rotation.TaskID != source.Record.ID || rotation.State != BackupKeyRotationPrepared {
+	rotation, err := backupruntime.DecodeBackupKeyRotationRecord(read.Values[0].Value)
+	if err != nil || rotation.TaskID != source.Record.ID || rotation.State != backupruntime.BackupKeyRotationPrepared {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindTaskNotRetryable,
 			"backup key rotation authority is not retryable",
@@ -649,13 +650,13 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	newIndex := backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, retry.ID)
 	rotation.TaskID = retry.ID
 	rotation.UpdatedAt = retry.CreatedAt
-	rotationValue, err := encodeBackupKeyRotationRecord(rotation)
+	rotationValue, err := backupruntime.EncodeBackupKeyRotationRecord(rotation)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	lockValue, err := encodeBackupOperationLockRecord(BackupOperationLockRecord{
+	lockValue, err := backupruntime.EncodeBackupOperationLockRecord(backupruntime.BackupOperationLockRecord{
 		EnvironmentID: source.Record.Owner.EnvironmentID, OperationID: retry.OperationID, TaskID: retry.ID,
-		Kind: BackupOperationRotation, CreatedAt: rotation.CreatedAt, UpdatedAt: retry.CreatedAt,
+		Kind: backupruntime.BackupOperationRotation, CreatedAt: rotation.CreatedAt, UpdatedAt: retry.CreatedAt,
 	})
 	if err != nil {
 		clear(rotationValue)
@@ -678,7 +679,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	conditions := []etcdstore.Condition{
 		{Key: taskKey(retry.ID)}, {Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
 		{Key: taskActiveOperationKey(retry.OperationID)}, {Key: taskQueueKey(retry.Executor, retry.ID)},
-		{Key: backupKeyRotationKey(source.Record.ID), ModRevision: read.Values[0].ModRevision},
+		{Key: backupruntime.BackupKeyRotationKey(source.Record.ID), ModRevision: read.Values[0].ModRevision},
 		{
 			Key: backupKeyRotationEnvironmentIndexKeyForRetry(
 				source.Record.Owner.EnvironmentID,
@@ -686,7 +687,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 			),
 			ModRevision: read.Values[1].ModRevision,
 		},
-		{Key: backupKeyRotationKey(retry.ID)}, {Key: newIndex},
+		{Key: backupruntime.BackupKeyRotationKey(retry.ID)}, {Key: newIndex},
 		{Key: backuppolicy.BackupKeyKey(source.Record.Owner.EnvironmentID), ModRevision: read.Values[4].ModRevision},
 		{Key: backuppolicy.BackupKeyValueKey(source.Record.Owner.EnvironmentID), ModRevision: read.Values[5].ModRevision},
 	}
@@ -696,12 +697,12 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
-		{Type: etcdstore.MutationDelete, Key: backupKeyRotationKey(source.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: backupruntime.BackupKeyRotationKey(source.Record.ID)},
 		{
 			Type: etcdstore.MutationDelete,
 			Key:  backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, source.Record.ID),
 		},
-		{Type: etcdstore.MutationPut, Key: backupKeyRotationKey(retry.ID), Value: rotationValue},
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupKeyRotationKey(retry.ID), Value: rotationValue},
 		{Type: etcdstore.MutationPut, Key: newIndex, Value: []byte(retry.ID)},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(source.Record.Owner.EnvironmentID), Value: lockValue},
 	}
@@ -734,6 +735,6 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 }
 
 func backupKeyRotationEnvironmentIndexKeyForRetry(environmentID, taskID string) string {
-	key, _ := backupKeyRotationEnvironmentIndexKey(environmentID, taskID)
+	key, _ := backupruntime.BackupKeyRotationEnvironmentIndexKey(environmentID, taskID)
 	return key
 }

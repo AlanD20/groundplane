@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -257,7 +258,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		attachrecord.AttachBackingProjectKey(input.BackingProjectID, task.Target),
 		attachrecord.AttachFactsKey(task.Target),
 	}
-	exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, task.Target)
+	exclusionKey, err := backupruntime.BackupSourceTargetExclusionKey(backupruntime.BackupSourceTargetAttach, task.Target)
 	if err != nil {
 		return err
 	}
@@ -319,8 +320,8 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 			return errs.New(errs.KindInternal, "attach detach replay companion evidence is misbucketed")
 		}
 		if index == exclusionIndex {
-			exclusion, decodeErr := decodeBackupSourceTargetExclusionRecord(value.Value)
-			if decodeErr != nil || exclusion.TargetKind != BackupSourceTargetAttach ||
+			exclusion, decodeErr := backupruntime.DecodeBackupSourceTargetExclusionRecord(value.Value)
+			if decodeErr != nil || exclusion.TargetKind != backupruntime.BackupSourceTargetAttach ||
 				exclusion.TargetID != task.Target || value.Key != exclusionKey {
 				return errs.New(errs.KindInternal, "attach detach replay exclusion evidence is corrupt")
 			}

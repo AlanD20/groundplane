@@ -114,7 +114,7 @@ func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolic
 			errs.KindValidationFailed, "Blueprint Backup preparation identity is invalid",
 		)
 	}
-	if len(input.Sources) > MaximumBackupPolicySources {
+	if len(input.Sources) > backuppolicy.MaximumBackupPolicySources {
 		return BlueprintBackupPolicyPreparation{}, errs.New(
 			errs.KindValidationFailed, "backup policy may select at most 12 sources",
 		)

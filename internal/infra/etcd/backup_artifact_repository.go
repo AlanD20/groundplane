@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -42,7 +43,7 @@ type BackupRecoveryPointPageRequest struct {
 
 // BackupRecoveryPointPage never exposes an etcd key or inverted-id layout.
 type BackupRecoveryPointPage struct {
-	Items    []etcdstore.Versioned[BackupRecoveryPointRecord]
+	Items    []etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]
 	NextID   string
 	Revision int64
 }
@@ -185,62 +186,62 @@ func backupTaskRecordsEqual(left TaskRecord, right TaskRecord) bool {
 func (repository *BackupRuntimeRepository) GetBackupOrphan(
 	ctx context.Context,
 	recoveryPointID string,
-) (etcdstore.Versioned[BackupOrphanRecord], bool, error) {
+) (etcdstore.Versioned[backupruntime.BackupOrphanRecord], bool, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, false, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindRecoveryPoint, recoveryPointID); err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, false, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, false, err
 	}
-	primaryKey := backupOrphanKey(recoveryPointID)
+	primaryKey := backupruntime.BackupOrphanKey(recoveryPointID)
 	initial, err := repository.store.Get(ctx, primaryKey)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, false, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, false, err
 	}
 	if initial == nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, false, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, false, errs.New(
 			errs.KindInternal,
 			"backup orphan read is empty",
 		)
 	}
 	if initial.Entry == nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{ReadRevision: initial.ReadRevision}, false, nil
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{ReadRevision: initial.ReadRevision}, false, nil
 	}
 	defer clear(initial.Entry.Value)
-	record, err := decodeBackupOrphanRecord(initial.Entry.Value)
+	record, err := backupruntime.DecodeBackupOrphanRecord(initial.Entry.Value)
 	if err != nil || record.Point.ID != recoveryPointID {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, false, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	membershipKey, err := backupOrphanEnvironmentIndexKey(
+	membershipKey, err := backupruntime.BackupOrphanEnvironmentIndexKey(
 		record.Point.EnvironmentID,
 		recoveryPointID,
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, false, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	connectorMembershipKey, err := backupOrphanConnectorIndexKey(
+	connectorMembershipKey, err := backupruntime.BackupOrphanConnectorIndexKey(
 		record.Point.ConnectorID,
 		recoveryPointID,
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, false, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	authority, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{primaryKey, membershipKey, connectorMembershipKey},
 		Revision: initial.ReadRevision,
 	})
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, false, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, false, err
 	}
 	if authority == nil || authority.ReadRevision != initial.ReadRevision ||
 		len(authority.Values) != 3 || authority.Values[0] == nil ||
 		authority.Values[1] == nil || authority.Values[2] == nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, false, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	defer clearKeyValues(authority.Values)
-	stored, err := decodeBackupOrphanRecord(authority.Values[0].Value)
+	stored, err := backupruntime.DecodeBackupOrphanRecord(authority.Values[0].Value)
 	expectedVersion := int64(1)
-	if stored.State == BackupOrphanDelete {
+	if stored.State == backupruntime.BackupOrphanDelete {
 		expectedVersion = 2
 	}
 	if err != nil || stored != record ||
@@ -254,9 +255,9 @@ func (repository *BackupRuntimeRepository) GetBackupOrphan(
 		authority.Values[2].ModRevision != authority.Values[0].ModRevision ||
 		string(authority.Values[1].Value) != recoveryPointID ||
 		string(authority.Values[2].Value) != recoveryPointID {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, false, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	return etcdstore.Versioned[BackupOrphanRecord]{
+	return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{
 		Record:       stored,
 		Revision:     authority.Values[0].ModRevision,
 		ReadRevision: authority.ReadRevision,
@@ -266,49 +267,49 @@ func (repository *BackupRuntimeRepository) GetBackupOrphan(
 func (repository *BackupRuntimeRepository) CreateBackupOrphan(
 	ctx context.Context,
 	authority BackupAssignmentInput,
-	current etcdstore.Versioned[BackupRunRecord],
-	next BackupRunRecord,
+	current etcdstore.Versioned[backupruntime.BackupRunRecord],
+	next backupruntime.BackupRunRecord,
 	ordinal uint32,
-	orphan BackupOrphanRecord,
-) (etcdstore.Versioned[BackupRunRecord], error) {
+	orphan backupruntime.BackupOrphanRecord,
+) (etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
 	changedOrdinal, changed := changedBackupSourceOrdinal(current.Record, next)
 	if int(ordinal) >= len(current.Record.Sources) || !changed || changedOrdinal != ordinal ||
 		validateBackupRunTransition(current.Record, next, backupRunTransitionOrphanCreate) != nil ||
 		!backupPointMatchesRunSource(orphan.Point, next, ordinal) || orphan.TaskID != next.TaskID ||
-		orphan.State != BackupOrphanInspect {
-		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
+		orphan.State != backupruntime.BackupOrphanInspect {
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup orphan creation is invalid",
 		)
 	}
-	orphan.Reconciliation = BackupOrphanReconciliationAuthority{
+	orphan.Reconciliation = backupruntime.BackupOrphanReconciliationAuthority{
 		OperationID:    next.OperationID,
 		PolicyRevision: next.PolicyRevision,
 		RetentionKeep:  next.RetentionKeep,
 	}
-	value, err := encodeBackupOrphanRecord(orphan)
+	value, err := backupruntime.EncodeBackupOrphanRecord(orphan)
 	if err != nil {
-		return etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
 	defer clear(value)
-	connectorIndex, err := backupOrphanConnectorIndexKey(orphan.Point.ConnectorID, orphan.Point.ID)
+	connectorIndex, err := backupruntime.BackupOrphanConnectorIndexKey(orphan.Point.ConnectorID, orphan.Point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
-	environmentIndex, err := backupOrphanEnvironmentIndexKey(
+	environmentIndex, err := backupruntime.BackupOrphanEnvironmentIndexKey(
 		orphan.Point.EnvironmentID,
 		orphan.Point.ID,
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
 	conditions := []etcdstore.Condition{
-		{Key: backupOrphanKey(orphan.Point.ID)},
+		{Key: backupruntime.BackupOrphanKey(orphan.Point.ID)},
 		{Key: connectorIndex},
 		{Key: environmentIndex},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: backupOrphanKey(orphan.Point.ID), Value: value},
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupOrphanKey(orphan.Point.ID), Value: value},
 		{
 			Type:  etcdstore.MutationPut,
 			Key:   connectorIndex,
@@ -332,56 +333,56 @@ func (repository *BackupRuntimeRepository) CreateBackupOrphan(
 // without depending on the originating Task, assignment, or Backup run.
 func (repository *BackupRuntimeRepository) TransitionReconciledBackupOrphan(
 	ctx context.Context,
-	current etcdstore.Versioned[BackupOrphanRecord],
-	next BackupOrphanRecord,
-) (etcdstore.Versioned[BackupOrphanRecord], error) {
-	if current.Revision <= 0 || current.Record.State != BackupOrphanInspect ||
-		next.State != BackupOrphanDelete || current.Record.Point != next.Point ||
+	current etcdstore.Versioned[backupruntime.BackupOrphanRecord],
+	next backupruntime.BackupOrphanRecord,
+) (etcdstore.Versioned[backupruntime.BackupOrphanRecord], error) {
+	if current.Revision <= 0 || current.Record.State != backupruntime.BackupOrphanInspect ||
+		next.State != backupruntime.BackupOrphanDelete || current.Record.Point != next.Point ||
 		current.Record.TaskID != next.TaskID ||
 		current.Record.Reconciliation != next.Reconciliation ||
 		!next.UpdatedAt.After(current.Record.UpdatedAt) || next.CreatedAt != current.Record.CreatedAt {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup orphan reconciliation transition is invalid",
 		)
 	}
-	value, err := encodeBackupOrphanRecord(next)
+	value, err := backupruntime.EncodeBackupOrphanRecord(next)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	defer clear(value)
-	connectorIndex, err := backupOrphanConnectorIndexKey(next.Point.ConnectorID, next.Point.ID)
+	connectorIndex, err := backupruntime.BackupOrphanConnectorIndexKey(next.Point.ConnectorID, next.Point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
-	environmentIndex, err := backupOrphanEnvironmentIndexKey(next.Point.EnvironmentID, next.Point.ID)
+	environmentIndex, err := backupruntime.BackupOrphanEnvironmentIndexKey(next.Point.EnvironmentID, next.Point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
-	keys := []string{backupOrphanKey(next.Point.ID), connectorIndex, environmentIndex}
+	keys := []string{backupruntime.BackupOrphanKey(next.Point.ID), connectorIndex, environmentIndex}
 	anchor, err := repository.readCurrentKeys(ctx, keys)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	defer clearKeyValues(anchor.Values)
 	if anchor.Values[0] != nil {
-		stored, decodeErr := decodeBackupOrphanRecord(anchor.Values[0].Value)
+		stored, decodeErr := backupruntime.DecodeBackupOrphanRecord(anchor.Values[0].Value)
 		if decodeErr == nil && stored == next &&
 			validateBackupOrphanCompanionEvidence(anchor.Values, next) == nil {
-			return etcdstore.Versioned[BackupOrphanRecord]{
+			return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{
 				Record: stored, Revision: anchor.Values[0].ModRevision,
 				ReadRevision: anchor.ReadRevision,
 			}, nil
 		}
 	}
 	if anchor.Values[0] == nil || anchor.Values[0].ModRevision != current.Revision {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup orphan reconciliation authority changed",
 		)
 	}
 	if err := validateBackupOrphanCompanionEvidence(anchor.Values, current.Record); err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	conditions := []etcdstore.Condition{
 		{Key: keys[0], ModRevision: current.Revision},
@@ -394,16 +395,16 @@ func (repository *BackupRuntimeRepository) TransitionReconciledBackupOrphan(
 		{Type: etcdstore.MutationPut, Key: keys[2], Value: []byte(next.Point.ID)},
 	})
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	if !result.Succeeded {
 		clearKeyValues(result.FailureReads)
-		return etcdstore.Versioned[BackupOrphanRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup orphan reconciliation authority changed",
 		)
 	}
-	return etcdstore.Versioned[BackupOrphanRecord]{
+	return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{
 		Record: next, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
@@ -411,26 +412,26 @@ func (repository *BackupRuntimeRepository) TransitionReconciledBackupOrphan(
 // DeleteReconciledBackupOrphan consumes verified-absent Controller authority.
 func (repository *BackupRuntimeRepository) DeleteReconciledBackupOrphan(
 	ctx context.Context,
-	current etcdstore.Versioned[BackupOrphanRecord],
+	current etcdstore.Versioned[backupruntime.BackupOrphanRecord],
 ) error {
-	if current.Revision <= 0 || current.Record.State != BackupOrphanDelete {
+	if current.Revision <= 0 || current.Record.State != backupruntime.BackupOrphanDelete {
 		return errs.New(errs.KindValidationFailed, "backup orphan reconciliation deletion is invalid")
 	}
-	connectorIndex, err := backupOrphanConnectorIndexKey(
+	connectorIndex, err := backupruntime.BackupOrphanConnectorIndexKey(
 		current.Record.Point.ConnectorID,
 		current.Record.Point.ID,
 	)
 	if err != nil {
 		return err
 	}
-	environmentIndex, err := backupOrphanEnvironmentIndexKey(
+	environmentIndex, err := backupruntime.BackupOrphanEnvironmentIndexKey(
 		current.Record.Point.EnvironmentID,
 		current.Record.Point.ID,
 	)
 	if err != nil {
 		return err
 	}
-	keys := []string{backupOrphanKey(current.Record.Point.ID), connectorIndex, environmentIndex}
+	keys := []string{backupruntime.BackupOrphanKey(current.Record.Point.ID), connectorIndex, environmentIndex}
 	anchor, err := repository.readCurrentKeys(ctx, keys)
 	if err != nil {
 		return err
@@ -468,95 +469,95 @@ func (repository *BackupRuntimeRepository) DeleteReconciledBackupOrphan(
 // captured retention sweep without consulting the originating Task or run.
 func (repository *BackupRuntimeRepository) AdoptReconciledBackupOrphan(
 	ctx context.Context,
-	current etcdstore.Versioned[BackupOrphanRecord],
-	point BackupRecoveryPointRecord,
-	sweep BackupRetentionSweepRecord,
-) (etcdstore.Versioned[BackupRecoveryPointRecord], error) {
-	if current.Revision <= 0 || current.Record.State != BackupOrphanInspect ||
+	current etcdstore.Versioned[backupruntime.BackupOrphanRecord],
+	point backupruntime.BackupRecoveryPointRecord,
+	sweep backupruntime.BackupRetentionSweepRecord,
+) (etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord], error) {
+	if current.Revision <= 0 || current.Record.State != backupruntime.BackupOrphanInspect ||
 		point.BackupRecoveryPointSnapshot != current.Record.Point ||
 		sweep.SourceID != point.SourceID || sweep.TriggerRecoveryPointID != point.ID ||
 		sweep.Revision != current.Record.Reconciliation.PolicyRevision ||
 		sweep.Keep != current.Record.Reconciliation.RetentionKeep ||
-		sweep.State != BackupRetentionPending || sweep.CreatedAt != point.VerifiedAt ||
+		sweep.State != backupruntime.BackupRetentionPending || sweep.CreatedAt != point.VerifiedAt ||
 		sweep.UpdatedAt != point.VerifiedAt {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup orphan reconciliation adoption is invalid",
 		)
 	}
-	pointValue, err := encodeBackupRecoveryPointRecord(point)
+	pointValue, err := backupruntime.EncodeBackupRecoveryPointRecord(point)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	defer clear(pointValue)
-	sweepValue, err := encodeBackupRetentionSweepRecord(sweep)
+	sweepValue, err := backupruntime.EncodeBackupRetentionSweepRecord(sweep)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	defer clear(sweepValue)
-	orphanConnectorIndex, err := backupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
+	orphanConnectorIndex, err := backupruntime.BackupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
-	orphanEnvironmentIndex, err := backupOrphanEnvironmentIndexKey(point.EnvironmentID, point.ID)
+	orphanEnvironmentIndex, err := backupruntime.BackupOrphanEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
-	environmentIndex, err := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+	environmentIndex, err := backupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
-	sourceIndex, err := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+	sourceIndex, err := backupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
-	connectorIndex, err := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+	connectorIndex, err := backupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	keys := []string{
-		backupOrphanKey(point.ID), orphanConnectorIndex, orphanEnvironmentIndex,
-		backupRecoveryPointKey(point.ID), environmentIndex, sourceIndex, connectorIndex,
-		backupRetentionKey(point.SourceID, point.ID),
+		backupruntime.BackupOrphanKey(point.ID), orphanConnectorIndex, orphanEnvironmentIndex,
+		backupruntime.BackupRecoveryPointKey(point.ID), environmentIndex, sourceIndex, connectorIndex,
+		backupruntime.BackupRetentionKey(point.SourceID, point.ID),
 	}
 	anchor, err := repository.readCurrentKeys(ctx, keys)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	defer clearKeyValues(anchor.Values)
 	if anchor.Values[0] == nil {
 		if anchor.Values[1] != nil || anchor.Values[2] != nil {
-			return etcdstore.Versioned[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+			return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		allTargetsAbsent := true
 		for _, value := range anchor.Values[3:] {
 			allTargetsAbsent = allTargetsAbsent && value == nil
 		}
 		if allTargetsAbsent {
-			return etcdstore.Versioned[BackupRecoveryPointRecord]{}, errs.New(
+			return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"backup orphan reconciliation authority disappeared",
 			)
 		}
 		if err := validateReconciledBackupPointReplay(anchor.Values[3:], point, sweep); err != nil {
-			return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+			return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 		}
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{
 			Record: point, Revision: anchor.Values[3].ModRevision, ReadRevision: anchor.ReadRevision,
 		}, nil
 	}
 	if anchor.Values[0].ModRevision != current.Revision {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup orphan reconciliation authority changed",
 		)
 	}
 	if err := validateBackupOrphanCompanionEvidence(anchor.Values[:3], current.Record); err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	for _, value := range anchor.Values[3:] {
 		if value != nil {
-			return etcdstore.Versioned[BackupRecoveryPointRecord]{}, errs.New(
+			return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"backup orphan adoption target already exists",
 			)
@@ -581,24 +582,24 @@ func (repository *BackupRuntimeRepository) AdoptReconciledBackupOrphan(
 		{Type: etcdstore.MutationPut, Key: keys[7], Value: sweepValue},
 	})
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	if !result.Succeeded {
 		clearKeyValues(result.FailureReads)
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup orphan reconciliation authority changed",
 		)
 	}
-	return etcdstore.Versioned[BackupRecoveryPointRecord]{
+	return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{
 		Record: point, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
 
 func validateReconciledBackupPointReplay(
 	values []*etcdstore.KeyValue,
-	point BackupRecoveryPointRecord,
-	sweep BackupRetentionSweepRecord,
+	point backupruntime.BackupRecoveryPointRecord,
+	sweep backupruntime.BackupRetentionSweepRecord,
 ) error {
 	if len(values) != 5 || values[0] == nil || values[1] == nil || values[2] == nil ||
 		values[3] == nil || values[4] == nil || values[0].Version != 1 ||
@@ -607,19 +608,19 @@ func validateReconciledBackupPointReplay(
 		values[2].ModRevision != values[0].ModRevision || values[3].ModRevision != values[0].ModRevision ||
 		values[4].ModRevision != values[0].ModRevision || string(values[1].Value) != point.ID ||
 		string(values[2].Value) != point.ID || string(values[3].Value) != point.ID {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	storedPoint, pointErr := decodeBackupRecoveryPointRecord(values[0].Value)
-	storedSweep, sweepErr := decodeBackupRetentionSweepRecord(values[4].Value)
+	storedPoint, pointErr := backupruntime.DecodeBackupRecoveryPointRecord(values[0].Value)
+	storedSweep, sweepErr := backupruntime.DecodeBackupRetentionSweepRecord(values[4].Value)
 	if pointErr != nil || sweepErr != nil ||
 		storedPoint.BackupRecoveryPointSnapshot != point.BackupRecoveryPointSnapshot ||
 		storedSweep.SourceID != storedPoint.SourceID ||
 		storedSweep.TriggerRecoveryPointID != storedPoint.ID ||
 		storedSweep.Keep != sweep.Keep || storedSweep.Revision != sweep.Revision ||
-		storedSweep.State != BackupRetentionPending ||
+		storedSweep.State != backupruntime.BackupRetentionPending ||
 		storedSweep.CreatedAt != storedPoint.VerifiedAt ||
 		storedSweep.UpdatedAt != storedPoint.VerifiedAt {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if storedPoint != point || storedSweep != sweep {
 		return errs.New(
@@ -633,64 +634,64 @@ func validateReconciledBackupPointReplay(
 func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 	ctx context.Context,
 	authority BackupAssignmentInput,
-	run etcdstore.Versioned[BackupRunRecord],
-	current etcdstore.Versioned[BackupOrphanRecord],
-	next BackupOrphanRecord,
-) (etcdstore.Versioned[BackupOrphanRecord], error) {
+	run etcdstore.Versioned[backupruntime.BackupRunRecord],
+	current etcdstore.Versioned[backupruntime.BackupOrphanRecord],
+	next backupruntime.BackupOrphanRecord,
+) (etcdstore.Versioned[backupruntime.BackupOrphanRecord], error) {
 	next.Reconciliation = current.Record.Reconciliation
-	if current.Revision <= 0 || current.Record.State != BackupOrphanInspect ||
-		next.State != BackupOrphanDelete ||
+	if current.Revision <= 0 || current.Record.State != backupruntime.BackupOrphanInspect ||
+		next.State != backupruntime.BackupOrphanDelete ||
 		current.Record.Point != next.Point ||
 		current.Record.TaskID != next.TaskID ||
 		!next.UpdatedAt.After(current.Record.UpdatedAt) ||
 		next.CreatedAt != current.Record.CreatedAt ||
 		next.TaskID != run.Record.TaskID ||
 		!runContainsOrphanedPoint(run.Record, current.Record) {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup orphan transition is invalid",
 		)
 	}
-	value, err := encodeBackupOrphanRecord(next)
+	value, err := backupruntime.EncodeBackupOrphanRecord(next)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	defer clear(value)
-	connectorIndex, err := backupOrphanConnectorIndexKey(next.Point.ConnectorID, next.Point.ID)
+	connectorIndex, err := backupruntime.BackupOrphanConnectorIndexKey(next.Point.ConnectorID, next.Point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
-	environmentIndex, err := backupOrphanEnvironmentIndexKey(
+	environmentIndex, err := backupruntime.BackupOrphanEnvironmentIndexKey(
 		next.Point.EnvironmentID,
 		next.Point.ID,
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	anchor, err := repository.readCurrentKeys(ctx, []string{
-		backupRunKey(
+		backupruntime.BackupRunKey(
 			run.Record.TaskID,
 		),
-		backupOrphanKey(next.Point.ID),
+		backupruntime.BackupOrphanKey(next.Point.ID),
 		connectorIndex,
 		environmentIndex,
 	})
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	defer clearKeyValues(anchor.Values)
 	if anchor.Values[0] == nil || anchor.Values[0].ModRevision != run.Revision {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup orphan state changed",
 		)
 	}
-	storedRun, decodeErr := decodeBackupRunRecord(anchor.Values[0].Value)
+	storedRun, decodeErr := backupruntime.DecodeBackupRunRecord(anchor.Values[0].Value)
 	if decodeErr != nil || !backupRunRecordsEqual(storedRun, run.Record) {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if authority.TaskID != run.Record.TaskID {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup orphan assignment does not match its run",
 		)
@@ -701,34 +702,34 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 		anchor.ReadRevision,
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	if anchor.Values[1] != nil {
-		storedOrphan, orphanErr := decodeBackupOrphanRecord(anchor.Values[1].Value)
+		storedOrphan, orphanErr := backupruntime.DecodeBackupOrphanRecord(anchor.Values[1].Value)
 		if orphanErr == nil && storedOrphan == next &&
 			validateBackupOrphanCompanionEvidence(anchor.Values[1:], next) == nil {
-			return etcdstore.Versioned[BackupOrphanRecord]{
+			return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{
 				Record: storedOrphan, Revision: anchor.Values[1].ModRevision,
 				ReadRevision: anchor.ReadRevision,
 			}, nil
 		}
 	}
 	if anchor.Values[1] == nil || anchor.Values[1].ModRevision != current.Revision {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup orphan companion state changed",
 		)
 	}
 	if err := validateBackupOrphanCompanionEvidence(anchor.Values[1:], current.Record); err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	evidence, err := repository.loadOwnedEvidence(ctx, run.Record, anchor.ReadRevision)
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	conditions := []etcdstore.Condition{
-		{Key: backupRunKey(run.Record.TaskID), ModRevision: run.Revision},
-		{Key: backupOrphanKey(next.Point.ID), ModRevision: current.Revision},
+		{Key: backupruntime.BackupRunKey(run.Record.TaskID), ModRevision: run.Revision},
+		{Key: backupruntime.BackupOrphanKey(next.Point.ID), ModRevision: current.Revision},
 		{Key: connectorIndex, ModRevision: current.Revision},
 		{Key: environmentIndex, ModRevision: current.Revision},
 	}
@@ -736,26 +737,26 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 	conditions = append(conditions, assignmentConditions...)
 	epoch, err := evidence.fence.epochRewriteMutation()
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	defer clear(epoch.Value)
 	result, err := repository.transact(ctx, conditions, []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: backupOrphanKey(next.Point.ID), Value: value},
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupOrphanKey(next.Point.ID), Value: value},
 		{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(next.Point.ID)},
 		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(next.Point.ID)},
 		epoch,
 	})
 	if err != nil {
-		return etcdstore.Versioned[BackupOrphanRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
 	if !result.Succeeded {
 		defer clearKeyValues(result.FailureReads)
-		return etcdstore.Versioned[BackupOrphanRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup orphan state changed",
 		)
 	}
-	return etcdstore.Versioned[BackupOrphanRecord]{
+	return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{
 		Record:       next,
 		Revision:     result.Revision,
 		ReadRevision: result.Revision,
@@ -765,15 +766,15 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 func (repository *BackupRuntimeRepository) prepareBackupOrphanAbsentTerminal(
 	ctx context.Context,
 	checkpoint BackupCheckpointInput,
-	currentRun etcdstore.Versioned[BackupRunRecord],
-	nextRun BackupRunRecord,
+	currentRun etcdstore.Versioned[backupruntime.BackupRunRecord],
+	nextRun backupruntime.BackupRunRecord,
 	ordinal uint32,
-	orphan etcdstore.Versioned[BackupOrphanRecord],
+	orphan etcdstore.Versioned[backupruntime.BackupOrphanRecord],
 ) (backupRunPublicationPlan, error) {
 	changedOrdinal, changed := changedBackupSourceOrdinal(currentRun.Record, nextRun)
 	if int(ordinal) >= len(currentRun.Record.Sources) || !changed || changedOrdinal != ordinal ||
 		orphan.Revision <= 0 ||
-		orphan.Record.State != BackupOrphanDelete || orphan.Record.TaskID != currentRun.Record.TaskID ||
+		orphan.Record.State != backupruntime.BackupOrphanDelete || orphan.Record.TaskID != currentRun.Record.TaskID ||
 		orphan.Record.Point.ID != currentRun.Record.Sources[ordinal].RecoveryPointID ||
 		validateBackupRunTransition(
 			currentRun.Record,
@@ -799,14 +800,14 @@ func (repository *BackupRuntimeRepository) prepareBackupOrphanAbsentTerminal(
 // It pins the exact completed sweep under the owning Backup lock.
 func (repository *BackupRuntimeRepository) advanceBackupRunAfterRetention(
 	ctx context.Context,
-	currentRun etcdstore.Versioned[BackupRunRecord],
-	nextRun BackupRunRecord,
+	currentRun etcdstore.Versioned[backupruntime.BackupRunRecord],
+	nextRun backupruntime.BackupRunRecord,
 	ordinal uint32,
-	sweep etcdstore.Versioned[BackupRetentionSweepRecord],
-) (etcdstore.Versioned[BackupRunRecord], error) {
+	sweep etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord],
+) (etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
 	changedOrdinal, changed := changedBackupSourceOrdinal(currentRun.Record, nextRun)
 	if int(ordinal) >= len(currentRun.Record.Sources) || !changed || changedOrdinal != ordinal ||
-		sweep.Revision <= 0 || sweep.Record.State != BackupRetentionCompleted ||
+		sweep.Revision <= 0 || sweep.Record.State != backupruntime.BackupRetentionCompleted ||
 		!backupRetentionSweepMatchesRun(currentRun.Record, sweep.Record) ||
 		sweep.Record.SourceID != currentRun.Record.Sources[ordinal].SourceID ||
 		sweep.Record.TriggerRecoveryPointID != currentRun.Record.Sources[ordinal].RecoveryPointID ||
@@ -815,12 +816,12 @@ func (repository *BackupRuntimeRepository) advanceBackupRunAfterRetention(
 			nextRun,
 			backupRunTransitionRetentionComplete,
 		) != nil {
-		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup retention completion is invalid",
 		)
 	}
-	key := backupRetentionKey(sweep.Record.SourceID, sweep.Record.TriggerRecoveryPointID)
+	key := backupruntime.BackupRetentionKey(sweep.Record.SourceID, sweep.Record.TriggerRecoveryPointID)
 	return repository.replaceBackupRun(
 		ctx,
 		currentRun,
@@ -831,10 +832,10 @@ func (repository *BackupRuntimeRepository) advanceBackupRunAfterRetention(
 			if len(values) != 1 || values[0] == nil || values[0].ModRevision != sweep.Revision {
 				return errs.New(errs.KindStateConflict, "backup retention authority changed")
 			}
-			stored, err := decodeBackupRetentionSweepRecord(values[0].Value)
-			if err != nil || stored != sweep.Record || stored.State != BackupRetentionCompleted ||
+			stored, err := backupruntime.DecodeBackupRetentionSweepRecord(values[0].Value)
+			if err != nil || stored != sweep.Record || stored.State != backupruntime.BackupRetentionCompleted ||
 				!backupRetentionSweepMatchesRun(currentRun.Record, stored) {
-				return corruptBackupRuntimeRecord()
+				return backupruntime.CorruptBackupRuntimeRecord()
 			}
 			return nil
 		},
@@ -846,13 +847,13 @@ func (repository *BackupRuntimeRepository) advanceBackupRunAfterRetention(
 func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 	ctx context.Context,
 	authority BackupAssignmentInput,
-	currentRun etcdstore.Versioned[BackupRunRecord],
-	nextRun BackupRunRecord,
+	currentRun etcdstore.Versioned[backupruntime.BackupRunRecord],
+	nextRun backupruntime.BackupRunRecord,
 	ordinal uint32,
-	point BackupRecoveryPointRecord,
-	orphan *etcdstore.Versioned[BackupOrphanRecord],
-	sweep BackupRetentionSweepRecord,
-) (etcdstore.Versioned[BackupRecoveryPointRecord], etcdstore.Versioned[BackupRunRecord], error) {
+	point backupruntime.BackupRecoveryPointRecord,
+	orphan *etcdstore.Versioned[backupruntime.BackupOrphanRecord],
+	sweep backupruntime.BackupRetentionSweepRecord,
+) (etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord], etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
 	changedOrdinal, changed := changedBackupSourceOrdinal(currentRun.Record, nextRun)
 	if int(ordinal) >= len(currentRun.Record.Sources) || !changed || changedOrdinal != ordinal ||
 		validateBackupRunTransition(
@@ -863,58 +864,58 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 		!backupPointMatchesRunSource(point.BackupRecoveryPointSnapshot, nextRun, ordinal) ||
 		sweep.SourceID != point.SourceID || sweep.TriggerRecoveryPointID != point.ID ||
 		sweep.Revision != nextRun.PolicyRevision || sweep.Keep != nextRun.RetentionKeep ||
-		sweep.State != BackupRetentionPending {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, etcdstore.Versioned[BackupRunRecord]{}, errs.New(
+		sweep.State != backupruntime.BackupRetentionPending {
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"recovery point commit is invalid",
 		)
 	}
-	if currentRun.Record.Sources[ordinal].State == BackupSourceAttemptOrphaned {
+	if currentRun.Record.Sources[ordinal].State == backupruntime.BackupSourceAttemptOrphaned {
 		if orphan == nil || orphan.Revision <= 0 ||
 			!backupOrphanMatchesRunSource(orphan.Record, currentRun.Record, ordinal) ||
 			orphan.Record.Point != point.BackupRecoveryPointSnapshot ||
-			orphan.Record.State != BackupOrphanInspect ||
+			orphan.Record.State != backupruntime.BackupOrphanInspect ||
 			orphan.Record.TaskID != currentRun.Record.TaskID {
-			return etcdstore.Versioned[BackupRecoveryPointRecord]{}, etcdstore.Versioned[BackupRunRecord]{}, errs.New(
+			return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 				errs.KindValidationFailed,
 				"orphan-backed Recovery Point commit is invalid",
 			)
 		}
 	} else if orphan != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, etcdstore.Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"direct Recovery Point commit cannot carry an orphan",
 		)
 	}
-	pointValue, err := encodeBackupRecoveryPointRecord(point)
+	pointValue, err := backupruntime.EncodeBackupRecoveryPointRecord(point)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
 	defer clear(pointValue)
-	sweepValue, err := encodeBackupRetentionSweepRecord(sweep)
+	sweepValue, err := backupruntime.EncodeBackupRetentionSweepRecord(sweep)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
 	defer clear(sweepValue)
-	environmentIndex, err := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+	environmentIndex, err := backupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
-	sourceIndex, err := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+	sourceIndex, err := backupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
-	connectorIndex, err := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+	connectorIndex, err := backupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
-	orphanConnectorIndex, err := backupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
+	orphanConnectorIndex, err := backupruntime.BackupOrphanConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
-	orphanEnvironmentIndex, err := backupOrphanEnvironmentIndexKey(point.EnvironmentID, point.ID)
+	orphanEnvironmentIndex, err := backupruntime.BackupOrphanEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
 	conditions := []etcdstore.Condition{
 		{
@@ -925,28 +926,28 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 			Key:         connectorrecord.CredentialValueKey(point.ConnectorID),
 			ModRevision: currentRun.Record.ConnectorCredentialsRevision,
 		},
-		{Key: backupRecoveryPointKey(point.ID)},
+		{Key: backupruntime.BackupRecoveryPointKey(point.ID)},
 		{Key: environmentIndex},
 		{Key: sourceIndex},
 		{Key: connectorIndex},
-		{Key: backupRetentionKey(point.SourceID, point.ID)},
+		{Key: backupruntime.BackupRetentionKey(point.SourceID, point.ID)},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: backupRecoveryPointKey(point.ID), Value: pointValue},
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupRecoveryPointKey(point.ID), Value: pointValue},
 		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
 		{Type: etcdstore.MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
 		{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(point.ID)},
-		{Type: etcdstore.MutationPut, Key: backupRetentionKey(point.SourceID, point.ID), Value: sweepValue},
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupRetentionKey(point.SourceID, point.ID), Value: sweepValue},
 	}
 	if orphan != nil {
 		conditions = append(conditions,
-			etcdstore.Condition{Key: backupOrphanKey(point.ID), ModRevision: orphan.Revision},
+			etcdstore.Condition{Key: backupruntime.BackupOrphanKey(point.ID), ModRevision: orphan.Revision},
 			etcdstore.Condition{Key: orphanConnectorIndex, ModRevision: orphan.Revision},
 			etcdstore.Condition{Key: orphanEnvironmentIndex, ModRevision: orphan.Revision},
 		)
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: backupOrphanKey(point.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: backupruntime.BackupOrphanKey(point.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: orphanConnectorIndex},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: orphanEnvironmentIndex},
 		)
@@ -974,9 +975,9 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 		nil,
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, etcdstore.Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
-	return etcdstore.Versioned[BackupRecoveryPointRecord]{
+	return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{
 		Record: point, Revision: updatedRun.Revision, ReadRevision: updatedRun.ReadRevision,
 	}, updatedRun, nil
 }
@@ -984,49 +985,49 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 func (repository *BackupRuntimeRepository) GetBackupRecoveryPoint(
 	ctx context.Context,
 	recoveryPointID string,
-) (etcdstore.Versioned[BackupRecoveryPointRecord], error) {
+) (etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindRecoveryPoint, recoveryPointID); err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	record, found, err := getOptionalBackupRuntimeRecord(
 		ctx,
 		repository.store,
-		backupRecoveryPointKey(recoveryPointID),
+		backupruntime.BackupRecoveryPointKey(recoveryPointID),
 		recoveryPointID,
-		decodeBackupRecoveryPointRecord,
-		func(point BackupRecoveryPointRecord) string { return point.ID },
+		backupruntime.DecodeBackupRecoveryPointRecord,
+		func(point backupruntime.BackupRecoveryPointRecord) string { return point.ID },
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	if !found {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindRecoveryPointNotFound,
 			"recovery point was not found",
 		)
 	}
-	environmentIndex, err := backupRecoveryPointEnvironmentIndexKey(
+	environmentIndex, err := backupruntime.BackupRecoveryPointEnvironmentIndexKey(
 		record.Record.EnvironmentID,
 		recoveryPointID,
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	sourceIndex, err := backupRecoveryPointSourceIndexKey(record.Record.SourceID, recoveryPointID)
+	sourceIndex, err := backupruntime.BackupRecoveryPointSourceIndexKey(record.Record.SourceID, recoveryPointID)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	connectorIndex, err := backupRecoveryPointConnectorIndexKey(
+	connectorIndex, err := backupruntime.BackupRecoveryPointConnectorIndexKey(
 		record.Record.ConnectorID,
 		recoveryPointID,
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	authority, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			backupRecoveryPointKey(recoveryPointID),
-			backupRecoveryPointPruneKey(recoveryPointID),
+			backupruntime.BackupRecoveryPointKey(recoveryPointID),
+			backupruntime.BackupRecoveryPointPruneKey(recoveryPointID),
 			environmentIndex,
 			sourceIndex,
 			connectorIndex,
@@ -1034,7 +1035,7 @@ func (repository *BackupRuntimeRepository) GetBackupRecoveryPoint(
 		Revision: record.ReadRevision,
 	})
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	if authority == nil || authority.ReadRevision != record.ReadRevision ||
 		len(authority.Values) != 5 ||
@@ -1042,23 +1043,23 @@ func (repository *BackupRuntimeRepository) GetBackupRecoveryPoint(
 		authority.Values[0].Version != 1 ||
 		authority.Values[0].ModRevision != record.Revision ||
 		authority.Values[2] == nil || authority.Values[3] == nil || authority.Values[4] == nil {
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	defer clearKeyValues(authority.Values)
 	for index, expectedKey := range []string{environmentIndex, sourceIndex, connectorIndex} {
 		value := authority.Values[index+2]
 		if value.Key != expectedKey || value.Version != 1 || value.ModRevision != record.Revision ||
 			string(value.Value) != recoveryPointID {
-			return etcdstore.Versioned[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+			return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 	}
 	if authority.Values[1] != nil {
-		prune, decodeErr := decodeBackupRecoveryPointPruneRecord(authority.Values[1].Value)
+		prune, decodeErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(authority.Values[1].Value)
 		if decodeErr != nil || prune.Point != record.Record.BackupRecoveryPointSnapshot ||
-			prune.State == BackupPruneVerifiedAbsent {
-			return etcdstore.Versioned[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+			prune.State == backupruntime.BackupPruneVerifiedAbsent {
+			return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		return etcdstore.Versioned[BackupRecoveryPointRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindRecoveryPointNotFound,
 			"recovery point was not found",
 		)
@@ -1070,17 +1071,17 @@ func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsByEnvironment
 	ctx context.Context,
 	environmentID string,
 	request BackupRuntimeListRequest,
-) (BackupRuntimePage[BackupRecoveryPointRecord], error) {
+) (BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	return repository.listBackupRecoveryPoints(
 		ctx,
-		backupRecoveryPointEnvironmentPrefix+environmentID+"/",
+		backupruntime.BackupRecoveryPointEnvironmentPrefix+environmentID+"/",
 		request,
-		func(point BackupRecoveryPointRecord) bool { return point.EnvironmentID == environmentID },
-		func(point BackupRecoveryPointRecord) (string, error) {
-			return backupRecoveryPointEnvironmentIndexKey(environmentID, point.ID)
+		func(point backupruntime.BackupRecoveryPointRecord) bool { return point.EnvironmentID == environmentID },
+		func(point backupruntime.BackupRecoveryPointRecord) (string, error) {
+			return backupruntime.BackupRecoveryPointEnvironmentIndexKey(environmentID, point.ID)
 		},
 	)
 }
@@ -1091,7 +1092,7 @@ type backupRecoveryPointPageReader func(
 	context.Context,
 	string,
 	BackupRuntimeListRequest,
-) (BackupRuntimePage[BackupRecoveryPointRecord], error)
+) (BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error)
 
 func (repository *BackupRuntimeRepository) ListVerifiedRecoveryPointsByEnvironment(
 	ctx context.Context,
@@ -1114,7 +1115,7 @@ func collectVerifiedRecoveryPointPage(
 ) (BackupRecoveryPointPage, error) {
 	storageRequest := BackupRuntimeListRequest{Limit: request.Limit, Revision: request.Revision}
 	if request.AfterID != "" {
-		boundary, err := backupRecoveryPointEnvironmentIndexKey(environmentID, request.AfterID)
+		boundary, err := backupruntime.BackupRecoveryPointEnvironmentIndexKey(environmentID, request.AfterID)
 		if err != nil {
 			return BackupRecoveryPointPage{}, err
 		}
@@ -1151,7 +1152,7 @@ func collectVerifiedRecoveryPointPage(
 		result.Items = append(result.Items, page.Items...)
 		if len(result.Items) == request.Limit || page.Next == "" {
 			if page.Next != "" {
-				result.NextID, err = backupRecoveryPointIDFromEnvironmentIndexKey(environmentID, page.Next)
+				result.NextID, err = backupruntime.BackupRecoveryPointIDFromEnvironmentIndexKey(environmentID, page.Next)
 				if err != nil {
 					return BackupRecoveryPointPage{}, err
 				}
@@ -1173,23 +1174,23 @@ func (repository *BackupRuntimeRepository) ListBackupRunsByEnvironment(
 	ctx context.Context,
 	environmentID string,
 	request BackupRuntimeListRequest,
-) (BackupRuntimePage[BackupRunRecord], error) {
+) (BackupRuntimePage[backupruntime.BackupRunRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return BackupRuntimePage[BackupRunRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRunRecord]{}, err
 	}
-	prefix := backupRunEnvironmentPrefix + environmentID + "/"
+	prefix := backupruntime.BackupRunEnvironmentPrefix + environmentID + "/"
 	if err := validateBackupRuntimeListRequest(prefix, request); err != nil {
-		return BackupRuntimePage[BackupRunRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRunRecord]{}, err
 	}
 	index, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: request.StartExclusive,
 		Limit: int64(request.Limit), Revision: request.Revision,
 	})
 	if err != nil {
-		return BackupRuntimePage[BackupRunRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRunRecord]{}, err
 	}
 	if index == nil || index.ReadRevision <= 0 {
-		return BackupRuntimePage[BackupRunRecord]{}, errs.New(
+		return BackupRuntimePage[backupruntime.BackupRunRecord]{}, errs.New(
 			errs.KindInternal,
 			"backup run environment index page is incomplete",
 		)
@@ -1200,9 +1201,9 @@ func (repository *BackupRuntimeRepository) ListBackupRunsByEnvironment(
 		taskID := string(item.Value)
 		if recordcodec.ValidateID(ids.KindTask, taskID) != nil ||
 			item.Key != prefix+taskID {
-			return BackupRuntimePage[BackupRunRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupRunRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		keys[position] = backupRunKey(taskID)
+		keys[position] = backupruntime.BackupRunKey(taskID)
 	}
 	return repository.readBackupRunMembershipPage(ctx, environmentID, keys, index)
 }
@@ -1212,8 +1213,8 @@ func (repository *BackupRuntimeRepository) readBackupRunMembershipPage(
 	environmentID string,
 	keys []string,
 	index *etcdstore.RangeResult,
-) (BackupRuntimePage[BackupRunRecord], error) {
-	page := BackupRuntimePage[BackupRunRecord]{Revision: index.ReadRevision}
+) (BackupRuntimePage[backupruntime.BackupRunRecord], error) {
+	page := BackupRuntimePage[backupruntime.BackupRunRecord]{Revision: index.ReadRevision}
 	if len(keys) == 0 {
 		return page, nil
 	}
@@ -1222,27 +1223,27 @@ func (repository *BackupRuntimeRepository) readBackupRunMembershipPage(
 		etcdstore.GetManyRequest{Keys: keys, Revision: index.ReadRevision},
 	)
 	if err != nil {
-		return BackupRuntimePage[BackupRunRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRunRecord]{}, err
 	}
 	if primaries == nil || primaries.ReadRevision != index.ReadRevision ||
 		len(primaries.Values) != len(keys) {
-		return BackupRuntimePage[BackupRunRecord]{}, corruptBackupRuntimeRecord()
+		return BackupRuntimePage[backupruntime.BackupRunRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	defer clearKeyValues(primaries.Values)
-	page.Items = make([]etcdstore.Versioned[BackupRunRecord], len(keys))
+	page.Items = make([]etcdstore.Versioned[backupruntime.BackupRunRecord], len(keys))
 	for position, value := range primaries.Values {
 		if value == nil {
-			return BackupRuntimePage[BackupRunRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupRunRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		record, decodeErr := decodeBackupRunRecord(value.Value)
-		expectedIndex, keyErr := backupRunEnvironmentIndexKey(environmentID, record.TaskID)
+		record, decodeErr := backupruntime.DecodeBackupRunRecord(value.Value)
+		expectedIndex, keyErr := backupruntime.BackupRunEnvironmentIndexKey(environmentID, record.TaskID)
 		if decodeErr != nil || keyErr != nil || record.EnvironmentID != environmentID ||
 			expectedIndex != index.Values[position].Key || index.Values[position].Version != 1 ||
 			index.Values[position].ModRevision > value.ModRevision ||
 			string(index.Values[position].Value) != record.TaskID {
-			return BackupRuntimePage[BackupRunRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupRunRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		page.Items[position] = etcdstore.Versioned[BackupRunRecord]{
+		page.Items[position] = etcdstore.Versioned[backupruntime.BackupRunRecord]{
 			Record: record, Revision: value.ModRevision, ReadRevision: index.ReadRevision,
 		}
 	}
@@ -1256,23 +1257,23 @@ func (repository *BackupRuntimeRepository) ListBackupOrphansByEnvironment(
 	ctx context.Context,
 	environmentID string,
 	request BackupRuntimeListRequest,
-) (BackupRuntimePage[BackupOrphanRecord], error) {
+) (BackupRuntimePage[backupruntime.BackupOrphanRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return BackupRuntimePage[BackupOrphanRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, err
 	}
-	prefix := backupOrphanEnvironmentPrefix + environmentID + "/"
+	prefix := backupruntime.BackupOrphanEnvironmentPrefix + environmentID + "/"
 	if err := validateBackupRuntimeListRequest(prefix, request); err != nil {
-		return BackupRuntimePage[BackupOrphanRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, err
 	}
 	index, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: request.StartExclusive,
 		Limit: int64(request.Limit), Revision: request.Revision,
 	})
 	if err != nil {
-		return BackupRuntimePage[BackupOrphanRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, err
 	}
 	if index == nil || index.ReadRevision <= 0 {
-		return BackupRuntimePage[BackupOrphanRecord]{}, errs.New(
+		return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, errs.New(
 			errs.KindInternal,
 			"backup orphan environment index page is incomplete",
 		)
@@ -1283,16 +1284,16 @@ func (repository *BackupRuntimeRepository) ListBackupOrphansByEnvironment(
 	for position, item := range index.Values {
 		pointID := string(item.Value)
 		if recordcodec.ValidateID(ids.KindRecoveryPoint, pointID) != nil {
-			return BackupRuntimePage[BackupOrphanRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		expected, keyErr := backupOrphanEnvironmentIndexKey(environmentID, pointID)
+		expected, keyErr := backupruntime.BackupOrphanEnvironmentIndexKey(environmentID, pointID)
 		if keyErr != nil || expected != item.Key {
-			return BackupRuntimePage[BackupOrphanRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		keys[position] = backupOrphanKey(pointID)
+		keys[position] = backupruntime.BackupOrphanKey(pointID)
 		pointIDs[position] = pointID
 	}
-	page := BackupRuntimePage[BackupOrphanRecord]{Revision: index.ReadRevision}
+	page := BackupRuntimePage[backupruntime.BackupOrphanRecord]{Revision: index.ReadRevision}
 	if len(keys) == 0 {
 		return page, nil
 	}
@@ -1301,36 +1302,36 @@ func (repository *BackupRuntimeRepository) ListBackupOrphansByEnvironment(
 		etcdstore.GetManyRequest{Keys: keys, Revision: index.ReadRevision},
 	)
 	if err != nil {
-		return BackupRuntimePage[BackupOrphanRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, err
 	}
 	if primaries == nil || primaries.ReadRevision != index.ReadRevision ||
 		len(primaries.Values) != len(keys) {
-		return BackupRuntimePage[BackupOrphanRecord]{}, corruptBackupRuntimeRecord()
+		return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	defer clearKeyValues(primaries.Values)
-	records := make([]BackupOrphanRecord, len(keys))
+	records := make([]backupruntime.BackupOrphanRecord, len(keys))
 	connectorKeys := make([]string, len(keys))
 	for position, value := range primaries.Values {
 		if value == nil {
-			return BackupRuntimePage[BackupOrphanRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		record, decodeErr := decodeBackupOrphanRecord(value.Value)
+		record, decodeErr := backupruntime.DecodeBackupOrphanRecord(value.Value)
 		expectedVersion := int64(1)
-		if record.State == BackupOrphanDelete {
+		if record.State == backupruntime.BackupOrphanDelete {
 			expectedVersion = 2
 		}
 		if decodeErr != nil || record.Point.ID != pointIDs[position] ||
 			record.Point.EnvironmentID != environmentID || value.Version != expectedVersion ||
 			index.Values[position].Version != expectedVersion ||
 			index.Values[position].ModRevision != value.ModRevision {
-			return BackupRuntimePage[BackupOrphanRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		connectorKey, keyErr := backupOrphanConnectorIndexKey(
+		connectorKey, keyErr := backupruntime.BackupOrphanConnectorIndexKey(
 			record.Point.ConnectorID,
 			record.Point.ID,
 		)
 		if keyErr != nil {
-			return BackupRuntimePage[BackupOrphanRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		records[position] = record
 		connectorKeys[position] = connectorKey
@@ -1339,27 +1340,27 @@ func (repository *BackupRuntimeRepository) ListBackupOrphansByEnvironment(
 		Keys: connectorKeys, Revision: index.ReadRevision,
 	})
 	if err != nil {
-		return BackupRuntimePage[BackupOrphanRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, err
 	}
 	if connectors == nil || connectors.ReadRevision != index.ReadRevision ||
 		len(connectors.Values) != len(connectorKeys) {
-		return BackupRuntimePage[BackupOrphanRecord]{}, corruptBackupRuntimeRecord()
+		return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	defer clearKeyValues(connectors.Values)
-	page.Items = make([]etcdstore.Versioned[BackupOrphanRecord], len(keys))
+	page.Items = make([]etcdstore.Versioned[backupruntime.BackupOrphanRecord], len(keys))
 	for position, connector := range connectors.Values {
 		record := records[position]
 		value := primaries.Values[position]
 		expectedVersion := int64(1)
-		if record.State == BackupOrphanDelete {
+		if record.State == backupruntime.BackupOrphanDelete {
 			expectedVersion = 2
 		}
 		if connector == nil || connector.Key != connectorKeys[position] ||
 			connector.Version != expectedVersion || connector.ModRevision != value.ModRevision ||
 			string(connector.Value) != record.Point.ID {
-			return BackupRuntimePage[BackupOrphanRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupOrphanRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		page.Items[position] = etcdstore.Versioned[BackupOrphanRecord]{
+		page.Items[position] = etcdstore.Versioned[backupruntime.BackupOrphanRecord]{
 			Record: record, Revision: value.ModRevision, ReadRevision: index.ReadRevision,
 		}
 	}
@@ -1373,17 +1374,17 @@ func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsBySource(
 	ctx context.Context,
 	sourceID string,
 	request BackupRuntimeListRequest,
-) (BackupRuntimePage[BackupRecoveryPointRecord], error) {
+) (BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
-		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	return repository.listBackupRecoveryPoints(
 		ctx,
-		backupRecoveryPointSourcePrefix+sourceID+"/",
+		backupruntime.BackupRecoveryPointSourcePrefix+sourceID+"/",
 		request,
-		func(point BackupRecoveryPointRecord) bool { return point.SourceID == sourceID },
-		func(point BackupRecoveryPointRecord) (string, error) {
-			return backupRecoveryPointSourceIndexKey(sourceID, point.ID)
+		func(point backupruntime.BackupRecoveryPointRecord) bool { return point.SourceID == sourceID },
+		func(point backupruntime.BackupRecoveryPointRecord) (string, error) {
+			return backupruntime.BackupRecoveryPointSourceIndexKey(sourceID, point.ID)
 		},
 	)
 }
@@ -1392,17 +1393,17 @@ func (repository *BackupRuntimeRepository) ListBackupRecoveryPointsByConnector(
 	ctx context.Context,
 	connectorID string,
 	request BackupRuntimeListRequest,
-) (BackupRuntimePage[BackupRecoveryPointRecord], error) {
+) (BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindConnector, connectorID); err != nil {
-		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	return repository.listBackupRecoveryPoints(
 		ctx,
-		backupRecoveryPointConnectorPrefix+connectorID+"/",
+		backupruntime.BackupRecoveryPointConnectorPrefix+connectorID+"/",
 		request,
-		func(point BackupRecoveryPointRecord) bool { return point.ConnectorID == connectorID },
-		func(point BackupRecoveryPointRecord) (string, error) {
-			return backupRecoveryPointConnectorIndexKey(connectorID, point.ID)
+		func(point backupruntime.BackupRecoveryPointRecord) bool { return point.ConnectorID == connectorID },
+		func(point backupruntime.BackupRecoveryPointRecord) (string, error) {
+			return backupruntime.BackupRecoveryPointConnectorIndexKey(connectorID, point.ID)
 		},
 	)
 }
@@ -1411,21 +1412,21 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 	ctx context.Context,
 	prefix string,
 	request BackupRuntimeListRequest,
-	belongs func(BackupRecoveryPointRecord) bool,
-	indexKey func(BackupRecoveryPointRecord) (string, error),
-) (BackupRuntimePage[BackupRecoveryPointRecord], error) {
+	belongs func(backupruntime.BackupRecoveryPointRecord) bool,
+	indexKey func(backupruntime.BackupRecoveryPointRecord) (string, error),
+) (BackupRuntimePage[backupruntime.BackupRecoveryPointRecord], error) {
 	if err := validateBackupRuntimeListRequest(prefix, request); err != nil {
-		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	index, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: request.StartExclusive,
 		Limit: int64(request.Limit), Revision: request.Revision,
 	})
 	if err != nil {
-		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	if index == nil || index.ReadRevision <= 0 {
-		return BackupRuntimePage[BackupRecoveryPointRecord]{}, errs.New(
+		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindInternal,
 			"recovery point index page is incomplete",
 		)
@@ -1436,64 +1437,64 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 	for position, item := range index.Values {
 		pointID := string(item.Value)
 		if recordcodec.ValidateID(ids.KindRecoveryPoint, pointID) != nil {
-			return BackupRuntimePage[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		keys = append(keys, backupRecoveryPointKey(pointID), backupRecoveryPointPruneKey(pointID))
+		keys = append(keys, backupruntime.BackupRecoveryPointKey(pointID), backupruntime.BackupRecoveryPointPruneKey(pointID))
 		pointIDs[position] = pointID
 	}
-	page := BackupRuntimePage[BackupRecoveryPointRecord]{Revision: index.ReadRevision}
+	page := BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{Revision: index.ReadRevision}
 	if len(keys) == 0 {
 		return page, nil
 	}
 	points, err := repository.readBackupRecoveryPointPageChunks(ctx, keys, index.ReadRevision)
 	if err != nil {
-		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	if points == nil || points.ReadRevision != index.ReadRevision ||
 		len(points.Values) != len(keys) {
-		return BackupRuntimePage[BackupRecoveryPointRecord]{}, errs.New(
+		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindInternal,
 			"recovery point fixed-revision page is incomplete",
 		)
 	}
 	defer clearKeyValues(points.Values)
-	records := make([]BackupRecoveryPointRecord, len(pointIDs))
+	records := make([]backupruntime.BackupRecoveryPointRecord, len(pointIDs))
 	visible := make([]bool, len(pointIDs))
 	companionKeys := make([]string, 0, len(pointIDs)*3)
 	for position, pointID := range pointIDs {
 		item := points.Values[position*2]
 		if item == nil {
-			return BackupRuntimePage[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		point, decodeErr := decodeBackupRecoveryPointRecord(item.Value)
+		point, decodeErr := backupruntime.DecodeBackupRecoveryPointRecord(item.Value)
 		if decodeErr != nil || point.ID != pointID || !belongs(point) || item.Version != 1 ||
 			index.Values[position].Version != 1 ||
 			index.Values[position].ModRevision != item.ModRevision {
-			return BackupRuntimePage[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		expectedIndexKey, keyErr := indexKey(point)
 		if keyErr != nil || expectedIndexKey != index.Values[position].Key {
-			return BackupRuntimePage[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		environmentIndex, keyErr := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+		environmentIndex, keyErr := backupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 		if keyErr != nil {
-			return BackupRuntimePage[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		sourceIndex, keyErr := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+		sourceIndex, keyErr := backupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 		if keyErr != nil {
-			return BackupRuntimePage[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		connectorIndex, keyErr := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+		connectorIndex, keyErr := backupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 		if keyErr != nil {
-			return BackupRuntimePage[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+			return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		records[position] = point
 		companionKeys = append(companionKeys, environmentIndex, sourceIndex, connectorIndex)
 		if pruneValue := points.Values[position*2+1]; pruneValue != nil {
-			prune, pruneErr := decodeBackupRecoveryPointPruneRecord(pruneValue.Value)
+			prune, pruneErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(pruneValue.Value)
 			if pruneErr != nil || prune.Point != point.BackupRecoveryPointSnapshot ||
-				prune.State == BackupPruneVerifiedAbsent {
-				return BackupRuntimePage[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+				prune.State == backupruntime.BackupPruneVerifiedAbsent {
+				return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 			}
 			continue
 		}
@@ -1505,17 +1506,17 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 		index.ReadRevision,
 	)
 	if err != nil {
-		return BackupRuntimePage[BackupRecoveryPointRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	if companions == nil || companions.ReadRevision != index.ReadRevision ||
 		len(companions.Values) != len(companionKeys) {
-		return BackupRuntimePage[BackupRecoveryPointRecord]{}, errs.New(
+		return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindInternal,
 			"recovery point companion page is incomplete",
 		)
 	}
 	defer clearKeyValues(companions.Values)
-	page.Items = make([]etcdstore.Versioned[BackupRecoveryPointRecord], 0, len(pointIDs))
+	page.Items = make([]etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord], 0, len(pointIDs))
 	for position, point := range records {
 		primary := points.Values[position*2]
 		for offset := range 3 {
@@ -1523,11 +1524,11 @@ func (repository *BackupRuntimeRepository) listBackupRecoveryPoints(
 			expectedKey := companionKeys[position*3+offset]
 			if companion == nil || companion.Key != expectedKey || companion.Version != 1 ||
 				companion.ModRevision != primary.ModRevision || string(companion.Value) != point.ID {
-				return BackupRuntimePage[BackupRecoveryPointRecord]{}, corruptBackupRuntimeRecord()
+				return BackupRuntimePage[backupruntime.BackupRecoveryPointRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 			}
 		}
 		if visible[position] {
-			page.Items = append(page.Items, etcdstore.Versioned[BackupRecoveryPointRecord]{
+			page.Items = append(page.Items, etcdstore.Versioned[backupruntime.BackupRecoveryPointRecord]{
 				Record: point, Revision: primary.ModRevision, ReadRevision: index.ReadRevision,
 			})
 		}
@@ -1586,20 +1587,20 @@ func (repository *BackupRuntimeRepository) GetBackupRetentionSweep(
 	ctx context.Context,
 	sourceID string,
 	triggerRecoveryPointID string,
-) (etcdstore.Versioned[BackupRetentionSweepRecord], bool, error) {
+) (etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord], bool, error) {
 	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, false, err
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindRecoveryPoint, triggerRecoveryPointID); err != nil {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, false, err
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, err
 	}
 	record, found, err := getOptionalBackupRuntimeRecord(
 		ctx,
 		repository.store,
-		backupRetentionKey(sourceID, triggerRecoveryPointID),
+		backupruntime.BackupRetentionKey(sourceID, triggerRecoveryPointID),
 		triggerRecoveryPointID,
-		decodeBackupRetentionSweepRecord,
-		func(record BackupRetentionSweepRecord) string {
+		backupruntime.DecodeBackupRetentionSweepRecord,
+		func(record backupruntime.BackupRetentionSweepRecord) string {
 			if record.SourceID != sourceID {
 				return ""
 			}
@@ -1612,30 +1613,30 @@ func (repository *BackupRuntimeRepository) GetBackupRetentionSweep(
 	authority, err := repository.readFixedKeys(
 		ctx,
 		[]string{
-			backupRetentionKey(sourceID, triggerRecoveryPointID),
-			backupRecoveryPointKey(triggerRecoveryPointID),
+			backupruntime.BackupRetentionKey(sourceID, triggerRecoveryPointID),
+			backupruntime.BackupRecoveryPointKey(triggerRecoveryPointID),
 		},
 		record.ReadRevision,
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, false, err
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, err
 	}
 	defer clearKeyValues(authority.Values)
 	if authority.Values[0] == nil || authority.Values[1] == nil ||
 		authority.Values[0].ModRevision != record.Revision || authority.Values[1].Version != 1 {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, false, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	point, err := decodeBackupRecoveryPointRecord(authority.Values[1].Value)
+	point, err := backupruntime.DecodeBackupRecoveryPointRecord(authority.Values[1].Value)
 	if err != nil || point.ID != triggerRecoveryPointID || point.SourceID != sourceID {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, false, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	if record.Record.State == BackupRetentionPending {
+	if record.Record.State == backupruntime.BackupRetentionPending {
 		if authority.Values[0].Version != 1 || authority.Values[0].ModRevision != authority.Values[1].ModRevision {
-			return etcdstore.Versioned[BackupRetentionSweepRecord]{}, false, corruptBackupRuntimeRecord()
+			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 		}
 	} else if authority.Values[0].Version < 2 ||
 		authority.Values[0].ModRevision <= authority.Values[1].ModRevision {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, false, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return record, true, nil
 }
@@ -1644,39 +1645,39 @@ func (repository *BackupRuntimeRepository) ListBackupRetentionSweepsBySource(
 	ctx context.Context,
 	sourceID string,
 	request BackupRuntimeListRequest,
-) (BackupRuntimePage[BackupRetentionSweepRecord], error) {
+) (BackupRuntimePage[backupruntime.BackupRetentionSweepRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
-		return BackupRuntimePage[BackupRetentionSweepRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
 	}
-	prefix := backupRetentionPrefix + sourceID + "/"
+	prefix := backupruntime.BackupRetentionPrefix + sourceID + "/"
 	if err := validateBackupRuntimeListRequest(prefix, request); err != nil {
-		return BackupRuntimePage[BackupRetentionSweepRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
 	}
 	result, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: request.StartExclusive,
 		Limit: int64(request.Limit), Revision: request.Revision,
 	})
 	if err != nil {
-		return BackupRuntimePage[BackupRetentionSweepRecord]{}, err
+		return BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, err
 	}
 	if result == nil || result.ReadRevision <= 0 {
-		return BackupRuntimePage[BackupRetentionSweepRecord]{}, errs.New(
+		return BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, errs.New(
 			errs.KindInternal,
 			"backup retention page is incomplete",
 		)
 	}
 	defer clearRangeValues(result.Values)
-	page := BackupRuntimePage[BackupRetentionSweepRecord]{
-		Items:    make([]etcdstore.Versioned[BackupRetentionSweepRecord], len(result.Values)),
+	page := BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{
+		Items:    make([]etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord], len(result.Values)),
 		Revision: result.ReadRevision,
 	}
 	for index, item := range result.Values {
-		record, decodeErr := decodeBackupRetentionSweepRecord(item.Value)
+		record, decodeErr := backupruntime.DecodeBackupRetentionSweepRecord(item.Value)
 		if decodeErr != nil || record.SourceID != sourceID ||
-			item.Key != backupRetentionKey(sourceID, record.TriggerRecoveryPointID) {
-			return BackupRuntimePage[BackupRetentionSweepRecord]{}, corruptBackupRuntimeRecord()
+			item.Key != backupruntime.BackupRetentionKey(sourceID, record.TriggerRecoveryPointID) {
+			return BackupRuntimePage[backupruntime.BackupRetentionSweepRecord]{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		page.Items[index] = etcdstore.Versioned[BackupRetentionSweepRecord]{
+		page.Items[index] = etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{
 			Record: record, Revision: item.ModRevision, ReadRevision: result.ReadRevision,
 		}
 	}
@@ -1691,52 +1692,52 @@ func (repository *BackupRuntimeRepository) ListBackupRetentionSweepsBySource(
 // every older visible point in the page under the owning Backup lock.
 func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 	ctx context.Context,
-	run etcdstore.Versioned[BackupRunRecord],
-	current etcdstore.Versioned[BackupRetentionSweepRecord],
+	run etcdstore.Versioned[backupruntime.BackupRunRecord],
+	current etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord],
 	advancedAt time.Time,
-) (etcdstore.Versioned[BackupRetentionSweepRecord], []etcdstore.Versioned[BackupRecoveryPointPruneRecord], error) {
+) (etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord], []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord], error) {
 	if current.Revision <= 0 ||
-		(current.Record.State != BackupRetentionPending && current.Record.State != BackupRetentionScanning) ||
-		!validBackupRuntimeInstant(advancedAt) || !advancedAt.After(current.Record.UpdatedAt) ||
-		validateBackupRunRecord(run.Record) != nil || run.Revision <= 0 ||
-		run.Record.State != BackupRunRunning ||
+		(current.Record.State != backupruntime.BackupRetentionPending && current.Record.State != backupruntime.BackupRetentionScanning) ||
+		!backupruntime.ValidBackupRuntimeInstant(advancedAt) || !advancedAt.After(current.Record.UpdatedAt) ||
+		backupruntime.ValidateBackupRunRecord(run.Record) != nil || run.Revision <= 0 ||
+		run.Record.State != backupruntime.BackupRunRunning ||
 		!backupRetentionSweepMatchesRun(run.Record, current.Record) {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, errs.New(
 			errs.KindValidationFailed,
 			"backup retention transition is invalid",
 		)
 	}
-	sweepKey := backupRetentionKey(current.Record.SourceID, current.Record.TriggerRecoveryPointID)
+	sweepKey := backupruntime.BackupRetentionKey(current.Record.SourceID, current.Record.TriggerRecoveryPointID)
 	anchor, err := repository.readCurrentKeys(
 		ctx,
-		[]string{backupRunKey(run.Record.TaskID), sweepKey},
+		[]string{backupruntime.BackupRunKey(run.Record.TaskID), sweepKey},
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, err
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	defer clearKeyValues(anchor.Values)
 	if anchor.Values[0] == nil || anchor.Values[0].ModRevision != run.Revision ||
 		anchor.Values[1] == nil || anchor.Values[1].ModRevision != current.Revision {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, errs.New(
 			errs.KindStateConflict,
 			"backup retention authority changed",
 		)
 	}
-	storedRun, runErr := decodeBackupRunRecord(anchor.Values[0].Value)
-	storedSweep, sweepErr := decodeBackupRetentionSweepRecord(anchor.Values[1].Value)
+	storedRun, runErr := backupruntime.DecodeBackupRunRecord(anchor.Values[0].Value)
+	storedSweep, sweepErr := backupruntime.DecodeBackupRetentionSweepRecord(anchor.Values[1].Value)
 	if runErr != nil || sweepErr != nil || !backupRunRecordsEqual(storedRun, run.Record) ||
 		storedSweep != current.Record || !backupRetentionSweepMatchesRun(storedRun, storedSweep) {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	prefix := backupRecoveryPointSourcePrefix + current.Record.SourceID + "/"
+	prefix := backupruntime.BackupRecoveryPointSourcePrefix + current.Record.SourceID + "/"
 	startExclusive := ""
 	if current.Record.Cursor != "" {
-		startExclusive, err = backupRecoveryPointSourceIndexKey(
+		startExclusive, err = backupruntime.BackupRecoveryPointSourceIndexKey(
 			current.Record.SourceID,
 			current.Record.Cursor,
 		)
 		if err != nil {
-			return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, err
+			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 		}
 	}
 	selectionRevision := current.Record.SelectionRevision
@@ -1744,17 +1745,17 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		selectionRevision = anchor.ReadRevision
 	}
 	if selectionRevision <= 0 || selectionRevision > anchor.ReadRevision {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	index, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: startExclusive, Limit: maximumBackupPruneBatch,
 		Revision: selectionRevision,
 	})
 	if err != nil {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, err
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	if index == nil || index.ReadRevision != selectionRevision {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, errs.New(
 			errs.KindInternal,
 			"backup retention point page is incomplete",
 		)
@@ -1764,15 +1765,15 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 	pointIDs := make([]string, len(index.Values))
 	for position, item := range index.Values {
 		pointID := string(item.Value)
-		expected, keyErr := backupRecoveryPointSourceIndexKey(current.Record.SourceID, pointID)
+		expected, keyErr := backupruntime.BackupRecoveryPointSourceIndexKey(current.Record.SourceID, pointID)
 		if keyErr != nil || expected != item.Key {
-			return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		pointIDs[position] = pointID
 		authorityKeys = append(
 			authorityKeys,
-			backupRecoveryPointKey(pointID),
-			backupRecoveryPointPruneKey(pointID),
+			backupruntime.BackupRecoveryPointKey(pointID),
+			backupruntime.BackupRecoveryPointPruneKey(pointID),
 		)
 	}
 	authority, err := repository.readBackupRecoveryPointPageChunks(
@@ -1781,41 +1782,41 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		selectionRevision,
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, err
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	if authority == nil || authority.ReadRevision != selectionRevision ||
 		len(authority.Values) != len(authorityKeys) {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, errs.New(
 			errs.KindInternal,
 			"backup retention point authority is incomplete",
 		)
 	}
 	defer clearKeyValues(authority.Values)
-	points := make([]BackupRecoveryPointRecord, len(pointIDs))
+	points := make([]backupruntime.BackupRecoveryPointRecord, len(pointIDs))
 	companionKeys := make([]string, 0, len(pointIDs)*3)
 	for position, pointID := range pointIDs {
 		pointValue := authority.Values[position*2]
 		if pointValue == nil || pointValue.Version != 1 || index.Values[position].Version != 1 ||
 			index.Values[position].ModRevision != pointValue.ModRevision {
-			return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		point, decodeErr := decodeBackupRecoveryPointRecord(pointValue.Value)
+		point, decodeErr := backupruntime.DecodeBackupRecoveryPointRecord(pointValue.Value)
 		if decodeErr != nil || point.ID != pointID ||
 			point.EnvironmentID != run.Record.EnvironmentID ||
 			point.SourceID != current.Record.SourceID {
-			return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		environmentIndex, keyErr := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+		environmentIndex, keyErr := backupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 		if keyErr != nil {
-			return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		sourceIndex, keyErr := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+		sourceIndex, keyErr := backupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 		if keyErr != nil || sourceIndex != index.Values[position].Key {
-			return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		connectorIndex, keyErr := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+		connectorIndex, keyErr := backupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 		if keyErr != nil {
-			return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		points[position] = point
 		companionKeys = append(companionKeys, environmentIndex, sourceIndex, connectorIndex)
@@ -1826,11 +1827,11 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 		selectionRevision,
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, err
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	defer clearKeyValues(companions.Values)
 	if companions.ReadRevision != selectionRevision || len(companions.Values) != len(companionKeys) {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	for position, point := range points {
 		pointRevision := authority.Values[position*2].ModRevision
@@ -1838,28 +1839,28 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 			companion := companions.Values[position*3+offset]
 			if companion == nil || companion.Version != 1 || companion.ModRevision != pointRevision ||
 				companion.Key != companionKeys[position*3+offset] || string(companion.Value) != point.ID {
-				return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+				return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 			}
 		}
 	}
 	next := current.Record
-	next.State = BackupRetentionScanning
+	next.State = backupruntime.BackupRetentionScanning
 	next.SelectionRevision = selectionRevision
 	next.UpdatedAt = advancedAt
 	if next.PruneOperationID == "" {
 		next.PruneOperationID = ids.New(ids.KindOperation)
 	}
 	conditions := []etcdstore.Condition{
-		{Key: backupRunKey(run.Record.TaskID), ModRevision: run.Revision},
+		{Key: backupruntime.BackupRunKey(run.Record.TaskID), ModRevision: run.Revision},
 		{Key: sweepKey, ModRevision: current.Revision},
 	}
-	created := make([]BackupRecoveryPointPruneRecord, 0, len(index.Values))
+	created := make([]backupruntime.BackupRecoveryPointPruneRecord, 0, len(index.Values))
 	mutations := make([]etcdstore.Mutation, 0, len(index.Values)+2)
 	for position, pointID := range pointIDs {
 		pointValue := authority.Values[position*2]
 		pruneValue := authority.Values[position*2+1]
 		if pointValue == nil {
-			return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		point := points[position]
 		conditions = append(
@@ -1867,49 +1868,49 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 			etcdstore.Condition{Key: companionKeys[position*3], ModRevision: pointValue.ModRevision},
 			etcdstore.Condition{Key: companionKeys[position*3+1], ModRevision: pointValue.ModRevision},
 			etcdstore.Condition{Key: companionKeys[position*3+2], ModRevision: pointValue.ModRevision},
-			etcdstore.Condition{Key: backupRecoveryPointKey(pointID), ModRevision: pointValue.ModRevision},
+			etcdstore.Condition{Key: backupruntime.BackupRecoveryPointKey(pointID), ModRevision: pointValue.ModRevision},
 		)
 		if pruneValue != nil {
-			prune, pruneErr := decodeBackupRecoveryPointPruneRecord(pruneValue.Value)
+			prune, pruneErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(pruneValue.Value)
 			if pruneErr != nil || prune.Point != point.BackupRecoveryPointSnapshot ||
-				prune.State == BackupPruneVerifiedAbsent {
-				return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, corruptBackupRuntimeRecord()
+				prune.State == backupruntime.BackupPruneVerifiedAbsent {
+				return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 			}
 			conditions = append(conditions, etcdstore.Condition{
-				Key: backupRecoveryPointPruneKey(pointID), ModRevision: pruneValue.ModRevision,
+				Key: backupruntime.BackupRecoveryPointPruneKey(pointID), ModRevision: pruneValue.ModRevision,
 			})
 			next.Cursor = pointID
 			continue
 		}
-		conditions = append(conditions, etcdstore.Condition{Key: backupRecoveryPointPruneKey(pointID)})
+		conditions = append(conditions, etcdstore.Condition{Key: backupruntime.BackupRecoveryPointPruneKey(pointID)})
 		if next.RetainedCount < next.Keep {
 			next.RetainedCount++
 			next.Cursor = pointID
 			continue
 		}
-		prune := BackupRecoveryPointPruneRecord{
+		prune := backupruntime.BackupRecoveryPointPruneRecord{
 			Point: point.BackupRecoveryPointSnapshot, PointRevision: pointValue.ModRevision,
 			OperationID: next.PruneOperationID,
-			State:       BackupPrunePending, CreatedAt: advancedAt, UpdatedAt: advancedAt,
+			State:       backupruntime.BackupPrunePending, CreatedAt: advancedAt, UpdatedAt: advancedAt,
 		}
-		encoded, encodeErr := encodeBackupRecoveryPointPruneRecord(prune)
+		encoded, encodeErr := backupruntime.EncodeBackupRecoveryPointPruneRecord(prune)
 		if encodeErr != nil {
 			clearBackupRuntimeMutations(mutations)
-			return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, encodeErr
+			return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, encodeErr
 		}
 		mutations = append(mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: backupRecoveryPointPruneKey(pointID), Value: encoded,
+			Type: etcdstore.MutationPut, Key: backupruntime.BackupRecoveryPointPruneKey(pointID), Value: encoded,
 		})
 		created = append(created, prune)
 		next.Cursor = pointID
 	}
 	if !index.More {
-		next.State = BackupRetentionCompleted
+		next.State = backupruntime.BackupRetentionCompleted
 	}
-	nextValue, err := encodeBackupRetentionSweepRecord(next)
+	nextValue, err := backupruntime.EncodeBackupRetentionSweepRecord(next)
 	if err != nil {
 		clearBackupRuntimeMutations(mutations)
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, err
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	mutations = append(
 		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: sweepKey, Value: nextValue}},
@@ -1917,41 +1918,41 @@ func (repository *BackupRuntimeRepository) AdvanceBackupRetentionSweep(
 	evidence, err := repository.loadOwnedEvidence(ctx, run.Record, anchor.ReadRevision)
 	if err != nil {
 		clearBackupRuntimeMutations(mutations)
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, err
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	conditions = append(conditions, evidence.fence.transactionConditions()...)
 	epoch, err := evidence.fence.epochRewriteMutation()
 	if err != nil {
 		clearBackupRuntimeMutations(mutations)
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, err
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	mutations = append(mutations, epoch)
 	result, err := repository.transact(ctx, conditions, mutations)
 	clearBackupRuntimeMutations(mutations)
 	if err != nil {
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, err
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, err
 	}
 	if !result.Succeeded {
 		clearKeyValues(result.FailureReads)
-		return etcdstore.Versioned[BackupRetentionSweepRecord]{}, nil, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{}, nil, errs.New(
 			errs.KindStateConflict,
 			"backup retention authority changed",
 		)
 	}
-	prunes := make([]etcdstore.Versioned[BackupRecoveryPointPruneRecord], len(created))
+	prunes := make([]etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord], len(created))
 	for index, prune := range created {
-		prunes[index] = etcdstore.Versioned[BackupRecoveryPointPruneRecord]{
+		prunes[index] = etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{
 			Record: prune, Revision: result.Revision, ReadRevision: result.Revision,
 		}
 	}
-	return etcdstore.Versioned[BackupRetentionSweepRecord]{
+	return etcdstore.Versioned[backupruntime.BackupRetentionSweepRecord]{
 		Record: next, Revision: result.Revision, ReadRevision: result.Revision,
 	}, prunes, nil
 }
 
 func backupRetentionSweepMatchesRun(
-	run BackupRunRecord,
-	sweep BackupRetentionSweepRecord,
+	run backupruntime.BackupRunRecord,
+	sweep backupruntime.BackupRetentionSweepRecord,
 ) bool {
 	if sweep.Revision != run.PolicyRevision || sweep.Keep != run.RetentionKeep {
 		return false
@@ -1969,34 +1970,34 @@ func backupRetentionSweepMatchesRun(
 // exact Environment lock with the future Task publication transaction.
 func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 	ctx context.Context,
-	pending []etcdstore.Versioned[BackupRecoveryPointPruneRecord],
-	dispatch BackupRecoveryPointPruneDispatchRecord,
-	lock BackupOperationLockRecord,
+	pending []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
+	dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
+	lock backupruntime.BackupOperationLockRecord,
 ) (backupPruneTransactionPlan, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return backupPruneTransactionPlan{}, err
 	}
-	if validateBackupRecoveryPointPruneDispatchRecord(dispatch) != nil ||
+	if backupruntime.ValidateBackupRecoveryPointPruneDispatchRecord(dispatch) != nil ||
 		len(pending) == 0 || len(pending) > maximumBackupPruneBatch ||
 		len(pending) != len(dispatch.RecoveryPointIDs) ||
 		lock.EnvironmentID != dispatch.EnvironmentID || lock.OperationID != dispatch.OperationID ||
-		lock.TaskID != dispatch.TaskID || lock.Kind != BackupOperationPrune ||
+		lock.TaskID != dispatch.TaskID || lock.Kind != backupruntime.BackupOperationPrune ||
 		lock.CreatedAt != dispatch.CreatedAt || lock.UpdatedAt != dispatch.CreatedAt {
 		return backupPruneTransactionPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"backup prune publication is invalid",
 		)
 	}
-	dispatchValue, err := encodeBackupRecoveryPointPruneDispatchRecord(dispatch)
+	dispatchValue, err := backupruntime.EncodeBackupRecoveryPointPruneDispatchRecord(dispatch)
 	if err != nil {
 		return backupPruneTransactionPlan{}, err
 	}
-	lockValue, err := encodeBackupOperationLockRecord(lock)
+	lockValue, err := backupruntime.EncodeBackupOperationLockRecord(lock)
 	if err != nil {
 		clear(dispatchValue)
 		return backupPruneTransactionPlan{}, err
 	}
-	dispatchKey := backupRecoveryPointPruneDispatchKey(dispatch.TaskID)
+	dispatchKey := backupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.TaskID)
 	keys := []string{dispatchKey}
 	assignedValues := make([][]byte, len(pending))
 	defer func() {
@@ -2007,7 +2008,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 	for index := range pending {
 		version := pending[index]
 		record := version.Record
-		if version.Revision <= 0 || record.State != BackupPrunePending || record.TaskID != "" ||
+		if version.Revision <= 0 || record.State != backupruntime.BackupPrunePending || record.TaskID != "" ||
 			record.OperationID != dispatch.OperationID ||
 			record.Point.EnvironmentID != dispatch.EnvironmentID ||
 			record.Point.ID != dispatch.RecoveryPointIDs[index] ||
@@ -2027,10 +2028,10 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 		}
 		keys = append(keys, authorityKeys...)
 		assigned := record
-		assigned.State = BackupPruneAssigned
+		assigned.State = backupruntime.BackupPruneAssigned
 		assigned.TaskID = dispatch.TaskID
 		assigned.UpdatedAt = dispatch.CreatedAt
-		assignedValues[index], err = encodeBackupRecoveryPointPruneRecord(assigned)
+		assignedValues[index], err = backupruntime.EncodeBackupRecoveryPointPruneRecord(assigned)
 		if err != nil {
 			clear(dispatchValue)
 			clear(lockValue)
@@ -2136,7 +2137,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 
 func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 	ctx context.Context,
-	pending []etcdstore.Versioned[BackupRecoveryPointPruneRecord],
+	pending []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 	authorityValues []*etcdstore.KeyValue,
 	readRevision int64,
 ) ([]backupPruneExecutionEvidence, error) {
@@ -2144,11 +2145,11 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 	for index, version := range pending {
 		start := 1 + index*5
 		if start+4 >= len(authorityValues) || authorityValues[start+1] == nil {
-			return nil, corruptBackupRuntimeRecord()
+			return nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		point, err := decodeBackupRecoveryPointRecord(authorityValues[start+1].Value)
+		point, err := backupruntime.DecodeBackupRecoveryPointRecord(authorityValues[start+1].Value)
 		if err != nil || point.BackupRecoveryPointSnapshot != version.Record.Point {
-			return nil, corruptBackupRuntimeRecord()
+			return nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		fixed, err := repository.readFixedKeys(ctx, []string{
 			backuppolicy.BackupSourceKey(point.SourceID),
@@ -2192,21 +2193,21 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedAbsent(
 	ctx context.Context,
 	checkpointInput BackupCheckpointInput,
-	dispatch etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord],
-	current etcdstore.Versioned[BackupRecoveryPointPruneRecord],
-	next BackupRecoveryPointPruneRecord,
+	dispatch etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord],
+	current etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
+	next backupruntime.BackupRecoveryPointPruneRecord,
 	verifiedRemoteAbsent bool,
-) (etcdstore.Versioned[BackupRecoveryPointPruneRecord], error) {
+) (etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord], error) {
 	if !verifiedRemoteAbsent || dispatch.Revision <= 0 || current.Revision <= 0 ||
-		validateBackupRecoveryPointPruneDispatchRecord(dispatch.Record) != nil ||
-		current.Record.State != BackupPruneAssigned || next.State != BackupPruneVerifiedAbsent ||
+		backupruntime.ValidateBackupRecoveryPointPruneDispatchRecord(dispatch.Record) != nil ||
+		current.Record.State != backupruntime.BackupPruneAssigned || next.State != backupruntime.BackupPruneVerifiedAbsent ||
 		current.Record.Point != next.Point || current.Record.OperationID != next.OperationID ||
 		current.Record.TaskID != next.TaskID || current.Record.CreatedAt != next.CreatedAt ||
 		!next.UpdatedAt.After(current.Record.UpdatedAt) ||
 		next.OperationID != dispatch.Record.OperationID || next.TaskID != dispatch.Record.TaskID ||
 		next.Point.EnvironmentID != dispatch.Record.EnvironmentID ||
 		!backupPruneDispatchContains(dispatch.Record, next.Point.ID) {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup prune absence checkpoint is invalid",
 		)
@@ -2214,7 +2215,7 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 	if checkpointInput.TaskID != dispatch.Record.TaskID ||
 		checkpointInput.Payload.Kind != BackupCheckpointRemoteObjectAbsent ||
 		checkpointInput.Payload.PointID != next.Point.ID {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup prune checkpoint is invalid",
 		)
@@ -2224,31 +2225,31 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		next.Point.ID,
 	)
 	if !found {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup prune checkpoint point order is invalid",
 		)
 	}
-	value, err := encodeBackupRecoveryPointPruneRecord(next)
+	value, err := backupruntime.EncodeBackupRecoveryPointPruneRecord(next)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	defer clear(value)
 	authorityKeys, err := backupPruneAuthorityKeys(current.Record.Point)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	keys := append(
-		[]string{backupRecoveryPointPruneDispatchKey(dispatch.Record.TaskID)},
+		[]string{backupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.Record.TaskID)},
 		authorityKeys...)
-	keys = append(keys, backupRetentionKey(current.Record.Point.SourceID, current.Record.Point.ID))
+	keys = append(keys, backupruntime.BackupRetentionKey(current.Record.Point.SourceID, current.Record.Point.ID))
 	anchor, err := repository.readCurrentKeys(ctx, keys)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	defer clearKeyValues(anchor.Values)
 	if err := validateExactBackupPruneDispatchValue(anchor.Values[0], dispatch); err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	checkpointPlan, err := repository.loadBackupCheckpointPlan(
 		ctx,
@@ -2259,16 +2260,16 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		},
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	defer checkpointPlan.clear()
 	if anchor.Values[1] != nil {
-		stored, decodeErr := decodeBackupRecoveryPointPruneRecord(anchor.Values[1].Value)
+		stored, decodeErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(anchor.Values[1].Value)
 		if decodeErr == nil && stored == next && anchor.Values[1].ModRevision > current.Revision &&
 			checkpointPlan.duplicate &&
 			anchor.Values[1].ModRevision == checkpointPlan.commitRevision &&
 			allBackupRuntimeValuesAbsent(anchor.Values[2:]) {
-			return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{
+			return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{
 				Record:       stored,
 				Revision:     anchor.Values[1].ModRevision,
 				ReadRevision: anchor.ReadRevision,
@@ -2276,20 +2277,20 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		}
 	}
 	if checkpointPlan.duplicate {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup prune checkpoint domain state is incomplete",
 		)
 	}
 	if err := validatePendingBackupPruneAuthority(anchor.Values[1:6], current); err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	if err := validateCompletedBackupRetentionSweep(
 		anchor.Values[6],
 		current.Record.Point,
 		anchor.Values[2].ModRevision,
 	); err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	fence, err := loadOwnedEnvironmentMutationFence(
 		ctx,
@@ -2297,12 +2298,12 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 		dispatch.Record.EnvironmentID,
 		anchor.ReadRevision,
 		environmentMutationFenceOwner{
-			Kind: BackupOperationPrune, OperationID: dispatch.Record.OperationID,
+			Kind: backupruntime.BackupOperationPrune, OperationID: dispatch.Record.OperationID,
 			TaskID: dispatch.Record.TaskID,
 		},
 	)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	conditions := []etcdstore.Condition{{Key: keys[0], ModRevision: dispatch.Revision}}
 	for index := 1; index < len(keys); index++ {
@@ -2318,7 +2319,7 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 	}
 	epoch, err := fence.epochRewriteMutation()
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	defer clear(epoch.Value)
 	mutations = append(mutations, epoch)
@@ -2330,16 +2331,16 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 	}
 	result, err := repository.transact(ctx, conditions, mutations)
 	if err != nil {
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, err
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, err
 	}
 	if !result.Succeeded {
 		defer clearKeyValues(result.FailureReads)
-		return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{}, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup prune authority changed",
 		)
 	}
-	return etcdstore.Versioned[BackupRecoveryPointPruneRecord]{
+	return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{
 		Record: next, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
@@ -2349,22 +2350,22 @@ func (repository *BackupRuntimeRepository) MarkBackupRecoveryPointPruneVerifiedA
 // already verified-absent authorities are removed before the lock is released.
 func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 	ctx context.Context,
-	dispatch etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord],
-	prunes []etcdstore.Versioned[BackupRecoveryPointPruneRecord],
+	dispatch etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord],
+	prunes []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 	terminalAt time.Time,
 ) (backupPruneTransactionPlan, error) {
-	if dispatch.Revision <= 0 || validateBackupRecoveryPointPruneDispatchRecord(dispatch.Record) != nil ||
+	if dispatch.Revision <= 0 || backupruntime.ValidateBackupRecoveryPointPruneDispatchRecord(dispatch.Record) != nil ||
 		len(prunes) != len(dispatch.Record.RecoveryPointIDs) ||
-		!validBackupRuntimeInstant(terminalAt) || !terminalAt.After(dispatch.Record.CreatedAt) {
+		!backupruntime.ValidBackupRuntimeInstant(terminalAt) || !terminalAt.After(dispatch.Record.CreatedAt) {
 		return backupPruneTransactionPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"backup prune failure is invalid",
 		)
 	}
-	keys := []string{backupRecoveryPointPruneDispatchKey(dispatch.Record.TaskID)}
+	keys := []string{backupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.Record.TaskID)}
 	for index, prune := range prunes {
 		if prune.Revision <= 0 ||
-			(prune.Record.State != BackupPruneAssigned && prune.Record.State != BackupPruneVerifiedAbsent) ||
+			(prune.Record.State != backupruntime.BackupPruneAssigned && prune.Record.State != backupruntime.BackupPruneVerifiedAbsent) ||
 			prune.Record.OperationID != dispatch.Record.OperationID ||
 			prune.Record.TaskID != dispatch.Record.TaskID ||
 			prune.Record.Point.ID != dispatch.Record.RecoveryPointIDs[index] ||
@@ -2391,7 +2392,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 	}
 	for index, prune := range prunes {
 		start := 1 + index*5
-		if prune.Record.State == BackupPruneAssigned {
+		if prune.Record.State == backupruntime.BackupPruneAssigned {
 			if err := validatePendingBackupPruneAuthority(anchor.Values[start:start+5], prune); err != nil {
 				return backupPruneTransactionPlan{}, err
 			}
@@ -2404,11 +2405,11 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 			)
 		}
 		if !allBackupRuntimeValuesAbsent(anchor.Values[start+1 : start+5]) {
-			return backupPruneTransactionPlan{}, corruptBackupRuntimeRecord()
+			return backupPruneTransactionPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		stored, decodeErr := decodeBackupRecoveryPointPruneRecord(anchor.Values[start].Value)
+		stored, decodeErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(anchor.Values[start].Value)
 		if decodeErr != nil || stored != prune.Record {
-			return backupPruneTransactionPlan{}, corruptBackupRuntimeRecord()
+			return backupPruneTransactionPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 	}
 	fence, err := loadOwnedEnvironmentMutationFence(
@@ -2417,7 +2418,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 		dispatch.Record.EnvironmentID,
 		anchor.ReadRevision,
 		environmentMutationFenceOwner{
-			Kind: BackupOperationPrune, OperationID: dispatch.Record.OperationID,
+			Kind: backupruntime.BackupOperationPrune, OperationID: dispatch.Record.OperationID,
 			TaskID: dispatch.Record.TaskID,
 		},
 	)
@@ -2435,15 +2436,15 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 	mutations := make([]etcdstore.Mutation, 0, len(prunes)+3)
 	for index, prune := range prunes {
 		key := keys[1+index*5]
-		if prune.Record.State == BackupPruneVerifiedAbsent {
+		if prune.Record.State == backupruntime.BackupPruneVerifiedAbsent {
 			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 			continue
 		}
 		pending := prune.Record
-		pending.State = BackupPrunePending
+		pending.State = backupruntime.BackupPrunePending
 		pending.TaskID = ""
 		pending.UpdatedAt = terminalAt
-		value, encodeErr := encodeBackupRecoveryPointPruneRecord(pending)
+		value, encodeErr := backupruntime.EncodeBackupRecoveryPointPruneRecord(pending)
 		if encodeErr != nil {
 			clearBackupRuntimeMutations(mutations)
 			return backupPruneTransactionPlan{}, encodeErr
@@ -2473,20 +2474,20 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 // conditions and mutations while guaranteeing lock release in that same txn.
 func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 	ctx context.Context,
-	dispatch etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord],
-	prunes []etcdstore.Versioned[BackupRecoveryPointPruneRecord],
+	dispatch etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord],
+	prunes []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 ) (backupPruneTransactionPlan, error) {
 	if dispatch.Revision <= 0 ||
-		validateBackupRecoveryPointPruneDispatchRecord(dispatch.Record) != nil ||
+		backupruntime.ValidateBackupRecoveryPointPruneDispatchRecord(dispatch.Record) != nil ||
 		len(prunes) != len(dispatch.Record.RecoveryPointIDs) {
 		return backupPruneTransactionPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"backup prune completion is invalid",
 		)
 	}
-	keys := []string{backupRecoveryPointPruneDispatchKey(dispatch.Record.TaskID)}
+	keys := []string{backupruntime.BackupRecoveryPointPruneDispatchKey(dispatch.Record.TaskID)}
 	for index, prune := range prunes {
-		if prune.Revision <= 0 || prune.Record.State != BackupPruneVerifiedAbsent ||
+		if prune.Revision <= 0 || prune.Record.State != backupruntime.BackupPruneVerifiedAbsent ||
 			prune.Record.OperationID != dispatch.Record.OperationID ||
 			prune.Record.TaskID != dispatch.Record.TaskID ||
 			prune.Record.Point.ID != dispatch.Record.RecoveryPointIDs[index] ||
@@ -2519,11 +2520,11 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 			)
 		}
 		if !allBackupRuntimeValuesAbsent(anchor.Values[start+1 : start+5]) {
-			return backupPruneTransactionPlan{}, corruptBackupRuntimeRecord()
+			return backupPruneTransactionPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
-		stored, decodeErr := decodeBackupRecoveryPointPruneRecord(anchor.Values[start].Value)
+		stored, decodeErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(anchor.Values[start].Value)
 		if decodeErr != nil || stored != prune.Record {
-			return backupPruneTransactionPlan{}, corruptBackupRuntimeRecord()
+			return backupPruneTransactionPlan{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 	}
 	fence, err := loadOwnedEnvironmentMutationFence(
@@ -2532,7 +2533,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 		dispatch.Record.EnvironmentID,
 		anchor.ReadRevision,
 		environmentMutationFenceOwner{
-			Kind: BackupOperationPrune, OperationID: dispatch.Record.OperationID,
+			Kind: backupruntime.BackupOperationPrune, OperationID: dispatch.Record.OperationID,
 			TaskID: dispatch.Record.TaskID,
 		},
 	)
@@ -2565,22 +2566,22 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneCompletion(
 	return backupPruneTransactionPlan{conditions: conditions, mutations: mutations}, nil
 }
 
-func backupPruneAuthorityKeys(point BackupRecoveryPointSnapshot) ([]string, error) {
-	environmentIndex, err := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+func backupPruneAuthorityKeys(point backupruntime.BackupRecoveryPointSnapshot) ([]string, error) {
+	environmentIndex, err := backupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
 		return nil, err
 	}
-	sourceIndex, err := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+	sourceIndex, err := backupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 	if err != nil {
 		return nil, err
 	}
-	connectorIndex, err := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+	connectorIndex, err := backupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
 	if err != nil {
 		return nil, err
 	}
 	return []string{
-		backupRecoveryPointPruneKey(point.ID),
-		backupRecoveryPointKey(point.ID),
+		backupruntime.BackupRecoveryPointPruneKey(point.ID),
+		backupruntime.BackupRecoveryPointKey(point.ID),
 		environmentIndex,
 		sourceIndex,
 		connectorIndex,
@@ -2589,17 +2590,17 @@ func backupPruneAuthorityKeys(point BackupRecoveryPointSnapshot) ([]string, erro
 
 func validatePendingBackupPruneAuthority(
 	values []*etcdstore.KeyValue,
-	version etcdstore.Versioned[BackupRecoveryPointPruneRecord],
+	version etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 ) error {
 	if len(values) != 5 {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if values[0] == nil || values[0].ModRevision != version.Revision {
 		return errs.New(errs.KindStateConflict, "backup prune authority changed")
 	}
-	storedPrune, err := decodeBackupRecoveryPointPruneRecord(values[0].Value)
+	storedPrune, err := backupruntime.DecodeBackupRecoveryPointPruneRecord(values[0].Value)
 	if err != nil || storedPrune != version.Record {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if values[1] == nil || values[2] == nil || values[3] == nil || values[4] == nil ||
 		values[1].Version != 1 || values[2].Version != 1 || values[3].Version != 1 ||
@@ -2610,62 +2611,62 @@ func validatePendingBackupPruneAuthority(
 		string(values[2].Value) != version.Record.Point.ID ||
 		string(values[3].Value) != version.Record.Point.ID ||
 		string(values[4].Value) != version.Record.Point.ID {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	point, err := decodeBackupRecoveryPointRecord(values[1].Value)
+	point, err := backupruntime.DecodeBackupRecoveryPointRecord(values[1].Value)
 	if err != nil || point.BackupRecoveryPointSnapshot != version.Record.Point {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	environmentIndex, err := backupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
+	environmentIndex, err := backupruntime.BackupRecoveryPointEnvironmentIndexKey(point.EnvironmentID, point.ID)
 	if err != nil {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	sourceIndex, err := backupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
+	sourceIndex, err := backupruntime.BackupRecoveryPointSourceIndexKey(point.SourceID, point.ID)
 	if err != nil {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	connectorIndex, err := backupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
-	if err != nil || values[1].Key != backupRecoveryPointKey(point.ID) ||
+	connectorIndex, err := backupruntime.BackupRecoveryPointConnectorIndexKey(point.ConnectorID, point.ID)
+	if err != nil || values[1].Key != backupruntime.BackupRecoveryPointKey(point.ID) ||
 		values[2].Key != environmentIndex || values[3].Key != sourceIndex ||
 		values[4].Key != connectorIndex {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return nil
 }
 
 func validateCompletedBackupRetentionSweep(
 	value *etcdstore.KeyValue,
-	point BackupRecoveryPointSnapshot,
+	point backupruntime.BackupRecoveryPointSnapshot,
 	pointRevision int64,
 ) error {
 	if value == nil || value.Version < 2 || value.ModRevision <= pointRevision {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	sweep, err := decodeBackupRetentionSweepRecord(value.Value)
+	sweep, err := backupruntime.DecodeBackupRetentionSweepRecord(value.Value)
 	if err != nil || sweep.SourceID != point.SourceID || sweep.TriggerRecoveryPointID != point.ID ||
-		sweep.State != BackupRetentionCompleted {
-		return corruptBackupRuntimeRecord()
+		sweep.State != backupruntime.BackupRetentionCompleted {
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return nil
 }
 
 func validateExactBackupPruneDispatchValue(
 	value *etcdstore.KeyValue,
-	expected etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord],
+	expected etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord],
 ) error {
 	if value == nil || value.ModRevision != expected.Revision {
 		return errs.New(errs.KindStateConflict, "backup prune dispatch changed")
 	}
-	stored, err := decodeBackupRecoveryPointPruneDispatchRecord(value.Value)
+	stored, err := backupruntime.DecodeBackupRecoveryPointPruneDispatchRecord(value.Value)
 	if err != nil || !backupPruneDispatchRecordsEqual(stored, expected.Record) {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return nil
 }
 
 func backupPruneDispatchRecordsEqual(
-	left BackupRecoveryPointPruneDispatchRecord,
-	right BackupRecoveryPointPruneDispatchRecord,
+	left backupruntime.BackupRecoveryPointPruneDispatchRecord,
+	right backupruntime.BackupRecoveryPointPruneDispatchRecord,
 ) bool {
 	if left.TaskID != right.TaskID || left.OperationID != right.OperationID ||
 		left.EnvironmentID != right.EnvironmentID ||
@@ -2681,7 +2682,7 @@ func backupPruneDispatchRecordsEqual(
 }
 
 func backupPruneDispatchContains(
-	dispatch BackupRecoveryPointPruneDispatchRecord,
+	dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
 	recoveryPointID string,
 ) bool {
 	for _, candidate := range dispatch.RecoveryPointIDs {
@@ -2693,7 +2694,7 @@ func backupPruneDispatchContains(
 }
 
 func backupPruneDispatchPointOrdinal(
-	dispatch BackupRecoveryPointPruneDispatchRecord,
+	dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
 	pointID string,
 ) (uint32, bool) {
 	for index, candidate := range dispatch.RecoveryPointIDs {
@@ -2740,7 +2741,7 @@ func getOptionalBackupRuntimeRecord[T any](
 	defer clear(result.Entry.Value)
 	record, err := decode(result.Entry.Value)
 	if err != nil || id(record) != stableID {
-		return etcdstore.Versioned[T]{}, false, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[T]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return etcdstore.Versioned[T]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
@@ -2766,16 +2767,16 @@ func validBackupRuntimeListCursor(prefix string, cursor string) bool {
 		return false
 	}
 	switch {
-	case strings.HasPrefix(prefix, backupRecoveryPointEnvironmentPrefix),
-		strings.HasPrefix(prefix, backupRecoveryPointSourcePrefix):
-		_, ok := invertBackupRecoveryPointULIDBody(suffix)
+	case strings.HasPrefix(prefix, backupruntime.BackupRecoveryPointEnvironmentPrefix),
+		strings.HasPrefix(prefix, backupruntime.BackupRecoveryPointSourcePrefix):
+		_, ok := backupruntime.InvertBackupRecoveryPointULIDBody(suffix)
 		return ok
-	case strings.HasPrefix(prefix, backupRecoveryPointConnectorPrefix),
-		strings.HasPrefix(prefix, backupOrphanEnvironmentPrefix),
-		strings.HasPrefix(prefix, backupRetentionPrefix):
+	case strings.HasPrefix(prefix, backupruntime.BackupRecoveryPointConnectorPrefix),
+		strings.HasPrefix(prefix, backupruntime.BackupOrphanEnvironmentPrefix),
+		strings.HasPrefix(prefix, backupruntime.BackupRetentionPrefix):
 		return recordcodec.ValidateID(ids.KindRecoveryPoint, suffix) == nil
-	case strings.HasPrefix(prefix, backupRunEnvironmentPrefix),
-		strings.HasPrefix(prefix, backupRestoreEnvironmentPrefix):
+	case strings.HasPrefix(prefix, backupruntime.BackupRunEnvironmentPrefix),
+		strings.HasPrefix(prefix, backupruntime.BackupRestoreEnvironmentPrefix):
 		return recordcodec.ValidateID(ids.KindTask, suffix) == nil
 	default:
 		return true
@@ -2783,11 +2784,11 @@ func validBackupRuntimeListCursor(prefix string, cursor string) bool {
 }
 
 func backupPointMatchesRunSource(
-	point BackupRecoveryPointSnapshot,
-	run BackupRunRecord,
+	point backupruntime.BackupRecoveryPointSnapshot,
+	run backupruntime.BackupRunRecord,
 	ordinal uint32,
 ) bool {
-	if int(ordinal) >= len(run.Sources) || validateBackupRecoveryPointSnapshot(point) != nil {
+	if int(ordinal) >= len(run.Sources) || backupruntime.ValidateBackupRecoveryPointSnapshot(point) != nil {
 		return false
 	}
 	source := run.Sources[ordinal]
@@ -2801,9 +2802,9 @@ func backupPointMatchesRunSource(
 		point.SizeBytes == source.SizeBytes && point.SHA256 == source.SHA256
 }
 
-func runContainsOrphanedPoint(run BackupRunRecord, orphan BackupOrphanRecord) bool {
+func runContainsOrphanedPoint(run backupruntime.BackupRunRecord, orphan backupruntime.BackupOrphanRecord) bool {
 	for ordinal, source := range run.Sources {
-		if source.State == BackupSourceAttemptOrphaned &&
+		if source.State == backupruntime.BackupSourceAttemptOrphaned &&
 			backupOrphanMatchesRunSource(orphan, run, uint32(ordinal)) {
 			return true
 		}
@@ -2812,12 +2813,12 @@ func runContainsOrphanedPoint(run BackupRunRecord, orphan BackupOrphanRecord) bo
 }
 
 func backupOrphanMatchesRunSource(
-	orphan BackupOrphanRecord,
-	run BackupRunRecord,
+	orphan backupruntime.BackupOrphanRecord,
+	run backupruntime.BackupRunRecord,
 	ordinal uint32,
 ) bool {
 	return orphan.TaskID == run.TaskID &&
-		orphan.Reconciliation == (BackupOrphanReconciliationAuthority{
+		orphan.Reconciliation == (backupruntime.BackupOrphanReconciliationAuthority{
 			OperationID:    run.OperationID,
 			PolicyRevision: run.PolicyRevision,
 			RetentionKeep:  run.RetentionKeep,
@@ -2825,9 +2826,9 @@ func backupOrphanMatchesRunSource(
 		backupPointMatchesRunSource(orphan.Point, run, ordinal)
 }
 
-func validateBackupOrphanCompanionEvidence(values []*etcdstore.KeyValue, expected BackupOrphanRecord) error {
+func validateBackupOrphanCompanionEvidence(values []*etcdstore.KeyValue, expected backupruntime.BackupOrphanRecord) error {
 	expectedVersion := int64(1)
-	if expected.State == BackupOrphanDelete {
+	if expected.State == backupruntime.BackupOrphanDelete {
 		expectedVersion = 2
 	}
 	if len(values) != 3 || values[0] == nil || values[1] == nil || values[2] == nil ||
@@ -2838,22 +2839,22 @@ func validateBackupOrphanCompanionEvidence(values []*etcdstore.KeyValue, expecte
 		string(
 			values[1].Value,
 		) != expected.Point.ID || string(values[2].Value) != expected.Point.ID {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	stored, err := decodeBackupOrphanRecord(values[0].Value)
+	stored, err := backupruntime.DecodeBackupOrphanRecord(values[0].Value)
 	if err != nil || stored != expected {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return nil
 }
 
-func validateBackupConnectorSnapshotEvidence(values []*etcdstore.KeyValue, run BackupRunRecord) error {
+func validateBackupConnectorSnapshotEvidence(values []*etcdstore.KeyValue, run backupruntime.BackupRunRecord) error {
 	if len(values) != 2 || values[0] == nil || values[0].ModRevision != run.ConnectorRevision {
 		return errs.New(errs.KindStateConflict, "backup connector snapshot changed")
 	}
 	connector, err := connectorrecord.DecodeRecord(values[0].Value)
 	if err != nil || connector.Connector.ID != run.ConnectorID {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if connector.Connector.EnvironmentID != run.EnvironmentID {
 		return errs.New(errs.KindStateConflict, "backup connector belongs to another environment")
@@ -2877,12 +2878,12 @@ func validateBackupConnectorSnapshotEvidence(values []*etcdstore.KeyValue, run B
 	credentials, err := connectorrecord.DecodeEncryptedCredentials(values[1].Value)
 	defer clear(credentials.Ciphertext)
 	if err != nil || credentials.ConnectorID != run.ConnectorID {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return nil
 }
 
-func changedBackupSourceOrdinal(current BackupRunRecord, next BackupRunRecord) (uint32, bool) {
+func changedBackupSourceOrdinal(current backupruntime.BackupRunRecord, next backupruntime.BackupRunRecord) (uint32, bool) {
 	if len(current.Sources) != len(next.Sources) {
 		return 0, false
 	}
@@ -2893,8 +2894,8 @@ func changedBackupSourceOrdinal(current BackupRunRecord, next BackupRunRecord) (
 		}
 		if changed >= 0 {
 			if terminalBackupRunState(next.State) && index > changed &&
-				current.Sources[index].State == BackupSourceAttemptPending &&
-				next.Sources[index].State == BackupSourceAttemptUnstarted &&
+				current.Sources[index].State == backupruntime.BackupSourceAttemptPending &&
+				next.Sources[index].State == backupruntime.BackupSourceAttemptUnstarted &&
 				current.Sources[index].SizeBytes == next.Sources[index].SizeBytes &&
 				current.Sources[index].SHA256 == next.Sources[index].SHA256 &&
 				current.Sources[index].FailureCode == "" && next.Sources[index].FailureCode == "" {

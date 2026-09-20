@@ -4,13 +4,14 @@ import (
 	"context"
 	backupcapability "github.com/AlanD20/groundplane/internal/controller/backup"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 type backupRunPlanReader interface {
-	GetBackupRun(context.Context, string) (etcdstore.Versioned[etcd.BackupRunRecord], error)
+	GetBackupRun(context.Context, string) (etcdstore.Versioned[backupruntime.BackupRunRecord], error)
 }
 
 // EnableBackupPlans connects the task-plan resolver to the durable Backup run

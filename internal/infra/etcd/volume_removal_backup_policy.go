@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -64,13 +65,13 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 		return VolumeRemovalBackupPolicyPreparation{}, err
 	}
 	if read == nil || read.ReadRevision != readRevision || len(read.Values) != len(keys) || read.Values[2] == nil {
-		return VolumeRemovalBackupPolicyPreparation{}, corruptBackupRuntimeRecord()
+		return VolumeRemovalBackupPolicyPreparation{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	defer clearKeyValues(read.Values)
 	state := &volumeRemovalBackupPolicyState{environmentID: environmentID, volumeID: volumeID}
-	epoch, err := decodeEnvironmentMutationEpochRecord(read.Values[2].Value)
+	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(read.Values[2].Value)
 	if err != nil || epoch.EnvironmentID != environmentID {
-		return VolumeRemovalBackupPolicyPreparation{}, corruptBackupRuntimeRecord()
+		return VolumeRemovalBackupPolicyPreparation{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	state.conditions = []etcdstore.Condition{
 		{Key: keys[0]}, {Key: keys[1]},
@@ -79,7 +80,7 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 	if read.Values[1] != nil {
 		state.coordination, err = decodeEnvironmentCoordinationRecord(read.Values[1].Value)
 		if err != nil || state.coordination.EnvironmentID != environmentID {
-			return VolumeRemovalBackupPolicyPreparation{}, corruptBackupRuntimeRecord()
+			return VolumeRemovalBackupPolicyPreparation{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		state.conditions[1].ModRevision = read.Values[1].ModRevision
 	}
@@ -87,11 +88,11 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 		return VolumeRemovalBackupPolicyPreparation{state: state}, nil
 	}
 	if read.Values[1] == nil {
-		return VolumeRemovalBackupPolicyPreparation{}, corruptBackupRuntimeRecord()
+		return VolumeRemovalBackupPolicyPreparation{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	policy, err := backuppolicy.DecodeBackupPolicyRecord(read.Values[0].Value)
-	if err != nil || policy.EnvironmentID != environmentID || len(policy.SourceIDs) > MaximumBackupPolicySources {
-		return VolumeRemovalBackupPolicyPreparation{}, corruptBackupRuntimeRecord()
+	if err != nil || policy.EnvironmentID != environmentID || len(policy.SourceIDs) > backuppolicy.MaximumBackupPolicySources {
+		return VolumeRemovalBackupPolicyPreparation{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	state.policy = &policy
 	state.conditions[0].ModRevision = read.Values[0].ModRevision

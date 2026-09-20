@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"encoding/hex"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -40,7 +41,7 @@ func validateBackupTaskSealedPlan(
 	return authority.validatePlan(validated)
 }
 
-func validateBackupRunExecutionPlan(run BackupRunRecord, plan *agentpb.ExecutionPlan) error {
+func validateBackupRunExecutionPlan(run backupruntime.BackupRunRecord, plan *agentpb.ExecutionPlan) error {
 	if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_BACKUP ||
 		plan.TargetId != run.EnvironmentID || len(plan.Steps) != len(run.Sources) {
 		return errs.New(errs.KindValidationFailed, "backup run execution plan is invalid")
@@ -63,7 +64,7 @@ func validateBackupRunExecutionPlan(run BackupRunRecord, plan *agentpb.Execution
 }
 
 func backupRunSourcePlanSnapshotEqual(
-	source BackupRunSourceAttemptRecord,
+	source backupruntime.BackupRunSourceAttemptRecord,
 	capture *agentpb.BackupSourceCapture,
 ) bool {
 	switch source.Kind {
@@ -98,7 +99,7 @@ func backupRunSourcePlanSnapshotEqual(
 	}
 }
 
-func backupPlanSourceFormat(value BackupRuntimeFormat) agentpb.BackupSourceFormat {
+func backupPlanSourceFormat(value backupruntime.BackupRuntimeFormat) agentpb.BackupSourceFormat {
 	switch value {
 	case BackupRuntimeFormatPostgres:
 		return agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1
@@ -111,7 +112,7 @@ func backupPlanSourceFormat(value BackupRuntimeFormat) agentpb.BackupSourceForma
 	}
 }
 
-func backupPlanEncryption(value BackupRuntimeEncryption) agentpb.BackupEncryption {
+func backupPlanEncryption(value backupruntime.BackupRuntimeEncryption) agentpb.BackupEncryption {
 	switch value {
 	case BackupRuntimeEncryptionNone:
 		return agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE
@@ -122,7 +123,7 @@ func backupPlanEncryption(value BackupRuntimeEncryption) agentpb.BackupEncryptio
 	}
 }
 
-func backupPlanServiceIntent(value BackupServiceRuntimeIntent) agentpb.BackupServiceRuntimeIntent {
+func backupPlanServiceIntent(value backupruntime.BackupServiceRuntimeIntent) agentpb.BackupServiceRuntimeIntent {
 	switch value {
 	case BackupServiceIntentRunning:
 		return agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING
@@ -136,7 +137,7 @@ func backupPlanServiceIntent(value BackupServiceRuntimeIntent) agentpb.BackupSer
 }
 
 type backupPruneExecutionEvidence struct {
-	prune               BackupRecoveryPointPruneRecord
+	prune               backupruntime.BackupRecoveryPointPruneRecord
 	pruneRevision       int64
 	pointRevision       int64
 	sourceRevision      int64
@@ -150,7 +151,7 @@ type backupPruneExecutionEvidence struct {
 }
 
 func validateBackupPruneExecutionPlan(
-	dispatch BackupRecoveryPointPruneDispatchRecord,
+	dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
 	evidence []backupPruneExecutionEvidence,
 	plan *agentpb.ExecutionPlan,
 ) error {

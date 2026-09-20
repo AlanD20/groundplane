@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
@@ -74,47 +75,47 @@ func (service *RecoveryPointReadService) ListRecoveryPoints(
 	ctx context.Context,
 	environmentID string,
 	encodedCursor string,
-) (etcdstore.Page[etcd.BackupRecoveryPointRecord], error) {
+) (etcdstore.Page[backupruntime.BackupRecoveryPointRecord], error) {
 	if ctx == nil {
-		return etcdstore.Page[etcd.BackupRecoveryPointRecord]{}, errs.New(
+		return etcdstore.Page[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindInternal,
 			"recovery point list context is required",
 		)
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcdstore.Page[etcd.BackupRecoveryPointRecord]{}, errs.New(
+		return etcdstore.Page[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"recovery point list requires a stable environment id",
 		)
 	}
 	if _, err := service.environments.GetEnvironment(ctx, environmentID); err != nil {
-		return etcdstore.Page[etcd.BackupRecoveryPointRecord]{}, err
+		return etcdstore.Page[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 
 	request := etcd.BackupRecoveryPointPageRequest{Limit: recoveryPointPageLimit}
 	if encodedCursor != "" {
 		cursor, err := decodeRecoveryPointCursor(ctx, service.cursorCipher, encodedCursor)
 		if err != nil {
-			return etcdstore.Page[etcd.BackupRecoveryPointRecord]{}, err
+			return etcdstore.Page[backupruntime.BackupRecoveryPointRecord]{}, err
 		}
 		if cursor.EnvironmentID != environmentID || cursor.Limit != recoveryPointPageLimit ||
 			cursor.Order != recoveryPointCursorOrder {
-			return etcdstore.Page[etcd.BackupRecoveryPointRecord]{}, invalidRecoveryPointCursor()
+			return etcdstore.Page[backupruntime.BackupRecoveryPointRecord]{}, invalidRecoveryPointCursor()
 		}
 		request.AfterID = cursor.AfterID
 		request.Revision = cursor.Revision
 	}
 	page, err := service.points.ListVerifiedRecoveryPointsByEnvironment(ctx, environmentID, request)
 	if err != nil {
-		return etcdstore.Page[etcd.BackupRecoveryPointRecord]{}, err
+		return etcdstore.Page[backupruntime.BackupRecoveryPointRecord]{}, err
 	}
 	if page.Revision <= 0 {
-		return etcdstore.Page[etcd.BackupRecoveryPointRecord]{}, errs.New(
+		return etcdstore.Page[backupruntime.BackupRecoveryPointRecord]{}, errs.New(
 			errs.KindInternal,
 			"recovery point list returned no fixed revision",
 		)
 	}
-	response := etcdstore.Page[etcd.BackupRecoveryPointRecord]{
+	response := etcdstore.Page[backupruntime.BackupRecoveryPointRecord]{
 		Items:    page.Items,
 		Revision: page.Revision,
 	}
@@ -128,7 +129,7 @@ func (service *RecoveryPointReadService) ListRecoveryPoints(
 			Order:         recoveryPointCursorOrder,
 		})
 		if err != nil {
-			return etcdstore.Page[etcd.BackupRecoveryPointRecord]{}, err
+			return etcdstore.Page[backupruntime.BackupRecoveryPointRecord]{}, err
 		}
 	}
 	return response, nil

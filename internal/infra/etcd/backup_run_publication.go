@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -35,7 +36,7 @@ type ManualBackupRunInput struct {
 	PlanID        string
 	FixedRevision int64
 	CreatedAt     time.Time
-	Initiator     BackupRunInitiator
+	Initiator     backupruntime.BackupRunInitiator
 	ScheduledAt   *time.Time
 }
 
@@ -54,7 +55,7 @@ type BackupPostgresIdentityResolver func(
 ) error
 
 type PreparedManualBackupRun struct {
-	Run         BackupRunRecord
+	Run         backupruntime.BackupRunRecord
 	Owner       TaskOwner
 	Publication *PreparedBackupRunPublication
 }
@@ -92,7 +93,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		ids.Validate(
 			ids.KindPlan,
 			input.PlanID,
-		) != nil || !validBackupRuntimeInstant(input.CreatedAt) ||
+		) != nil || !backupruntime.ValidBackupRuntimeInstant(input.CreatedAt) ||
 		input.FixedRevision < 0 || resolvePostgres == nil {
 		return PreparedManualBackupRun{}, errs.New(
 			errs.KindValidationFailed,
@@ -125,10 +126,10 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	policy, policyErr := backuppolicy.DecodeBackupPolicyRecord(anchor.Values[1].Value)
 	if environmentErr != nil || policyErr != nil || environment.ID != input.EnvironmentID ||
 		policy.EnvironmentID != input.EnvironmentID {
-		return PreparedManualBackupRun{}, corruptBackupRuntimeRecord()
+		return PreparedManualBackupRun{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if !policy.Enabled || len(policy.SourceIDs) == 0 ||
-		len(policy.SourceIDs) > MaximumBackupPolicySources {
+		len(policy.SourceIDs) > backuppolicy.MaximumBackupPolicySources {
 		return PreparedManualBackupRun{}, errs.New(
 			errs.KindStateConflict,
 			"backup policy is disabled or unconfigured",
@@ -149,22 +150,22 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	}
 	initiator := input.Initiator
 	if initiator == "" {
-		initiator = BackupRunInitiatorOperator
+		initiator = backupruntime.BackupRunInitiatorOperator
 	}
-	if initiator != BackupRunInitiatorOperator && initiator != BackupRunInitiatorSchedule {
+	if initiator != backupruntime.BackupRunInitiatorOperator && initiator != backupruntime.BackupRunInitiatorSchedule {
 		return PreparedManualBackupRun{}, errs.New(errs.KindValidationFailed, "backup run initiator is invalid")
 	}
-	if initiator == BackupRunInitiatorOperator && input.ScheduledAt != nil {
+	if initiator == backupruntime.BackupRunInitiatorOperator && input.ScheduledAt != nil {
 		return PreparedManualBackupRun{}, errs.New(
 			errs.KindValidationFailed,
 			"operator backup run cannot have a schedule",
 		)
 	}
-	if initiator == BackupRunInitiatorSchedule &&
-		(input.ScheduledAt == nil || !validBackupRuntimeInstant(input.ScheduledAt.UTC()) || input.ScheduledAt.After(input.CreatedAt)) {
+	if initiator == backupruntime.BackupRunInitiatorSchedule &&
+		(input.ScheduledAt == nil || !backupruntime.ValidBackupRuntimeInstant(input.ScheduledAt.UTC()) || input.ScheduledAt.After(input.CreatedAt)) {
 		return PreparedManualBackupRun{}, errs.New(errs.KindValidationFailed, "scheduled backup run time is invalid")
 	}
-	run := BackupRunRecord{
+	run := backupruntime.BackupRunRecord{
 		TaskID:                        input.TaskID,
 		OperationID:                   input.OperationID,
 		EnvironmentID:                 input.EnvironmentID,
@@ -180,8 +181,8 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		ConnectorPathStyle:            connector.Connector.PathStyle,
 		ConnectorHasDirectCredentials: hasDirect,
 		ConnectorCredentialsRevision:  credentialsRevision,
-		Encryption:                    BackupRuntimeEncryption(policy.Encryption),
-		State:                         BackupRunQueued,
+		Encryption:                    backupruntime.BackupRuntimeEncryption(policy.Encryption),
+		State:                         backupruntime.BackupRunQueued,
 		CreatedAt:                     input.CreatedAt.UTC(),
 		UpdatedAt:                     input.CreatedAt.UTC(),
 	}
@@ -201,7 +202,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		return PreparedManualBackupRun{}, err
 	}
 	defer clearKeyValues(sourceRead.Values)
-	run.Sources = make([]BackupRunSourceAttemptRecord, len(sourceRead.Values))
+	run.Sources = make([]backupruntime.BackupRunSourceAttemptRecord, len(sourceRead.Values))
 	for index, value := range sourceRead.Values {
 		if value == nil {
 			return PreparedManualBackupRun{}, errs.New(
@@ -212,7 +213,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		source, decodeErr := backuppolicy.DecodeBackupSourceRecord(value.Value)
 		if decodeErr != nil || source.ID != policy.SourceIDs[index] ||
 			source.EnvironmentID != input.EnvironmentID {
-			return PreparedManualBackupRun{}, corruptBackupRuntimeRecord()
+			return PreparedManualBackupRun{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		attempt, prepareErr := repository.prepareManualBackupSource(
 			ctx, run, source, value.ModRevision, uint32(index), fixedRevision, resolvePostgres,
@@ -222,9 +223,9 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 		}
 		run.Sources[index] = attempt
 	}
-	lock := BackupOperationLockRecord{
+	lock := backupruntime.BackupOperationLockRecord{
 		EnvironmentID: input.EnvironmentID, OperationID: input.OperationID, TaskID: input.TaskID,
-		Kind: BackupOperationBackup, CreatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
+		Kind: backupruntime.BackupOperationBackup, CreatedAt: run.CreatedAt, UpdatedAt: run.CreatedAt,
 	}
 	plan, err := repository.prepareBackupRunPublication(ctx, run, lock, fixedRevision)
 	if err != nil {
@@ -276,7 +277,7 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 	}
 	tenant, err := hierarchyrecord.DecodeTenant(tenantRead.Values[0].Value)
 	if err != nil || tenant.ID != project.TenantID {
-		return TaskOwner{}, corruptBackupRuntimeRecord()
+		return TaskOwner{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return EnvironmentTaskOwner(project, environment)
 }
@@ -336,13 +337,13 @@ func (repository *BackupRuntimeRepository) manualBackupConnector(
 
 func (repository *BackupRuntimeRepository) manualBackupKey(
 	ctx context.Context,
-	run *BackupRunRecord,
+	run *backupruntime.BackupRunRecord,
 	fixedRevision int64,
 ) error {
-	if run.Encryption == BackupRuntimeEncryptionNone {
+	if run.Encryption == backupruntime.BackupRuntimeEncryptionNone {
 		return nil
 	}
-	if run.Encryption != BackupRuntimeEncryptionAge {
+	if run.Encryption != backupruntime.BackupRuntimeEncryptionAge {
 		return errs.New(errs.KindStateConflict, "backup encryption strategy is unsupported")
 	}
 	read, err := repository.readFixedKeys(ctx, []string{
@@ -371,29 +372,29 @@ func (repository *BackupRuntimeRepository) manualBackupKey(
 
 func (repository *BackupRuntimeRepository) prepareManualBackupSource(
 	ctx context.Context,
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	source backuppolicy.BackupSourceRecord,
 	sourceRevision int64,
 	ordinal uint32,
 	fixedRevision int64,
 	resolvePostgres BackupPostgresIdentityResolver,
-) (BackupRunSourceAttemptRecord, error) {
+) (backupruntime.BackupRunSourceAttemptRecord, error) {
 	pointID := ids.New(ids.KindRecoveryPoint)
 	pointCreatedAt, err := ids.Timestamp(ids.KindRecoveryPoint, pointID)
 	if err != nil {
-		return BackupRunSourceAttemptRecord{}, errs.Wrap(errs.KindInternal, err)
+		return backupruntime.BackupRunSourceAttemptRecord{}, errs.Wrap(errs.KindInternal, err)
 	}
-	attempt := BackupRunSourceAttemptRecord{
+	attempt := backupruntime.BackupRunSourceAttemptRecord{
 		Ordinal:                ordinal,
 		SourceID:               source.ID,
-		Kind:                   BackupRuntimeSourceKind(source.Kind),
+		Kind:                   backupruntime.BackupRuntimeSourceKind(source.Kind),
 		TargetID:               source.TargetID,
 		SourceRevision:         sourceRevision,
 		RecoveryPointID:        pointID,
 		RecoveryPointCreatedAt: pointCreatedAt,
 		ObjectKey:              run.ConnectorPrefix + run.EnvironmentID + "/" + source.ID + "/" + pointID + "/artifact.bin",
-		State:                  BackupSourceAttemptPending,
-		Phase:                  BackupSourcePhaseCapture,
+		State:                  backupruntime.BackupSourceAttemptPending,
+		Phase:                  backupruntime.BackupSourcePhaseCapture,
 	}
 	switch attempt.Kind {
 	case BackupRuntimeSourceAttach:
@@ -407,8 +408,8 @@ func (repository *BackupRuntimeRepository) prepareManualBackupSource(
 	case BackupRuntimeSourceVolume:
 		return repository.prepareManualVolumeSource(ctx, attempt, run.EnvironmentID, fixedRevision)
 	case BackupRuntimeSourceConfig:
-		if run.Encryption != BackupRuntimeEncryptionAge || source.TargetID != run.EnvironmentID {
-			return BackupRunSourceAttemptRecord{}, errs.New(
+		if run.Encryption != backupruntime.BackupRuntimeEncryptionAge || source.TargetID != run.EnvironmentID {
+			return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 				errs.KindStateConflict, "config backup source requires age encryption",
 			)
 		}
@@ -418,23 +419,23 @@ func (repository *BackupRuntimeRepository) prepareManualBackupSource(
 			fixedRevision,
 		)
 		if readErr != nil {
-			return BackupRunSourceAttemptRecord{}, readErr
+			return backupruntime.BackupRunSourceAttemptRecord{}, readErr
 		}
 		defer clearKeyValues(read.Values)
 		if read.Values[0] == nil {
-			return BackupRunSourceAttemptRecord{}, errs.New(
+			return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 				errs.KindStateConflict,
 				"config target is unavailable",
 			)
 		}
 		attempt.TargetRevision = read.Values[0].ModRevision
-		attempt.Format = BackupRuntimeFormatConfig
-		attempt.Snapshot.Config = &BackupConfigSourceSnapshot{
+		attempt.Format = backupruntime.BackupRuntimeFormatConfig
+		attempt.Snapshot.Config = &backupruntime.BackupConfigSourceSnapshot{
 			ConfigSnapshotID: run.TaskID, ReadRevision: fixedRevision,
 		}
 		return attempt, nil
 	default:
-		return BackupRunSourceAttemptRecord{}, errs.New(
+		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStrategyNotImplemented, "backup source strategy is not implemented",
 		)
 	}
@@ -442,20 +443,20 @@ func (repository *BackupRuntimeRepository) prepareManualBackupSource(
 
 func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	ctx context.Context,
-	attempt BackupRunSourceAttemptRecord,
+	attempt backupruntime.BackupRunSourceAttemptRecord,
 	consumerEnvironmentID string,
 	fixedRevision int64,
 	resolvePostgres BackupPostgresIdentityResolver,
-) (BackupRunSourceAttemptRecord, error) {
+) (backupruntime.BackupRunSourceAttemptRecord, error) {
 	read, err := repository.readFixedKeys(
 		ctx, []string{attachrecord.AttachKey(attempt.TargetID), attachrecord.AttachFactsKey(attempt.TargetID)}, fixedRevision,
 	)
 	if err != nil {
-		return BackupRunSourceAttemptRecord{}, err
+		return backupruntime.BackupRunSourceAttemptRecord{}, err
 	}
 	defer clearKeyValues(read.Values)
 	if read.Values[0] == nil || read.Values[1] == nil {
-		return BackupRunSourceAttemptRecord{}, errs.New(
+		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,
 			"postgres Attach evidence is unavailable",
 		)
@@ -466,7 +467,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 		attach.EnvironmentID != consumerEnvironmentID || !attach.OwnsCredential() ||
 		attach.Status != backupAttachStatusReady || facts.AttachID != attach.ID {
 		clear(facts.Ciphertext)
-		return BackupRunSourceAttemptRecord{}, errs.New(
+		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,
 			"postgres Attach evidence changed",
 		)
@@ -478,12 +479,12 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 		environmentBlueprintHeadKey(attach.BackingEnvironmentID),
 	}, fixedRevision)
 	if err != nil {
-		return BackupRunSourceAttemptRecord{}, err
+		return backupruntime.BackupRunSourceAttemptRecord{}, err
 	}
 	defer clearKeyValues(backingRead.Values)
 	if backingRead.Values[0] == nil || backingRead.Values[1] == nil ||
 		backingRead.Values[2] == nil {
-		return BackupRunSourceAttemptRecord{}, errs.New(
+		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,
 			"postgres backing evidence is unavailable",
 		)
@@ -498,7 +499,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 		service.Record.Desired.Adapter != "postgres:16" ||
 		service.Record.Desired.Image != "postgres:16-alpine" ||
 		service.Revision != backingRead.Values[2].ModRevision {
-		return BackupRunSourceAttemptRecord{}, errs.New(
+		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,
 			"postgres:16 backing evidence changed",
 		)
@@ -518,17 +519,17 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 		},
 	)
 	if err != nil {
-		return BackupRunSourceAttemptRecord{}, err
+		return backupruntime.BackupRunSourceAttemptRecord{}, err
 	}
 	if identity.Database == "" || identity.Role == "" {
-		return BackupRunSourceAttemptRecord{}, errs.New(
+		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,
 			"postgres Attach identity is incomplete",
 		)
 	}
 	attempt.TargetRevision = read.Values[0].ModRevision
-	attempt.Format = BackupRuntimeFormatPostgres
-	attempt.Snapshot.Postgres = &BackupPostgresSourceSnapshot{
+	attempt.Format = backupruntime.BackupRuntimeFormatPostgres
+	attempt.Snapshot.Postgres = &backupruntime.BackupPostgresSourceSnapshot{
 		ConsumerEnvironmentID:      consumerEnvironmentID,
 		AttachID:                   attach.ID,
 		AttachRevision:             read.Values[0].ModRevision,
@@ -547,18 +548,18 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 
 func (repository *BackupRuntimeRepository) prepareManualVolumeSource(
 	ctx context.Context,
-	attempt BackupRunSourceAttemptRecord,
+	attempt backupruntime.BackupRunSourceAttemptRecord,
 	environmentID string,
 	fixedRevision int64,
-) (BackupRunSourceAttemptRecord, error) {
+) (backupruntime.BackupRunSourceAttemptRecord, error) {
 	evidence, err := loadBackupVolumeProjectionEvidence(
 		ctx, repository.store, environmentID, attempt.TargetID, fixedRevision,
 	)
 	if err != nil {
-		return BackupRunSourceAttemptRecord{}, err
+		return backupruntime.BackupRunSourceAttemptRecord{}, err
 	}
 	if evidence.Environment.Record.VolumeDir == "" {
-		return BackupRunSourceAttemptRecord{}, errs.New(
+		return backupruntime.BackupRunSourceAttemptRecord{}, errs.New(
 			errs.KindStateConflict,
 			"backup Volume projection is unavailable",
 		)
@@ -567,11 +568,11 @@ func (repository *BackupRuntimeRepository) prepareManualVolumeSource(
 		ctx, environmentID, attempt.TargetID, evidence.Projection.Record, fixedRevision,
 	)
 	if err != nil {
-		return BackupRunSourceAttemptRecord{}, err
+		return backupruntime.BackupRunSourceAttemptRecord{}, err
 	}
 	attempt.TargetRevision = evidence.Projection.Revision
-	attempt.Format = BackupRuntimeFormatVolume
-	attempt.Snapshot.Volume = &BackupVolumeSourceSnapshot{
+	attempt.Format = backupruntime.BackupRuntimeFormatVolume
+	attempt.Snapshot.Volume = &backupruntime.BackupVolumeSourceSnapshot{
 		EnvironmentID:       environmentID,
 		EnvironmentRevision: evidence.Environment.Revision,
 		VolumeID:            evidence.Volume.ID,
@@ -593,7 +594,7 @@ func (repository *BackupRuntimeRepository) manualBackupVolumeConsumers(
 	volumeID string,
 	projection EnvironmentComposeProjection,
 	fixedRevision int64,
-) ([]BackupVolumeServiceSnapshot, error) {
+) ([]backupruntime.BackupVolumeServiceSnapshot, error) {
 	serviceKeys := make(map[string]string, len(projection.DesiredServices))
 	for _, desired := range projection.DesiredServices {
 		serviceKeys[desired.Desired.ID] = desired.Desired.Name
@@ -610,7 +611,7 @@ func (repository *BackupRuntimeRepository) manualBackupVolumeConsumers(
 		sort.Strings(mounts[serviceID])
 	}
 	sort.Strings(serviceIDs)
-	result := make([]BackupVolumeServiceSnapshot, 0)
+	result := make([]backupruntime.BackupVolumeServiceSnapshot, 0)
 	for _, serviceID := range serviceIDs {
 		service, serviceErr := findServiceAtRevision(ctx, repository.store, serviceID, fixedRevision)
 		if serviceErr != nil || service.Record.EnvironmentID != environmentID {
@@ -631,10 +632,10 @@ func (repository *BackupRuntimeRepository) manualBackupVolumeConsumers(
 					"Volume consumer projection is incomplete",
 				)
 			}
-			result = append(result, BackupVolumeServiceSnapshot{
+			result = append(result, backupruntime.BackupVolumeServiceSnapshot{
 				ServiceID: service.Record.Desired.ID, ServiceRevision: ServiceRuntimeRevision(service),
 				ComposeKey: composeKey, MountPaths: mountPaths,
-				PriorIntent: BackupServiceRuntimeIntent(service.Record.Runtime.RuntimeIntent),
+				PriorIntent: backupruntime.BackupServiceRuntimeIntent(service.Record.Runtime.RuntimeIntent),
 			})
 		}
 	}
@@ -652,9 +653,9 @@ func backupVolumeTargetsGeneratedService(components []componentrecord.Record, se
 	return false
 }
 
-func (publication *PreparedBackupRunPublication) Record() BackupRunRecord {
+func (publication *PreparedBackupRunPublication) Record() backupruntime.BackupRunRecord {
 	if publication == nil || publication.state == nil {
-		return BackupRunRecord{}
+		return backupruntime.BackupRunRecord{}
 	}
 	publication.state.mu.Lock()
 	defer publication.state.mu.Unlock()
@@ -734,10 +735,10 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 		marker.Response.Status != 202 ||
 		json.Unmarshal(marker.Response.Body, &response) != nil ||
 		response.TaskID != marker.TaskID {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	read, err := repository.readFixedKeys(ctx, []string{
-		backupRunKey(marker.TaskID),
+		backupruntime.BackupRunKey(marker.TaskID),
 		taskKey(marker.TaskID),
 		hierarchyrecord.EnvironmentOperationLockKey(marker.Locator.ScopeID),
 	}, readRevision)
@@ -746,7 +747,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	}
 	defer clearKeyValues(read.Values)
 	if len(read.Values) != 3 || read.Values[1] == nil {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	task, taskErr := decodeTaskRecord(read.Values[1].Value)
 	if taskErr != nil || task.ID != marker.TaskID || task.Type != TaskBackup ||
@@ -754,7 +755,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 		(task.RetryOf == "" && task.IdempotencyKey != marker.Locator.Key) ||
 		task.idempotencyMarker == nil ||
 		*task.idempotencyMarker != marker.Locator || task.Owner.EnvironmentID != marker.Locator.ScopeID {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if marker.State != idempotencyrecord.IdempotencyMarkerPending {
 		return repository.validateTerminalBackupRunPublication(
@@ -768,18 +769,18 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 		)
 	}
 	if read.Values[0] == nil || read.Values[2] == nil {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	run, runErr := decodeBackupRunRecord(read.Values[0].Value)
-	lock, lockErr := decodeBackupOperationLockRecord(read.Values[2].Value)
+	run, runErr := backupruntime.DecodeBackupRunRecord(read.Values[0].Value)
+	lock, lockErr := backupruntime.DecodeBackupOperationLockRecord(read.Values[2].Value)
 	if runErr != nil || lockErr != nil || validateBackupRunTaskBinding(task, run) != nil ||
 		(run.RetryOfTaskID != "" && task.Actor != TaskActorOperator) ||
-		(run.RetryOfTaskID == "" && run.Initiator == BackupRunInitiatorOperator && task.Actor != TaskActorOperator) ||
-		(run.RetryOfTaskID == "" && run.Initiator == BackupRunInitiatorSchedule && task.Actor != TaskActorSystem) ||
+		(run.RetryOfTaskID == "" && run.Initiator == backupruntime.BackupRunInitiatorOperator && task.Actor != TaskActorOperator) ||
+		(run.RetryOfTaskID == "" && run.Initiator == backupruntime.BackupRunInitiatorSchedule && task.Actor != TaskActorSystem) ||
 		lock.TaskID != marker.TaskID || lock.OperationID != run.OperationID ||
-		lock.EnvironmentID != run.EnvironmentID || lock.Kind != BackupOperationBackup ||
+		lock.EnvironmentID != run.EnvironmentID || lock.Kind != backupruntime.BackupOperationBackup ||
 		!lock.CreatedAt.Equal(run.CreatedAt) || !lock.UpdatedAt.Equal(lock.CreatedAt) {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	switch task.Status {
 	case TaskStatusPending:
@@ -791,7 +792,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 			ctx, run, task, read.Values, readRevision, commitRevision,
 		)
 	default:
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 }
 
@@ -799,7 +800,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 // written atomically with the pending marker and must retain that revision.
 func (repository *BackupRuntimeRepository) validateQueuedBackupRunPublication(
 	ctx context.Context,
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	task TaskRecord,
 	primary []*etcdstore.KeyValue,
 	readRevision int64,
@@ -807,14 +808,14 @@ func (repository *BackupRuntimeRepository) validateQueuedBackupRunPublication(
 ) error {
 	for _, value := range primary {
 		if value == nil || value.ModRevision != commitRevision {
-			return corruptBackupRuntimeRecord()
+			return backupruntime.CorruptBackupRuntimeRecord()
 		}
 	}
-	if run.RetryOfTaskID == "" && run.Initiator == BackupRunInitiatorSchedule &&
+	if run.RetryOfTaskID == "" && run.Initiator == backupruntime.BackupRunInitiatorSchedule &&
 		!repository.exactScheduledBackupRunSubordinates(ctx, run, readRevision, commitRevision) {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
-	if run.State != BackupRunQueued || !run.UpdatedAt.Equal(run.CreatedAt) ||
+	if run.State != backupruntime.BackupRunQueued || !run.UpdatedAt.Equal(run.CreatedAt) ||
 		task.NextEventSequence != 1 || !task.UpdatedAt.Equal(task.CreatedAt) ||
 		task.StartedAt != nil || task.FinishedAt != nil || task.RetainUntil != nil ||
 		!repository.exactBackupRunPublicationSubordinates(
@@ -822,7 +823,7 @@ func (repository *BackupRuntimeRepository) validateQueuedBackupRunPublication(
 		) || !repository.exactBackupRunConfigCompanions(
 		ctx, run, readRevision, commitRevision,
 	) {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return nil
 }
@@ -833,7 +834,7 @@ func (repository *BackupRuntimeRepository) validateQueuedBackupRunPublication(
 // pending publication revision everywhere.
 func (repository *BackupRuntimeRepository) validateRunningBackupRunPublication(
 	ctx context.Context,
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	task TaskRecord,
 	primary []*etcdstore.KeyValue,
 	readRevision int64,
@@ -842,7 +843,7 @@ func (repository *BackupRuntimeRepository) validateRunningBackupRunPublication(
 	if primary[0].ModRevision < publicationRevision ||
 		primary[1].ModRevision <= publicationRevision ||
 		primary[2].ModRevision != publicationRevision ||
-		(run.State != BackupRunQueued && run.State != BackupRunRunning) ||
+		(run.State != backupruntime.BackupRunQueued && run.State != backupruntime.BackupRunRunning) ||
 		task.StartedAt == nil || task.FinishedAt != nil || task.RetainUntil != nil ||
 		!repository.exactRunningBackupRunSubordinates(
 			ctx,
@@ -855,7 +856,7 @@ func (repository *BackupRuntimeRepository) validateRunningBackupRunPublication(
 		) || !repository.currentBackupRunConfigCompanions(
 		ctx, run, readRevision, publicationRevision,
 	) {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return nil
 }
@@ -879,12 +880,12 @@ func (repository *BackupRuntimeRepository) validateTerminalBackupRunPublication(
 		(marker.State == idempotencyrecord.IdempotencyMarkerCompleted && task.Status != TaskStatusCompleted) ||
 		(marker.State == idempotencyrecord.IdempotencyMarkerFailed && task.Status == TaskStatusCompleted) ||
 		(marker.State != idempotencyrecord.IdempotencyMarkerCompleted && marker.State != idempotencyrecord.IdempotencyMarkerFailed) {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if runValue != nil && !repository.exactTerminalBackupRunSubordinates(
 		ctx, marker, task, runValue, readRevision, terminalRevision,
 	) {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	tasks, err := newTaskRepository(repository.store)
 	if err != nil {
@@ -894,10 +895,10 @@ func (repository *BackupRuntimeRepository) validateTerminalBackupRunPublication(
 		Record: task, Revision: terminalRevision, ReadRevision: readRevision,
 	}
 	if err := tasks.validateTaskRetentionReplay(ctx, task, readRevision); err != nil {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if err := tasks.validateBackupTerminalReceiptReplay(ctx, versioned); err != nil {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return nil
 }
@@ -917,7 +918,7 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 	if runValue.ModRevision != terminalRevision {
 		return false
 	}
-	run, err := decodeBackupRunRecord(runValue.Value)
+	run, err := backupruntime.DecodeBackupRunRecord(runValue.Value)
 	if err != nil || validateBackupRunTaskBinding(task, run) != nil ||
 		run.UpdatedAt != *task.FinishedAt {
 		return false
@@ -926,7 +927,7 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 	if err != nil || run.State != wantState {
 		return false
 	}
-	membershipKey, err := backupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
+	membershipKey, err := backupruntime.BackupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
 	if err != nil {
 		return false
 	}
@@ -1019,12 +1020,12 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 // coordination record still names the marker's winning Task exactly.
 func (repository *BackupRuntimeRepository) exactBackupRunPublicationSubordinates(
 	ctx context.Context,
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	task TaskRecord,
 	readRevision int64,
 	commitRevision int64,
 ) bool {
-	membershipKey, err := backupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
+	membershipKey, err := backupruntime.BackupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
 	if err != nil {
 		return false
 	}
@@ -1043,7 +1044,7 @@ func (repository *BackupRuntimeRepository) exactBackupRunPublicationSubordinates
 		taskQueueKey(task.Executor, task.ID),
 	}
 	for _, exclusion := range exclusions {
-		key, keyErr := backupSourceTargetExclusionKey(exclusion.TargetKind, exclusion.TargetID)
+		key, keyErr := backupruntime.BackupSourceTargetExclusionKey(exclusion.TargetKind, exclusion.TargetID)
 		if keyErr != nil {
 			return false
 		}
@@ -1076,7 +1077,7 @@ func (repository *BackupRuntimeRepository) exactBackupRunPublicationSubordinates
 	}
 	exclusionOffset := 4
 	for index, exclusion := range exclusions {
-		expected, encodeErr := encodeBackupSourceTargetExclusionRecord(exclusion)
+		expected, encodeErr := backupruntime.EncodeBackupSourceTargetExclusionRecord(exclusion)
 		if encodeErr != nil {
 			return false
 		}
@@ -1092,7 +1093,7 @@ func (repository *BackupRuntimeRepository) exactBackupRunPublicationSubordinates
 			return false
 		}
 	}
-	epoch, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
+	epoch, err := backupruntime.EncodeEnvironmentMutationEpochRecord(backupruntime.EnvironmentMutationEpochRecord{
 		EnvironmentID: run.EnvironmentID,
 	})
 	if err != nil {
@@ -1107,14 +1108,14 @@ func (repository *BackupRuntimeRepository) exactBackupRunPublicationSubordinates
 // revision and the current run is paired with the current Environment epoch.
 func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 	ctx context.Context,
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	task TaskRecord,
 	runRevision int64,
 	taskRevision int64,
 	readRevision int64,
 	publicationRevision int64,
 ) bool {
-	membershipKey, err := backupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
+	membershipKey, err := backupruntime.BackupRunEnvironmentIndexKey(run.EnvironmentID, run.TaskID)
 	if err != nil {
 		return false
 	}
@@ -1134,7 +1135,7 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 		taskAssignmentIndexKey(task.ID),
 	}
 	for _, exclusion := range exclusions {
-		key, keyErr := backupSourceTargetExclusionKey(exclusion.TargetKind, exclusion.TargetID)
+		key, keyErr := backupruntime.BackupSourceTargetExclusionKey(exclusion.TargetKind, exclusion.TargetID)
 		if keyErr != nil {
 			return false
 		}
@@ -1178,7 +1179,7 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 		return false
 	}
 	for index, exclusion := range exclusions {
-		expected, encodeErr := encodeBackupSourceTargetExclusionRecord(exclusion)
+		expected, encodeErr := backupruntime.EncodeBackupSourceTargetExclusionRecord(exclusion)
 		if encodeErr != nil {
 			return false
 		}
@@ -1198,7 +1199,7 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 		read.Values[epochIndex].ModRevision != runRevision {
 		return false
 	}
-	epoch, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
+	epoch, err := backupruntime.EncodeEnvironmentMutationEpochRecord(backupruntime.EnvironmentMutationEpochRecord{
 		EnvironmentID: run.EnvironmentID,
 	})
 	if err != nil {
@@ -1241,12 +1242,12 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 // publication revision and bind the current validated snapshot identity.
 func (repository *BackupRuntimeRepository) currentBackupRunConfigCompanions(
 	ctx context.Context,
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	readRevision int64,
 	publicationRevision int64,
 ) bool {
 	for _, source := range run.Sources {
-		if source.Kind != BackupRuntimeSourceConfig {
+		if source.Kind != backupruntime.BackupRuntimeSourceConfig {
 			continue
 		}
 		snapshot := source.Snapshot.Config
@@ -1285,13 +1286,13 @@ func (repository *BackupRuntimeRepository) currentBackupRunConfigCompanions(
 	return true
 }
 
-func cloneBackupRunPublicationRecord(record BackupRunRecord) BackupRunRecord {
+func cloneBackupRunPublicationRecord(record backupruntime.BackupRunRecord) backupruntime.BackupRunRecord {
 	clone := record
 	if record.ScheduledAt != nil {
 		scheduledAt := *record.ScheduledAt
 		clone.ScheduledAt = &scheduledAt
 	}
-	clone.Sources = make([]BackupRunSourceAttemptRecord, len(record.Sources))
+	clone.Sources = make([]backupruntime.BackupRunSourceAttemptRecord, len(record.Sources))
 	for index, source := range record.Sources {
 		clone.Sources[index] = source
 		clone.Sources[index].Snapshot = cloneBackupRunSourceSnapshot(source.Snapshot)
@@ -1299,7 +1300,7 @@ func cloneBackupRunPublicationRecord(record BackupRunRecord) BackupRunRecord {
 	return clone
 }
 
-func cloneBackupRunSourceSnapshot(snapshot BackupRunSourceSnapshot) BackupRunSourceSnapshot {
+func cloneBackupRunSourceSnapshot(snapshot backupruntime.BackupRunSourceSnapshot) backupruntime.BackupRunSourceSnapshot {
 	clone := snapshot
 	if snapshot.Postgres != nil {
 		postgres := *snapshot.Postgres
@@ -1307,7 +1308,7 @@ func cloneBackupRunSourceSnapshot(snapshot BackupRunSourceSnapshot) BackupRunSou
 	}
 	if snapshot.Volume != nil {
 		volume := *snapshot.Volume
-		volume.Services = append([]BackupVolumeServiceSnapshot(nil), snapshot.Volume.Services...)
+		volume.Services = append([]backupruntime.BackupVolumeServiceSnapshot(nil), snapshot.Volume.Services...)
 		for index := range volume.Services {
 			volume.Services[index].MountPaths = append(
 				[]string(nil),

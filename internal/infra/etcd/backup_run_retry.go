@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
@@ -18,14 +19,14 @@ type BackupRunRetryInput struct {
 
 type PreparedBackupRunRetry struct {
 	SourceTask  TaskRecord
-	Run         BackupRunRecord
+	Run         backupruntime.BackupRunRecord
 	Owner       TaskOwner
 	Publication *PreparedBackupRunPublication
 }
 
 type backupRunRetrySource struct {
 	task            etcdstore.Versioned[TaskRecord]
-	run             etcdstore.Versioned[BackupRunRecord]
+	run             etcdstore.Versioned[backupruntime.BackupRunRecord]
 	receiptRevision int64
 }
 
@@ -44,7 +45,7 @@ func (repository *BackupRuntimeRepository) PrepareBackupRunRetry(
 	}
 	if ids.Validate(ids.KindTask, input.SourceTaskID) != nil ||
 		ids.Validate(ids.KindTask, input.TaskID) != nil ||
-		input.SourceTaskID == input.TaskID || !validBackupRuntimeInstant(input.CreatedAt) {
+		input.SourceTaskID == input.TaskID || !backupruntime.ValidBackupRuntimeInstant(input.CreatedAt) {
 		return PreparedBackupRunRetry{}, errs.New(
 			errs.KindValidationFailed,
 			"backup run retry input is invalid",
@@ -64,11 +65,11 @@ func (repository *BackupRuntimeRepository) PrepareBackupRunRetry(
 	if err != nil {
 		return PreparedBackupRunRetry{}, err
 	}
-	lock := BackupOperationLockRecord{
+	lock := backupruntime.BackupOperationLockRecord{
 		EnvironmentID: run.EnvironmentID,
 		OperationID:   run.OperationID,
 		TaskID:        run.TaskID,
-		Kind:          BackupOperationBackup,
+		Kind:          backupruntime.BackupOperationBackup,
 		CreatedAt:     run.CreatedAt,
 		UpdatedAt:     run.CreatedAt,
 	}
@@ -97,7 +98,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 	ctx context.Context,
 	taskID string,
 ) (backupRunRetrySource, error) {
-	keys := []string{taskKey(taskID), backupRunKey(taskID), backupTerminalReceiptKey(taskID)}
+	keys := []string{taskKey(taskID), backupruntime.BackupRunKey(taskID), backupTerminalReceiptKey(taskID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return backupRunRetrySource{}, err
@@ -118,12 +119,12 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 		)
 	}
 	task, taskErr := decodeTaskRecord(read.Values[0].Value)
-	run, runErr := decodeBackupRunRecord(read.Values[1].Value)
+	run, runErr := backupruntime.DecodeBackupRunRecord(read.Values[1].Value)
 	receipt, receiptErr := decodeBackupTerminalReceiptRecord(read.Values[2].Value)
 	if taskErr != nil || runErr != nil || receiptErr != nil || task.ID != taskID ||
 		validateBackupRunTaskBinding(task, run) != nil ||
 		validateBackupTerminalReceiptTaskBinding(task, receipt) != nil {
-		return backupRunRetrySource{}, corruptBackupRuntimeRecord()
+		return backupRunRetrySource{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if task.Status != TaskStatusFailed && task.Status != TaskStatusTimedOut &&
 		task.Status != TaskStatusAborted {
@@ -136,7 +137,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 	}
 	wantRunState, err := backupRunStateForTaskStatus(task.Status)
 	if err != nil || run.State != wantRunState {
-		return backupRunRetrySource{}, corruptBackupRuntimeRecord()
+		return backupRunRetrySource{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	versionedTask := etcdstore.Versioned[TaskRecord]{
 		Record:       task,
@@ -152,7 +153,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 	}
 	return backupRunRetrySource{
 		task: versionedTask,
-		run: etcdstore.Versioned[BackupRunRecord]{
+		run: etcdstore.Versioned[backupruntime.BackupRunRecord]{
 			Record:       run,
 			Revision:     read.Values[1].ModRevision,
 			ReadRevision: read.ReadRevision,
@@ -162,25 +163,25 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 }
 
 func newBackupRunRetryRecord(
-	source BackupRunRecord,
+	source backupruntime.BackupRunRecord,
 	taskID string,
 	createdAt time.Time,
-) (BackupRunRecord, error) {
+) (backupruntime.BackupRunRecord, error) {
 	retry := cloneBackupRunPublicationRecord(source)
 	retry.TaskID = taskID
 	retry.RetryOfTaskID = source.TaskID
-	retry.State = BackupRunQueued
+	retry.State = backupruntime.BackupRunQueued
 	retry.CreatedAt = createdAt.UTC()
 	retry.UpdatedAt = retry.CreatedAt
 	retry.Sources = retry.Sources[:0]
 	for _, sourceAttempt := range source.Sources {
-		if sourceAttempt.State == BackupSourceAttemptSucceeded {
+		if sourceAttempt.State == backupruntime.BackupSourceAttemptSucceeded {
 			continue
 		}
 		pointID := ids.New(ids.KindRecoveryPoint)
 		pointCreatedAt, err := ids.Timestamp(ids.KindRecoveryPoint, pointID)
 		if err != nil {
-			return BackupRunRecord{}, errs.Wrap(errs.KindInternal, err)
+			return backupruntime.BackupRunRecord{}, errs.Wrap(errs.KindInternal, err)
 		}
 		attempt := sourceAttempt
 		attempt.Ordinal = uint32(len(retry.Sources))
@@ -189,33 +190,33 @@ func newBackupRunRetryRecord(
 		attempt.RecoveryPointCreatedAt = pointCreatedAt
 		attempt.ObjectKey = retry.ConnectorPrefix + retry.EnvironmentID + "/" +
 			attempt.SourceID + "/" + pointID + "/artifact.bin"
-		attempt.State = BackupSourceAttemptPending
-		attempt.Phase = BackupSourcePhaseCapture
+		attempt.State = backupruntime.BackupSourceAttemptPending
+		attempt.Phase = backupruntime.BackupSourcePhaseCapture
 		attempt.SizeBytes = 0
 		attempt.SHA256 = ""
 		attempt.FailureCode = ""
 		retry.Sources = append(retry.Sources, attempt)
 	}
 	if len(retry.Sources) == 0 {
-		return BackupRunRecord{}, errs.New(
+		return backupruntime.BackupRunRecord{}, errs.New(
 			errs.KindTaskNotRetryable,
 			"backup run has no incomplete source attempts",
 		)
 	}
-	if err := validateBackupRunRecord(retry); err != nil {
-		return BackupRunRecord{}, err
+	if err := backupruntime.ValidateBackupRunRecord(retry); err != nil {
+		return backupruntime.BackupRunRecord{}, err
 	}
 	return retry, nil
 }
 
 func (repository *BackupRuntimeRepository) prepareBackupRetryConfigReferences(
 	ctx context.Context,
-	run BackupRunRecord,
-	source BackupRunSourceAttemptRecord,
-	retrySource BackupRunRecord,
+	run backupruntime.BackupRunRecord,
+	source backupruntime.BackupRunSourceAttemptRecord,
+	retrySource backupruntime.BackupRunRecord,
 	fixedRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
-	var prior *BackupRunSourceAttemptRecord
+	var prior *backupruntime.BackupRunSourceAttemptRecord
 	for index := range retrySource.Sources {
 		if retrySource.Sources[index].SourceID == source.SourceID {
 			prior = &retrySource.Sources[index]

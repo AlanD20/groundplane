@@ -1,4 +1,4 @@
-package etcd
+package backupruntime
 
 import (
 	"fmt"
@@ -11,27 +11,27 @@ import (
 )
 
 const (
-	backupScheduleCursorPrefix             = "/v1/runtime/backup-schedule-cursors/"
-	backupDueOutcomePrefix                 = "/v1/runtime/backup-due/"
+	BackupScheduleCursorPrefix             = "/v1/runtime/backup-schedule-cursors/"
+	BackupDueOutcomePrefix                 = "/v1/runtime/backup-due/"
 	backupDueRetentionIndexPrefix          = "/v1/indexes/backup-due/by-retention/"
 	backupSourceTargetExclusionPrefix      = "/v1/runtime/backup-source-target-exclusions/"
 	backupRunPrefix                        = "/v1/runtime/backup-runs/"
-	backupRunEnvironmentPrefix             = "/v1/indexes/backup-runs/by-environment/"
+	BackupRunEnvironmentPrefix             = "/v1/indexes/backup-runs/by-environment/"
 	backupRecoveryPointPrefix              = "/v1/records/recovery-points/"
-	backupRecoveryPointEnvironmentPrefix   = "/v1/indexes/recovery-points/by-environment/"
-	backupRecoveryPointSourcePrefix        = "/v1/indexes/recovery-points/by-source/"
-	backupRecoveryPointConnectorPrefix     = "/v1/indexes/recovery-points/by-connector/"
+	BackupRecoveryPointEnvironmentPrefix   = "/v1/indexes/recovery-points/by-environment/"
+	BackupRecoveryPointSourcePrefix        = "/v1/indexes/recovery-points/by-source/"
+	BackupRecoveryPointConnectorPrefix     = "/v1/indexes/recovery-points/by-connector/"
 	backupOrphanPrefix                     = "/v1/runtime/backup-orphans/"
-	backupOrphanConnectorPrefix            = "/v1/indexes/backup-orphans/by-connector/"
-	backupOrphanEnvironmentPrefix          = "/v1/indexes/backup-orphans/by-environment/"
-	backupRetentionPrefix                  = "/v1/runtime/backup-retention/"
+	BackupOrphanConnectorPrefix            = "/v1/indexes/backup-orphans/by-connector/"
+	BackupOrphanEnvironmentPrefix          = "/v1/indexes/backup-orphans/by-environment/"
+	BackupRetentionPrefix                  = "/v1/runtime/backup-retention/"
 	backupRecoveryPointPrunePrefix         = "/v1/runtime/recovery-point-prunes/"
 	backupRecoveryPointPruneDispatchPrefix = "/v1/runtime/recovery-point-prune-dispatches/"
 	backupRestorePrefix                    = "/v1/runtime/backup-restores/"
-	backupRestoreEnvironmentPrefix         = "/v1/indexes/backup-restores/by-environment/"
+	BackupRestoreEnvironmentPrefix         = "/v1/indexes/backup-restores/by-environment/"
 	backupRestoreServicePrefix             = "/v1/runtime/backup-restore-services/"
 	backupKeyRotationPrefix                = "/v1/runtime/backup-key-rotations/"
-	backupKeyRotationEnvironmentPrefix     = "/v1/indexes/backup-key-rotations/by-environment/"
+	BackupKeyRotationEnvironmentPrefix     = "/v1/indexes/backup-key-rotations/by-environment/"
 	backupRuntimeOrderedSegmentWidth       = 20
 	backupRecoveryPointULIDAlphabet        = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 )
@@ -41,10 +41,10 @@ func backupScheduleCursorKey(environmentID string, policyRevision int64) (string
 	if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil || err != nil {
 		return "", errs.New(errs.KindValidationFailed, "backup schedule cursor key is invalid")
 	}
-	return backupScheduleCursorPrefix + environmentID + "/" + orderedRevision, nil
+	return BackupScheduleCursorPrefix + environmentID + "/" + orderedRevision, nil
 }
 
-func backupDueOutcomeKey(
+func BackupDueOutcomeKey(
 	environmentID string,
 	policyRevision int64,
 	scheduledAt time.Time,
@@ -57,10 +57,10 @@ func backupDueOutcomeKey(
 	if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil || err != nil {
 		return "", errs.New(errs.KindValidationFailed, "backup due key is invalid")
 	}
-	return backupDueOutcomePrefix + environmentID + "/" + orderedRevision + "/" + orderedSchedule, nil
+	return BackupDueOutcomePrefix + environmentID + "/" + orderedRevision + "/" + orderedSchedule, nil
 }
 
-func backupDueRetentionIndexKey(
+func BackupDueRetentionIndexKey(
 	retainUntil time.Time,
 	environmentID string,
 	policyRevision int64,
@@ -82,7 +82,7 @@ func backupDueRetentionIndexKey(
 		"/" + orderedSchedule, nil
 }
 
-func backupSourceTargetExclusionKey(kind BackupSourceTargetKind, stableID string) (string, error) {
+func BackupSourceTargetExclusionKey(kind BackupSourceTargetKind, stableID string) (string, error) {
 	if validateBackupSourceTargetIdentity(kind, stableID) != nil {
 		return "", errs.New(
 			errs.KindValidationFailed,
@@ -92,11 +92,11 @@ func backupSourceTargetExclusionKey(kind BackupSourceTargetKind, stableID string
 	return backupSourceTargetExclusionPrefix + string(kind) + "/" + stableID, nil
 }
 
-func backupRunKey(taskID string) string {
+func BackupRunKey(taskID string) string {
 	return backupRunPrefix + taskID
 }
 
-func backupRunEnvironmentIndexKey(environmentID string, taskID string) (string, error) {
+func BackupRunEnvironmentIndexKey(environmentID string, taskID string) (string, error) {
 	if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
 		recordcodec.ValidateID(ids.KindTask, taskID) != nil {
 		return "", errs.New(
@@ -104,14 +104,14 @@ func backupRunEnvironmentIndexKey(environmentID string, taskID string) (string, 
 			"backup run environment index key is invalid",
 		)
 	}
-	return backupRunEnvironmentPrefix + environmentID + "/" + taskID, nil
+	return BackupRunEnvironmentPrefix + environmentID + "/" + taskID, nil
 }
 
-func backupRecoveryPointKey(recoveryPointID string) string {
+func BackupRecoveryPointKey(recoveryPointID string) string {
 	return backupRecoveryPointPrefix + recoveryPointID
 }
 
-func backupRecoveryPointEnvironmentIndexKey(
+func BackupRecoveryPointEnvironmentIndexKey(
 	environmentID string,
 	recoveryPointID string,
 ) (string, error) {
@@ -125,15 +125,15 @@ func backupRecoveryPointEnvironmentIndexKey(
 	if err != nil {
 		return "", err
 	}
-	return backupRecoveryPointEnvironmentPrefix + environmentID + "/" + inverted, nil
+	return BackupRecoveryPointEnvironmentPrefix + environmentID + "/" + inverted, nil
 }
 
-func backupRecoveryPointIDFromEnvironmentIndexKey(environmentID string, key string) (string, error) {
-	prefix := backupRecoveryPointEnvironmentPrefix + environmentID + "/"
+func BackupRecoveryPointIDFromEnvironmentIndexKey(environmentID string, key string) (string, error) {
+	prefix := BackupRecoveryPointEnvironmentPrefix + environmentID + "/"
 	if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil || !strings.HasPrefix(key, prefix) {
 		return "", errs.New(errs.KindInternal, "backup recovery point continuation key is invalid")
 	}
-	body, ok := invertBackupRecoveryPointULIDBody(strings.TrimPrefix(key, prefix))
+	body, ok := InvertBackupRecoveryPointULIDBody(strings.TrimPrefix(key, prefix))
 	if !ok {
 		return "", errs.New(errs.KindInternal, "backup recovery point continuation key is invalid")
 	}
@@ -144,7 +144,7 @@ func backupRecoveryPointIDFromEnvironmentIndexKey(environmentID string, key stri
 	return pointID, nil
 }
 
-func backupRecoveryPointSourceIndexKey(sourceID string, recoveryPointID string) (string, error) {
+func BackupRecoveryPointSourceIndexKey(sourceID string, recoveryPointID string) (string, error) {
 	if recordcodec.ValidateID(ids.KindBackupSource, sourceID) != nil {
 		return "", errs.New(
 			errs.KindValidationFailed,
@@ -155,10 +155,10 @@ func backupRecoveryPointSourceIndexKey(sourceID string, recoveryPointID string) 
 	if err != nil {
 		return "", err
 	}
-	return backupRecoveryPointSourcePrefix + sourceID + "/" + inverted, nil
+	return BackupRecoveryPointSourcePrefix + sourceID + "/" + inverted, nil
 }
 
-func backupRecoveryPointConnectorIndexKey(
+func BackupRecoveryPointConnectorIndexKey(
 	connectorID string,
 	recoveryPointID string,
 ) (string, error) {
@@ -169,14 +169,14 @@ func backupRecoveryPointConnectorIndexKey(
 			"backup recovery point connector index key is invalid",
 		)
 	}
-	return backupRecoveryPointConnectorPrefix + connectorID + "/" + recoveryPointID, nil
+	return BackupRecoveryPointConnectorPrefix + connectorID + "/" + recoveryPointID, nil
 }
 
-func backupOrphanKey(recoveryPointID string) string {
+func BackupOrphanKey(recoveryPointID string) string {
 	return backupOrphanPrefix + recoveryPointID
 }
 
-func backupOrphanConnectorIndexKey(connectorID string, recoveryPointID string) (string, error) {
+func BackupOrphanConnectorIndexKey(connectorID string, recoveryPointID string) (string, error) {
 	if recordcodec.ValidateID(ids.KindConnector, connectorID) != nil ||
 		recordcodec.ValidateID(ids.KindRecoveryPoint, recoveryPointID) != nil {
 		return "", errs.New(
@@ -184,10 +184,10 @@ func backupOrphanConnectorIndexKey(connectorID string, recoveryPointID string) (
 			"backup orphan connector index key is invalid",
 		)
 	}
-	return backupOrphanConnectorPrefix + connectorID + "/" + recoveryPointID, nil
+	return BackupOrphanConnectorPrefix + connectorID + "/" + recoveryPointID, nil
 }
 
-func backupOrphanEnvironmentIndexKey(
+func BackupOrphanEnvironmentIndexKey(
 	environmentID string,
 	recoveryPointID string,
 ) (string, error) {
@@ -201,18 +201,18 @@ func backupOrphanEnvironmentIndexKey(
 	if err != nil {
 		return "", err
 	}
-	return backupOrphanEnvironmentPrefix + environmentID + "/" + inverted, nil
+	return BackupOrphanEnvironmentPrefix + environmentID + "/" + inverted, nil
 }
 
-func backupRetentionKey(sourceID string, triggerRecoveryPointID string) string {
-	return backupRetentionPrefix + sourceID + "/" + triggerRecoveryPointID
+func BackupRetentionKey(sourceID string, triggerRecoveryPointID string) string {
+	return BackupRetentionPrefix + sourceID + "/" + triggerRecoveryPointID
 }
 
-func backupRecoveryPointPruneKey(recoveryPointID string) string {
+func BackupRecoveryPointPruneKey(recoveryPointID string) string {
 	return backupRecoveryPointPrunePrefix + recoveryPointID
 }
 
-func backupRecoveryPointPruneDispatchKey(taskID string) string {
+func BackupRecoveryPointPruneDispatchKey(taskID string) string {
 	return backupRecoveryPointPruneDispatchPrefix + taskID
 }
 
@@ -228,18 +228,18 @@ func backupRestoreEnvironmentIndexKey(environmentID string, taskID string) (stri
 			"backup restore environment index key is invalid",
 		)
 	}
-	return backupRestoreEnvironmentPrefix + environmentID + "/" + taskID, nil
+	return BackupRestoreEnvironmentPrefix + environmentID + "/" + taskID, nil
 }
 
 func backupRestoreServiceKey(taskID string, ordinal uint32) string {
 	return backupRestoreServicePrefix + taskID + "/" + backupRuntimeOrderedUint32(ordinal)
 }
 
-func backupKeyRotationKey(taskID string) string {
+func BackupKeyRotationKey(taskID string) string {
 	return backupKeyRotationPrefix + taskID
 }
 
-func backupKeyRotationEnvironmentIndexKey(environmentID string, taskID string) (string, error) {
+func BackupKeyRotationEnvironmentIndexKey(environmentID string, taskID string) (string, error) {
 	if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
 		recordcodec.ValidateID(ids.KindTask, taskID) != nil {
 		return "", errs.New(
@@ -247,7 +247,7 @@ func backupKeyRotationEnvironmentIndexKey(environmentID string, taskID string) (
 			"backup key rotation environment index key is invalid",
 		)
 	}
-	return backupKeyRotationEnvironmentPrefix + environmentID + "/" + taskID, nil
+	return BackupKeyRotationEnvironmentPrefix + environmentID + "/" + taskID, nil
 }
 
 func backupRuntimeOrderedPositiveInt64(value int64) (string, error) {
@@ -258,7 +258,7 @@ func backupRuntimeOrderedPositiveInt64(value int64) (string, error) {
 }
 
 func backupRuntimeOrderedInstant(value time.Time) (string, error) {
-	if !validBackupRuntimeInstant(value) {
+	if !ValidBackupRuntimeInstant(value) {
 		return "", errs.New(errs.KindValidationFailed, "backup ordered timestamp is invalid")
 	}
 	return backupRuntimeOrderedPositiveInt64(value.UnixNano())
@@ -273,7 +273,7 @@ func invertedBackupRecoveryPointID(recoveryPointID string) (string, error) {
 		return "", err
 	}
 	body := strings.TrimPrefix(recoveryPointID, string(ids.KindRecoveryPoint)+"_")
-	inverted, ok := invertBackupRecoveryPointULIDBody(body)
+	inverted, ok := InvertBackupRecoveryPointULIDBody(body)
 	if !ok {
 		return "", errs.New(
 			errs.KindValidationFailed,
@@ -283,7 +283,7 @@ func invertedBackupRecoveryPointID(recoveryPointID string) (string, error) {
 	return inverted, nil
 }
 
-func invertBackupRecoveryPointULIDBody(body string) (string, bool) {
+func InvertBackupRecoveryPointULIDBody(body string) (string, bool) {
 	if len(body) != 26 {
 		return "", false
 	}

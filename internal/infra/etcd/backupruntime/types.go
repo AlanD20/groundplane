@@ -1,9 +1,9 @@
-package etcd
+package backupruntime
 
 const (
 	maximumBackupRuntimeRecordBytes  = 256 * 1024
 	maximumBackupObjectKeyBytes      = 1024
-	maximumBackupPruneDispatchPoints = 11
+	MaximumBackupPruneDispatchPoints = 11
 )
 
 type BackupRuntimeSourceKind string

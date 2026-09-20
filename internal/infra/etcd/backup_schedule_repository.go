@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
@@ -68,7 +69,7 @@ func (repository *BackupRuntimeRepository) ListBackupScheduleCandidates(
 			clear(value.Value)
 			if ids.Validate(ids.KindEnvironment, environmentID) != nil || decodeErr != nil ||
 				policy.EnvironmentID != environmentID {
-				candidate.Err = corruptBackupRuntimeRecord()
+				candidate.Err = backupruntime.CorruptBackupRuntimeRecord()
 				candidates = append(candidates, candidate)
 				continue
 			}
@@ -99,7 +100,7 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 		return BackupScheduleEvaluation{}, err
 	}
 	now = now.UTC()
-	if !validBackupRuntimeInstant(now) {
+	if !backupruntime.ValidBackupRuntimeInstant(now) {
 		return BackupScheduleEvaluation{}, errs.New(errs.KindValidationFailed, "backup schedule clock is invalid")
 	}
 	keys := []string{
@@ -202,12 +203,12 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 		environmentCoordinationKey(evaluation.EnvironmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(evaluation.EnvironmentID),
 	}
-	dueKey, err := backupDueOutcomeKey(evaluation.EnvironmentID, evaluation.PolicyRevision, evaluation.ScheduledAt)
+	dueKey, err := backupruntime.BackupDueOutcomeKey(evaluation.EnvironmentID, evaluation.PolicyRevision, evaluation.ScheduledAt)
 	if err != nil {
 		return err
 	}
 	retention := now.UTC().Add(backupDueRetention)
-	retentionKey, err := backupDueRetentionIndexKey(
+	retentionKey, err := backupruntime.BackupDueRetentionIndexKey(
 		retention,
 		evaluation.EnvironmentID,
 		evaluation.PolicyRevision,
@@ -248,9 +249,9 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 		return err
 	}
 	defer clear(coordValue)
-	dueValue, err := encodeBackupDueOutcomeRecord(BackupDueOutcomeRecord{
+	dueValue, err := backupruntime.EncodeBackupDueOutcomeRecord(backupruntime.BackupDueOutcomeRecord{
 		EnvironmentID: evaluation.EnvironmentID, PolicyRevision: evaluation.PolicyRevision,
-		ScheduledAt: evaluation.ScheduledAt.UTC(), Outcome: BackupDueSkippedOverlap,
+		ScheduledAt: evaluation.ScheduledAt.UTC(), Outcome: backupruntime.BackupDueSkippedOverlap,
 		CreatedAt: now.UTC(), RetainUntil: retention,
 	})
 	if err != nil {
@@ -282,18 +283,18 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 }
 
 func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
-	ctx context.Context, record BackupRunRecord, fixedRevision int64,
+	ctx context.Context, record backupruntime.BackupRunRecord, fixedRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
-	if record.ScheduledAt == nil || record.Initiator != BackupRunInitiatorSchedule {
+	if record.ScheduledAt == nil || record.Initiator != backupruntime.BackupRunInitiatorSchedule {
 		return nil, nil, errs.New(errs.KindValidationFailed, "scheduled backup publication metadata is missing")
 	}
 	keys := []string{backuppolicy.BackupPolicyKey(record.EnvironmentID), environmentCoordinationKey(record.EnvironmentID)}
-	dueKey, err := backupDueOutcomeKey(record.EnvironmentID, record.PolicyRevision, *record.ScheduledAt)
+	dueKey, err := backupruntime.BackupDueOutcomeKey(record.EnvironmentID, record.PolicyRevision, *record.ScheduledAt)
 	if err != nil {
 		return nil, nil, err
 	}
 	retention := record.CreatedAt.UTC().Add(backupDueRetention)
-	retentionKey, err := backupDueRetentionIndexKey(
+	retentionKey, err := backupruntime.BackupDueRetentionIndexKey(
 		retention,
 		record.EnvironmentID,
 		record.PolicyRevision,
@@ -341,9 +342,9 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 	if err != nil {
 		return nil, nil, err
 	}
-	dueValue, err := encodeBackupDueOutcomeRecord(BackupDueOutcomeRecord{
+	dueValue, err := backupruntime.EncodeBackupDueOutcomeRecord(backupruntime.BackupDueOutcomeRecord{
 		EnvironmentID: record.EnvironmentID, PolicyRevision: record.PolicyRevision,
-		ScheduledAt: record.ScheduledAt.UTC(), Outcome: BackupDueDispatched,
+		ScheduledAt: record.ScheduledAt.UTC(), Outcome: backupruntime.BackupDueDispatched,
 		TaskID: record.TaskID, CreatedAt: record.CreatedAt.UTC(), RetainUntil: retention,
 	})
 	if err != nil {
@@ -362,17 +363,17 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 }
 
 func (repository *BackupRuntimeRepository) exactScheduledBackupRunSubordinates(
-	ctx context.Context, run BackupRunRecord, readRevision, commitRevision int64,
+	ctx context.Context, run backupruntime.BackupRunRecord, readRevision, commitRevision int64,
 ) bool {
 	if run.ScheduledAt == nil {
 		return false
 	}
-	dueKey, err := backupDueOutcomeKey(run.EnvironmentID, run.PolicyRevision, *run.ScheduledAt)
+	dueKey, err := backupruntime.BackupDueOutcomeKey(run.EnvironmentID, run.PolicyRevision, *run.ScheduledAt)
 	if err != nil {
 		return false
 	}
 	retainUntil := run.CreatedAt.UTC().Add(backupDueRetention)
-	retentionKey, err := backupDueRetentionIndexKey(
+	retentionKey, err := backupruntime.BackupDueRetentionIndexKey(
 		retainUntil,
 		run.EnvironmentID,
 		run.PolicyRevision,
@@ -398,9 +399,9 @@ func (repository *BackupRuntimeRepository) exactScheduledBackupRunSubordinates(
 		!coord.CurrentBackupScheduleState.LastEvaluatedAt.Equal(run.CreatedAt) {
 		return false
 	}
-	due, err := decodeBackupDueOutcomeRecord(read.Values[1].Value)
+	due, err := backupruntime.DecodeBackupDueOutcomeRecord(read.Values[1].Value)
 	if err != nil || due.EnvironmentID != run.EnvironmentID || due.PolicyRevision != run.PolicyRevision ||
-		!due.ScheduledAt.Equal(*run.ScheduledAt) || due.Outcome != BackupDueDispatched || due.TaskID != run.TaskID ||
+		!due.ScheduledAt.Equal(*run.ScheduledAt) || due.Outcome != backupruntime.BackupDueDispatched || due.TaskID != run.TaskID ||
 		!due.CreatedAt.Equal(run.CreatedAt) || !due.RetainUntil.Equal(retainUntil) {
 		return false
 	}

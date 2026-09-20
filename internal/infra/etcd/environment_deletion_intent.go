@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -202,7 +203,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	}
 	retentionKey := taskRetentionIndexKey(source.ID, *source.RetainUntil)
 	owner := environmentMutationFenceOwner{
-		Kind: BackupOperationDeletion, OperationID: source.OperationID, TaskID: source.ID,
+		Kind: backupruntime.BackupOperationDeletion, OperationID: source.OperationID, TaskID: source.ID,
 	}
 	fence, err := loadOwnedEnvironmentMutationFence(
 		ctx,
@@ -277,7 +278,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	if err != nil {
 		return environmentTaskChange{}, err
 	}
-	lockValue, err := encodeBackupOperationLockRecord(lock)
+	lockValue, err := backupruntime.EncodeBackupOperationLockRecord(lock)
 	if err != nil {
 		clear(tombstoneValue)
 		return environmentTaskChange{}, err
@@ -450,13 +451,13 @@ func environmentDeletionBackupAuthorityPresent(
 	prefixes := []string{
 		backuppolicy.BackupSourceEnvironmentPrefix(environmentID),
 		connectorEnvironmentPrefix(environmentID),
-		backupScheduleCursorPrefix + environmentID + "/",
-		backupDueOutcomePrefix + environmentID + "/",
-		backupRecoveryPointEnvironmentPrefix + environmentID + "/",
-		backupRunEnvironmentPrefix + environmentID + "/",
-		backupOrphanEnvironmentPrefix + environmentID + "/",
-		backupRestoreEnvironmentPrefix + environmentID + "/",
-		backupKeyRotationEnvironmentPrefix + environmentID + "/",
+		backupruntime.BackupScheduleCursorPrefix + environmentID + "/",
+		backupruntime.BackupDueOutcomePrefix + environmentID + "/",
+		backupruntime.BackupRecoveryPointEnvironmentPrefix + environmentID + "/",
+		backupruntime.BackupRunEnvironmentPrefix + environmentID + "/",
+		backupruntime.BackupOrphanEnvironmentPrefix + environmentID + "/",
+		backupruntime.BackupRestoreEnvironmentPrefix + environmentID + "/",
+		backupruntime.BackupKeyRotationEnvironmentPrefix + environmentID + "/",
 		environmentDeletionWorkOperationPrefix(operationID),
 	}
 	for _, prefix := range prefixes {
@@ -542,7 +543,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		)
 	}
 	owner := environmentMutationFenceOwner{
-		Kind: BackupOperationDeletion, OperationID: task.OperationID, TaskID: task.ID,
+		Kind: backupruntime.BackupOperationDeletion, OperationID: task.OperationID, TaskID: task.ID,
 	}
 	fence, err := loadOwnedEnvironmentMutationFence(
 		ctx, repository.store, task.Target, state.ReadRevision, owner,
@@ -631,7 +632,7 @@ func environmentDeletionTaskPruneFence(
 		return false, "", corruptTaskPruneIntent()
 	}
 	lock, err := decodeEnvironmentOperationLock(values[1], task.Target)
-	if err != nil || lock.Kind != BackupOperationDeletion || lock.EnvironmentID != task.Target ||
+	if err != nil || lock.Kind != backupruntime.BackupOperationDeletion || lock.EnvironmentID != task.Target ||
 		lock.OperationID != task.OperationID {
 		return false, "", corruptTaskPruneIntent()
 	}

@@ -142,7 +142,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		return BackupPolicyProjection{EnvironmentID: environmentID, Sources: []BackupPolicySourceProjection{}}, nil
 	}
 	if policy.Frequency != "" {
-		if err := validateBackupPolicyFrequency(policy.Frequency); err != nil {
+		if err := backuppolicy.ValidateFrequency(policy.Frequency); err != nil {
 			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
 	}

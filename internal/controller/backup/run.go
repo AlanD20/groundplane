@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -54,7 +55,7 @@ func (service *BackupRunService) RunBackup(
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.runBackup(
 		ctx, environmentID, idempotencyKey, backupRunRoute,
-		etcd.BackupRunInitiatorOperator, nil, time.Time{}, fixedRevision...,
+		backupruntime.BackupRunInitiatorOperator, nil, time.Time{}, fixedRevision...,
 	)
 }
 
@@ -77,7 +78,7 @@ func (service *BackupRunService) RunScheduledBackup(
 	)
 	return service.runBackup(
 		ctx, environmentID, key, scheduledBackupRunRoute,
-		etcd.BackupRunInitiatorSchedule, &scheduledAt, evaluatedAt, fixedRevision...,
+		backupruntime.BackupRunInitiatorSchedule, &scheduledAt, evaluatedAt, fixedRevision...,
 	)
 }
 
@@ -140,7 +141,7 @@ func (service *BackupRunService) RetryBackupTask(
 func (service *BackupRunService) runBackup(
 	ctx context.Context,
 	environmentID, idempotencyKey, route string,
-	initiator etcd.BackupRunInitiator, scheduledAt *time.Time,
+	initiator backupruntime.BackupRunInitiator, scheduledAt *time.Time,
 	createdAtOverride time.Time, fixedRevision ...int64,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.repository == nil || service.plans == nil ||
@@ -225,7 +226,7 @@ func (service *BackupRunService) runBackup(
 		CreatedAt:         createdAt,
 		UpdatedAt:         createdAt,
 	}
-	if initiator == etcd.BackupRunInitiatorSchedule {
+	if initiator == backupruntime.BackupRunInitiatorSchedule {
 		task.Actor = etcd.TaskActorSystem
 	}
 	sealed, err := service.plans.BuildBackupRunPlan(BackupRunPlanInput{

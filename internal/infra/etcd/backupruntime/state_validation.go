@@ -1,4 +1,4 @@
-package etcd
+package backupruntime
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func validBackupFailureCodeForAttempt(
+func ValidBackupFailureCodeForAttempt(
 	state BackupSourceAttemptState,
 	phase BackupSourceAttemptPhase,
 	code BackupFailureCode,
@@ -52,7 +52,7 @@ func validBackupArtifact(value BackupArtifactEvidence) bool {
 	return value.SizeBytes > 0 && recordcodec.ValidSHA256(value.SHA256)
 }
 
-func validBackupRuntimeInstant(value time.Time) bool {
+func ValidBackupRuntimeInstant(value time.Time) bool {
 	if value.IsZero() || value.Location() != time.UTC {
 		return false
 	}
@@ -61,7 +61,7 @@ func validBackupRuntimeInstant(value time.Time) bool {
 }
 
 func validBackupRuntimeLifecycle(createdAt time.Time, updatedAt time.Time) bool {
-	return validBackupRuntimeInstant(createdAt) && validBackupRuntimeInstant(updatedAt) &&
+	return ValidBackupRuntimeInstant(createdAt) && ValidBackupRuntimeInstant(updatedAt) &&
 		!updatedAt.Before(createdAt)
 }
 
@@ -98,7 +98,7 @@ func validBackupRunState(state BackupRunState) bool {
 	}
 }
 
-func validBackupSourceAttemptState(state BackupSourceAttemptState) bool {
+func ValidBackupSourceAttemptState(state BackupSourceAttemptState) bool {
 	switch state {
 	case BackupSourceAttemptPending, BackupSourceAttemptCapturing, BackupSourceAttemptReady,
 		BackupSourceAttemptStaged, BackupSourceAttemptPointCommitted, BackupSourceAttemptCleanupPending,
@@ -110,7 +110,7 @@ func validBackupSourceAttemptState(state BackupSourceAttemptState) bool {
 	}
 }
 
-func validBackupSourceAttemptPhase(phase BackupSourceAttemptPhase) bool {
+func ValidBackupSourceAttemptPhase(phase BackupSourceAttemptPhase) bool {
 	switch phase {
 	case BackupSourcePhaseCapture, BackupSourcePhaseStaging, BackupSourcePhaseUpload,
 		BackupSourcePhaseHeadVerification, BackupSourcePhasePointCommit,
@@ -141,13 +141,13 @@ func validBackupPhaseForAttemptState(
 	case BackupSourceAttemptCleanupPending, BackupSourceAttemptSucceeded:
 		return phase == BackupSourcePhaseCleanup
 	case BackupSourceAttemptFailed:
-		return validBackupSourceAttemptPhase(phase)
+		return ValidBackupSourceAttemptPhase(phase)
 	default:
 		return false
 	}
 }
 
-func sourceAttemptRequiresArtifact(
+func SourceAttemptRequiresArtifact(
 	state BackupSourceAttemptState,
 	phase BackupSourceAttemptPhase,
 ) bool {
@@ -171,7 +171,7 @@ func sourceAttemptForbidsArtifact(state BackupSourceAttemptState) bool {
 		state == BackupSourceAttemptReady || state == BackupSourceAttemptUnstarted
 }
 
-func activeBackupSourceAttemptState(state BackupSourceAttemptState) bool {
+func ActiveBackupSourceAttemptState(state BackupSourceAttemptState) bool {
 	switch state {
 	case BackupSourceAttemptPending, BackupSourceAttemptCapturing, BackupSourceAttemptReady,
 		BackupSourceAttemptStaged, BackupSourceAttemptPointCommitted, BackupSourceAttemptCleanupPending,

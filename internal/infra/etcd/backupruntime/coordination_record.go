@@ -1,7 +1,8 @@
-package etcd
+package backupruntime
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 )
@@ -56,13 +57,13 @@ func validateBackupScheduleCursorRecord(record BackupScheduleCursorRecord) error
 	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
-	if record.PolicyRevision <= 0 || validateBackupPolicyFrequency(record.Frequency) != nil ||
-		!validBackupRuntimeInstant(
+	if record.PolicyRevision <= 0 || backuppolicy.ValidateFrequency(record.Frequency) != nil ||
+		!ValidBackupRuntimeInstant(
 			record.EnabledAt,
-		) || !validBackupRuntimeInstant(record.LastEvaluatedAt) ||
-		!validBackupRuntimeInstant(
+		) || !ValidBackupRuntimeInstant(record.LastEvaluatedAt) ||
+		!ValidBackupRuntimeInstant(
 			record.NextDueAt,
-		) || !validBackupRuntimeInstant(record.UpdatedAt) ||
+		) || !ValidBackupRuntimeInstant(record.UpdatedAt) ||
 		record.LastEvaluatedAt.Before(
 			record.EnabledAt,
 		) || !record.NextDueAt.After(record.LastEvaluatedAt) ||
@@ -72,7 +73,7 @@ func validateBackupScheduleCursorRecord(record BackupScheduleCursorRecord) error
 	return nil
 }
 
-func validateEnvironmentMutationEpochRecord(record EnvironmentMutationEpochRecord) error {
+func ValidateEnvironmentMutationEpochRecord(record EnvironmentMutationEpochRecord) error {
 	if recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil {
 		return invalidBackupRuntimeRecord("environment mutation epoch is invalid")
 	}
@@ -83,10 +84,10 @@ func validateBackupDueOutcomeRecord(record BackupDueOutcomeRecord) error {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
-	if record.PolicyRevision <= 0 || !validBackupRuntimeInstant(record.ScheduledAt) ||
-		!validBackupRuntimeInstant(
+	if record.PolicyRevision <= 0 || !ValidBackupRuntimeInstant(record.ScheduledAt) ||
+		!ValidBackupRuntimeInstant(
 			record.CreatedAt,
-		) || !validBackupRuntimeInstant(record.RetainUntil) ||
+		) || !ValidBackupRuntimeInstant(record.RetainUntil) ||
 		record.ScheduledAt.After(record.CreatedAt) || !record.RetainUntil.After(record.CreatedAt) {
 		return invalidBackupRuntimeRecord("backup due outcome lifecycle is invalid")
 	}

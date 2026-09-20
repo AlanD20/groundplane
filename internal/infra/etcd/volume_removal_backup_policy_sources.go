@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
@@ -22,16 +23,16 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 			return err
 		}
 		if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-			return corruptBackupRuntimeRecord()
+			return backupruntime.CorruptBackupRuntimeRecord()
 		}
 		defer clearKeyValues(read.Values)
 		for index, value := range read.Values {
 			if value == nil {
-				return corruptBackupRuntimeRecord()
+				return backupruntime.CorruptBackupRuntimeRecord()
 			}
 			source, err := backuppolicy.DecodeBackupSourceRecord(value.Value)
 			if err != nil || source.ID != policy.SourceIDs[index] || source.EnvironmentID != state.environmentID {
-				return corruptBackupRuntimeRecord()
+				return backupruntime.CorruptBackupRuntimeRecord()
 			}
 			state.sources = append(state.sources, source)
 			state.conditions = append(state.conditions, etcdstore.Condition{Key: keys[index], ModRevision: value.ModRevision})
@@ -60,18 +61,18 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 		return err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	defer clearKeyValues(read.Values)
 	for index, value := range read.Values {
 		condition := etcdstore.Condition{Key: keys[index]}
 		if values[index] == "" {
 			if value != nil {
-				return corruptBackupRuntimeRecord()
+				return backupruntime.CorruptBackupRuntimeRecord()
 			}
 		} else {
 			if value == nil || string(value.Value) != values[index] {
-				return corruptBackupRuntimeRecord()
+				return backupruntime.CorruptBackupRuntimeRecord()
 			}
 			condition.ModRevision = value.ModRevision
 		}

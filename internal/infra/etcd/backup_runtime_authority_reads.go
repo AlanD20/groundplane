@@ -2,47 +2,48 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func (repository *BackupRuntimeRepository) GetBackupSourceTargetExclusion(
 	ctx context.Context,
-	kind BackupSourceTargetKind,
+	kind backupruntime.BackupSourceTargetKind,
 	targetID string,
-) (etcdstore.Versioned[BackupSourceTargetExclusionRecord], bool, error) {
-	key, err := backupSourceTargetExclusionKey(kind, targetID)
+) (etcdstore.Versioned[backupruntime.BackupSourceTargetExclusionRecord], bool, error) {
+	key, err := backupruntime.BackupSourceTargetExclusionKey(kind, targetID)
 	if err != nil {
-		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, err
+		return etcdstore.Versioned[backupruntime.BackupSourceTargetExclusionRecord]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, key)
 	if err != nil {
-		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, err
+		return etcdstore.Versioned[backupruntime.BackupSourceTargetExclusionRecord]{}, false, err
 	}
 	if result == nil {
-		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, errs.New(
+		return etcdstore.Versioned[backupruntime.BackupSourceTargetExclusionRecord]{}, false, errs.New(
 			errs.KindInternal,
 			"backup source-target exclusion read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{
+		return etcdstore.Versioned[backupruntime.BackupSourceTargetExclusionRecord]{
 			ReadRevision: result.ReadRevision,
 		}, false, nil
 	}
 	defer clear(result.Entry.Value)
-	record, err := decodeBackupSourceTargetExclusionRecord(result.Entry.Value)
+	record, err := backupruntime.DecodeBackupSourceTargetExclusionRecord(result.Entry.Value)
 	if err != nil || record.TargetKind != kind || record.TargetID != targetID {
-		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[backupruntime.BackupSourceTargetExclusionRecord]{}, false, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{
+	return etcdstore.Versioned[backupruntime.BackupSourceTargetExclusionRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }
 
 func (repository *BackupRuntimeRepository) loadOwnedEvidence(
 	ctx context.Context,
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	revision int64,
 ) (backupRuntimeOwnedEvidence, error) {
 	fence, err := loadOwnedEnvironmentMutationFence(
@@ -51,7 +52,7 @@ func (repository *BackupRuntimeRepository) loadOwnedEvidence(
 		run.EnvironmentID,
 		revision,
 		environmentMutationFenceOwner{
-			Kind: BackupOperationBackup, OperationID: run.OperationID, TaskID: run.TaskID,
+			Kind: backupruntime.BackupOperationBackup, OperationID: run.OperationID, TaskID: run.TaskID,
 		},
 	)
 	if err != nil {
@@ -115,10 +116,10 @@ func (repository *BackupRuntimeRepository) readFixedKeys(
 
 func (repository *BackupRuntimeRepository) loadManualBackupPolicyFence(
 	ctx context.Context,
-	record BackupRunRecord,
+	record backupruntime.BackupRunRecord,
 	fixedRevision int64,
 ) ([]etcdstore.Condition, error) {
-	if record.Initiator != BackupRunInitiatorOperator {
+	if record.Initiator != backupruntime.BackupRunInitiatorOperator {
 		return nil, nil
 	}
 	key := environmentCoordinationKey(record.EnvironmentID)

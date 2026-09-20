@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"encoding/hex"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"time"
@@ -14,13 +15,13 @@ import (
 )
 
 type BackupCheckpointRepository interface {
-	GetBackupRun(context.Context, string) (etcdstore.Versioned[etcd.BackupRunRecord], error)
+	GetBackupRun(context.Context, string) (etcdstore.Versioned[backupruntime.BackupRunRecord], error)
 	CheckpointBackupRun(
 		context.Context,
 		etcd.BackupCheckpointInput,
-		etcdstore.Versioned[etcd.BackupRunRecord],
-		etcd.BackupRunRecord,
-	) (etcdstore.Versioned[etcd.BackupRunRecord], error)
+		etcdstore.Versioned[backupruntime.BackupRunRecord],
+		backupruntime.BackupRunRecord,
+	) (etcdstore.Versioned[backupruntime.BackupRunRecord], error)
 }
 
 type BackupCheckpointService struct {
@@ -58,7 +59,7 @@ func (service *BackupCheckpointService) CheckpointBackup(
 		return nil, err
 	}
 	next := current.Record
-	next.Sources = append([]etcd.BackupRunSourceAttemptRecord(nil), current.Record.Sources...)
+	next.Sources = append([]backupruntime.BackupRunSourceAttemptRecord(nil), current.Record.Sources...)
 	ordinal := -1
 	for index := range next.Sources {
 		if next.Sources[index].RecoveryPointID == payload.PointID {
@@ -127,7 +128,7 @@ func backupCheckpointPayload(request *agentpb.BackupCheckpointRequest) (etcd.Bac
 }
 
 func applyBackupCheckpointTransition(
-	source *etcd.BackupRunSourceAttemptRecord,
+	source *backupruntime.BackupRunSourceAttemptRecord,
 	payload etcd.BackupCheckpointPayload,
 ) error {
 	if source == nil {
@@ -138,16 +139,16 @@ func applyBackupCheckpointTransition(
 		if payload.StoredSizeBytes > math.MaxInt64 {
 			return errs.New(errs.KindValidationFailed, "Backup artifact size exceeds the durable range")
 		}
-		source.State = etcd.BackupSourceAttemptStaged
-		source.Phase = etcd.BackupSourcePhaseUpload
+		source.State = backupruntime.BackupSourceAttemptStaged
+		source.Phase = backupruntime.BackupSourcePhaseUpload
 		source.SizeBytes = int64(payload.StoredSizeBytes)
 		source.SHA256 = payload.StoredSHA256
 	case etcd.BackupCheckpointUploadCompleted:
-		source.Phase = etcd.BackupSourcePhaseHeadVerification
+		source.Phase = backupruntime.BackupSourcePhaseHeadVerification
 	case etcd.BackupCheckpointUploadVerified:
-		source.Phase = etcd.BackupSourcePhasePointCommit
+		source.Phase = backupruntime.BackupSourcePhasePointCommit
 	case etcd.BackupCheckpointSourceCleanupCompleted:
-		source.State = etcd.BackupSourceAttemptSucceeded
+		source.State = backupruntime.BackupSourceAttemptSucceeded
 	default:
 		return errs.New(errs.KindNotImplemented, "Backup checkpoint transition is not implemented")
 	}

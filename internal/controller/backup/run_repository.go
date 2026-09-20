@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -21,7 +22,7 @@ type BackupRunPrepareInput struct {
 	StepIDs       []string
 	FixedRevision int64
 	CreatedAt     time.Time
-	Initiator     etcd.BackupRunInitiator
+	Initiator     backupruntime.BackupRunInitiator
 	ScheduledAt   *time.Time
 }
 
@@ -29,7 +30,7 @@ type BackupRunPrepareInput struct {
 // revision evidence has been validated. Publication remains opaque and
 // one-shot.
 type BackupRunPrepared struct {
-	Run         etcd.BackupRunRecord
+	Run         backupruntime.BackupRunRecord
 	Owner       etcd.TaskOwner
 	Publication backupRunPublication
 }
@@ -42,7 +43,7 @@ type BackupRunRetryPrepareInput struct {
 
 type BackupRunRetryPrepared struct {
 	SourceTask  etcd.TaskRecord
-	Run         etcd.BackupRunRecord
+	Run         backupruntime.BackupRunRecord
 	Owner       etcd.TaskOwner
 	Publication backupRunPublication
 }

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +16,7 @@ import (
 type backupRunPublicationPlan struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
-	record     BackupRunRecord
+	record     backupruntime.BackupRunRecord
 	replay     func(context.Context, idempotencyrecord.IdempotencyMarker, int64, int64) error
 }
 

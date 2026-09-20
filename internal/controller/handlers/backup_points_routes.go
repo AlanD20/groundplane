@@ -2,18 +2,18 @@ package handlers
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type RecoveryPointReader interface {
-	ListRecoveryPoints(context.Context, string, string) (etcdstore.Page[etcd.BackupRecoveryPointRecord], error)
+	ListRecoveryPoints(context.Context, string, string) (etcdstore.Page[backupruntime.BackupRecoveryPointRecord], error)
 }
 
 type recoveryPointListInput struct {
@@ -76,7 +76,7 @@ func (s *Server) listRecoveryPoints(
 	return &recoveryPointPageOutput{Body: response}, nil
 }
 
-func recoveryPointResponse(record etcd.BackupRecoveryPointRecord) apiTypes.RecoveryPoint {
+func recoveryPointResponse(record backupruntime.BackupRecoveryPointRecord) apiTypes.RecoveryPoint {
 	return apiTypes.RecoveryPoint{
 		ID:         record.ID,
 		SourceID:   record.SourceID,
@@ -84,7 +84,7 @@ func recoveryPointResponse(record etcd.BackupRecoveryPointRecord) apiTypes.Recov
 		TargetID:   record.TargetID,
 		CreatedAt:  record.CreatedAt.UTC().Format(time.RFC3339),
 		SizeBytes:  record.SizeBytes,
-		Encrypted:  record.Encryption == etcd.BackupRuntimeEncryptionAge,
+		Encrypted:  record.Encryption == backupruntime.BackupRuntimeEncryptionAge,
 		KeyEra:     record.KeyEra,
 		Status:     apiTypes.RecoveryPointVerified,
 	}

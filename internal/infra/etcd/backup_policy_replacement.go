@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -46,7 +47,7 @@ type backupPolicyConnectorReferenceEvidence struct {
 type backupPolicyReplacementCandidate struct {
 	Environment         etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	Project             etcdstore.Versioned[hierarchyrecord.ProjectRecord]
-	MutationEpoch       etcdstore.Versioned[EnvironmentMutationEpochRecord]
+	MutationEpoch       etcdstore.Versioned[backupruntime.EnvironmentMutationEpochRecord]
 	Coordination        etcdstore.Versioned[EnvironmentCoordinationRecord]
 	NextCoordination    EnvironmentCoordinationRecord
 	NextRunAt           time.Time
@@ -194,7 +195,7 @@ func validatebackupPolicyReplacementCandidate(
 	if err := hierarchyrecord.ValidateProject(candidate.Project.Record); err != nil {
 		return err
 	}
-	if err := validateEnvironmentMutationEpochRecord(candidate.MutationEpoch.Record); err != nil {
+	if err := backupruntime.ValidateEnvironmentMutationEpochRecord(candidate.MutationEpoch.Record); err != nil {
 		return err
 	}
 	if err := backuppolicy.ValidateBackupPolicyRecord(candidate.Replacement); err != nil {
@@ -222,7 +223,7 @@ func validatebackupPolicyReplacementCandidate(
 		return errs.New(errs.KindValidationFailed, "backup policy schedule transition is invalid")
 	}
 	if candidate.Replacement.Enabled {
-		if err := validateBackupPolicyFrequency(candidate.Replacement.Frequency); err != nil {
+		if err := backuppolicy.ValidateFrequency(candidate.Replacement.Frequency); err != nil {
 			return err
 		}
 	}
@@ -309,43 +310,6 @@ func mustBackupPolicyScheduleTransition(
 		return EnvironmentCoordinationRecord{}
 	}
 	return next
-}
-
-func validateBackupPolicyFrequency(frequency string) error {
-	calendar := frequency
-	if len(frequency) == 18 {
-		if frequency[3] != ' ' || !validBackupPolicyWeekday(frequency[:3]) {
-			return errs.New(errs.KindValidationFailed, "backup policy frequency is invalid")
-		}
-		calendar = frequency[4:]
-	}
-	if len(calendar) != 14 || calendar[:6] != "*-*-* " {
-		return errs.New(errs.KindValidationFailed, "backup policy frequency is invalid")
-	}
-	clock := calendar[6:]
-	if clock[2] != ':' || clock[5] != ':' ||
-		!twoASCIIDigits(clock[0], clock[1], 23) ||
-		!twoASCIIDigits(clock[3], clock[4], 59) ||
-		!twoASCIIDigits(clock[6], clock[7], 59) {
-		return errs.New(errs.KindValidationFailed, "backup policy frequency is invalid")
-	}
-	return nil
-}
-
-func validBackupPolicyWeekday(value string) bool {
-	switch value {
-	case "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun":
-		return true
-	default:
-		return false
-	}
-}
-
-func twoASCIIDigits(tens byte, ones byte, maximum int) bool {
-	if tens < '0' || tens > '9' || ones < '0' || ones > '9' {
-		return false
-	}
-	return int(tens-'0')*10+int(ones-'0') <= maximum
 }
 
 func validReplacementRevision(revision int64, readRevision int64) bool {

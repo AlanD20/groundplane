@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -167,11 +168,11 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 	if err != nil || environment.ID != group.EnvironmentID || result.Values[1] == nil {
 		return releaseGroupMutationEvidence{}, recordcodec.CorruptRecord()
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(result.Values[1].Value)
+	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(result.Values[1].Value)
 	if err != nil || epoch.EnvironmentID != group.EnvironmentID {
 		return releaseGroupMutationEvidence{}, recordcodec.CorruptRecord()
 	}
-	epochValue, err := encodeEnvironmentMutationEpochRecord(epoch)
+	epochValue, err := backupruntime.EncodeEnvironmentMutationEpochRecord(epoch)
 	if err != nil {
 		return releaseGroupMutationEvidence{}, err
 	}

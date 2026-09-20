@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -42,11 +43,11 @@ type BackupSecretResolutionEvidence struct {
 	ProjectRevision     int64
 	Connector           connectorrecord.Record
 	ConnectorRevision   int64
-	Run                 *BackupRunRecord
-	Dispatch            *BackupRecoveryPointPruneDispatchRecord
+	Run                 *backupruntime.BackupRunRecord
+	Dispatch            *backupruntime.BackupRecoveryPointPruneDispatchRecord
 	DispatchRevision    int64
-	Point               *BackupRecoveryPointRecord
-	Prune               *BackupRecoveryPointPruneRecord
+	Point               *backupruntime.BackupRecoveryPointRecord
+	Prune               *backupruntime.BackupRecoveryPointPruneRecord
 	Source              backuppolicy.BackupSourceRecord
 	SourceRevision      int64
 	Credentials         connectorrecord.EncryptedCredentials
@@ -137,8 +138,8 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 		taskAssignmentIndexKey(request.TaskID),
 		taskExecutionClaimKey(TaskExecutorAgent, request.AgentID, request.TaskID),
 		taskTimeoutIndexKey(request.TaskID, assignmentForKey.Deadline),
-		backupRunKey(request.TaskID),
-		backupRecoveryPointPruneDispatchKey(request.TaskID),
+		backupruntime.BackupRunKey(request.TaskID),
+		backupruntime.BackupRecoveryPointPruneDispatchKey(request.TaskID),
 	}
 	base, err := reader.readFixed(ctx, baseKeys, fixedRevision)
 	if err != nil {
@@ -232,7 +233,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 				"backup run evidence is unavailable",
 			)
 		}
-		run, decodeErr := decodeBackupRunRecord(base.Values[4].Value)
+		run, decodeErr := backupruntime.DecodeBackupRunRecord(base.Values[4].Value)
 		if decodeErr != nil {
 			return BackupSecretResolutionEvidence{}, errs.New(
 				errs.KindInternal,
@@ -242,7 +243,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 		if err := validateBackupRunTaskBinding(task, run); err != nil {
 			return BackupSecretResolutionEvidence{}, err
 		}
-		if run.State != BackupRunQueued && run.State != BackupRunRunning {
+		if run.State != backupruntime.BackupRunQueued && run.State != backupruntime.BackupRunRunning {
 			return BackupSecretResolutionEvidence{}, errs.New(
 				errs.KindStateConflict,
 				"backup run is no longer active",
@@ -265,7 +266,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 				"backup prune dispatch evidence is unavailable",
 			)
 		}
-		dispatch, decodeErr := decodeBackupRecoveryPointPruneDispatchRecord(base.Values[5].Value)
+		dispatch, decodeErr := backupruntime.DecodeBackupRecoveryPointPruneDispatchRecord(base.Values[5].Value)
 		if decodeErr != nil {
 			return BackupSecretResolutionEvidence{}, errs.New(
 				errs.KindInternal,
@@ -457,8 +458,8 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 	} else if evidence.Dispatch != nil {
 		environmentID = evidence.Dispatch.EnvironmentID
 		for index, pointID := range evidence.Dispatch.RecoveryPointIDs {
-			dynamic.points[pointID] = dynamic.add(backupRecoveryPointKey(pointID))
-			dynamic.prunes[pointID] = dynamic.add(backupRecoveryPointPruneKey(pointID))
+			dynamic.points[pointID] = dynamic.add(backupruntime.BackupRecoveryPointKey(pointID))
+			dynamic.prunes[pointID] = dynamic.add(backupruntime.BackupRecoveryPointPruneKey(pointID))
 			if index < len(plan.Steps) {
 				prune := plan.Steps[index].GetBackupArtifactPrune()
 				if prune != nil {
@@ -673,8 +674,8 @@ func (reader *BackupSecretResolutionReader) decodeSourceDynamicEvidence(
 func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
-	run *BackupRunRecord,
-	source BackupRunSourceAttemptRecord,
+	run *backupruntime.BackupRunRecord,
+	source backupruntime.BackupRunSourceAttemptRecord,
 	step *agentpb.BackupSourceCapture,
 ) error {
 	switch source.Kind {
@@ -747,18 +748,18 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 		if pointValue == nil || pruneValue == nil {
 			return errs.New(errs.KindStateConflict, "backup prune point evidence is unavailable")
 		}
-		point, pointErr := decodeBackupRecoveryPointRecord(pointValue.Value)
-		prune, pruneErr := decodeBackupRecoveryPointPruneRecord(pruneValue.Value)
+		point, pointErr := backupruntime.DecodeBackupRecoveryPointRecord(pointValue.Value)
+		prune, pruneErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(pruneValue.Value)
 		if pointErr != nil || pruneErr != nil || prune.Point != point.BackupRecoveryPointSnapshot ||
 			prune.PointRevision != pointValue.ModRevision ||
 			prune.Point.ID != pointID || prune.OperationID != dispatch.OperationID ||
-			prune.TaskID != dispatch.TaskID || prune.State != BackupPruneAssigned ||
+			prune.TaskID != dispatch.TaskID || prune.State != backupruntime.BackupPruneAssigned ||
 			prune.Point.EnvironmentID != dispatch.EnvironmentID ||
 			pruneValue.ModRevision != evidence.DispatchRevision {
 			return errs.New(errs.KindStateConflict, "backup prune point evidence changed")
 		}
 		sealed, err := reader.readFixed(
-			ctx, []string{backupRecoveryPointPruneKey(pointID)}, int64(planned.PruneRevision),
+			ctx, []string{backupruntime.BackupRecoveryPointPruneKey(pointID)}, int64(planned.PruneRevision),
 		)
 		if err != nil {
 			return err
@@ -768,12 +769,12 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 			clearKeyValues(sealed.Values)
 			return errs.New(errs.KindStateConflict, "backup prune sealed authority changed")
 		}
-		sealedPrune, sealedErr := decodeBackupRecoveryPointPruneRecord(sealedValue.Value)
+		sealedPrune, sealedErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(sealedValue.Value)
 		clearKeyValues(sealed.Values)
 		if sealedErr != nil || sealedPrune.Point != prune.Point ||
 			sealedPrune.PointRevision != prune.PointRevision ||
 			sealedPrune.OperationID != prune.OperationID || sealedPrune.TaskID != "" ||
-			sealedPrune.State != BackupPrunePending {
+			sealedPrune.State != backupruntime.BackupPrunePending {
 			return errs.New(errs.KindStateConflict, "backup prune sealed authority changed")
 		}
 		sourceValue := result.Values[dynamic.sources[point.SourceID]]
@@ -832,8 +833,8 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 		if pointID == prune.PointId {
 			pointValue := result.Values[dynamic.points[pointID]]
 			pruneValue := result.Values[dynamic.prunes[pointID]]
-			point, _ := decodeBackupRecoveryPointRecord(pointValue.Value)
-			pruneRecord, _ := decodeBackupRecoveryPointPruneRecord(pruneValue.Value)
+			point, _ := backupruntime.DecodeBackupRecoveryPointRecord(pointValue.Value)
+			pruneRecord, _ := backupruntime.DecodeBackupRecoveryPointPruneRecord(pruneValue.Value)
 			evidence.Point = &point
 			evidence.Prune = &pruneRecord
 			evidence.Source = mustDecodeBackupSource(result.Values[dynamic.sources[point.SourceID]])

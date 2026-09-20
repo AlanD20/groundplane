@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"slices"
@@ -20,7 +21,7 @@ const (
 // the caller cannot add, remove, or reorder captures here.
 type BackupRunPlanInput struct {
 	Task   etcd.TaskRecord
-	Run    etcd.BackupRunRecord
+	Run    backupruntime.BackupRunRecord
 	Upload []BackupSourceUploadAuthority
 }
 
@@ -63,10 +64,10 @@ type BackupVolumeConsumerAuthority struct {
 	ServiceRevision int64
 	ComposeKey      string
 	MountPaths      []string
-	PriorIntent     etcd.BackupServiceRuntimeIntent
+	PriorIntent     backupruntime.BackupServiceRuntimeIntent
 }
 
-func BackupRunUploadAuthorities(run etcd.BackupRunRecord) []BackupSourceUploadAuthority {
+func BackupRunUploadAuthorities(run backupruntime.BackupRunRecord) []BackupSourceUploadAuthority {
 	result := make([]BackupSourceUploadAuthority, len(run.Sources))
 	for index, source := range run.Sources {
 		result[index] = BackupSourceUploadAuthority{
@@ -149,11 +150,11 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 				"backup retry task must be operator-acted and name its source",
 			)
 		}
-	case run.Initiator == etcd.BackupRunInitiatorOperator:
+	case run.Initiator == backupruntime.BackupRunInitiatorOperator:
 		if task.Actor != etcd.TaskActorOperator {
 			return nil, errs.New(errs.KindValidationFailed, "operator backup run task must be operator-acted")
 		}
-	case run.Initiator == etcd.BackupRunInitiatorSchedule:
+	case run.Initiator == backupruntime.BackupRunInitiatorSchedule:
 		if task.Actor != etcd.TaskActorSystem {
 			return nil, errs.New(errs.KindValidationFailed, "scheduled backup run task must be system-acted")
 		}
@@ -191,9 +192,9 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 			"backup run task params and materializations must be empty",
 		)
 	}
-	if !((task.Status == etcd.TaskStatusPending && run.State == etcd.BackupRunQueued) ||
-		(task.Status == etcd.TaskStatusRunning && run.State == etcd.BackupRunRunning)) ||
-		(run.Initiator != etcd.BackupRunInitiatorOperator && run.Initiator != etcd.BackupRunInitiatorSchedule) {
+	if !((task.Status == etcd.TaskStatusPending && run.State == backupruntime.BackupRunQueued) ||
+		(task.Status == etcd.TaskStatusRunning && run.State == backupruntime.BackupRunRunning)) ||
+		(run.Initiator != backupruntime.BackupRunInitiatorOperator && run.Initiator != backupruntime.BackupRunInitiatorSchedule) {
 		return nil, errs.New(
 			errs.KindValidationFailed,
 			"backup run state must match its pending or running task and have a valid initiator",
@@ -260,7 +261,7 @@ func BuildBackupRunPlan(input BackupRunPlanInput) (*agentpb.ExecutionPlan, error
 }
 
 func validateBackupRunUploadAuthorities(
-	run etcd.BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	authorities []BackupSourceUploadAuthority,
 ) error {
 	if len(authorities) != len(run.Sources) {
@@ -333,8 +334,8 @@ func validateBackupRunUploadAuthorities(
 }
 
 func backupRunCapture(
-	source etcd.BackupRunSourceAttemptRecord,
-	run etcd.BackupRunRecord,
+	source backupruntime.BackupRunSourceAttemptRecord,
+	run backupruntime.BackupRunRecord,
 	upload BackupSourceUploadAuthority,
 ) (*agentpb.BackupSourceCapture, error) {
 	if source.SourceID == "" || source.TargetID == "" || source.RecoveryPointID == "" ||
@@ -369,7 +370,7 @@ func backupRunCapture(
 		},
 	}
 	switch source.Kind {
-	case etcd.BackupRuntimeSourceAttach:
+	case backupruntime.BackupRuntimeSourceAttach:
 		if source.Snapshot.Postgres == nil {
 			return nil, errs.New(errs.KindValidationFailed, "postgres snapshot is required")
 		}
@@ -380,14 +381,14 @@ func backupRunCapture(
 			Database:               postgres.Database,
 			Role:                   postgres.Role,
 		}}
-	case etcd.BackupRuntimeSourceConfig:
+	case backupruntime.BackupRuntimeSourceConfig:
 		if source.Snapshot.Config == nil {
 			return nil, errs.New(errs.KindValidationFailed, "config snapshot is required")
 		}
 		capture.Source = &agentpb.BackupSourceCapture_Config{Config: &agentpb.BackupConfigSource{
 			SnapshotRevision: uint64(source.Snapshot.Config.ReadRevision),
 		}}
-	case etcd.BackupRuntimeSourceVolume:
+	case backupruntime.BackupRuntimeSourceVolume:
 		if source.Snapshot.Volume == nil {
 			return nil, errs.New(errs.KindValidationFailed, "volume snapshot is required")
 		}
@@ -433,24 +434,24 @@ func backupRunPlanAddressing(value string) agentpb.BackupS3Addressing {
 	return agentpb.BackupS3Addressing_BACKUP_S3_ADDRESSING_UNSPECIFIED
 }
 
-func backupRunPlanFormat(format etcd.BackupRuntimeFormat) agentpb.BackupSourceFormat {
+func backupRunPlanFormat(format backupruntime.BackupRuntimeFormat) agentpb.BackupSourceFormat {
 	switch format {
-	case etcd.BackupRuntimeFormatPostgres:
+	case backupruntime.BackupRuntimeFormatPostgres:
 		return agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_POSTGRES_CUSTOM_V1
-	case etcd.BackupRuntimeFormatConfig:
+	case backupruntime.BackupRuntimeFormatConfig:
 		return agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_ENVIRONMENT_CONFIG_V1
-	case etcd.BackupRuntimeFormatVolume:
+	case backupruntime.BackupRuntimeFormatVolume:
 		return agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_VOLUME_TAR_V1
 	default:
 		return agentpb.BackupSourceFormat_BACKUP_SOURCE_FORMAT_UNSPECIFIED
 	}
 }
 
-func backupRunPlanEncryption(encryption etcd.BackupRuntimeEncryption) agentpb.BackupEncryption {
+func backupRunPlanEncryption(encryption backupruntime.BackupRuntimeEncryption) agentpb.BackupEncryption {
 	switch encryption {
-	case etcd.BackupRuntimeEncryptionNone:
+	case backupruntime.BackupRuntimeEncryptionNone:
 		return agentpb.BackupEncryption_BACKUP_ENCRYPTION_NONE
-	case etcd.BackupRuntimeEncryptionAge:
+	case backupruntime.BackupRuntimeEncryptionAge:
 		return agentpb.BackupEncryption_BACKUP_ENCRYPTION_AGE
 	default:
 		return agentpb.BackupEncryption_BACKUP_ENCRYPTION_UNSPECIFIED
@@ -458,14 +459,14 @@ func backupRunPlanEncryption(encryption etcd.BackupRuntimeEncryption) agentpb.Ba
 }
 
 func backupRunPlanServiceIntent(
-	intent etcd.BackupServiceRuntimeIntent,
+	intent backupruntime.BackupServiceRuntimeIntent,
 ) agentpb.BackupServiceRuntimeIntent {
 	switch intent {
-	case etcd.BackupServiceIntentRunning:
+	case backupruntime.BackupServiceIntentRunning:
 		return agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_RUNNING
-	case etcd.BackupServiceIntentStopped:
+	case backupruntime.BackupServiceIntentStopped:
 		return agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_STOPPED
-	case etcd.BackupServiceIntentAbsent:
+	case backupruntime.BackupServiceIntentAbsent:
 		return agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_ABSENT
 	default:
 		return agentpb.BackupServiceRuntimeIntent_BACKUP_SERVICE_RUNTIME_INTENT_UNSPECIFIED

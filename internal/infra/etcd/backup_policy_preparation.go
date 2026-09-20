@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -14,14 +15,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
-)
-
-// MaximumBackupPolicySources is the largest selection whose worst-case
-// protected replacement fits the fixed 96-operation etcd transaction budget.
-// The worst case is an enabled Connector move that creates era 1 and selects
-// only Attach/Volume sources: 24 fixed operations plus 6 per source.
-const (
-	MaximumBackupPolicySources = 12
 )
 
 // BackupPolicySourceSelection is the stable-id form accepted by the human API
@@ -293,7 +286,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 			"environment mutation epoch is missing",
 		)
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(result.Values[3].Value)
+	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(result.Values[3].Value)
 	if err != nil || epoch.EnvironmentID != input.EnvironmentID {
 		return backupPolicyReplacementCandidate{}, false, errs.New(
 			errs.KindInternal,
@@ -307,7 +300,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 		Project: etcdstore.Versioned[hierarchyrecord.ProjectRecord]{
 			Record: project, Revision: result.Values[1].ModRevision, ReadRevision: result.ReadRevision,
 		},
-		MutationEpoch: etcdstore.Versioned[EnvironmentMutationEpochRecord]{
+		MutationEpoch: etcdstore.Versioned[backupruntime.EnvironmentMutationEpochRecord]{
 			Record: epoch, Revision: result.Values[3].ModRevision, ReadRevision: result.ReadRevision,
 		},
 		Replacement: backuppolicy.BackupPolicyRecord{
@@ -457,7 +450,7 @@ func validateBackupPolicyReplacementInput(
 	if err := recordcodec.ValidateID(ids.KindEnvironment, input.EnvironmentID); err != nil {
 		return err
 	}
-	if len(input.Sources) > MaximumBackupPolicySources {
+	if len(input.Sources) > backuppolicy.MaximumBackupPolicySources {
 		return errs.New(
 			errs.KindValidationFailed,
 			"backup policy may select at most 12 sources",
@@ -471,7 +464,7 @@ func validateBackupPolicyReplacementInput(
 			input.Enabled && (len(input.Sources) == 0 || input.ConnectorID == "") {
 			return errs.New(errs.KindValidationFailed, "configured backup policy is incomplete")
 		}
-		if err := validateBackupPolicyFrequency(input.Frequency); err != nil {
+		if err := backuppolicy.ValidateFrequency(input.Frequency); err != nil {
 			return err
 		}
 		if err := recordcodec.ValidateID(ids.KindConnector, input.ConnectorID); err != nil {

@@ -1,4 +1,4 @@
-package etcd
+package backupruntime
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -107,7 +107,7 @@ type BackupRunRecord struct {
 	UpdatedAt                     time.Time                      `json:"updated_at"`
 }
 
-func validateBackupRunRecord(record BackupRunRecord) error {
+func ValidateBackupRunRecord(record BackupRunRecord) error {
 	if recordcodec.ValidateID(ids.KindTask, record.TaskID) != nil ||
 		recordcodec.ValidateID(ids.KindOperation, record.OperationID) != nil ||
 		recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID) != nil ||
@@ -147,7 +147,7 @@ func validateBackupRunRecord(record BackupRunRecord) error {
 	); err != nil {
 		return err
 	}
-	if len(record.Sources) == 0 || len(record.Sources) > MaximumBackupPolicySources {
+	if len(record.Sources) == 0 || len(record.Sources) > backuppolicy.MaximumBackupPolicySources {
 		return invalidBackupRuntimeRecord("backup run source count is invalid")
 	}
 	seenSources := make(map[string]struct{}, len(record.Sources))
@@ -225,7 +225,7 @@ func validateBackupRunAttemptTable(record BackupRunRecord) error {
 		}
 	case BackupRunRunning:
 		if boundarySource.FailureCode != "" || !suffixAll(BackupSourceAttemptPending) ||
-			!activeBackupSourceAttemptState(boundarySource.State) {
+			!ActiveBackupSourceAttemptState(boundarySource.State) {
 			return invalidBackupRuntimeRecord("running backup run checkpoint is invalid")
 		}
 	case BackupRunFailed:
@@ -264,7 +264,7 @@ func validateBackupRunInitiator(record BackupRunRecord) error {
 			return invalidBackupRuntimeRecord("operator backup run cannot carry a scheduled time")
 		}
 	case BackupRunInitiatorSchedule:
-		if record.ScheduledAt == nil || !validBackupRuntimeInstant(*record.ScheduledAt) ||
+		if record.ScheduledAt == nil || !ValidBackupRuntimeInstant(*record.ScheduledAt) ||
 			record.ScheduledAt.After(record.CreatedAt) {
 			return invalidBackupRuntimeRecord("scheduled backup run time is invalid")
 		}
@@ -283,10 +283,10 @@ func validateBackupRunSourceAttempt(
 		record.SourceRevision <= 0 ||
 		record.TargetRevision <= 0 ||
 		recordcodec.ValidateID(ids.KindRecoveryPoint, record.RecoveryPointID) != nil ||
-		!validBackupRuntimeInstant(record.RecoveryPointCreatedAt) ||
+		!ValidBackupRuntimeInstant(record.RecoveryPointCreatedAt) ||
 		!recoveryPointIDMatchesInstant(record.RecoveryPointID, record.RecoveryPointCreatedAt) ||
-		!validBackupSourceAttemptState(record.State) ||
-		!validBackupSourceAttemptPhase(record.Phase) ||
+		!ValidBackupSourceAttemptState(record.State) ||
+		!ValidBackupSourceAttemptPhase(record.Phase) ||
 		!validBackupObjectKey(
 			record.ObjectKey,
 			environmentID,
@@ -321,7 +321,7 @@ func validateBackupRunSourceAttempt(
 		(record.SHA256 != "" && !recordcodec.ValidSHA256(record.SHA256)) {
 		return invalidBackupRuntimeRecord("backup run source artifact evidence is invalid")
 	}
-	if sourceAttemptRequiresArtifact(record.State, record.Phase) &&
+	if SourceAttemptRequiresArtifact(record.State, record.Phase) &&
 		(record.SizeBytes <= 0 || record.SHA256 == "") {
 		return invalidBackupRuntimeRecord("backup run source state requires artifact evidence")
 	}
@@ -330,7 +330,7 @@ func validateBackupRunSourceAttempt(
 		return invalidBackupRuntimeRecord("backup run source state cannot carry artifact evidence")
 	}
 	if !validBackupPhaseForAttemptState(record.State, record.Phase) ||
-		!validBackupFailureCodeForAttempt(record.State, record.Phase, record.FailureCode) {
+		!ValidBackupFailureCodeForAttempt(record.State, record.Phase, record.FailureCode) {
 		return invalidBackupRuntimeRecord("backup source failure checkpoint is invalid")
 	}
 	return nil

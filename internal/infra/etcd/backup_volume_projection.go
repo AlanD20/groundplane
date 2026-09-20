@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -95,7 +96,7 @@ func (repository *BackupRuntimeRepository) ResolveVolumeRemovalImpactAtRevision(
 		return BackupVolumeRemovalImpact{}, err
 	}
 	if policyRead == nil || policyRead.ReadRevision != revision || len(policyRead.Values) != 1 {
-		return BackupVolumeRemovalImpact{}, corruptBackupRuntimeRecord()
+		return BackupVolumeRemovalImpact{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	defer clearKeyValues(policyRead.Values)
 	selected := make(map[string]struct{})
@@ -103,7 +104,7 @@ func (repository *BackupRuntimeRepository) ResolveVolumeRemovalImpactAtRevision(
 	if policyRead.Values[0] != nil {
 		policy, decodeErr := backuppolicy.DecodeBackupPolicyRecord(policyRead.Values[0].Value)
 		if decodeErr != nil || policy.EnvironmentID != environmentID {
-			return BackupVolumeRemovalImpact{}, corruptBackupRuntimeRecord()
+			return BackupVolumeRemovalImpact{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		impact.PolicyRevision = policyRead.Values[0].ModRevision
 		for _, sourceID := range policy.SourceIDs {
@@ -134,7 +135,7 @@ func (repository *BackupRuntimeRepository) ResolveVolumeRemovalImpactAtRevision(
 		}
 		if sourceRead == nil || sourceRead.ReadRevision != revision || len(sourceRead.Values) != 1 ||
 			sourceRead.Values[0] == nil {
-			return BackupVolumeRemovalImpact{}, corruptBackupRuntimeRecord()
+			return BackupVolumeRemovalImpact{}, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		sourceRevision := sourceRead.Values[0].ModRevision
 		clearKeyValues(sourceRead.Values)
@@ -164,7 +165,7 @@ func (repository *BackupRuntimeRepository) backupVolumeSourceIDsAtRevision(
 			return nil, err
 		}
 		if page == nil || page.ReadRevision != revision || (page.More && len(page.Values) == 0) {
-			return nil, corruptBackupRuntimeRecord()
+			return nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		for _, index := range page.Values {
 			sourceID := string(index.Value)
@@ -177,12 +178,12 @@ func (repository *BackupRuntimeRepository) backupVolumeSourceIDsAtRevision(
 				return nil, readErr
 			}
 			if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-				return nil, corruptBackupRuntimeRecord()
+				return nil, backupruntime.CorruptBackupRuntimeRecord()
 			}
 			source, decodeErr := backuppolicy.DecodeBackupSourceRecord(read.Values[0].Value)
 			clearKeyValues(read.Values)
 			if decodeErr != nil || source.ID != sourceID || source.EnvironmentID != environmentID {
-				return nil, corruptBackupRuntimeRecord()
+				return nil, backupruntime.CorruptBackupRuntimeRecord()
 			}
 			if source.Kind == "volume" && source.TargetID == volumeID {
 				result = append(result, sourceID)
@@ -202,7 +203,7 @@ func (repository *BackupRuntimeRepository) backupVolumeHistoricalImpactAtRevisio
 	volumeID string,
 	revision int64,
 ) (int64, string, error) {
-	prefix := backupRecoveryPointSourcePrefix + sourceID + "/"
+	prefix := backupruntime.BackupRecoveryPointSourcePrefix + sourceID + "/"
 	start := ""
 	pointIDs := make([]string, 0)
 	for {
@@ -213,13 +214,13 @@ func (repository *BackupRuntimeRepository) backupVolumeHistoricalImpactAtRevisio
 			return 0, "", err
 		}
 		if page == nil || page.ReadRevision != revision || (page.More && len(page.Values) == 0) {
-			return 0, "", corruptBackupRuntimeRecord()
+			return 0, "", backupruntime.CorruptBackupRuntimeRecord()
 		}
 		for _, index := range page.Values {
 			pointID := string(index.Value)
 			clear(index.Value)
 			if ids.Validate(ids.KindRecoveryPoint, pointID) != nil {
-				return 0, "", corruptBackupRuntimeRecord()
+				return 0, "", backupruntime.CorruptBackupRuntimeRecord()
 			}
 			pointIDs = append(pointIDs, pointID)
 			start = index.Key
@@ -233,18 +234,18 @@ func (repository *BackupRuntimeRepository) backupVolumeHistoricalImpactAtRevisio
 	digest.Write([]byte("groundplane.volume.backup-history.v1"))
 	for _, pointID := range pointIDs {
 		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{backupRecoveryPointKey(pointID)}, Revision: revision,
+			Keys: []string{backupruntime.BackupRecoveryPointKey(pointID)}, Revision: revision,
 		})
 		if err != nil {
 			return 0, "", err
 		}
 		if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-			return 0, "", corruptBackupRuntimeRecord()
+			return 0, "", backupruntime.CorruptBackupRuntimeRecord()
 		}
-		point, decodeErr := decodeBackupRecoveryPointRecord(read.Values[0].Value)
+		point, decodeErr := backupruntime.DecodeBackupRecoveryPointRecord(read.Values[0].Value)
 		if decodeErr != nil || point.ID != pointID || point.SourceID != sourceID || point.TargetID != volumeID {
 			clearKeyValues(read.Values)
-			return 0, "", corruptBackupRuntimeRecord()
+			return 0, "", backupruntime.CorruptBackupRuntimeRecord()
 		}
 		writeBackupImpactField(digest, []byte(pointID))
 		writeBackupImpactField(digest, read.Values[0].Value)

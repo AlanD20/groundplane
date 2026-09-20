@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
@@ -14,7 +15,7 @@ type environmentMutationFenceStore interface {
 }
 
 type environmentMutationFenceOwner struct {
-	Kind        BackupOperationKind
+	Kind        backupruntime.BackupOperationKind
 	OperationID string
 	TaskID      string
 }
@@ -125,7 +126,7 @@ func loadEnvironmentMutationFence(
 			"environment mutation fence environment is corrupt",
 		)
 	}
-	deletionOwner := owner != nil && owner.Kind == BackupOperationDeletion
+	deletionOwner := owner != nil && owner.Kind == backupruntime.BackupOperationDeletion
 	if deletionOwner {
 		if err := validateOwnedEnvironmentDeletionTombstone(
 			base.Values[3],
@@ -321,7 +322,7 @@ func decodeEnvironmentMutationFenceEpoch(value *etcdstore.KeyValue, environmentI
 	if value == nil {
 		return nil, errs.New(errs.KindInternal, "environment mutation epoch is missing")
 	}
-	record, err := decodeEnvironmentMutationEpochRecord(value.Value)
+	record, err := backupruntime.DecodeEnvironmentMutationEpochRecord(value.Value)
 	if err != nil || record.EnvironmentID != environmentID {
 		return nil, errs.New(errs.KindInternal, "environment mutation epoch is corrupt")
 	}
@@ -342,7 +343,7 @@ func validateEnvironmentMutationFenceLock(
 		}
 		return 0, nil
 	}
-	lock, err := decodeBackupOperationLockRecord(value.Value)
+	lock, err := backupruntime.DecodeBackupOperationLockRecord(value.Value)
 	if err != nil || lock.EnvironmentID != environmentID {
 		return 0, errs.New(errs.KindInternal, "environment operation lock is corrupt")
 	}
@@ -385,10 +386,10 @@ func validateOwnedEnvironmentDeletionTombstone(
 
 func validateEnvironmentMutationFenceOwner(owner environmentMutationFenceOwner) error {
 	switch owner.Kind {
-	case BackupOperationBackup,
-		BackupOperationRestore,
-		BackupOperationRotation,
-		BackupOperationPrune,
+	case backupruntime.BackupOperationBackup,
+		backupruntime.BackupOperationRestore,
+		backupruntime.BackupOperationRotation,
+		backupruntime.BackupOperationPrune,
 		BackupOperationDeletion:
 	default:
 		return errs.New(
@@ -416,7 +417,7 @@ func (evidence environmentMutationFenceEvidence) transactionConditions() []etcds
 }
 
 func (evidence environmentMutationFenceEvidence) epochRewriteMutation() (etcdstore.Mutation, error) {
-	value, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
+	value, err := backupruntime.EncodeEnvironmentMutationEpochRecord(backupruntime.EnvironmentMutationEpochRecord{
 		EnvironmentID: evidence.environmentID,
 	})
 	if err != nil {

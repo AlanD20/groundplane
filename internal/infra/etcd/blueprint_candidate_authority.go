@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -409,7 +410,7 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 	if err != nil || ids.Validate(ids.KindTask, headRevisionID) != nil {
 		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(read.Values[2].Value)
+	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(read.Values[2].Value)
 	if err != nil || epoch.EnvironmentID != task.Owner.EnvironmentID {
 		return blueprintCandidateAuthoritySnapshot{}, errs.New(
 			errs.KindStateConflict,

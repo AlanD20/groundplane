@@ -1,4 +1,4 @@
-package etcd
+package backupruntime
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -79,7 +79,7 @@ func validateBackupRestoreRecord(record BackupRestoreRecord) error {
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) {
 		return invalidBackupRuntimeRecord("backup restore identity or lifecycle is invalid")
 	}
-	if err := validateBackupRecoveryPointSnapshot(record.Point); err != nil {
+	if err := ValidateBackupRecoveryPointSnapshot(record.Point); err != nil {
 		return err
 	}
 	if record.Point.EnvironmentID != record.EnvironmentID {

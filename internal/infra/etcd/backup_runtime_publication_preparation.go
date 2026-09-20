@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -11,8 +12,8 @@ import (
 
 func (repository *BackupRuntimeRepository) prepareBackupRunPublication(
 	ctx context.Context,
-	record BackupRunRecord,
-	lock BackupOperationLockRecord,
+	record backupruntime.BackupRunRecord,
+	lock backupruntime.BackupOperationLockRecord,
 	fixedRevision int64,
 ) (backupRunPublicationPlan, error) {
 	return repository.prepareBackupRunPublicationWithRetry(
@@ -22,35 +23,35 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublication(
 
 func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	ctx context.Context,
-	record BackupRunRecord,
-	lock BackupOperationLockRecord,
+	record backupruntime.BackupRunRecord,
+	lock backupruntime.BackupOperationLockRecord,
 	retrySource *backupRunRetrySource,
 	fixedRevision int64,
 ) (backupRunPublicationPlan, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return backupRunPublicationPlan{}, err
 	}
-	if record.State != BackupRunQueued || fixedRevision <= 0 ||
+	if record.State != backupruntime.BackupRunQueued || fixedRevision <= 0 ||
 		(record.RetryOfTaskID == "") != (retrySource == nil) ||
 		lock.EnvironmentID != record.EnvironmentID ||
 		lock.OperationID != record.OperationID || lock.TaskID != record.TaskID ||
-		lock.Kind != BackupOperationBackup || lock.CreatedAt != record.CreatedAt ||
+		lock.Kind != backupruntime.BackupOperationBackup || lock.CreatedAt != record.CreatedAt ||
 		lock.UpdatedAt != record.CreatedAt {
 		return backupRunPublicationPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"backup run publication ownership is invalid",
 		)
 	}
-	runValue, err := encodeBackupRunRecord(record)
+	runValue, err := backupruntime.EncodeBackupRunRecord(record)
 	if err != nil {
 		return backupRunPublicationPlan{}, err
 	}
-	lockValue, err := encodeBackupOperationLockRecord(lock)
+	lockValue, err := backupruntime.EncodeBackupOperationLockRecord(lock)
 	if err != nil {
 		clear(runValue)
 		return backupRunPublicationPlan{}, err
 	}
-	membershipKey, err := backupRunEnvironmentIndexKey(record.EnvironmentID, record.TaskID)
+	membershipKey, err := backupruntime.BackupRunEnvironmentIndexKey(record.EnvironmentID, record.TaskID)
 	if err != nil {
 		clear(runValue)
 		clear(lockValue)
@@ -62,19 +63,19 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		clear(lockValue)
 		return backupRunPublicationPlan{}, err
 	}
-	keys := []string{backupRunKey(record.TaskID), membershipKey}
+	keys := []string{backupruntime.BackupRunKey(record.TaskID), membershipKey}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: keys[0], Value: runValue},
 		{Type: etcdstore.MutationPut, Key: keys[1], Value: []byte(record.TaskID)},
 	}
 	for _, exclusion := range exclusions {
-		key, keyErr := backupSourceTargetExclusionKey(exclusion.TargetKind, exclusion.TargetID)
+		key, keyErr := backupruntime.BackupSourceTargetExclusionKey(exclusion.TargetKind, exclusion.TargetID)
 		if keyErr != nil {
 			clearBackupRuntimeMutations(mutations)
 			clear(lockValue)
 			return backupRunPublicationPlan{}, keyErr
 		}
-		value, encodeErr := encodeBackupSourceTargetExclusionRecord(exclusion)
+		value, encodeErr := backupruntime.EncodeBackupSourceTargetExclusionRecord(exclusion)
 		if encodeErr != nil {
 			clearBackupRuntimeMutations(mutations)
 			clear(lockValue)
@@ -177,7 +178,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		conditions = append(
 			conditions,
 			etcdstore.Condition{Key: taskKey(retrySource.task.Record.ID), ModRevision: retrySource.task.Revision},
-			etcdstore.Condition{Key: backupRunKey(retrySource.run.Record.TaskID), ModRevision: retrySource.run.Revision},
+			etcdstore.Condition{Key: backupruntime.BackupRunKey(retrySource.run.Record.TaskID), ModRevision: retrySource.run.Revision},
 			etcdstore.Condition{
 				Key:         backupTerminalReceiptKey(retrySource.task.Record.ID),
 				ModRevision: retrySource.receiptRevision,
@@ -194,7 +195,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 		return backupRunPublicationPlan{}, err
 	}
 	mutations = append(mutations, epoch)
-	if retrySource == nil && record.Initiator == BackupRunInitiatorSchedule {
+	if retrySource == nil && record.Initiator == backupruntime.BackupRunInitiatorSchedule {
 		scheduleConditions, scheduleMutations, scheduleErr := repository.prepareScheduledBackupPublication(
 			ctx, record, fixedRevision,
 		)
@@ -222,7 +223,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 // change independently of an Environment operation; the exact Environment
 // epoch and operation lock serialize the remaining consumer-owned evidence.
 func backupRunExternalConditions(
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	conditions []etcdstore.Condition,
 ) []etcdstore.Condition {
 	allowed := make(map[string]struct{}, len(run.Sources)*2+2)
@@ -262,12 +263,12 @@ func backupRunExternalConditions(
 
 func (repository *BackupRuntimeRepository) exactBackupRunConfigCompanions(
 	ctx context.Context,
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	readRevision int64,
 	resultRevision int64,
 ) bool {
 	for _, source := range run.Sources {
-		if source.Kind != BackupRuntimeSourceConfig {
+		if source.Kind != backupruntime.BackupRuntimeSourceConfig {
 			continue
 		}
 		snapshot := source.Snapshot.Config

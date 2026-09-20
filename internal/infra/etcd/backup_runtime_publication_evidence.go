@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -14,7 +15,7 @@ import (
 
 func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 	ctx context.Context,
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 	retrySource *backupRunRetrySource,
 	fixedRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
@@ -54,7 +55,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 		}
 		policy, decodeErr := backuppolicy.DecodeBackupPolicyRecord(policyRead.Values[0].Value)
 		if decodeErr != nil {
-			return nil, nil, corruptBackupRuntimeRecord()
+			return nil, nil, backupruntime.CorruptBackupRuntimeRecord()
 		}
 		policyKeep, keepErr := checkedBackupRuntimeRetentionKeep(policy.Keep)
 		if keepErr != nil {
@@ -70,7 +71,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			return nil, nil, err
 		}
 	}
-	if run.Encryption == BackupRuntimeEncryptionAge {
+	if run.Encryption == backupruntime.BackupRuntimeEncryptionAge {
 		keyRead, readErr := repository.readFixedKeys(ctx, []string{
 			backuppolicy.BackupKeyKey(run.EnvironmentID), backuppolicy.BackupKeyValueKey(run.EnvironmentID),
 		}, fixedRevision)
@@ -275,7 +276,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			clearKeyValues(targetRead.Values)
 			if decodeErr != nil || environment.ID != run.EnvironmentID {
 				clearBackupRuntimeMutations(mutations)
-				return nil, nil, corruptBackupRuntimeRecord()
+				return nil, nil, backupruntime.CorruptBackupRuntimeRecord()
 			}
 			config := BackupConfigSnapshotRecord{
 				SnapshotID:    snapshot.ConfigSnapshotID,
@@ -322,15 +323,15 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 
 func checkedBackupRuntimeRetentionKeep(keep int64) (int64, error) {
 	if keep <= 0 || keep > backuppolicy.MaximumBackupPolicyKeep {
-		return 0, corruptBackupRuntimeRecord()
+		return 0, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	return keep, nil
 }
 
 func validateBackupPostgresPublicationEvidence(
 	values []*etcdstore.KeyValue,
-	source BackupRunSourceAttemptRecord,
-	snapshot BackupPostgresSourceSnapshot,
+	source backupruntime.BackupRunSourceAttemptRecord,
+	snapshot backupruntime.BackupPostgresSourceSnapshot,
 ) error {
 	if len(values) != 5 || values[0] == nil || values[1] == nil || values[2] == nil ||
 		values[3] == nil || values[4] == nil || values[0].ModRevision != source.TargetRevision ||
@@ -346,7 +347,7 @@ func validateBackupPostgresPublicationEvidence(
 	project, projectErr := hierarchyrecord.DecodeProject(values[2].Value)
 	environment, environmentErr := hierarchyrecord.DecodeEnvironment(values[3].Value)
 	if attachErr != nil || factsErr != nil || projectErr != nil || environmentErr != nil {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if attach.ID != source.TargetID || attach.EnvironmentID != snapshot.ConsumerEnvironmentID ||
 		string(attach.Status) != "ready" || attach.BackingProjectID != snapshot.BackingProjectID ||
@@ -361,8 +362,8 @@ func validateBackupPostgresPublicationEvidence(
 
 func validateBackupVolumePublicationEvidence(
 	values []*etcdstore.KeyValue,
-	source BackupRunSourceAttemptRecord,
-	snapshot BackupVolumeSourceSnapshot,
+	source backupruntime.BackupRunSourceAttemptRecord,
+	snapshot backupruntime.BackupVolumeSourceSnapshot,
 ) error {
 	const offset = 3
 	if len(values) != len(snapshot.Services)+offset || values[0] == nil || values[1] == nil || values[2] == nil ||
@@ -374,7 +375,7 @@ func validateBackupVolumePublicationEvidence(
 	revisionID, headErr := idempotencyrecord.DecodeTaskReference(values[1].Value)
 	seal, sealErr := decodeEnvironmentBlueprintSeal(values[2].Value)
 	if environmentErr != nil || headErr != nil || sealErr != nil {
-		return corruptBackupRuntimeRecord()
+		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if environment.ID != snapshot.EnvironmentID || environment.VolumeDir != snapshot.AuthorizedVolumeDir ||
 		revisionID != snapshot.DesiredRevisionID || seal.EnvironmentID != snapshot.EnvironmentID ||
@@ -386,7 +387,7 @@ func validateBackupVolumePublicationEvidence(
 	for index, expected := range snapshot.Services {
 		value := values[index+offset]
 		if expected.ServiceRevision == 0 {
-			if value != nil || expected.PriorIntent != BackupServiceIntentRunning {
+			if value != nil || expected.PriorIntent != backupruntime.BackupServiceIntentRunning {
 				return errs.New(errs.KindStateConflict, "volume service publication evidence changed")
 			}
 			continue
@@ -396,7 +397,7 @@ func validateBackupVolumePublicationEvidence(
 		}
 		service, decodeErr := decodeServiceRuntimeRecord(value.Value)
 		if decodeErr != nil {
-			return corruptBackupRuntimeRecord()
+			return backupruntime.CorruptBackupRuntimeRecord()
 		}
 		if service.ServiceID != expected.ServiceID ||
 			service.EnvironmentID != snapshot.EnvironmentID ||

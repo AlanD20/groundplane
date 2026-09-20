@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -21,25 +23,25 @@ const backupTerminalReceiptPrefix = "/v1/runtime/backup-terminal-receipts/"
 // ordered Backup source. The full terminal run is bound separately by
 // DomainDigest so the receipt does not duplicate potentially large snapshots.
 type BackupTerminalSourceOutcome struct {
-	Ordinal                uint32                   `json:"ordinal"`
-	SourceID               string                   `json:"source_id"`
-	Kind                   BackupRuntimeSourceKind  `json:"kind"`
-	TargetID               string                   `json:"target_id"`
-	RecoveryPointID        string                   `json:"recovery_point_id"`
-	RecoveryPointCreatedAt time.Time                `json:"recovery_point_created_at"`
-	State                  BackupSourceAttemptState `json:"state"`
-	Phase                  BackupSourceAttemptPhase `json:"phase"`
-	SizeBytes              int64                    `json:"size_bytes,omitempty"`
-	SHA256                 string                   `json:"sha256,omitempty"`
-	FailureCode            BackupFailureCode        `json:"failure_code,omitempty"`
+	Ordinal                uint32                                 `json:"ordinal"`
+	SourceID               string                                 `json:"source_id"`
+	Kind                   backupruntime.BackupRuntimeSourceKind  `json:"kind"`
+	TargetID               string                                 `json:"target_id"`
+	RecoveryPointID        string                                 `json:"recovery_point_id"`
+	RecoveryPointCreatedAt time.Time                              `json:"recovery_point_created_at"`
+	State                  backupruntime.BackupSourceAttemptState `json:"state"`
+	Phase                  backupruntime.BackupSourceAttemptPhase `json:"phase"`
+	SizeBytes              int64                                  `json:"size_bytes,omitempty"`
+	SHA256                 string                                 `json:"sha256,omitempty"`
+	FailureCode            backupruntime.BackupFailureCode        `json:"failure_code,omitempty"`
 }
 
 // BackupPruneTerminalPointOutcome is the immutable terminal result for one
 // ordered Recovery Point in a Backup-prune Task.
 type BackupPruneTerminalPointOutcome struct {
-	Point     BackupRecoveryPointSnapshot `json:"point"`
-	CreatedAt time.Time                   `json:"created_at"`
-	Outcome   BackupPruneTerminalOutcome  `json:"outcome"`
+	Point     backupruntime.BackupRecoveryPointSnapshot `json:"point"`
+	CreatedAt time.Time                                 `json:"created_at"`
+	Outcome   BackupPruneTerminalOutcome                `json:"outcome"`
 }
 
 type BackupPruneTerminalOutcome string
@@ -106,7 +108,7 @@ func backupTerminalReceiptKey(taskID string) string {
 }
 
 func encodeBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) ([]byte, error) {
-	return encodeBackupRuntimeRecord(
+	return backupruntime.EncodeBackupRuntimeRecord(
 		"backup-terminal-receipt",
 		record,
 		validateBackupTerminalReceiptRecord,
@@ -114,7 +116,7 @@ func encodeBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) ([]by
 }
 
 func decodeBackupTerminalReceiptRecord(value []byte) (BackupTerminalReceiptRecord, error) {
-	return decodeBackupRuntimeRecord(
+	return backupruntime.DecodeBackupRuntimeRecord(
 		value,
 		"backup-terminal-receipt",
 		validateBackupTerminalReceiptRecord,
@@ -134,7 +136,7 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 	}
 	switch record.Task.TaskType {
 	case TaskBackup:
-		if len(record.Sources) == 0 || len(record.Sources) > MaximumBackupPolicySources ||
+		if len(record.Sources) == 0 || len(record.Sources) > backuppolicy.MaximumBackupPolicySources ||
 			len(record.Points) != 0 {
 			return errs.New(errs.KindValidationFailed, "backup terminal receipt sources are invalid")
 		}
@@ -143,31 +145,31 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 				recordcodec.ValidateID(ids.KindBackupSource, source.SourceID) != nil ||
 				source.TargetID == "" ||
 				recordcodec.ValidateID(ids.KindRecoveryPoint, source.RecoveryPointID) != nil ||
-				!validBackupRuntimeInstant(source.RecoveryPointCreatedAt) ||
+				!backupruntime.ValidBackupRuntimeInstant(source.RecoveryPointCreatedAt) ||
 				source.RecoveryPointCreatedAt.After(record.Task.FinishedAt) ||
-				!validBackupSourceAttemptState(source.State) ||
-				!validBackupSourceAttemptPhase(source.Phase) ||
-				!validBackupFailureCodeForAttempt(source.State, source.Phase, source.FailureCode) ||
+				!backupruntime.ValidBackupSourceAttemptState(source.State) ||
+				!backupruntime.ValidBackupSourceAttemptPhase(source.Phase) ||
+				!backupruntime.ValidBackupFailureCodeForAttempt(source.State, source.Phase, source.FailureCode) ||
 				source.SizeBytes < 0 || (source.SHA256 != "" && !recordcodec.ValidSHA256(source.SHA256)) ||
 				((source.SizeBytes > 0) != (source.SHA256 != "")) {
 				return errs.New(errs.KindValidationFailed, "backup terminal receipt source is invalid")
 			}
 			switch source.Kind {
-			case BackupRuntimeSourceAttach, BackupRuntimeSourceVolume, BackupRuntimeSourceConfig:
+			case backupruntime.BackupRuntimeSourceAttach, backupruntime.BackupRuntimeSourceVolume, BackupRuntimeSourceConfig:
 			default:
 				return errs.New(errs.KindValidationFailed, "backup terminal receipt source kind is invalid")
 			}
 		}
 	case TaskBackupPrune:
 		if len(record.Sources) != 0 || len(record.Points) == 0 ||
-			len(record.Points) > maximumBackupPruneDispatchPoints {
+			len(record.Points) > backupruntime.MaximumBackupPruneDispatchPoints {
 			return errs.New(errs.KindValidationFailed, "backup terminal receipt points are invalid")
 		}
 		seen := make(map[string]struct{}, len(record.Points))
 		for _, point := range record.Points {
-			if validateBackupRecoveryPointSnapshot(point.Point) != nil ||
+			if backupruntime.ValidateBackupRecoveryPointSnapshot(point.Point) != nil ||
 				point.Point.EnvironmentID != record.Task.Owner.EnvironmentID ||
-				!validBackupRuntimeInstant(point.CreatedAt) ||
+				!backupruntime.ValidBackupRuntimeInstant(point.CreatedAt) ||
 				point.CreatedAt.After(record.Task.FinishedAt) {
 				return errs.New(errs.KindValidationFailed, "backup terminal receipt point is invalid")
 			}
@@ -252,7 +254,7 @@ func backupTerminalDomainDigest(value any) (string, error) {
 }
 
 func backupTerminalEnvironmentEpochDigest(environmentID string) (string, error) {
-	value, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
+	value, err := backupruntime.EncodeEnvironmentMutationEpochRecord(backupruntime.EnvironmentMutationEpochRecord{
 		EnvironmentID: environmentID,
 	})
 	if err != nil {
@@ -318,7 +320,7 @@ func backupTerminalTaskEvidence(task TaskRecord) (BackupTerminalTaskEvidence, er
 func prepareBackupRunTerminalReceipt(
 	current etcdstore.Versioned[TaskRecord],
 	terminal TaskRecord,
-	run BackupRunRecord,
+	run backupruntime.BackupRunRecord,
 ) (backupTerminalReceiptPlan, error) {
 	if current.Revision <= 0 || current.Record.Type != TaskBackup || terminal.Type != TaskBackup ||
 		current.Record.ID != terminal.ID || !isTerminalTaskStatus(terminal.Status) ||
@@ -340,7 +342,7 @@ func prepareBackupRunTerminalReceipt(
 	if err != nil {
 		return backupTerminalReceiptPlan{}, err
 	}
-	runValue, err := encodeBackupRunRecord(run)
+	runValue, err := backupruntime.EncodeBackupRunRecord(run)
 	if err != nil {
 		return backupTerminalReceiptPlan{}, err
 	}
@@ -354,7 +356,7 @@ func prepareBackupRunTerminalReceipt(
 	return prepareBackupTerminalReceiptPlan(receipt)
 }
 
-func backupTerminalRunOutcomes(run BackupRunRecord) []BackupTerminalSourceOutcome {
+func backupTerminalRunOutcomes(run backupruntime.BackupRunRecord) []BackupTerminalSourceOutcome {
 	outcomes := make([]BackupTerminalSourceOutcome, len(run.Sources))
 	for index, source := range run.Sources {
 		outcomes[index] = BackupTerminalSourceOutcome{
@@ -371,8 +373,8 @@ func backupTerminalRunOutcomes(run BackupRunRecord) []BackupTerminalSourceOutcom
 func prepareBackupPruneTerminalReceipt(
 	current etcdstore.Versioned[TaskRecord],
 	terminal TaskRecord,
-	dispatch BackupRecoveryPointPruneDispatchRecord,
-	prunes []etcdstore.Versioned[BackupRecoveryPointPruneRecord],
+	dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
+	prunes []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 ) (backupTerminalReceiptPlan, error) {
 	if current.Revision <= 0 || current.Record.Type != TaskBackupPrune ||
 		terminal.Type != TaskBackupPrune || !isTerminalTaskStatus(terminal.Status) ||
@@ -402,9 +404,9 @@ func prepareBackupPruneTerminalReceipt(
 			)
 		}
 		outcome := BackupPruneTerminalRetained
-		if prune.Record.State == BackupPruneVerifiedAbsent {
+		if prune.Record.State == backupruntime.BackupPruneVerifiedAbsent {
 			outcome = BackupPruneTerminalRemoved
-		} else if prune.Record.State != BackupPruneAssigned || terminal.Status == TaskStatusCompleted {
+		} else if prune.Record.State != backupruntime.BackupPruneAssigned || terminal.Status == TaskStatusCompleted {
 			return backupTerminalReceiptPlan{}, errs.New(
 				errs.KindValidationFailed,
 				"backup prune terminal receipt outcome is invalid",
@@ -631,12 +633,12 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(environmentID),
 		deletionTombstoneKey(string(DeletionTargetEnvironment), environmentID),
-		backupRecoveryPointPruneDispatchKey(receipt.Task.TaskID),
+		backupruntime.BackupRecoveryPointPruneDispatchKey(receipt.Task.TaskID),
 	}
 	runIndex, membershipIndex, exclusionsStart := -1, -1, -1
 	var exclusionKeys []string
 	if receipt.Task.TaskType == TaskBackup {
-		membershipKey, err := backupRunEnvironmentIndexKey(environmentID, receipt.Task.TaskID)
+		membershipKey, err := backupruntime.BackupRunEnvironmentIndexKey(environmentID, receipt.Task.TaskID)
 		if err != nil {
 			return err
 		}
@@ -645,7 +647,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 			return err
 		}
 		runIndex = len(keys)
-		keys = append(keys, backupRunKey(receipt.Task.TaskID))
+		keys = append(keys, backupruntime.BackupRunKey(receipt.Task.TaskID))
 		membershipIndex = len(keys)
 		keys = append(keys, membershipKey)
 		exclusionsStart = len(keys)
@@ -696,7 +698,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 			string(membershipValue.Value) != receipt.Task.TaskID {
 			return errs.New(errs.KindStateConflict, "terminal backup run membership changed")
 		}
-		run, err := decodeBackupRunRecord(runValue.Value)
+		run, err := backupruntime.DecodeBackupRunRecord(runValue.Value)
 		if err != nil {
 			return err
 		}
@@ -706,7 +708,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		if validateBackupRunTaskBinding(task, run) != nil {
 			return errs.New(errs.KindInternal, "same-revision terminal backup run binding is invalid")
 		}
-		value, err := encodeBackupRunRecord(run)
+		value, err := backupruntime.EncodeBackupRunRecord(run)
 		if err != nil {
 			return err
 		}
@@ -723,11 +725,11 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 			if exclusionValue == nil {
 				continue
 			}
-			exclusion, err := decodeBackupSourceTargetExclusionRecord(exclusionValue.Value)
+			exclusion, err := backupruntime.DecodeBackupSourceTargetExclusionRecord(exclusionValue.Value)
 			if err != nil {
 				return err
 			}
-			exclusionKey, keyErr := backupSourceTargetExclusionKey(
+			exclusionKey, keyErr := backupruntime.BackupSourceTargetExclusionKey(
 				exclusion.TargetKind,
 				exclusion.TargetID,
 			)
@@ -766,20 +768,20 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		if !ownerPresent {
 			return errs.New(errs.KindStateConflict, "deleted backup owner retained point authority")
 		}
-		prune, err := decodeBackupRecoveryPointPruneRecord(values[0].Value)
+		prune, err := backupruntime.DecodeBackupRecoveryPointPruneRecord(values[0].Value)
 		if err != nil {
 			return err
 		}
 		if values[0].ModRevision == terminalRevision {
 			if outcome.Outcome != BackupPruneTerminalRetained || prune.Point != outcome.Point ||
-				prune.OperationID != receipt.Task.OperationID || prune.State != BackupPrunePending ||
+				prune.OperationID != receipt.Task.OperationID || prune.State != backupruntime.BackupPrunePending ||
 				prune.TaskID != "" || prune.CreatedAt != outcome.CreatedAt ||
 				!prune.UpdatedAt.Equal(receipt.Task.FinishedAt) {
 				return errs.New(errs.KindInternal, "same-revision backup prune outcome is invalid")
 			}
 			if err := validatePendingBackupPruneAuthority(
 				values,
-				etcdstore.Versioned[BackupRecoveryPointPruneRecord]{
+				etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{
 					Record:   prune,
 					Revision: values[0].ModRevision,
 				},
@@ -796,24 +798,24 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		}
 		if err := validatePendingBackupPruneAuthority(
 			values,
-			etcdstore.Versioned[BackupRecoveryPointPruneRecord]{
+			etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord]{
 				Record: prune, Revision: values[0].ModRevision,
 			},
 		); err != nil {
 			return err
 		}
 		if prune.TaskID == "" {
-			if prune.State != BackupPrunePending {
+			if prune.State != backupruntime.BackupPrunePending {
 				return errs.New(errs.KindStateConflict, "terminal backup prune successor changed")
 			}
 			continue
 		}
-		if successorLock == nil || successorLock.Kind != BackupOperationPrune ||
+		if successorLock == nil || successorLock.Kind != backupruntime.BackupOperationPrune ||
 			successorLock.OperationID != prune.OperationID || successorLock.TaskID != prune.TaskID {
 			return errs.New(errs.KindStateConflict, "terminal backup prune successor ownership changed")
 		}
 		dispatchRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys:     []string{backupRecoveryPointPruneDispatchKey(prune.TaskID)},
+			Keys:     []string{backupruntime.BackupRecoveryPointPruneDispatchKey(prune.TaskID)},
 			Revision: read.ReadRevision,
 		})
 		if err != nil {
@@ -827,7 +829,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 			return errs.New(errs.KindStateConflict, "terminal backup prune successor dispatch is missing")
 		}
 		dispatchRevision := dispatchRead.Values[0].ModRevision
-		dispatch, err := decodeBackupRecoveryPointPruneDispatchRecord(dispatchRead.Values[0].Value)
+		dispatch, err := backupruntime.DecodeBackupRecoveryPointPruneDispatchRecord(dispatchRead.Values[0].Value)
 		clearKeyValues(dispatchRead.Values)
 		if err != nil {
 			return err
@@ -848,18 +850,18 @@ func backupTerminalExclusionKeys(
 ) ([]string, error) {
 	byKey := make(map[string]struct{})
 	for _, source := range sources {
-		var kind BackupSourceTargetKind
+		var kind backupruntime.BackupSourceTargetKind
 		switch source.Kind {
 		case BackupRuntimeSourceAttach:
-			kind = BackupSourceTargetAttach
+			kind = backupruntime.BackupSourceTargetAttach
 		case BackupRuntimeSourceVolume:
-			kind = BackupSourceTargetVolume
+			kind = backupruntime.BackupSourceTargetVolume
 		case BackupRuntimeSourceConfig:
 			continue
 		default:
 			return nil, errs.New(errs.KindInternal, "backup terminal source kind is invalid")
 		}
-		key, err := backupSourceTargetExclusionKey(kind, source.TargetID)
+		key, err := backupruntime.BackupSourceTargetExclusionKey(kind, source.TargetID)
 		if err != nil {
 			return nil, err
 		}
@@ -879,7 +881,7 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 	terminalRevision int64,
 	receipt BackupTerminalReceiptRecord,
 	values []*etcdstore.KeyValue,
-) (bool, *BackupOperationLockRecord, bool, error) {
+) (bool, *backupruntime.BackupOperationLockRecord, bool, error) {
 	if len(values) < 5 {
 		return false, nil, false, errs.New(errs.KindInternal, "backup terminal owner snapshot is incomplete")
 	}
@@ -904,7 +906,7 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 	if epochValue == nil || epochValue.ModRevision < terminalRevision {
 		return false, nil, false, errs.New(errs.KindStateConflict, "terminal backup Environment epoch changed")
 	}
-	epoch, err := decodeEnvironmentMutationEpochRecord(epochValue.Value)
+	epoch, err := backupruntime.DecodeEnvironmentMutationEpochRecord(epochValue.Value)
 	if err != nil {
 		return false, nil, false, err
 	}
@@ -920,7 +922,7 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 		}
 		return true, nil, false, nil
 	}
-	lock, err := decodeBackupOperationLockRecord(lockValue.Value)
+	lock, err := backupruntime.DecodeBackupOperationLockRecord(lockValue.Value)
 	if err != nil {
 		return false, nil, false, err
 	}
@@ -928,7 +930,7 @@ func (repository *TaskRepository) validateBackupTerminalOwnerSnapshot(
 		lock.TaskID == receipt.Task.TaskID {
 		return false, nil, false, errs.New(errs.KindStateConflict, "stale terminal backup lock remains")
 	}
-	if lock.Kind != BackupOperationDeletion {
+	if lock.Kind != backupruntime.BackupOperationDeletion {
 		if tombstoneValue != nil {
 			return false, nil, false, errs.New(errs.KindStateConflict, "terminal backup deletion authority is torn")
 		}
