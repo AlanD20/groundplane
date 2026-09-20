@@ -1,4 +1,4 @@
-package agent
+package composeruntime
 
 import (
 	"context"
@@ -22,36 +22,36 @@ type recreateObservationTarget struct {
 
 // A group may fail before reaching this member. Its unchanged predecessor
 // still has historical ownership, not the regenerated compensation labels.
-func (runtime *ComposeRuntime) observeRecreateRecovery(
+func (runtime *Runtime) observeRecreateRecovery(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-) (composeStepResult, error) {
+) (StepResult, error) {
 	probe := step.GetServiceRecreateProbe()
 	observation, err := executionplan.NewRestorationObservation(
 		assignment.Plan, assignment.RestorationAuthority, step.GetStepId(),
 	)
 	if err != nil {
-		return composeStepResult{ReconciliationRequired: true}, err
+		return StepResult{ReconciliationRequired: true}, err
 	}
 	observed, err := runtime.observer.ObserveRestoration(ctx, observation)
 	if err == nil {
 		evidence := observedRecreateSetEvidence(observation.Artifact(), observed,
 			probe.GetServiceId(), probe.GetPriorReleaseId(), "", true, observation.CandidateWorkloads())
 		if evidence != nil {
-			return composeStepResult{Observed: observed, RecreateEvidence: evidence}, nil
+			return StepResult{Observed: observed, RecreateEvidence: evidence}, nil
 		}
 	}
 	return runtime.observeRecreateSet(ctx, assignment.Plan, probe.GetCandidateArtifactId(),
 		probe.GetPriorArtifactId(), probe.GetServiceId(), probe.GetCandidateReleaseId(), probe.GetPriorReleaseId())
 }
 
-func (runtime *ComposeRuntime) observeRecreateSet(
+func (runtime *Runtime) observeRecreateSet(
 	ctx context.Context,
 	plan *agentpb.ExecutionPlan,
 	candidateArtifactID, priorArtifactID, serviceID, candidateReleaseID, priorReleaseID string,
-) (composeStepResult, error) {
-	result := composeStepResult{}
+) (StepResult, error) {
+	result := StepResult{}
 	targets := []recreateObservationTarget{
 		{artifactID: candidateArtifactID, releaseID: candidateReleaseID, target: recreateRuntimeRole},
 		{artifactID: priorArtifactID, releaseID: priorReleaseID, compensated: true},

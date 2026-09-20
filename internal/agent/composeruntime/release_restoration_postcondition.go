@@ -1,4 +1,4 @@
-package agent
+package composeruntime
 
 import (
 	"bytes"
@@ -13,12 +13,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (runtime *ComposeRuntime) candidateRestoration(
+func (runtime *Runtime) candidateRestoration(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-) (composeStepResult, error) {
-	result := composeStepResult{MutationAttempted: step.GetCandidateRestorationCompensate() != nil}
+) (StepResult, error) {
+	result := StepResult{MutationAttempted: step.GetCandidateRestorationCompensate() != nil}
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID, TaskId: assignment.TaskID,
 		OperationId: assignment.OperationID, Plan: assignment.Plan, StepId: step.GetStepId(),
@@ -56,12 +56,12 @@ func (runtime *ComposeRuntime) candidateRestoration(
 	return runtime.verifyReleaseRestorationPostcondition(ctx, assignment, step, result, nil)
 }
 
-func (runtime *ComposeRuntime) proxyProcedure(
+func (runtime *Runtime) proxyProcedure(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-) (composeStepResult, error) {
-	result := composeStepResult{
+) (StepResult, error) {
+	result := StepResult{
 		MutationAttempted: step.GetServiceProxySwitch() != nil || step.GetServiceProxyCompensate() != nil,
 	}
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
@@ -94,13 +94,13 @@ func (runtime *ComposeRuntime) proxyProcedure(
 	return runtime.verifyReleaseRestorationPostcondition(ctx, assignment, step, result, nil)
 }
 
-func (runtime *ComposeRuntime) verifyReleaseRestorationPostcondition(
+func (runtime *Runtime) verifyReleaseRestorationPostcondition(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-	result composeStepResult,
+	result StepResult,
 	stepErr error,
-) (composeStepResult, error) {
+) (StepResult, error) {
 	if stepErr != nil {
 		return result, stepErr
 	}
@@ -146,16 +146,16 @@ func (runtime *ComposeRuntime) verifyReleaseRestorationPostcondition(
 func restorationObservationTarget(
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-	result composeStepResult,
+	result StepResult,
 ) (*agentpb.ComposeArtifact, string, string, string, *agentpb.ExecutionPlan, error) {
 	if step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
-		if !releaseRestorationEvidenceProven(assignment, step, result) {
+		if !ReleaseRestorationEvidenceProven(assignment, step, result) {
 			return nil, "", "", "", nil, errs.New(
 				errs.KindInternal,
 				"agent: release compensation returned no exact restoration proof",
 			)
 		}
-	} else if _, err := releaseProbeEvidenceStatus(assignment, step, result); err != nil {
+	} else if _, err := ReleaseProbeEvidenceStatus(assignment, step, result); err != nil {
 		return nil, "", "", "", nil, err
 	}
 	if compensate := step.GetServiceProxyCompensate(); compensate != nil {
@@ -278,7 +278,7 @@ func nativeServingPredecessorRetainedArtifact(authority *agentpb.ReleaseRestorat
 func candidateServingPredecessorEvidenceMatches(
 	assignment taskassignment.Assignment,
 	serviceID string,
-	result composeStepResult,
+	result StepResult,
 ) bool {
 	artifact, target, releaseID, err := openServingPredecessorAuthority(assignment, serviceID)
 	if err != nil {

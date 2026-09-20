@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
 	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
+	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
@@ -139,8 +140,8 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		} else if p.compose == nil {
 			err = p.executeStep(stepCtx, step)
 		} else {
-			var stepResult composeStepResult
-			stepResult, err = p.compose.executeStep(stepCtx, reservation.assignment, step)
+			var stepResult composeruntime.StepResult
+			stepResult, err = p.compose.ExecuteStep(stepCtx, reservation.assignment, step)
 			if stepResult.ExitCode != 0 {
 				exitCode = stepResult.ExitCode
 			}

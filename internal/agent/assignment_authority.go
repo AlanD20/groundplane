@@ -89,7 +89,7 @@ func validateAndCopyAssignment(assignment taskassignment.Assignment, volumeRoot 
 	if err := executionplan.AuthorizeVolumeDirectories(plan, volumeRoot); err != nil {
 		return taskassignment.Assignment{}, errs.Wrap(errs.KindInternal, err)
 	}
-	if err := validateCandidateReleaseAssignmentAuthority(assignment, plan); err != nil {
+	if err := taskassignment.ValidateCandidateReleaseAuthority(assignment, plan); err != nil {
 		return taskassignment.Assignment{}, err
 	}
 	if assignment.AutomaticReconcile && plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {

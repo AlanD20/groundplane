@@ -1,4 +1,4 @@
-package agent
+package composeruntime
 
 import (
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
@@ -24,7 +24,7 @@ func selectedServingProbe(assignment taskassignment.Assignment, step *agentpb.Ex
 	authority := assignment.RestorationAuthority
 	if probe == nil || step.GetStepId() == "" ||
 		step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE ||
-		!hasServingPredecessorAuthority(authority, probe.GetServiceId()) ||
+		!taskassignment.HasServingPredecessorAuthority(authority, probe.GetServiceId()) ||
 		probe.GetCandidateArtifactId() != authority.GetCandidateArtifactId() ||
 		executionplan.RestorationTargetForService(
 			authority,

@@ -1,15 +1,14 @@
-package agent
+package taskassignment
 
 import (
 	"bytes"
-	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func hasServingPredecessorAuthority(authority *agentpb.ReleaseRestorationAuthority, serviceID string) bool {
+func HasServingPredecessorAuthority(authority *agentpb.ReleaseRestorationAuthority, serviceID string) bool {
 	for _, witness := range authority.GetNativePredecessors() {
 		if witness.GetServiceId() == serviceID {
 			return len(witness.GetCurrentArtifact()) != 0
@@ -18,7 +17,7 @@ func hasServingPredecessorAuthority(authority *agentpb.ReleaseRestorationAuthori
 	return false
 }
 
-func validateCandidateReleaseAssignmentAuthority(assignment taskassignment.Assignment, plan *agentpb.ExecutionPlan) error {
+func ValidateCandidateReleaseAuthority(assignment Assignment, plan *agentpb.ExecutionPlan) error {
 	procedure := plan.GetCandidateReleaseProcedure()
 	if procedure == nil {
 		if assignment.RestorationAuthority != nil || assignment.ReleaseRecoveryDirective != nil ||
@@ -52,7 +51,7 @@ func validateCandidateReleaseAssignmentAuthority(assignment taskassignment.Assig
 		switch candidate.GetTarget() {
 		case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_SERVING_PREDECESSOR:
 			selected := member.GetServingPredecessor()
-			if selected == nil || !hasServingPredecessorAuthority(authority, member.GetServiceId()) {
+			if selected == nil || !HasServingPredecessorAuthority(authority, member.GetServiceId()) {
 				return errs.New(errs.KindInternal, "agent: serving predecessor authority is incomplete")
 			}
 		case agentpb.ReleaseRestorationTarget_RELEASE_RESTORATION_TARGET_CANDIDATE_ABSENCE:

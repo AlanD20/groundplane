@@ -1,4 +1,4 @@
-package agent
+package composeruntime
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 // ensureManagedComposeResource prepares only the sealed Network or Volume. The helper
 // verifies the physical result; observing workload containers here would fail
 // the first-release path before those containers are allowed to exist.
-func (runtime *ComposeRuntime) ensureManagedComposeResource(
+func (runtime *Runtime) ensureManagedComposeResource(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-) (composeStepResult, error) {
-	result := composeStepResult{MutationAttempted: true}
+) (StepResult, error) {
+	result := StepResult{MutationAttempted: true}
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID,
 		TaskId: assignment.TaskID, OperationId: assignment.OperationID,

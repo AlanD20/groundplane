@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"errors"
+	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
@@ -65,7 +66,7 @@ type Client struct {
 	started                bool
 	pool                   *WorkerPool
 	workersDone            <-chan struct{}
-	compose                *ComposeRuntime
+	compose                *composeruntime.Runtime
 	environmentDirectories *directoryruntime.Runtime
 	materializer           *filematerialization.Runtime
 	componentActions       ComponentActionRuntime
@@ -161,7 +162,7 @@ func NewClientWithRuntimes(
 	token []byte,
 	volumeRoot string,
 	logger *slog.Logger,
-	compose *ComposeRuntime,
+	compose *composeruntime.Runtime,
 	environmentDirectories *directoryruntime.Runtime,
 	materializer *filematerialization.Runtime,
 ) (*Client, error) {
@@ -184,7 +185,7 @@ func NewClientWithLogReader(
 	token []byte,
 	volumeRoot string,
 	logger *slog.Logger,
-	compose *ComposeRuntime,
+	compose *composeruntime.Runtime,
 	environmentDirectories *directoryruntime.Runtime,
 	materializer *filematerialization.Runtime,
 	logReader agentprotocol.LogReader,

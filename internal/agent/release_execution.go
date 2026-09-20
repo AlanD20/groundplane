@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"sort"
 	"time"
@@ -130,7 +131,7 @@ func (p *WorkerPool) runBlueprintReleaseForward(
 	reservation *taskReservation,
 	state *releaseExecutionState,
 ) {
-	stepID, err := p.compose.preflightManagedComponentTeardown(ctx, reservation.assignment.Plan)
+	stepID, err := p.compose.PreflightManagedComponentTeardown(ctx, reservation.assignment.Plan)
 	if err != nil {
 		state.err, state.failedStepID, state.reconciliation = err, stepID, true
 		return
@@ -268,7 +269,7 @@ func (p *WorkerPool) runReleaseStep(
 		p.emitProgress(runCtx, running)
 	}
 	stepCtx, cancel := context.WithTimeout(reservation.ctx, time.Duration(step.TimeoutSeconds)*time.Second)
-	var result composeStepResult
+	var result composeruntime.StepResult
 	var err error
 	if step.GetRunScript() != nil {
 		if p.scriptRuntime == nil {
@@ -301,7 +302,7 @@ func (p *WorkerPool) runReleaseStep(
 		(step.GetMaterializeFile() != nil || step.GetAdapterProcedure() != nil || step.GetManagedVolumeDirectoriesEnsure() != nil || step.GetEnvironmentDirectoryCreate() != nil) {
 		result, err = p.executeBlueprintReleaseSetup(stepCtx, reservation.assignment, step)
 	} else {
-		result, err = p.compose.executeStep(stepCtx, reservation.assignment, step)
+		result, err = p.compose.ExecuteStep(stepCtx, reservation.assignment, step)
 	}
 	stepContextErr := stepCtx.Err()
 	cancel()
@@ -323,7 +324,7 @@ func (p *WorkerPool) runReleaseStep(
 	err = state.recordAbsenceResult(&result, err)
 	pair := executionplan.ConfigurationFilePair(reservation.assignment.Plan, step.GetStepId())
 	if err == nil && step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
-		state.restored = pair != nil || releaseRestorationEvidenceProven(reservation.assignment, step, result)
+		state.restored = pair != nil || composeruntime.ReleaseRestorationEvidenceProven(reservation.assignment, step, result)
 		if !state.restored {
 			err = errs.New(errs.KindInternal, "agent: release compensation returned no exact restoration proof")
 			result.ReconciliationRequired = true
@@ -334,7 +335,7 @@ func (p *WorkerPool) runReleaseStep(
 		if pair != nil {
 			required = result.RestorationRequired
 		} else {
-			required, err = releaseProbeEvidenceStatus(reservation.assignment, step, result)
+			required, err = composeruntime.ReleaseProbeEvidenceStatus(reservation.assignment, step, result)
 		}
 		if err == nil {
 			state.probeRequired[step.GetStepId()] = required

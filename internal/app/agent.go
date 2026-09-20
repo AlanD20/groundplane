@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	scriptruntime "github.com/AlanD20/groundplane/internal/agent/scriptruntime"
@@ -43,12 +44,12 @@ type Agent struct {
 }
 
 type ownedComposeHelper interface {
-	agent.ComposeHelper
+	composeruntime.Helper
 	io.Closer
 }
 
 type ownedComposeObserver interface {
-	agent.ComposeObserver
+	composeruntime.Observer
 	io.Closer
 }
 
@@ -335,7 +336,7 @@ func newAgentComposeRuntime(
 	image string,
 	newHelper func(string) (ownedComposeHelper, error),
 	newObserver func() (ownedComposeObserver, error),
-) (*agent.ComposeRuntime, *agentComposeResources, error) {
+) (*composeruntime.Runtime, *agentComposeResources, error) {
 	if image == "" {
 		return nil, nil, errs.New(errs.KindValidationFailed, "agent: managed Agent image is required")
 	}
@@ -351,7 +352,7 @@ func newAgentComposeRuntime(
 		return nil, nil, preferAgentComposeCleanup(err, helper.Close())
 	}
 	resources := &agentComposeResources{helper: helper, observer: observer}
-	runtime, err := agent.NewComposeRuntime(helper, observer)
+	runtime, err := composeruntime.New(helper, observer)
 	if err != nil {
 		return nil, nil, preferAgentComposeCleanup(err, resources.Close())
 	}

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	"sort"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -8,7 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (state *releaseExecutionState) recordAbsenceResult(result *composeStepResult, primary error) error {
+func (state *releaseExecutionState) recordAbsenceResult(result *composeruntime.StepResult, primary error) error {
 	if result.CandidateAbsenceEvidence == nil {
 		return primary
 	}

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"slices"
@@ -179,7 +180,7 @@ func (p *WorkerPool) probeReleaseRecoveryWithoutEvent(
 		result, err := p.executeReleaseConfigurationStep(stepCtx, reservation.assignment, step)
 		return result.RestorationRequired, err
 	}
-	result, err := p.compose.executeStep(stepCtx, reservation.assignment, step)
+	result, err := p.compose.ExecuteStep(stepCtx, reservation.assignment, step)
 	if err != nil {
 		return false, err
 	}
@@ -197,48 +198,48 @@ func (p *WorkerPool) probeReleaseRecoveryWithoutEvent(
 	if result.ReconciliationRequired {
 		return false, errs.New(errs.KindInternal, "agent: release recovery probe requires reconciliation")
 	}
-	return releaseProbeEvidenceStatus(reservation.assignment, step, result)
+	return composeruntime.ReleaseProbeEvidenceStatus(reservation.assignment, step, result)
 }
 
 func (p *WorkerPool) executeReleaseConfigurationStep(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-) (composeStepResult, error) {
+) (composeruntime.StepResult, error) {
 	if p.materializer == nil {
-		return composeStepResult{ReconciliationRequired: true}, errs.New(
+		return composeruntime.StepResult{ReconciliationRequired: true}, errs.New(
 			errs.KindInternal,
 			"agent: materialization runtime is not configured",
 		)
 	}
 	payload, err := p.materializations.Take(ctx, assignment.TaskID, step.GetStepId())
 	if err != nil {
-		return composeStepResult{ReconciliationRequired: true}, err
+		return composeruntime.StepResult{ReconciliationRequired: true}, err
 	}
 	if step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE {
 		err = p.materializer.VerifyStep(ctx, assignment, step, payload)
 		if errors.Is(err, errs.New(errs.KindStateConflict, "")) {
-			return composeStepResult{RestorationRequired: true}, nil
+			return composeruntime.StepResult{RestorationRequired: true}, nil
 		}
-		return composeStepResult{ReconciliationRequired: err != nil}, err
+		return composeruntime.StepResult{ReconciliationRequired: err != nil}, err
 	}
 	if step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
-		return composeStepResult{ReconciliationRequired: true}, filematerialization.CloseSourceWithError(
+		return composeruntime.StepResult{ReconciliationRequired: true}, filematerialization.CloseSourceWithError(
 			payload.Source,
 			"agent: configuration recovery selected a forward materialization",
 		)
 	}
 	if err := p.materializer.ExecuteStep(ctx, assignment, step, payload); err != nil {
-		return composeStepResult{ReconciliationRequired: true}, err
+		return composeruntime.StepResult{ReconciliationRequired: true}, err
 	}
 	proof, err := p.materializations.Take(ctx, assignment.TaskID, step.GetStepId())
 	if err != nil {
-		return composeStepResult{ReconciliationRequired: true}, err
+		return composeruntime.StepResult{ReconciliationRequired: true}, err
 	}
 	if err := p.materializer.VerifyStep(ctx, assignment, step, proof); err != nil {
-		return composeStepResult{ReconciliationRequired: true}, err
+		return composeruntime.StepResult{ReconciliationRequired: true}, err
 	}
-	return composeStepResult{}, nil
+	return composeruntime.StepResult{}, nil
 }
 
 func (p *WorkerPool) completeReleaseRecoveryNoop(

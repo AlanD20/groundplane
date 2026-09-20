@@ -1,4 +1,4 @@
-package agent
+package composeruntime
 
 import (
 	"bytes"
@@ -11,10 +11,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func releaseRestorationEvidenceProven(
+func ReleaseRestorationEvidenceProven(
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-	result composeStepResult,
+	result StepResult,
 ) bool {
 	if compensate := step.GetServiceProxyCompensate(); compensate != nil {
 		return compensate.GetEnabled() && exclusiveProxyEvidence(result) && exactProxyEvidence(
@@ -49,10 +49,10 @@ func releaseRestorationEvidenceProven(
 	}
 }
 
-func releaseProbeEvidenceStatus(
+func ReleaseProbeEvidenceStatus(
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-	result composeStepResult,
+	result StepResult,
 ) (bool, error) {
 	if result.RestorationRequired {
 		if !selectedServingProbe(assignment, step) || result.ProxyEvidence != nil ||
@@ -286,17 +286,17 @@ func restorationCandidateSet(values []*agentpb.ReleaseRestorationCandidate) (map
 	return set, len(set) != 0
 }
 
-func exclusiveProxyEvidence(result composeStepResult) bool {
+func exclusiveProxyEvidence(result StepResult) bool {
 	return !result.RestorationRequired && result.ProxyEvidence != nil && result.RecreateEvidence == nil &&
 		result.CandidateAbsenceEvidence == nil
 }
 
-func exclusiveRecreateEvidence(result composeStepResult) bool {
+func exclusiveRecreateEvidence(result StepResult) bool {
 	return !result.RestorationRequired && result.ProxyEvidence == nil && result.RecreateEvidence != nil &&
 		result.CandidateAbsenceEvidence == nil
 }
 
-func exclusiveAbsenceEvidence(result composeStepResult) bool {
+func exclusiveAbsenceEvidence(result StepResult) bool {
 	return !result.RestorationRequired && result.ProxyEvidence == nil && result.RecreateEvidence == nil &&
 		result.CandidateAbsenceEvidence != nil
 }

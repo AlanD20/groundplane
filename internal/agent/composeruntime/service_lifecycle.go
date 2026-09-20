@@ -1,4 +1,4 @@
-package agent
+package composeruntime
 
 import (
 	"context"
@@ -8,23 +8,23 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (runtime *ComposeRuntime) executeServiceLifecycleMutation(
+func (runtime *Runtime) executeServiceLifecycleMutation(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	artifactID string,
-) (composeStepResult, error) {
+) (StepResult, error) {
 	artifact, source, err := serviceLifecycleStepSource(assignment.Plan, artifactID, step.GetStepId())
 	if err != nil {
-		return composeStepResult{}, err
+		return StepResult{}, err
 	}
 	if step.GetComposeStop() != nil || step.GetComposeRemove() != nil {
 		observed, observeErr := runtime.observer.Observe(ctx, assignment.Plan, artifactID)
 		if observeErr != nil {
-			return composeStepResult{Observed: observed, ReconciliationRequired: true}, observeErr
+			return StepResult{Observed: observed, ReconciliationRequired: true}, observeErr
 		}
 		if footprintErr := verifyServiceLifecycleFootprint(artifact, source, observed); footprintErr != nil {
-			return composeStepResult{Observed: observed, ReconciliationRequired: true}, footprintErr
+			return StepResult{Observed: observed, ReconciliationRequired: true}, footprintErr
 		}
 	}
 	postcondition := func(observed *agentpb.ObservedProject) error {

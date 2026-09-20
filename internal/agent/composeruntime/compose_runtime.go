@@ -1,4 +1,4 @@
-package agent
+package composeruntime
 
 import (
 	"context"
@@ -19,22 +19,22 @@ const (
 	composeHealthPollInterval = 250 * time.Millisecond
 )
 
-type ComposeHelper interface {
+type Helper interface {
 	Execute(context.Context, *agentpb.ComposeHelperRequest) (*agentpb.ComposeHelperResponse, error)
 }
 
-type ComposeObserver interface {
+type Observer interface {
 	Observe(context.Context, *agentpb.ExecutionPlan, string) (*agentpb.ObservedProject, error)
 	ObserveRestoration(context.Context, *executionplan.RestorationObservation) (*agentpb.ObservedProject, error)
 	ObserveReleaseRestoration(context.Context, *agentpb.ExecutionPlan, string, string) (*agentpb.ObservedProject, error)
 }
 
-type ComposeRuntime struct {
-	helper   ComposeHelper
-	observer ComposeObserver
+type Runtime struct {
+	helper   Helper
+	observer Observer
 }
 
-type composeStepResult struct {
+type StepResult struct {
 	Observed                 *agentpb.ObservedProject
 	ExitCode                 int32
 	Diagnostic               agentpb.ComposeHelperDiagnostic
@@ -46,23 +46,23 @@ type composeStepResult struct {
 	CandidateAbsenceEvidence *agentpb.CandidateAbsenceEvidence
 }
 
-func NewComposeRuntime(helper ComposeHelper, observer ComposeObserver) (*ComposeRuntime, error) {
+func New(helper Helper, observer Observer) (*Runtime, error) {
 	if helper == nil || observer == nil {
 		return nil, errs.New(errs.KindValidationFailed, "agent: Compose helper and observer are required")
 	}
-	return &ComposeRuntime{helper: helper, observer: observer}, nil
+	return &Runtime{helper: helper, observer: observer}, nil
 }
 
-func (runtime *ComposeRuntime) executeStep(
+func (runtime *Runtime) ExecuteStep(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-) (composeStepResult, error) {
+) (StepResult, error) {
 	if runtime == nil || runtime.helper == nil || runtime.observer == nil {
-		return composeStepResult{}, errs.New(errs.KindInternal, "agent: Compose runtime is not configured")
+		return StepResult{}, errs.New(errs.KindInternal, "agent: Compose runtime is not configured")
 	}
 	if err := ctx.Err(); err != nil {
-		return composeStepResult{}, err
+		return StepResult{}, err
 	}
 
 	switch payload := step.GetPayload().(type) {
@@ -131,16 +131,16 @@ func (runtime *ComposeRuntime) executeStep(
 	case *agentpb.ExecutionStep_CandidateRestorationProbe, *agentpb.ExecutionStep_CandidateRestorationCompensate:
 		return runtime.candidateRestoration(ctx, assignment, step)
 	default:
-		return composeStepResult{}, errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
+		return StepResult{}, errs.New(errs.KindInternal, "agent: Controller sent an unknown step payload")
 	}
 }
 
-func (runtime *ComposeRuntime) waitWorkloadHealthy(
+func (runtime *Runtime) waitWorkloadHealthy(
 	ctx context.Context,
 	plan *agentpb.ExecutionPlan,
 	wait *agentpb.WaitWorkloadHealthy,
-) (composeStepResult, error) {
-	result := composeStepResult{}
+) (StepResult, error) {
+	result := StepResult{}
 	artifact := taskassignment.ComposeArtifact(plan, wait.ArtifactId)
 	role, slot := agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_WORKLOAD_SLOT, wait.Target
 	if wait.Target == "singleton" {
@@ -192,12 +192,12 @@ func releaseRuntimeComposeName(
 	return ""
 }
 
-func (runtime *ComposeRuntime) removeManagedVolume(
+func (runtime *Runtime) removeManagedVolume(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-) (composeStepResult, error) {
-	result := composeStepResult{MutationAttempted: true}
+) (StepResult, error) {
+	result := StepResult{MutationAttempted: true}
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID,
 		TaskId: assignment.TaskID, OperationId: assignment.OperationID,
@@ -222,12 +222,12 @@ func (runtime *ComposeRuntime) removeManagedVolume(
 	}
 	return result, nil
 }
-func (runtime *ComposeRuntime) removeManagedNetwork(
+func (runtime *Runtime) removeManagedNetwork(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-) (composeStepResult, error) {
-	result := composeStepResult{MutationAttempted: true}
+) (StepResult, error) {
+	result := StepResult{MutationAttempted: true}
 	response, err := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema: composeHelperSchema, AssignmentId: assignment.AssignmentID,
 		TaskId: assignment.TaskID, OperationId: assignment.OperationID,
@@ -263,14 +263,14 @@ func (runtime *ComposeRuntime) removeManagedNetwork(
 	return result, nil
 }
 
-func (runtime *ComposeRuntime) mutate(
+func (runtime *Runtime) mutate(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	artifactID string,
 	postcondition func(*agentpb.ObservedProject) error,
-) (composeStepResult, error) {
-	result := composeStepResult{MutationAttempted: true}
+) (StepResult, error) {
+	result := StepResult{MutationAttempted: true}
 	response, helperErr := runtime.helper.Execute(ctx, &agentpb.ComposeHelperRequest{
 		Schema:         composeHelperSchema,
 		AssignmentId:   assignment.AssignmentID,
@@ -322,7 +322,7 @@ func (runtime *ComposeRuntime) mutate(
 	return result, nil
 }
 
-func (runtime *ComposeRuntime) observeAfterMutation(
+func (runtime *Runtime) observeAfterMutation(
 	ctx context.Context,
 	plan *agentpb.ExecutionPlan,
 	artifactID string,
@@ -336,12 +336,12 @@ func (runtime *ComposeRuntime) observeAfterMutation(
 	return runtime.observer.Observe(observeCtx, plan, artifactID)
 }
 
-func (runtime *ComposeRuntime) waitHealthy(
+func (runtime *Runtime) waitHealthy(
 	ctx context.Context,
 	plan *agentpb.ExecutionPlan,
 	wait *agentpb.WaitHealthy,
-) (composeStepResult, error) {
-	result := composeStepResult{}
+) (StepResult, error) {
+	result := StepResult{}
 	artifact := taskassignment.ComposeArtifact(plan, wait.GetArtifactId())
 	if artifact == nil {
 		return result, errs.New(errs.KindInternal, "agent: WaitHealthy artifact is missing from the plan")

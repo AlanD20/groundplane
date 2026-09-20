@@ -1,4 +1,4 @@
-package agent
+package composeruntime
 
 import (
 	"context"
@@ -7,10 +7,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-// preflightManagedComponentTeardown observes every selected physical Compose
+// PreflightManagedComponentTeardown observes every selected physical Compose
 // name before the first forward mutation. Volatile plan labels may differ, but
 // the existing Component and Service ownership labels must match exactly.
-func (runtime *ComposeRuntime) preflightManagedComponentTeardown(
+func (runtime *Runtime) PreflightManagedComponentTeardown(
 	ctx context.Context,
 	plan *agentpb.ExecutionPlan,
 ) (string, error) {
