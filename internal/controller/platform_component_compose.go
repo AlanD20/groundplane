@@ -3,6 +3,7 @@ package controller
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	"math"
 	"path/filepath"
 	"strconv"
@@ -52,7 +53,7 @@ func RenderPlatformComponentCompose(
 		!validPlatformSHA256(input.ImageConfigDigest) || input.ImageConfigDigest == input.ImageIndexDigest ||
 		input.ImageConfigDigest == input.ImageChildDigest || input.ImageIndexDigest == input.ImageChildDigest ||
 		len(service.Networks) != 0 || len(service.Mounts) != 1 ||
-		!service.Mounts[0].ReadOnly || service.Replicas != 1 || !validGeneratedRelativePath(file.Path) ||
+		!service.Mounts[0].ReadOnly || service.Replicas != 1 || !componentrender.ValidGeneratedRelativePath(file.Path) ||
 		len(file.Content) == 0 || service.ObservationAction == "" {
 		return nil, errs.New(errs.KindValidationFailed, "platform Component managed Service is invalid")
 	}

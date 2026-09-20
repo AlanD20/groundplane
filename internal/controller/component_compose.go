@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/hex"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	"math"
@@ -39,7 +40,7 @@ type EnvironmentComponentEnvironmentFile struct {
 type EnvironmentComponentComposeProjection struct {
 	Project          *composetypes.Project
 	Services         []composeidentity.Resource
-	PlainFiles       []GeneratedEnvironmentFile
+	PlainFiles       []componentrender.GeneratedEnvironmentFile
 	EnvironmentFiles []EnvironmentComponentEnvironmentFile
 }
 
@@ -49,7 +50,7 @@ type EnvironmentComponentComposeProjection struct {
 func ProjectEnvironmentComponents(
 	project *composetypes.Project,
 	environment core.Environment,
-	catalog []EnvironmentComponentRegistration,
+	catalog []componentrender.EnvironmentComponentRegistration,
 ) (EnvironmentComponentComposeProjection, error) {
 	if project == nil || ids.Validate(ids.KindEnvironment, environment.ID) != nil ||
 		!filepath.IsAbs(environment.VolumeDir) || filepath.Clean(environment.VolumeDir) != environment.VolumeDir ||
@@ -59,7 +60,7 @@ func ProjectEnvironmentComponents(
 			"Environment Component Compose input is invalid",
 		)
 	}
-	rendered, err := RenderEnvironmentComponents(environment, catalog)
+	rendered, err := componentrender.RenderEnvironmentComponents(environment, catalog)
 	if err != nil {
 		return EnvironmentComponentComposeProjection{}, err
 	}
@@ -141,7 +142,7 @@ func ProjectEnvironmentComponents(
 				"Component generated file is not a bounded mounted output",
 			)
 		}
-		result.PlainFiles = append(result.PlainFiles, GeneratedEnvironmentFile{
+		result.PlainFiles = append(result.PlainFiles, componentrender.GeneratedEnvironmentFile{
 			ComponentID: file.ComponentID,
 			Path:        file.Path,
 			Content:     append([]byte(nil), file.Content...),
@@ -151,7 +152,7 @@ func ProjectEnvironmentComponents(
 }
 
 func componentGeneratedFileIsMounted(
-	file GeneratedEnvironmentFile,
+	file componentrender.GeneratedEnvironmentFile,
 	mountedFiles map[string]map[string]struct{},
 ) bool {
 	for source, owners := range mountedFiles {
@@ -180,7 +181,7 @@ func cloneComposeProjectServices(project *composetypes.Project) *composetypes.Pr
 
 func projectEnvironmentComponentService(
 	environment core.Environment,
-	generated GeneratedEnvironmentService,
+	generated componentrender.GeneratedEnvironmentService,
 	image composeidentity.ComponentImage,
 ) (composetypes.ServiceConfig, *EnvironmentComponentEnvironmentFile, error) {
 	definition := generated.Definition
@@ -270,11 +271,6 @@ func projectEnvironmentComponentService(
 		ServiceID:   definition.ID, ServiceName: definition.Name, Destination: destination,
 		Values: values,
 	}, nil
-}
-
-func environmentComponentImageReference(image componentsdk.OCIImage) (string, bool) {
-	_, reference, selected := image.Select(runtime.GOOS, runtime.GOARCH)
-	return reference, selected
 }
 
 func bindEnvironmentComponentImage(

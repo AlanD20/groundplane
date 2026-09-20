@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	"github.com/AlanD20/groundplane/internal/controller/configurationrecovery"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -19,7 +20,7 @@ type TaskPlanResolver struct {
 	attaches              attachPlanRecordReader
 	services              attachPlanServiceReader
 	attachIdentities      attachPlanIdentityResolver
-	componentCatalog      []EnvironmentComponentRegistration
+	componentCatalog      []componentrender.EnvironmentComponentRegistration
 	serviceProxyImage     *etcd.ReleaseProxyImage
 	routeState            routeProviderStateReader
 	releases              *etcd.ReleaseLedger

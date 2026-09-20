@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -26,14 +27,14 @@ type routeProviderStateReader interface {
 // a Component lifecycle Task. The boolean is true only when that Task changes
 // the provider, allowing nil Provider to mean a deliberate disable projection.
 func ResolveComponentTaskRouteProvider(
-	catalog []EnvironmentComponentRegistration,
+	catalog []componentrender.EnvironmentComponentRegistration,
 	environment core.Environment,
 	components []componentrecord.Record,
 	candidates []etcd.ComponentTaskCandidate,
 	inputRevision int64,
 	inputGeneration uint64,
 ) (*etcd.RouteProviderPin, bool, error) {
-	if err := ValidateEnvironmentComponentCatalog(catalog); err != nil {
+	if err := componentrender.ValidateEnvironmentComponentCatalog(catalog); err != nil {
 		return nil, false, err
 	}
 	changesProvider := false
@@ -67,7 +68,7 @@ func ResolveComponentTaskRouteProvider(
 		if err != nil {
 			return nil, false, err
 		}
-		destination, actionID, found := managedConfigurationIdentity(registration)
+		destination, actionID, found := componentrender.ManagedConfigurationIdentity(registration)
 		if !found || inputRevision <= 0 || inputGeneration == 0 {
 			return nil, false, errs.New(errs.KindInternal, "HTTP router Component lifecycle pin is incomplete")
 		}
@@ -117,7 +118,7 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 		return nil, err
 	}
 	input = componentsdk.CloneHTTPRouterInput(input)
-	destination, actionID, managed := managedConfigurationIdentity(registration)
+	destination, actionID, managed := componentrender.ManagedConfigurationIdentity(registration)
 	if componentsdk.ValidateHTTPRouterInput(input) != nil || input.ComponentID != component.ID ||
 		len(component.GeneratedServices) != 1 || !managed {
 		return nil, errs.New(errs.KindStateConflict, "registered HTTP router input is invalid")
@@ -139,14 +140,14 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 
 func (resolver *TaskPlanResolver) routeProviderRegistration(
 	projection etcd.EnvironmentComposeProjection,
-) (EnvironmentComponentRegistration, core.Component, bool, error) {
-	var selected EnvironmentComponentRegistration
+) (componentrender.EnvironmentComponentRegistration, core.Component, bool, error) {
+	var selected componentrender.EnvironmentComponentRegistration
 	var component core.Component
 	found := false
 	for _, record := range projection.Components {
 		candidate, err := componentrecord.ProjectRecord(record)
 		if err != nil {
-			return EnvironmentComponentRegistration{}, core.Component{}, false, err
+			return componentrender.EnvironmentComponentRegistration{}, core.Component{}, false, err
 		}
 		if !candidate.Enabled {
 			continue
@@ -157,7 +158,7 @@ func (resolver *TaskPlanResolver) routeProviderRegistration(
 				continue
 			}
 			if found {
-				return EnvironmentComponentRegistration{}, core.Component{}, false, errs.New(
+				return componentrender.EnvironmentComponentRegistration{}, core.Component{}, false, errs.New(
 					errs.KindStateConflict,
 					"Environment has multiple enabled HTTP router providers",
 				)

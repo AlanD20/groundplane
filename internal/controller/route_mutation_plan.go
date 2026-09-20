@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"math"
@@ -274,7 +275,7 @@ func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 	var definitionDigest, catalogDigest [sha256.Size]byte
 	copy(definitionDigest[:], definitionBytes)
 	copy(catalogDigest[:], catalogBytes)
-	action, err := BuildPinnedEnvironmentComponentAction(
+	action, err := componentrender.BuildPinnedEnvironmentComponentAction(
 		resolver.componentCatalog,
 		pin.ComponentID,
 		definitionDigest,

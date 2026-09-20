@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -21,7 +22,7 @@ func projectPinnedEnvironmentComponents(
 	_ []core.RouteSpec,
 	componentSpecs map[string]core.ComponentSpec,
 	entries []core.EnvEntry,
-	catalog []EnvironmentComponentRegistration,
+	catalog []componentrender.EnvironmentComponentRegistration,
 ) (EnvironmentComponentComposeProjection, error) {
 	generated := make(map[string]struct{})
 	for _, component := range projection.Components {

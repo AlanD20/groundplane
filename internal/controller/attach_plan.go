@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"math"
@@ -92,7 +93,7 @@ func NewTaskPlanResolverWithAttachments(
 	attaches attachPlanRecordReader,
 	services attachPlanServiceReader,
 	identities attachPlanIdentityResolver,
-	componentCatalog []EnvironmentComponentRegistration,
+	componentCatalog []componentrender.EnvironmentComponentRegistration,
 ) (*TaskPlanResolver, error) {
 	resolver, err := NewTaskPlanResolverWithBlueprints(volumeRoot, blueprints, componentCatalog)
 	if err != nil {

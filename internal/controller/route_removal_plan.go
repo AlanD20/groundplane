@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
@@ -254,7 +255,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 	var definitionPin, catalogPin [sha256.Size]byte
 	copy(definitionPin[:], definitionDigest)
 	copy(catalogPin[:], catalogDigest)
-	action, err := BuildPinnedEnvironmentComponentAction(
+	action, err := componentrender.BuildPinnedEnvironmentComponentAction(
 		resolver.componentCatalog,
 		pin.ComponentID,
 		definitionPin,

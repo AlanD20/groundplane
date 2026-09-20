@@ -1,27 +1,28 @@
 package componentregistration
 
 import (
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	"net/netip"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	registeredcaddy "github.com/AlanD20/groundplane-registered-components/caddy"
 
 	"github.com/AlanD20/groundplane/internal/common/ipam"
-	"github.com/AlanD20/groundplane/internal/controller"
+
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func registeredCaddyEnvironmentComponent(
 	actionCatalog Catalog,
-) (controller.EnvironmentComponentRegistration, error) {
+) (componentrender.EnvironmentComponentRegistration, error) {
 	definition, err := registeredcaddy.Definition()
 	if err != nil {
-		return controller.EnvironmentComponentRegistration{}, errs.Wrap(errs.KindInternal, err)
+		return componentrender.EnvironmentComponentRegistration{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return controller.EnvironmentComponentRegistration{
+	return componentrender.EnvironmentComponentRegistration{
 		Kind: core.ComponentKindIngressCaddy, Definition: definition, CatalogDigest: actionCatalog.Digest(),
-		ManagedConfiguration: &controller.EnvironmentManagedConfigurationRegistration{
+		ManagedConfiguration: &componentrender.EnvironmentManagedConfigurationRegistration{
 			SourcePath: registeredcaddy.CaddyfileSource,
 			ActionID:   registeredcaddy.ActivateConfigAction,
 		},

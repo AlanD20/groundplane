@@ -8,6 +8,7 @@ import (
 	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
 	registeredcoredns "github.com/AlanD20/groundplane-registered-components/coredns"
 	"github.com/AlanD20/groundplane/internal/controller"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -212,7 +213,7 @@ func (catalog Catalog) ResolveDNSResolverObservationActionEnvelope(
 	return definition, action, recipe, nil
 }
 
-func EnvironmentCatalog() ([]controller.EnvironmentComponentRegistration, error) {
+func EnvironmentCatalog() ([]componentrender.EnvironmentComponentRegistration, error) {
 	actionCatalog, err := NewCatalog()
 	if err != nil {
 		return nil, err
@@ -228,9 +229,9 @@ func EnvironmentCatalog() ([]controller.EnvironmentComponentRegistration, error)
 	if err := validateRegisteredCoreDNSComponent(); err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	catalog := []controller.EnvironmentComponentRegistration{caddy, cloudflareTunnel}
-	if err := controller.ValidateEnvironmentComponentCatalog(catalog); err != nil {
+	catalog := []componentrender.EnvironmentComponentRegistration{caddy, cloudflareTunnel}
+	if err := componentrender.ValidateEnvironmentComponentCatalog(catalog); err != nil {
 		return nil, err
 	}
-	return controller.CloneEnvironmentComponentCatalog(catalog), nil
+	return componentrender.CloneEnvironmentComponentCatalog(catalog), nil
 }

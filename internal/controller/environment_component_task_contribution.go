@@ -3,6 +3,7 @@ package controller
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
@@ -18,7 +19,7 @@ type EnvironmentManagedConfigApplyInput struct {
 	RevisionID       string
 	RenderGeneration uint64
 	Components       []componentrecord.Record
-	ComponentCatalog []EnvironmentComponentRegistration
+	ComponentCatalog []componentrender.EnvironmentComponentRegistration
 	Materializations []etcd.TaskMaterializationRecord
 	Artifact         *agentpb.ComposeArtifact
 }
@@ -94,7 +95,7 @@ func ResolveEnvironmentManagedConfigApply(
 		)
 	}
 
-	if err := ValidateEnvironmentComponentCatalog(input.ComponentCatalog); err != nil {
+	if err := componentrender.ValidateEnvironmentComponentCatalog(input.ComponentCatalog); err != nil {
 		return EnvironmentManagedConfigApply{}, false, err
 	}
 	candidate, registration, hasCandidate, err := resolveEnvironmentManagedConfigCandidate(
@@ -155,7 +156,7 @@ func ResolveEnvironmentManagedConfigApply(
 		return EnvironmentManagedConfigApply{}, false, err
 	}
 	reference := input.Materializations[materializationIndex]
-	action, err := BuildEnvironmentComponentAction(
+	action, err := componentrender.BuildEnvironmentComponentAction(
 		input.ComponentCatalog,
 		candidate.Desired.Kind,
 		candidate.Desired.ID,
@@ -174,10 +175,10 @@ func ResolveEnvironmentManagedConfigApply(
 
 func resolveEnvironmentManagedConfigCandidate(
 	components []componentrecord.Record,
-	catalog []EnvironmentComponentRegistration,
-) (componentrecord.Record, EnvironmentComponentRegistration, bool, error) {
+	catalog []componentrender.EnvironmentComponentRegistration,
+) (componentrecord.Record, componentrender.EnvironmentComponentRegistration, bool, error) {
 	var candidate componentrecord.Record
-	var selected EnvironmentComponentRegistration
+	var selected componentrender.EnvironmentComponentRegistration
 	found := false
 	for _, component := range components {
 		registration, registered := environmentComponentRegistration(catalog, component.Desired.Kind)
@@ -185,7 +186,7 @@ func resolveEnvironmentManagedConfigCandidate(
 			continue
 		}
 		if found {
-			return componentrecord.Record{}, EnvironmentComponentRegistration{}, false, errs.New(
+			return componentrecord.Record{}, componentrender.EnvironmentComponentRegistration{}, false, errs.New(
 				errs.KindInternal,
 				"Blueprint managed-config provider is duplicated",
 			)
@@ -193,7 +194,7 @@ func resolveEnvironmentManagedConfigCandidate(
 		if ids.Validate(ids.KindComponent, component.Desired.ID) != nil ||
 			component.Desired.Owner != core.ComponentOwnerEnvironment ||
 			ids.Validate(ids.KindEnvironment, component.Desired.OwnerID) != nil {
-			return componentrecord.Record{}, EnvironmentComponentRegistration{}, false, errs.New(
+			return componentrecord.Record{}, componentrender.EnvironmentComponentRegistration{}, false, errs.New(
 				errs.KindInternal,
 				"Blueprint managed-config candidate identity is invalid",
 			)
@@ -201,13 +202,13 @@ func resolveEnvironmentManagedConfigCandidate(
 		if component.Desired.Enabled {
 			if len(component.Runtime.GeneratedServices) != 1 ||
 				ids.Validate(ids.KindService, component.Runtime.GeneratedServices[0]) != nil {
-				return componentrecord.Record{}, EnvironmentComponentRegistration{}, false, errs.New(
+				return componentrecord.Record{}, componentrender.EnvironmentComponentRegistration{}, false, errs.New(
 					errs.KindInternal,
 					"enabled Blueprint managed-config candidate Service identity is invalid",
 				)
 			}
 		} else if len(component.Runtime.GeneratedServices) != 0 {
-			return componentrecord.Record{}, EnvironmentComponentRegistration{}, false, errs.New(
+			return componentrecord.Record{}, componentrender.EnvironmentComponentRegistration{}, false, errs.New(
 				errs.KindInternal,
 				"disabled Blueprint managed-config candidate has a generated Service",
 			)
@@ -220,22 +221,22 @@ func resolveEnvironmentManagedConfigCandidate(
 }
 
 func environmentComponentRegistration(
-	catalog []EnvironmentComponentRegistration,
+	catalog []componentrender.EnvironmentComponentRegistration,
 	kind core.ComponentKind,
-) (EnvironmentComponentRegistration, bool) {
+) (componentrender.EnvironmentComponentRegistration, bool) {
 	for _, registration := range catalog {
 		if registration.Kind == kind {
 			return registration, true
 		}
 	}
-	return EnvironmentComponentRegistration{}, false
+	return componentrender.EnvironmentComponentRegistration{}, false
 }
 
 func resolveEnvironmentManagedConfigMaterialization(
 	materializations []etcd.TaskMaterializationRecord,
 	componentID string,
-	managed *EnvironmentManagedConfigurationRegistration,
-	catalog []EnvironmentComponentRegistration,
+	managed *componentrender.EnvironmentManagedConfigurationRegistration,
+	catalog []componentrender.EnvironmentComponentRegistration,
 ) (int, bool, error) {
 	selected := -1
 	for index := range materializations {
@@ -265,8 +266,8 @@ func claimsManagedConfiguration(
 	referenceComponentID string,
 	referencePath string,
 	componentID string,
-	managed *EnvironmentManagedConfigurationRegistration,
-	catalog []EnvironmentComponentRegistration,
+	managed *componentrender.EnvironmentManagedConfigurationRegistration,
+	catalog []componentrender.EnvironmentComponentRegistration,
 ) bool {
 	if managed != nil {
 		return referenceComponentID == componentID && referencePath == managed.SourcePath
@@ -306,7 +307,7 @@ func validateEnvironmentManagedConfigMaterialization(
 	reference etcd.TaskMaterializationRecord,
 	revisionID string,
 	candidate componentrecord.Record,
-	managed *EnvironmentManagedConfigurationRegistration,
+	managed *componentrender.EnvironmentManagedConfigurationRegistration,
 ) ([sha256.Size]byte, error) {
 	componentFile := reference.Source.ComponentFile
 	if managed == nil || ids.Validate(ids.KindStep, reference.StepID) != nil ||

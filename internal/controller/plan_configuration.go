@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/controller/configurationrecovery"
@@ -11,22 +12,22 @@ import (
 
 func NewTaskPlanResolver(
 	volumeRoot string,
-	componentCatalog []EnvironmentComponentRegistration,
+	componentCatalog []componentrender.EnvironmentComponentRegistration,
 ) (*TaskPlanResolver, error) {
 	if err := environmentpath.ValidateRoot(volumeRoot); err != nil {
 		return nil, err
 	}
-	if err := ValidateEnvironmentComponentCatalog(componentCatalog); err != nil {
+	if err := componentrender.ValidateEnvironmentComponentCatalog(componentCatalog); err != nil {
 		return nil, err
 	}
 	return &TaskPlanResolver{
 		volumeRoot:       volumeRoot,
-		componentCatalog: CloneEnvironmentComponentCatalog(componentCatalog),
+		componentCatalog: componentrender.CloneEnvironmentComponentCatalog(componentCatalog),
 	}, nil
 }
 
 func NewTaskPlanResolverWithBlueprints(volumeRoot string, blueprints blueprintPlanStateReader,
-	componentCatalog []EnvironmentComponentRegistration) (*TaskPlanResolver, error) {
+	componentCatalog []componentrender.EnvironmentComponentRegistration) (*TaskPlanResolver, error) {
 	resolver, err := NewTaskPlanResolver(volumeRoot, componentCatalog)
 	if err != nil {
 		return nil, err

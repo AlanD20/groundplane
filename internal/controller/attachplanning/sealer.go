@@ -4,6 +4,7 @@ package attachplanning
 
 import (
 	"context"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
@@ -68,7 +69,7 @@ type Sealer struct {
 	volumeRoot       string
 	repository       Repository
 	facts            Facts
-	componentCatalog []controllerpkg.EnvironmentComponentRegistration
+	componentCatalog []componentrender.EnvironmentComponentRegistration
 }
 
 func New(
@@ -76,7 +77,7 @@ func New(
 	runtimes *etcd.AttachRepository,
 	repository Repository,
 	facts Facts,
-	componentCatalog []controllerpkg.EnvironmentComponentRegistration,
+	componentCatalog []componentrender.EnvironmentComponentRegistration,
 ) (*Sealer, error) {
 	if repository == nil || facts == nil || runtimes == nil {
 		return nil, errs.New(errs.KindInternal, "Attach draft plan dependencies are required")
@@ -86,7 +87,7 @@ func New(
 	}
 	return &Sealer{
 		volumeRoot: volumeRoot, repository: repository, facts: facts, runtimes: runtimes,
-		componentCatalog: controllerpkg.CloneEnvironmentComponentCatalog(componentCatalog),
+		componentCatalog: componentrender.CloneEnvironmentComponentCatalog(componentCatalog),
 	}, nil
 }
 

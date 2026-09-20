@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -56,7 +57,7 @@ type CreationService struct {
 	protector        *secretvalue.Protector
 	plans            *controller.TaskPlanResolver
 	hookInputs       backingServiceHookInputs
-	componentCatalog []controller.EnvironmentComponentRegistration
+	componentCatalog []componentrender.EnvironmentComponentRegistration
 	now              func() time.Time
 }
 
@@ -68,19 +69,19 @@ func NewCreationService(
 	protector *secretvalue.Protector,
 	plans *controller.TaskPlanResolver,
 	hookInputs backingServiceHookInputs,
-	componentCatalog []controller.EnvironmentComponentRegistration,
+	componentCatalog []componentrender.EnvironmentComponentRegistration,
 ) (*CreationService, error) {
 	if volumeRoot == "" || !environmentPool.IsValid() || repository == nil || idempotency == nil || protector == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service creation dependencies are incomplete")
 	}
-	if err := controller.ValidateEnvironmentComponentCatalog(componentCatalog); err != nil {
+	if err := componentrender.ValidateEnvironmentComponentCatalog(componentCatalog); err != nil {
 		return nil, err
 	}
 	return &CreationService{
 		volumeRoot: volumeRoot, environmentPool: environmentPool,
 		repository: repository, idempotency: idempotency, protector: protector,
 		plans: plans, hookInputs: hookInputs,
-		componentCatalog: controller.CloneEnvironmentComponentCatalog(componentCatalog),
+		componentCatalog: componentrender.CloneEnvironmentComponentCatalog(componentCatalog),
 		now:              time.Now,
 	}, nil
 }

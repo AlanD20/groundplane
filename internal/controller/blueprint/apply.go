@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/entry"
@@ -45,7 +46,7 @@ type Service struct {
 	blueprintReleases *blueprintrelease.Service
 	entryGeneration   *entrygeneration.EntryGenerationService
 	attachFacts       *attachments.FactService
-	componentCatalog  []controller.EnvironmentComponentRegistration
+	componentCatalog  []componentrender.EnvironmentComponentRegistration
 	backups           environmentBlueprintBackupRepository
 	backupKeys        environmentBlueprintBackupKeyFactory
 	random            io.Reader
@@ -62,7 +63,7 @@ func NewService(
 	blueprintReleases *blueprintrelease.Service,
 	entryGeneration *entrygeneration.EntryGenerationService,
 	attachFacts *attachments.FactService,
-	componentCatalog []controller.EnvironmentComponentRegistration,
+	componentCatalog []componentrender.EnvironmentComponentRegistration,
 	backups environmentBlueprintBackupRepository,
 	backupKeys environmentBlueprintBackupKeyFactory,
 ) (*Service, error) {
@@ -86,7 +87,7 @@ func NewService(
 		materials: materials, releaseGroups: releaseGroups, blueprintReleases: blueprintReleases,
 		entryGeneration:  entryGeneration,
 		attachFacts:      attachFacts,
-		componentCatalog: controller.CloneEnvironmentComponentCatalog(componentCatalog),
+		componentCatalog: componentrender.CloneEnvironmentComponentCatalog(componentCatalog),
 		backups:          backups,
 		backupKeys:       backupKeys,
 		random:           rand.Reader, now: time.Now,

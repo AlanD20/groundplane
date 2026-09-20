@@ -4,19 +4,20 @@ import (
 	"github.com/AlanD20/groundplane-component-sdk/component"
 	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
+
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func registeredCloudflareTunnelEnvironmentComponent(
 	actionCatalog Catalog,
-) (controller.EnvironmentComponentRegistration, error) {
+) (componentrender.EnvironmentComponentRegistration, error) {
 	definition, err := registeredtunnel.Definition()
 	if err != nil {
-		return controller.EnvironmentComponentRegistration{}, errs.Wrap(errs.KindInternal, err)
+		return componentrender.EnvironmentComponentRegistration{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return controller.EnvironmentComponentRegistration{
+	return componentrender.EnvironmentComponentRegistration{
 		Kind: core.ComponentKindEdgeCloudflare, Definition: definition, CatalogDigest: actionCatalog.Digest(),
 		Plan: func(environment core.Environment, instance core.Component) (component.EnvironmentPlan, error) {
 			plan, err := planRegisteredCloudflareTunnel(environment, instance)
