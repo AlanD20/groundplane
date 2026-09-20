@@ -1,6 +1,7 @@
 package controller
 
 import (
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"sort"
 
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -18,7 +19,7 @@ func ProjectEnvironmentAttachNetworks(
 	environmentID string,
 	zones []etcd.EnvironmentZoneProjection,
 	services []etcd.EnvironmentServiceProjection,
-	attaches []etcd.Versioned[etcd.AttachRecord],
+	attaches []etcd.Versioned[attachrecord.Record],
 ) ([]ComposeResourceIdentity, error) {
 	projection := etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, DesiredZones: zones, DesiredServices: services,
@@ -35,7 +36,7 @@ func ProjectEnvironmentAttachNetworks(
 func ResolveAttachNetworkJoins(
 	environmentID string,
 	projection etcd.EnvironmentComposeProjection,
-	attaches []etcd.Versioned[etcd.AttachRecord],
+	attaches []etcd.Versioned[attachrecord.Record],
 	excludedAttachID string,
 ) ([]etcd.AttachTaskNetworkJoin, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || projection.EnvironmentID != environmentID {
@@ -61,11 +62,11 @@ func ResolveAttachNetworkJoins(
 		if record.EnvironmentID != environmentID {
 			return nil, errs.New(errs.KindScopeUnauthorized, "Attach network union crosses Environments")
 		}
-		if record.ID == excludedAttachID || record.Operation == etcd.AttachOperationDetach ||
+		if record.ID == excludedAttachID || record.Operation == attachrecord.AttachOperationDetach ||
 			record.Status == core.AttachDetached {
 			continue
 		}
-		if record.Operation != etcd.AttachOperationProvision {
+		if record.Operation != attachrecord.AttachOperationProvision {
 			return nil, errs.New(errs.KindInternal, "Attach network union contains an invalid operation")
 		}
 		if ids.Validate(ids.KindNetwork, record.BackingNetworkID) != nil {

@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"slices"
 	"sort"
@@ -32,14 +33,14 @@ type resolvedBlueprintAttach struct {
 }
 
 type blueprintAttachProcedure struct {
-	record     etcd.AttachRecord
+	record     attachrecord.Record
 	adapterKey string
 	identity   *controllerpkg.AttachPlanIdentity
 }
 
 type preparedBlueprintAttaches struct {
 	publication etcd.BlueprintAttachTaskPreparation
-	effective   []etcd.Versioned[etcd.AttachRecord]
+	effective   []etcd.Versioned[attachrecord.Record]
 	procedures  []blueprintAttachProcedure
 	facts       *blueprintAttachFactOverlay
 }
@@ -63,13 +64,13 @@ func (service *Service) prepareBlueprintAttaches(
 	taskID string,
 	specs map[string]core.AttachmentSpec,
 	serviceChanges []etcd.EnvironmentBlueprintServiceChange,
-	current []etcd.Versioned[etcd.AttachRecord],
+	current []etcd.Versioned[attachrecord.Record],
 	namedID func(ids.Kind, string) string,
 	ownsEnvironmentFence bool,
 	createdAt time.Time,
 ) (preparedBlueprintAttaches, error) {
 	prepared := preparedBlueprintAttaches{
-		effective: append([]etcd.Versioned[etcd.AttachRecord](nil), current...),
+		effective: append([]etcd.Versioned[attachrecord.Record](nil), current...),
 		facts:     newBlueprintAttachFactOverlay(service.attachFacts),
 	}
 	if len(specs) == 0 {
@@ -79,7 +80,7 @@ func (service *Service) prepareBlueprintAttaches(
 	for _, change := range serviceChanges {
 		serviceByName[change.Record.Desired.Name] = change.Record
 	}
-	currentByName := make(map[string]etcd.Versioned[etcd.AttachRecord], len(current))
+	currentByName := make(map[string]etcd.Versioned[attachrecord.Record], len(current))
 	for _, attach := range current {
 		currentByName[attach.Record.Name] = attach
 	}
@@ -90,7 +91,7 @@ func (service *Service) prepareBlueprintAttaches(
 	sort.Strings(names)
 	resolved := make(map[string]resolvedBlueprintAttach, len(names))
 	for _, name := range names {
-		if err := etcd.ValidateAttachName(name); err != nil {
+		if err := attachrecord.ValidateAttachName(name); err != nil {
 			return preparedBlueprintAttaches{}, err
 		}
 		spec := specs[name]
@@ -219,7 +220,7 @@ func (service *Service) prepareBlueprintAttaches(
 		}
 	}
 	inputs := make([]etcd.EnvironmentBlueprintAttachCandidateInput, 0, newCount)
-	records := make(map[string]etcd.AttachRecord, newCount)
+	records := make(map[string]attachrecord.Record, newCount)
 	failed := true
 	defer func() {
 		if failed {
@@ -240,7 +241,7 @@ func (service *Service) prepareBlueprintAttaches(
 		})
 		grantIDs := make([]string, 0, len(grantNames))
 		grantFacts := make([]attachments.GrantInput, 0, len(grantNames))
-		retainedGrants := make([]etcd.Versioned[etcd.AttachRecord], 0, len(grantNames))
+		retainedGrants := make([]etcd.Versioned[attachrecord.Record], 0, len(grantNames))
 		identity := identities[name]
 		for _, grantName := range grantNames {
 			grant, exists := resolved[grantName]
@@ -296,7 +297,7 @@ func (service *Service) prepareBlueprintAttaches(
 		if err != nil {
 			return preparedBlueprintAttaches{}, err
 		}
-		record, err := etcd.NewPendingAttachRecord(
+		record, err := attachrecord.NewPendingAttachRecord(
 			attachIDs[name], environmentID, name,
 			item.backingProject.Record.ID, item.backingEnvironment.Record.ID,
 			item.backingService.Record.Desired.ID, item.backingService.Record.BackingNetworkID,
@@ -333,7 +334,7 @@ func (service *Service) prepareBlueprintAttaches(
 			continue
 		}
 		owner, exists := records[item.spec.Credential.Attach]
-		var retainedOwner *etcd.Versioned[etcd.AttachRecord]
+		var retainedOwner *etcd.Versioned[attachrecord.Record]
 		if !exists {
 			currentOwner, retained := currentByName[item.spec.Credential.Attach]
 			if retained {
@@ -349,7 +350,7 @@ func (service *Service) prepareBlueprintAttaches(
 				"Blueprint Attach credential owner is unavailable",
 			)
 		}
-		record, err := etcd.NewPendingAttachRecord(
+		record, err := attachrecord.NewPendingAttachRecord(
 			attachIDs[name], environmentID, name,
 			item.backingProject.Record.ID, item.backingEnvironment.Record.ID,
 			item.backingService.Record.Desired.ID, item.backingService.Record.BackingNetworkID,
@@ -381,7 +382,7 @@ func (service *Service) prepareBlueprintAttaches(
 	prepared.publication = publication
 	for _, name := range names {
 		if record, created := records[name]; created {
-			prepared.effective = append(prepared.effective, etcd.Versioned[etcd.AttachRecord]{Record: record})
+			prepared.effective = append(prepared.effective, etcd.Versioned[attachrecord.Record]{Record: record})
 		}
 	}
 	sort.Slice(prepared.procedures, func(left, right int) bool {
@@ -394,7 +395,7 @@ func (service *Service) prepareBlueprintAttaches(
 func validateExistingBlueprintAttaches(
 	names []string,
 	resolved map[string]resolvedBlueprintAttach,
-	current map[string]etcd.Versioned[etcd.AttachRecord],
+	current map[string]etcd.Versioned[attachrecord.Record],
 ) error {
 	for _, name := range names {
 		item := resolved[name]
@@ -420,7 +421,7 @@ func validateExistingBlueprintAttaches(
 			grantIDs = append(grantIDs, grant.Record.ID)
 		}
 		sort.Strings(grantIDs)
-		if record.Status != core.AttachReady || record.Operation != etcd.AttachOperationProvision ||
+		if record.Status != core.AttachReady || record.Operation != attachrecord.AttachOperationProvision ||
 			record.BackingProjectID != item.backingProject.Record.ID ||
 			record.BackingEnvironmentID != item.backingEnvironment.Record.ID ||
 			record.BackingServiceID != item.backingService.Record.Desired.ID ||
@@ -579,12 +580,12 @@ func (overlay *blueprintAttachFactOverlay) clear() {
 	}
 }
 
-func cloneBlueprintAttachFactSets(values []etcd.AttachFactSetMetadata) []etcd.AttachFactSetMetadata {
-	cloned := make([]etcd.AttachFactSetMetadata, len(values))
+func cloneBlueprintAttachFactSets(values []attachrecord.FactSetMetadata) []attachrecord.FactSetMetadata {
+	cloned := make([]attachrecord.FactSetMetadata, len(values))
 	for index, value := range values {
-		cloned[index] = etcd.AttachFactSetMetadata{
+		cloned[index] = attachrecord.FactSetMetadata{
 			GrantAttachID: value.GrantAttachID,
-			Facts:         append([]etcd.AttachFactDefinition(nil), value.Facts...),
+			Facts:         append([]attachrecord.FactDefinition(nil), value.Facts...),
 		}
 	}
 	return cloned

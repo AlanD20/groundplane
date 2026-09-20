@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -22,7 +23,7 @@ type backingHookPlanResolver interface {
 }
 
 type backingHookCheckpointRepository interface {
-	GetAttach(context.Context, string) (etcd.Versioned[etcd.AttachRecord], error)
+	GetAttach(context.Context, string) (etcd.Versioned[attachrecord.Record], error)
 	CheckpointBackingHook(
 		context.Context,
 		etcd.BackingHookCheckpointInput,
@@ -32,10 +33,10 @@ type backingHookCheckpointRepository interface {
 type backingHookFactSealer interface {
 	SealHookResult(
 		context.Context,
-		etcd.Versioned[etcd.AttachRecord],
+		etcd.Versioned[attachrecord.Record],
 		[]backinghook.FactDefinition,
 		backinghook.Output,
-	) (etcd.AttachEncryptedFacts, error)
+	) (attachrecord.EncryptedFacts, error)
 }
 
 type BackingHookCheckpointService struct {
@@ -104,7 +105,7 @@ func (service *BackingHookCheckpointService) CheckpointBackingHook(
 		return nil, errs.New(errs.KindStateConflict, "Backing hook checkpoint step changed")
 	}
 	state := etcd.BackingHookCheckpointStarted
-	var sealed *etcd.AttachEncryptedFacts
+	var sealed *attachrecord.EncryptedFacts
 	if validated.GetState() == agentpb.BackingHookCheckpointState_BACKING_HOOK_CHECKPOINT_STATE_RESULT {
 		state = etcd.BackingHookCheckpointResult
 		output := backingHookCheckpointOutput(schema, validated.GetFacts())

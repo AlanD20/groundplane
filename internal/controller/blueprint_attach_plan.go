@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
@@ -12,7 +13,7 @@ import (
 )
 
 type blueprintAttachPlanCandidate struct {
-	current        etcd.Versioned[etcd.AttachRecord]
+	current        etcd.Versioned[attachrecord.Record]
 	adapterKey     string
 	authentication core.BackingAuthentication
 	stepCount      int
@@ -85,7 +86,7 @@ func (resolver *TaskPlanResolver) blueprintAttachPlanCandidates(
 	return candidates, totalSteps, nil
 }
 
-func blueprintAttachRecordEqual(left etcd.AttachRecord, right etcd.AttachRecord) bool {
+func blueprintAttachRecordEqual(left attachrecord.Record, right attachrecord.Record) bool {
 	if left.ID != right.ID || left.EnvironmentID != right.EnvironmentID || left.Name != right.Name ||
 		left.BackingProjectID != right.BackingProjectID || left.BackingEnvironmentID != right.BackingEnvironmentID ||
 		left.BackingServiceID != right.BackingServiceID || left.BackingNetworkID != right.BackingNetworkID ||

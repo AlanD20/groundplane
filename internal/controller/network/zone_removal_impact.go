@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"slices"
 	"strings"
@@ -26,7 +27,7 @@ type zoneRemovalImpactAttaches interface {
 		string,
 		string,
 		int64,
-	) ([]etcd.Versioned[etcd.AttachRecord], error)
+	) ([]etcd.Versioned[attachrecord.Record], error)
 }
 
 type zoneRemovalImpactServices interface {
@@ -35,7 +36,7 @@ type zoneRemovalImpactServices interface {
 }
 
 type zoneRemovalImpactFacts interface {
-	ResolveRemovalDatabase(context.Context, etcd.Versioned[etcd.AttachRecord], func(string) error) error
+	ResolveRemovalDatabase(context.Context, etcd.Versioned[attachrecord.Record], func(string) error) error
 }
 
 type zoneRemovalImpactService struct {

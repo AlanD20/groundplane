@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
@@ -16,7 +17,7 @@ func (service *MutationService) resolveAttachScope(
 	backingServiceID string,
 	credentialAttachID string,
 	grantIDs []string,
-) (etcd.AttachCreateScope, []etcd.Versioned[etcd.AttachRecord], adapters.Adapter, error) {
+) (etcd.AttachCreateScope, []etcd.Versioned[attachrecord.Record], adapters.Adapter, error) {
 	environment, err := service.repository.GetEnvironment(ctx, consumer.Record.EnvironmentID)
 	if err != nil {
 		return etcd.AttachCreateScope{}, nil, nil, err
@@ -104,7 +105,7 @@ func (service *MutationService) resolveAttachScope(
 			"Attach selected Environment Compose projection is inconsistent",
 		)
 	}
-	grants := make([]etcd.Versioned[etcd.AttachRecord], 0, len(grantIDs))
+	grants := make([]etcd.Versioned[attachrecord.Record], 0, len(grantIDs))
 	for _, grantID := range grantIDs {
 		grant, grantErr := service.repository.GetAttach(ctx, grantID)
 		if grantErr != nil {
@@ -112,7 +113,7 @@ func (service *MutationService) resolveAttachScope(
 		}
 		grants = append(grants, grant)
 	}
-	slices.SortFunc(grants, func(left, right etcd.Versioned[etcd.AttachRecord]) int {
+	slices.SortFunc(grants, func(left, right etcd.Versioned[attachrecord.Record]) int {
 		if left.Record.ID < right.Record.ID {
 			return -1
 		}
@@ -121,7 +122,7 @@ func (service *MutationService) resolveAttachScope(
 		}
 		return 0
 	})
-	var credentialOwner *etcd.Versioned[etcd.AttachRecord]
+	var credentialOwner *etcd.Versioned[attachrecord.Record]
 	if credentialAttachID != "" {
 		owner, ownerErr := service.repository.GetAttach(ctx, credentialAttachID)
 		if ownerErr != nil {
@@ -155,8 +156,8 @@ func (service *MutationService) resolveAttachScope(
 func (service *MutationService) listAllAttaches(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[etcd.AttachRecord], error) {
-	var records []etcd.Versioned[etcd.AttachRecord]
+) ([]etcd.Versioned[attachrecord.Record], error) {
+	var records []etcd.Versioned[attachrecord.Record]
 	cursor := ""
 	revision := int64(0)
 	for {

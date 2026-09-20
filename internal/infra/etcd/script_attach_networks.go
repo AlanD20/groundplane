@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
@@ -13,7 +14,7 @@ import (
 type ScriptAttachSources struct {
 	Networks []Versioned[zonerecord.Record]
 	Heads    []Versioned[EnvironmentBlueprintHead]
-	Attaches []Versioned[AttachRecord]
+	Attaches []Versioned[attachrecord.Record]
 }
 
 func loadEnvironmentAttachesAtRevision(
@@ -21,14 +22,14 @@ func loadEnvironmentAttachesAtRevision(
 	store hierarchyStore,
 	environmentID string,
 	revision int64,
-) ([]Versioned[AttachRecord], error) {
-	var result []Versioned[AttachRecord]
+) ([]Versioned[attachrecord.Record], error) {
+	var result []Versioned[attachrecord.Record]
 	request := PageRequest{Limit: 200}
 	for {
 		page, err := listIndexPageAtRevision(ctx, store, "attaches", "environment", environmentID,
-			attachOwnerPrefix(environmentID), attachKey, ids.KindAttach, request, decodeAttachRecord,
-			func(record AttachRecord) string { return record.ID },
-			func(record AttachRecord) bool { return record.EnvironmentID == environmentID }, revision)
+			attachrecord.AttachOwnerPrefix(environmentID), attachrecord.AttachKey, ids.KindAttach, request, attachrecord.DecodeAttachRecord,
+			func(record attachrecord.Record) string { return record.ID },
+			func(record attachrecord.Record) bool { return record.EnvironmentID == environmentID }, revision)
 		if err != nil {
 			return nil, err
 		}
@@ -46,7 +47,7 @@ func resolveScriptAttachNetworks(
 	ctx context.Context,
 	store hierarchyStore,
 	environmentID, serviceID string,
-	attaches []Versioned[AttachRecord],
+	attaches []Versioned[attachrecord.Record],
 	revision int64,
 ) (ScriptAttachSources, error) {
 	result := ScriptAttachSources{}
@@ -63,7 +64,7 @@ func resolveScriptAttachNetworks(
 		if attach.ServiceID != serviceID {
 			continue
 		}
-		if validateAttachRecord(attach) != nil || attach.Operation == AttachOperationDetach {
+		if attachrecord.ValidateAttachRecord(attach) != nil || attach.Operation == attachrecord.AttachOperationDetach {
 			return ScriptAttachSources{}, errs.New(errs.KindStateConflict, "Script Attach network authority is invalid")
 		}
 		result.Attaches = append(result.Attaches, value)
@@ -122,7 +123,7 @@ func resolveScriptAttachNetworks(
 func scriptAttachSourceConditions(sources ScriptAttachSources) []etcdstore.Condition {
 	byKey := make(map[string]etcdstore.Condition)
 	for _, attach := range sources.Attaches {
-		key := attachKey(attach.Record.ID)
+		key := attachrecord.AttachKey(attach.Record.ID)
 		byKey[key] = etcdstore.Condition{Key: key, ModRevision: attach.Revision}
 	}
 	for _, head := range sources.Heads {

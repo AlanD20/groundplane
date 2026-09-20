@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"sort"
@@ -16,7 +17,7 @@ import (
 type applyPreflight struct {
 	bundle                core.BlueprintBundle
 	parsed                blueprintparser.Result
-	currentAttaches       []etcd.Versioned[etcd.AttachRecord]
+	currentAttaches       []etcd.Versioned[attachrecord.Record]
 	attachReadRevision    int64
 	requirements          core.BlueprintRequirements
 	submittedServiceNames map[string]struct{}

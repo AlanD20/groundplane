@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -23,25 +24,25 @@ const (
 // will be published by the same transaction as its owning Blueprint Task.
 // Versioned backing records are private compare evidence, not desired state.
 type EnvironmentBlueprintAttachCandidateInput struct {
-	Record                  AttachRecord
-	Facts                   *AttachEncryptedFacts
+	Record                  attachrecord.Record
+	Facts                   *attachrecord.EncryptedFacts
 	BackingProject          Versioned[hierarchyrecord.ProjectRecord]
 	BackingEnvironment      Versioned[hierarchyrecord.EnvironmentRecord]
 	BackingService          Versioned[ServiceRecord]
-	RetainedCredentialOwner *Versioned[AttachRecord]
-	RetainedGrantTargets    []Versioned[AttachRecord]
+	RetainedCredentialOwner *Versioned[attachrecord.Record]
+	RetainedGrantTargets    []Versioned[attachrecord.Record]
 }
 
 // BlueprintAttachTaskIntent is the non-secret, task-owned lifecycle manifest
 // for every Attach introduced by one Blueprint application.
 type BlueprintAttachTaskIntent struct {
-	TaskID               string         `json:"task_id"`
-	EnvironmentID        string         `json:"environment_id"`
-	Status               TaskStatus     `json:"status"`
-	OwnsEnvironmentFence bool           `json:"owns_environment_fence"`
-	Candidates           []AttachRecord `json:"candidates"`
-	CreatedAt            time.Time      `json:"created_at"`
-	TerminalAt           *time.Time     `json:"terminal_at,omitempty"`
+	TaskID               string                `json:"task_id"`
+	EnvironmentID        string                `json:"environment_id"`
+	Status               TaskStatus            `json:"status"`
+	OwnsEnvironmentFence bool                  `json:"owns_environment_fence"`
+	Candidates           []attachrecord.Record `json:"candidates"`
+	CreatedAt            time.Time             `json:"created_at"`
+	TerminalAt           *time.Time            `json:"terminal_at,omitempty"`
 }
 
 // BlueprintAttachTaskPreparation is immutable publication input. Ciphertext
@@ -148,7 +149,7 @@ func PrepareEnvironmentBlueprintAttachTask(
 	sort.Slice(preparation.candidates, func(left, right int) bool {
 		return preparation.candidates[left].Record.ID < preparation.candidates[right].Record.ID
 	})
-	preparation.Intent.Candidates = make([]AttachRecord, 0, len(preparation.candidates))
+	preparation.Intent.Candidates = make([]attachrecord.Record, 0, len(preparation.candidates))
 	for _, input := range preparation.candidates {
 		preparation.Intent.Candidates = append(preparation.Intent.Candidates, cloneAttachRecord(input.Record))
 	}
@@ -225,7 +226,7 @@ func terminalBlueprintAttachTaskIntent(
 		return BlueprintAttachTaskIntent{}, errs.New(errs.KindStateConflict, "Blueprint Attach intent is not pending")
 	}
 	terminal := intent
-	terminal.Candidates = make([]AttachRecord, len(intent.Candidates))
+	terminal.Candidates = make([]attachrecord.Record, len(intent.Candidates))
 	for index, record := range intent.Candidates {
 		terminal.Candidates[index] = cloneAttachRecord(record)
 	}
@@ -276,12 +277,12 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 	if len(byID) != len(preparation.candidates) || len(byName) != len(preparation.candidates) {
 		return errs.New(errs.KindValidationFailed, "Blueprint Attach identities must be unique")
 	}
-	retainedByID := make(map[string]Versioned[AttachRecord])
+	retainedByID := make(map[string]Versioned[attachrecord.Record])
 	retainedReadRevision := int64(0)
-	validateRetained := func(retained Versioned[AttachRecord], candidate AttachRecord) error {
+	validateRetained := func(retained Versioned[attachrecord.Record], candidate attachrecord.Record) error {
 		if retained.Revision <= 0 || retained.ReadRevision <= 0 || retained.Revision > retained.ReadRevision ||
-			validateAttachRecord(retained.Record) != nil || retained.Record.Status != core.AttachReady ||
-			retained.Record.Operation != AttachOperationProvision || !retained.Record.OwnsCredential() ||
+			attachrecord.ValidateAttachRecord(retained.Record) != nil || retained.Record.Status != core.AttachReady ||
+			retained.Record.Operation != attachrecord.AttachOperationProvision || !retained.Record.OwnsCredential() ||
 			retained.Record.EnvironmentID != candidate.EnvironmentID ||
 			retained.Record.BackingProjectID != candidate.BackingProjectID ||
 			retained.Record.BackingEnvironmentID != candidate.BackingEnvironmentID ||
@@ -326,7 +327,7 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 				return err
 			}
 		}
-		retainedGrants := make(map[string]Versioned[AttachRecord], len(input.RetainedGrantTargets))
+		retainedGrants := make(map[string]Versioned[attachrecord.Record], len(input.RetainedGrantTargets))
 		for _, retained := range input.RetainedGrantTargets {
 			if _, duplicate := retainedGrants[retained.Record.ID]; duplicate {
 				return errs.New(errs.KindValidationFailed, "Blueprint Attach retained grant target is duplicated")
@@ -363,7 +364,7 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 	return nil
 }
 
-func sameBlueprintAttachCandidateRecord(left, right AttachRecord) bool {
+func sameBlueprintAttachCandidateRecord(left, right attachrecord.Record) bool {
 	return left.ID == right.ID && left.EnvironmentID == right.EnvironmentID && left.Name == right.Name &&
 		left.BackingProjectID == right.BackingProjectID && left.BackingEnvironmentID == right.BackingEnvironmentID &&
 		left.BackingServiceID == right.BackingServiceID && left.BackingNetworkID == right.BackingNetworkID &&
@@ -378,7 +379,7 @@ func sameBlueprintAttachStrings(left, right []string) bool {
 	return (left == nil) == (right == nil) && slices.Equal(left, right)
 }
 
-func sameBlueprintAttachFactSets(left, right []AttachFactSetMetadata) bool {
+func sameBlueprintAttachFactSets(left, right []attachrecord.FactSetMetadata) bool {
 	if (left == nil) != (right == nil) || len(left) != len(right) {
 		return false
 	}
@@ -409,9 +410,9 @@ func validateBlueprintAttachTaskIntent(intent BlueprintAttachTaskIntent) error {
 	}
 	previousID := ""
 	for _, record := range intent.Candidates {
-		if validateAttachRecord(record) != nil || record.EnvironmentID != intent.EnvironmentID ||
+		if attachrecord.ValidateAttachRecord(record) != nil || record.EnvironmentID != intent.EnvironmentID ||
 			record.TaskID != intent.TaskID || record.Status != core.AttachPending ||
-			record.Operation != AttachOperationProvision || record.ID <= previousID {
+			record.Operation != attachrecord.AttachOperationProvision || record.ID <= previousID {
 			return errs.New(errs.KindValidationFailed, "Blueprint Attach Task candidate is invalid or unsorted")
 		}
 		previousID = record.ID
@@ -443,7 +444,7 @@ func cloneEnvironmentBlueprintAttachCandidateInputs(
 			cloned[index].RetainedCredentialOwner = &owner
 		}
 		cloned[index].RetainedGrantTargets = append(
-			[]Versioned[AttachRecord](nil), input.RetainedGrantTargets...,
+			[]Versioned[attachrecord.Record](nil), input.RetainedGrantTargets...,
 		)
 		for retainedIndex := range cloned[index].RetainedGrantTargets {
 			cloned[index].RetainedGrantTargets[retainedIndex].Record = cloneAttachRecord(
@@ -454,9 +455,9 @@ func cloneEnvironmentBlueprintAttachCandidateInputs(
 	return cloned
 }
 
-func cloneAttachRecord(record AttachRecord) AttachRecord {
+func cloneAttachRecord(record attachrecord.Record) attachrecord.Record {
 	record.GrantAttachIDs = append([]string(nil), record.GrantAttachIDs...)
-	record.FactSets = cloneAttachFactSets(record.FactSets)
+	record.FactSets = attachrecord.CloneAttachFactSets(record.FactSets)
 	return record
 }
 

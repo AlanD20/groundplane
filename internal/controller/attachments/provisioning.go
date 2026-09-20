@@ -7,6 +7,7 @@ import (
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 )
 
 func (service *MutationService) prepareAttachFacts(
@@ -14,7 +15,7 @@ func (service *MutationService) prepareAttachFacts(
 	consumer etcd.Versioned[etcd.ServiceRecord],
 	scope etcd.AttachCreateScope,
 	adapter adapters.Adapter,
-) (*controllerpkg.AttachPlanIdentity, []etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts,
+) (*controllerpkg.AttachPlanIdentity, []attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts,
 	*etcd.BackingHookEncryptedInputs, error,
 ) {
 	if adapter.Custom() {
@@ -91,7 +92,7 @@ func (service *MutationService) prepareAttachFacts(
 	return planIdentity, metadata, encrypted, nil, nil
 }
 
-func attachGrantIDs(grants []etcd.Versioned[etcd.AttachRecord]) []string {
+func attachGrantIDs(grants []etcd.Versioned[attachrecord.Record]) []string {
 	values := make([]string, len(grants))
 	for index, grant := range grants {
 		values[index] = grant.Record.ID
@@ -99,12 +100,12 @@ func attachGrantIDs(grants []etcd.Versioned[etcd.AttachRecord]) []string {
 	return values
 }
 
-func cloneAttachFactMetadata(values []etcd.AttachFactSetMetadata) []etcd.AttachFactSetMetadata {
-	cloned := make([]etcd.AttachFactSetMetadata, len(values))
+func cloneAttachFactMetadata(values []attachrecord.FactSetMetadata) []attachrecord.FactSetMetadata {
+	cloned := make([]attachrecord.FactSetMetadata, len(values))
 	for index, value := range values {
-		cloned[index] = etcd.AttachFactSetMetadata{
+		cloned[index] = attachrecord.FactSetMetadata{
 			GrantAttachID: value.GrantAttachID,
-			Facts:         append([]etcd.AttachFactDefinition(nil), value.Facts...),
+			Facts:         append([]attachrecord.FactDefinition(nil), value.Facts...),
 		}
 	}
 	return cloned

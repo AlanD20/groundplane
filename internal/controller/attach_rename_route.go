@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"io"
 	"net/http"
 	"reflect"
 	"strconv"
 	"unicode/utf8"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -136,7 +136,7 @@ func decodeAttachRename(body []byte) (apiTypes.AttachRenameRequest, error) {
 		}
 		return apiTypes.AttachRenameRequest{}, projectCreateJSONError(err)
 	}
-	if err := etcd.ValidateAttachName(request.Name); err != nil {
+	if err := attachrecord.ValidateAttachName(request.Name); err != nil {
 		return apiTypes.AttachRenameRequest{}, err
 	}
 	return request, nil

@@ -2,6 +2,7 @@ package attachments
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -11,7 +12,7 @@ import (
 )
 
 type attachFactRecordReader interface {
-	GetAttach(context.Context, string) (etcd.Versioned[etcd.AttachRecord], error)
+	GetAttach(context.Context, string) (etcd.Versioned[attachrecord.Record], error)
 }
 
 type attachFactValueResolver interface {

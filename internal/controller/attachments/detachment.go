@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
@@ -121,7 +122,7 @@ func (service *MutationService) detachAttachOnce(
 	}
 	now := service.now().UTC()
 	taskID := ids.New(ids.KindTask)
-	detaching, err := etcd.BeginAttachDetaching(current.Record, taskID)
+	detaching, err := attachrecord.BeginAttachDetaching(current.Record, taskID)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"log/slog"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -66,7 +67,7 @@ func attachListRequest(environmentID string, limit int, cursor string) (etcd.Pag
 	return etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
 }
 
-func attachResponse(record etcd.AttachRecord) apiTypes.Attach {
+func attachResponse(record attachrecord.Record) apiTypes.Attach {
 	return apiTypes.Attach{
 		ID: record.ID, Name: record.Name,
 		ServiceID: record.ServiceID, Credential: attachCredentialResponse(record),
@@ -78,7 +79,7 @@ func attachResponse(record etcd.AttachRecord) apiTypes.Attach {
 	}
 }
 
-func attachCredentialResponse(record etcd.AttachRecord) apiTypes.AttachCredential {
+func attachCredentialResponse(record attachrecord.Record) apiTypes.AttachCredential {
 	if record.OwnsCredential() {
 		return apiTypes.AttachCredential{Mode: apiTypes.AttachCredentialNew}
 	}
@@ -87,7 +88,7 @@ func attachCredentialResponse(record etcd.AttachRecord) apiTypes.AttachCredentia
 	}
 }
 
-func attachFactSetResponses(factSets []etcd.AttachFactSetMetadata) []apiTypes.AttachFactSet {
+func attachFactSetResponses(factSets []attachrecord.FactSetMetadata) []apiTypes.AttachFactSet {
 	response := make([]apiTypes.AttachFactSet, len(factSets))
 	for setIndex, set := range factSets {
 		facts := make([]apiTypes.AttachFact, len(set.Facts))

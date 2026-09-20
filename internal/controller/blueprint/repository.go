@@ -3,6 +3,7 @@ package blueprint
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -43,7 +44,7 @@ type environmentBlueprintRepository interface {
 	BlueprintEntryValueGenerationExists(context.Context, entryrecord.Record) (bool, error)
 	CreateBlueprintEntryValueGeneration(context.Context, etcd.EntryValueGeneration) error
 	BindBlueprintEntryEnvironment(context.Context, string, string) error
-	ListAttaches(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.AttachRecord], error)
+	ListAttaches(context.Context, string, etcd.PageRequest) (etcd.Page[attachrecord.Record], error)
 	ListEnvironmentComponents(context.Context, string, etcd.PageRequest) (etcd.Page[componentrecord.Record], error)
 	PrepareEnvironmentComponentTask(
 		context.Context,
@@ -215,7 +216,7 @@ func (repository *durableRepository) ListAttaches(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.AttachRecord], error) {
+) (etcd.Page[attachrecord.Record], error) {
 	return repository.attaches.ListAttaches(ctx, environmentID, request)
 }
 func (repository *durableRepository) ListEnvironmentComponents(

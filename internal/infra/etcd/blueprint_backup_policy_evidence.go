@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -288,7 +289,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 				item.candidateAttach = true
 			} else {
 				attachRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-					attachKey(selection.TargetID), attachOwnerKey(input.EnvironmentID, selection.TargetID),
+					attachrecord.AttachKey(selection.TargetID), attachrecord.AttachOwnerKey(input.EnvironmentID, selection.TargetID),
 					deletionTombstoneKey("attach", selection.TargetID),
 				}, Revision: revision})
 				if readErr != nil {
@@ -298,12 +299,12 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 					attachRead.Values[0] == nil || attachRead.Values[1] == nil || attachRead.Values[2] != nil {
 					return nil, errs.New(errs.KindAttachNotFound, "backup Attach source was not found")
 				}
-				attach, decodeErr := decodeAttachRecord(attachRead.Values[0].Value)
+				attach, decodeErr := attachrecord.DecodeAttachRecord(attachRead.Values[0].Value)
 				if decodeErr != nil || attach.ID != selection.TargetID || attach.EnvironmentID != input.EnvironmentID ||
 					!attach.OwnsCredential() || string(attachRead.Values[1].Value) != selection.TargetID {
 					return nil, errs.New(errs.KindValidationFailed, "backup Attach source must own credentials")
 				}
-				versioned := Versioned[AttachRecord]{Record: attach, Revision: attachRead.Values[0].ModRevision, ReadRevision: revision}
+				versioned := Versioned[attachrecord.Record]{Record: attach, Revision: attachRead.Values[0].ModRevision, ReadRevision: revision}
 				item.attach = &versioned
 				item.attachOwner = cloneBackupPolicyEvidenceKeyValue(attachRead.Values[1])
 			}

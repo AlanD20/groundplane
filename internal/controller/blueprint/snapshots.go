@@ -3,6 +3,7 @@ package blueprint
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -182,8 +183,8 @@ func (service *Service) listBlueprintEntries(
 func (service *Service) listBlueprintAttaches(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[etcd.AttachRecord], int64, error) {
-	attaches := []etcd.Versioned[etcd.AttachRecord](nil)
+) ([]etcd.Versioned[attachrecord.Record], int64, error) {
+	attaches := []etcd.Versioned[attachrecord.Record](nil)
 	cursor := ""
 	revision := int64(0)
 	for {

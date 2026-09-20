@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -59,7 +60,7 @@ func NewService(
 }
 
 type PrepareInput struct {
-	IntendedAttaches []etcd.Versioned[etcd.AttachRecord]
+	IntendedAttaches []etcd.Versioned[attachrecord.Record]
 	Workloads        WorkloadPreparation
 	VolumeRoot       string
 	Tenant           etcd.Versioned[hierarchyrecord.TenantRecord]

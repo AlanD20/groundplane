@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -45,8 +46,8 @@ type BackupPostgresIdentity struct {
 // supplied by the repository.
 type BackupPostgresIdentityResolver func(
 	context.Context,
-	Versioned[AttachRecord],
-	AttachEncryptedFacts,
+	Versioned[attachrecord.Record],
+	attachrecord.EncryptedFacts,
 	func(BackupPostgresIdentity) error,
 ) error
 
@@ -445,7 +446,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	resolvePostgres BackupPostgresIdentityResolver,
 ) (BackupRunSourceAttemptRecord, error) {
 	read, err := repository.readFixedKeys(
-		ctx, []string{attachKey(attempt.TargetID), attachFactsKey(attempt.TargetID)}, fixedRevision,
+		ctx, []string{attachrecord.AttachKey(attempt.TargetID), attachrecord.AttachFactsKey(attempt.TargetID)}, fixedRevision,
 	)
 	if err != nil {
 		return BackupRunSourceAttemptRecord{}, err
@@ -457,8 +458,8 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 			"postgres Attach evidence is unavailable",
 		)
 	}
-	attach, attachErr := decodeAttachRecord(read.Values[0].Value)
-	facts, factsErr := decodeAttachEncryptedFacts(read.Values[1].Value)
+	attach, attachErr := attachrecord.DecodeAttachRecord(read.Values[0].Value)
+	facts, factsErr := attachrecord.DecodeAttachEncryptedFacts(read.Values[1].Value)
 	if attachErr != nil || factsErr != nil || attach.ID != attempt.TargetID ||
 		attach.EnvironmentID != consumerEnvironmentID || !attach.OwnsCredential() ||
 		attach.Status != backupAttachStatusReady || facts.AttachID != attach.ID {
@@ -503,7 +504,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	identity := BackupPostgresIdentity{}
 	err = resolvePostgres(
 		ctx,
-		Versioned[AttachRecord]{
+		Versioned[attachrecord.Record]{
 			Record:       attach,
 			Revision:     read.Values[0].ModRevision,
 			ReadRevision: fixedRevision,

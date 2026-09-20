@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -26,7 +27,7 @@ type backupPolicySourceEvidence struct {
 	Source           Versioned[BackupSourceRecord]
 	EnvironmentIndex *etcdstore.KeyValue
 	IdentityIndex    *etcdstore.KeyValue
-	Attach           *Versioned[AttachRecord]
+	Attach           *Versioned[attachrecord.Record]
 	Volume           *backupVolumeProjectionEvidence
 	TargetOwnerIndex *etcdstore.KeyValue
 }
@@ -380,14 +381,14 @@ func validatebackupPolicySourceEvidence(
 		}
 	case "attach":
 		if evidence.Attach == nil || evidence.Volume != nil ||
-			validateAttachRecord(evidence.Attach.Record) != nil ||
+			attachrecord.ValidateAttachRecord(evidence.Attach.Record) != nil ||
 			!validReplacementRevision(evidence.Attach.Revision, evidence.Attach.ReadRevision) ||
 			evidence.Attach.Record.ID != evidence.Source.Record.TargetID ||
 			!evidence.Attach.Record.OwnsCredential() ||
 			evidence.Attach.Record.EnvironmentID != environmentID ||
 			!validBackupPolicyIndex(
 				evidence.TargetOwnerIndex,
-				attachOwnerKey(environmentID, evidence.Attach.Record.ID),
+				attachrecord.AttachOwnerKey(environmentID, evidence.Attach.Record.ID),
 				evidence.Attach.Record.ID,
 			) {
 			return errs.New(errs.KindValidationFailed, "attach backup source evidence is invalid")
@@ -591,7 +592,7 @@ func prepareBackupPolicyReplacement(
 			plan.compare(
 				backupPolicyCompareAttach,
 				source.Attach.Record.ID,
-				attachKey(source.Attach.Record.ID),
+				attachrecord.AttachKey(source.Attach.Record.ID),
 				source.Attach.Revision,
 			)
 			plan.compare(

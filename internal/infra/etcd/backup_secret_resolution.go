@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -491,8 +492,8 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 			if snapshot == nil {
 				return "", nil, nil, errs.New(errs.KindInternal, "postgres backup source snapshot is corrupt")
 			}
-			dynamic.add(attachKey(source.TargetID))
-			dynamic.add(attachFactsKey(source.TargetID))
+			dynamic.add(attachrecord.AttachKey(source.TargetID))
+			dynamic.add(attachrecord.AttachFactsKey(source.TargetID))
 			dynamic.add(hierarchyrecord.ProjectKey(snapshot.BackingProjectID))
 			dynamic.add(hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID))
 			dynamic.add(environmentBlueprintHeadKey(snapshot.BackingEnvironmentID))
@@ -682,8 +683,8 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 			return errs.New(errs.KindInternal, "postgres backup source snapshot is corrupt")
 		}
 		keys := []*etcdstore.KeyValue{
-			result.Values[dynamic.index[attachKey(source.TargetID)]],
-			result.Values[dynamic.index[attachFactsKey(source.TargetID)]],
+			result.Values[dynamic.index[attachrecord.AttachKey(source.TargetID)]],
+			result.Values[dynamic.index[attachrecord.AttachFactsKey(source.TargetID)]],
 			result.Values[dynamic.index[hierarchyrecord.ProjectKey(snapshot.BackingProjectID)]],
 			result.Values[dynamic.index[hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID)]],
 			result.Values[dynamic.index[environmentBlueprintHeadKey(snapshot.BackingEnvironmentID)]],

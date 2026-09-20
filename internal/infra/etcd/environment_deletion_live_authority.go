@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -108,7 +109,7 @@ func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID 
 		environmentBlueprintRevisionsPrefix(environmentID),
 		routerecord.OwnerPrefix(environmentID),
 		entryOwnerCollectionPrefix(environmentID),
-		attachOwnerPrefix(environmentID),
+		attachrecord.AttachOwnerPrefix(environmentID),
 		componentrecord.EnvironmentOwnerPrefix(environmentID),
 		connectorEnvironmentPrefix(environmentID),
 		environmentReleaseGroupOwnerPrefix + environmentID + "/",

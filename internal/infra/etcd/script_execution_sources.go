@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -48,7 +49,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 	project Versioned[hierarchyrecord.ProjectRecord],
 	environment Versioned[hierarchyrecord.EnvironmentRecord],
 	projection EnvironmentComposeProjection,
-	intendedAttaches []Versioned[AttachRecord],
+	intendedAttaches []Versioned[attachrecord.Record],
 	revision int64,
 ) (ScriptExecutionSources, error) {
 	if ctx == nil || repository == nil || repository.store == nil ||

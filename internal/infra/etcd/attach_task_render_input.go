@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"strings"
@@ -178,8 +179,8 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 		return err
 	}
 	if len(input.ConsumerServiceIDs) == 0 ||
-		validateSortedStableIDs(input.ConsumerServiceIDs, ids.KindService, "Attach consumer service_ids") != nil ||
-		validateSortedStableIDs(input.GrantAttachIDs, ids.KindAttach, "Attach grant_attach_ids") != nil {
+		attachrecord.ValidateSortedStableIDs(input.ConsumerServiceIDs, ids.KindService, "Attach consumer service_ids") != nil ||
+		attachrecord.ValidateSortedStableIDs(input.GrantAttachIDs, ids.KindAttach, "Attach grant_attach_ids") != nil {
 		return errs.New(errs.KindValidationFailed, "attach task removal evidence is invalid or unsorted")
 	}
 	serviceIDs := make(map[string]struct{}, len(input.Services))
@@ -191,7 +192,7 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 			return errs.New(errs.KindValidationFailed, "attach task removal evidence references an unknown service")
 		}
 	}
-	if validateSortedStableIDs(input.RunningServiceIDs, ids.KindService, "Attach running service_ids") != nil {
+	if attachrecord.ValidateSortedStableIDs(input.RunningServiceIDs, ids.KindService, "Attach running service_ids") != nil {
 		return errs.New(errs.KindValidationFailed, "Attach running service_ids are invalid or unsorted")
 	}
 	for _, serviceID := range input.RunningServiceIDs {
@@ -241,7 +242,7 @@ func validateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 
 func validateAttachTaskRenderInputScope(
 	scope AttachCreateScope,
-	record AttachRecord,
+	record attachrecord.Record,
 	task TaskRecord,
 	input AttachTaskRenderInput,
 ) error {

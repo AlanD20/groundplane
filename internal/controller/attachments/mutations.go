@@ -9,6 +9,7 @@ import (
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"io"
@@ -30,7 +31,7 @@ type attachMutationFacts interface {
 		string,
 		string,
 		backinghook.Configuration,
-	) ([]etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, *etcd.BackingHookEncryptedInputs, error)
+	) ([]attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts, *etcd.BackingHookEncryptedInputs, error)
 	SealBackingHookTaskInputs(
 		context.Context,
 		string,
@@ -43,15 +44,15 @@ type attachMutationFacts interface {
 		adapters.Adapter,
 		adapters.Input,
 		[]GrantInput,
-	) ([]etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, error)
+	) ([]attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts, error)
 	ResolveReadyDatabase(
 		context.Context,
-		etcd.Versioned[etcd.AttachRecord],
+		etcd.Versioned[attachrecord.Record],
 		func(string) error,
 	) error
 	ResolveTaskIdentity(
 		context.Context,
-		etcd.Versioned[etcd.AttachRecord],
+		etcd.Versioned[attachrecord.Record],
 		string,
 		controllerpkg.AttachPlanIdentityConsumer,
 	) error
@@ -60,11 +61,11 @@ type attachMutationFacts interface {
 type attachDraftPlanSealer interface {
 	SealDraft(
 		context.Context,
-		etcd.Versioned[etcd.AttachRecord],
+		etcd.Versioned[attachrecord.Record],
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		*controllerpkg.AttachPlanIdentity,
-		*etcd.AttachEncryptedFacts,
+		*attachrecord.EncryptedFacts,
 		*etcd.BackingHookEncryptedInputs,
 	) (serviceruntimerecord.AttachPreparation, error)
 }

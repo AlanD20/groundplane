@@ -2,6 +2,7 @@ package attachments
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
 	"slices"
@@ -81,8 +82,8 @@ func attachTaskStepCount(
 func buildAttachTaskRenderInput(
 	scope etcd.AttachCreateScope,
 	runtime controllerpkg.EntryMutationRuntime,
-	record etcd.AttachRecord,
-	attaches []etcd.Versioned[etcd.AttachRecord],
+	record attachrecord.Record,
+	attaches []etcd.Versioned[attachrecord.Record],
 	task etcd.TaskRecord,
 	artifactID string,
 ) (etcd.AttachTaskRenderInput, error) {
@@ -136,7 +137,7 @@ func buildAttachTaskRenderInput(
 	unionRecords := attaches
 	switch task.Type {
 	case etcd.TaskAttach:
-		if record.Status != core.AttachPending || record.Operation != etcd.AttachOperationProvision ||
+		if record.Status != core.AttachPending || record.Operation != attachrecord.AttachOperationProvision ||
 			record.TaskID != task.ID {
 			return etcd.AttachTaskRenderInput{}, errs.New(
 				errs.KindValidationFailed,
@@ -144,13 +145,13 @@ func buildAttachTaskRenderInput(
 			)
 		}
 		unionRecords = append(
-			append([]etcd.Versioned[etcd.AttachRecord](nil), attaches...),
-			etcd.Versioned[etcd.AttachRecord]{
+			append([]etcd.Versioned[attachrecord.Record](nil), attaches...),
+			etcd.Versioned[attachrecord.Record]{
 				Record: record,
 			},
 		)
 	case etcd.TaskDetach:
-		if record.Status != core.AttachDetaching || record.Operation != etcd.AttachOperationDetach ||
+		if record.Status != core.AttachDetaching || record.Operation != attachrecord.AttachOperationDetach ||
 			record.TaskID != task.ID {
 			return etcd.AttachTaskRenderInput{}, errs.New(
 				errs.KindValidationFailed,

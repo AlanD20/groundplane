@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -12,7 +13,7 @@ import (
 func (resolver *TaskPlanResolver) resolveCustomAttachPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	current etcd.Versioned[etcd.AttachRecord],
+	current etcd.Versioned[attachrecord.Record],
 	renderInput etcd.AttachTaskRenderInput,
 	operation agentpb.PlanOperation,
 	artifact *agentpb.ComposeArtifact,

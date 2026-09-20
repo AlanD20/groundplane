@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"math"
 	"slices"
 
@@ -41,7 +42,7 @@ type AttachPlanIdentityConsumer func(AttachPlanIdentity) error
 type BackingHookInputConsumer func(backinghook.Input) error
 
 type attachPlanRecordReader interface {
-	GetAttach(context.Context, string) (etcd.Versioned[etcd.AttachRecord], error)
+	GetAttach(context.Context, string) (etcd.Versioned[attachrecord.Record], error)
 	GetAttachTaskRenderInput(context.Context, string) (etcd.Versioned[etcd.AttachTaskRenderInput], error)
 	GetBlueprintAttachTaskIntent(
 		context.Context,
@@ -54,7 +55,7 @@ type attachPlanRecordReader interface {
 // exact builder so their Agent payloads cannot drift.
 func BuildAttachProvisionSteps(
 	task etcd.TaskRecord,
-	record etcd.AttachRecord,
+	record attachrecord.Record,
 	adapterKey string,
 	identity AttachPlanIdentity,
 ) ([]*agentpb.ExecutionStep, error) {
@@ -71,13 +72,13 @@ type attachPlanServiceReader interface {
 type attachPlanIdentityResolver interface {
 	ResolveTaskIdentity(
 		context.Context,
-		etcd.Versioned[etcd.AttachRecord],
+		etcd.Versioned[attachrecord.Record],
 		string,
 		AttachPlanIdentityConsumer,
 	) error
 	ResolveHookInput(
 		context.Context,
-		etcd.Versioned[etcd.AttachRecord],
+		etcd.Versioned[attachrecord.Record],
 		etcd.TaskRecord,
 		backinghook.Context,
 		BackingHookInputConsumer,
@@ -296,7 +297,7 @@ func attachPlanOwnedNetworkSnapshots(values []etcd.EnvironmentZoneProjection) []
 
 func attachNetworkProcedureSteps(
 	task etcd.TaskRecord,
-	record etcd.AttachRecord,
+	record attachrecord.Record,
 	adapterKey string,
 	artifact *agentpb.ComposeArtifact,
 	identity AttachPlanIdentity,
@@ -352,16 +353,16 @@ func attachComposeStep(
 	}
 }
 
-func attachPlanOperation(task etcd.TaskRecord, record etcd.AttachRecord) (agentpb.PlanOperation, error) {
+func attachPlanOperation(task etcd.TaskRecord, record attachrecord.Record) (agentpb.PlanOperation, error) {
 	switch task.Type {
 	case etcd.TaskAttach:
-		if record.Operation != etcd.AttachOperationProvision ||
+		if record.Operation != attachrecord.AttachOperationProvision ||
 			(record.Status != core.AttachPending && record.Status != core.AttachProvisioning) {
 			return 0, errs.New(errs.KindStateConflict, "Attach is not provisionable")
 		}
 		return agentpb.PlanOperation_PLAN_OPERATION_ATTACH, nil
 	case etcd.TaskDetach:
-		if record.Operation != etcd.AttachOperationDetach || record.Status != core.AttachDetaching {
+		if record.Operation != attachrecord.AttachOperationDetach || record.Status != core.AttachDetaching {
 			return 0, errs.New(errs.KindStateConflict, "Attach is not detaching")
 		}
 		return agentpb.PlanOperation_PLAN_OPERATION_DETACH, nil
@@ -370,7 +371,7 @@ func attachPlanOperation(task etcd.TaskRecord, record etcd.AttachRecord) (agentp
 	}
 }
 
-func (resolver *TaskPlanResolver) validateAttachGrantTargets(ctx context.Context, record etcd.AttachRecord) error {
+func (resolver *TaskPlanResolver) validateAttachGrantTargets(ctx context.Context, record attachrecord.Record) error {
 	for _, grantID := range record.GrantAttachIDs {
 		grant, err := resolver.attaches.GetAttach(ctx, grantID)
 		if err != nil {
@@ -385,7 +386,7 @@ func (resolver *TaskPlanResolver) validateAttachGrantTargets(ctx context.Context
 
 func attachProcedureSteps(
 	task etcd.TaskRecord,
-	record etcd.AttachRecord,
+	record attachrecord.Record,
 	adapterKey string,
 	identity AttachPlanIdentity,
 ) ([]*agentpb.ExecutionStep, error) {

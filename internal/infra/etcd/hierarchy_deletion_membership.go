@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -293,8 +294,8 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		{
 			targetKind:    "attach",
 			actionKind:    HierarchyDeletionAttachGrantRevoke,
-			ownerPrefix:   attachOwnerPrefix,
-			primaryKey:    attachKey,
+			ownerPrefix:   attachrecord.AttachOwnerPrefix,
+			primaryKey:    attachrecord.AttachKey,
 			stableIDKind:  ids.KindAttach,
 			validateOwner: validateHierarchyDeletionAttachOwner,
 		},

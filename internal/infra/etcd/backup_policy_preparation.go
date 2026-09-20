@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -530,8 +531,8 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 	ownerKey := ""
 	notFound := errs.KindAttachNotFound
 	if selection.Kind == core.BackupSourceAttach {
-		primaryKey = attachKey(selection.TargetID)
-		ownerKey = attachOwnerKey(environmentID, selection.TargetID)
+		primaryKey = attachrecord.AttachKey(selection.TargetID)
+		ownerKey = attachrecord.AttachOwnerKey(environmentID, selection.TargetID)
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		primaryKey,
@@ -549,7 +550,7 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 	}
 	ownerEnvironmentID := ""
 	if selection.Kind == core.BackupSourceAttach {
-		record, decodeErr := decodeAttachRecord(result.Values[0].Value)
+		record, decodeErr := attachrecord.DecodeAttachRecord(result.Values[0].Value)
 		if decodeErr != nil || record.ID != selection.TargetID {
 			return recordcodec.CorruptRecord()
 		}
@@ -583,7 +584,7 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 		backupSourceIdentityKey(record.EnvironmentID, record.Kind, record.TargetID),
 	}
 	if record.Kind == core.BackupSourceAttach {
-		keys = append(keys, attachKey(record.TargetID), attachOwnerKey(record.EnvironmentID, record.TargetID))
+		keys = append(keys, attachrecord.AttachKey(record.TargetID), attachrecord.AttachOwnerKey(record.EnvironmentID, record.TargetID))
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -625,11 +626,11 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 	}
 	evidence.TargetOwnerIndex = cloneBackupPolicyEvidenceKeyValue(result.Values[4])
 	if record.Kind == core.BackupSourceAttach {
-		attach, decodeErr := decodeAttachRecord(result.Values[3].Value)
+		attach, decodeErr := attachrecord.DecodeAttachRecord(result.Values[3].Value)
 		if decodeErr != nil || attach.ID != record.TargetID || attach.EnvironmentID != record.EnvironmentID {
 			return backupPolicySourceEvidence{}, recordcodec.CorruptRecord()
 		}
-		evidence.Attach = &Versioned[AttachRecord]{
+		evidence.Attach = &Versioned[attachrecord.Record]{
 			Record: attach, Revision: result.Values[3].ModRevision, ReadRevision: result.ReadRevision,
 		}
 	}

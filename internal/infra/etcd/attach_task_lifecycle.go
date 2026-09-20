@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -34,7 +35,7 @@ func (repository *TaskRepository) prepareAttachTaskClaim(
 	}
 	change := attachTaskChange{
 		applies:    true,
-		conditions: []etcdstore.Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
+		conditions: []etcdstore.Condition{{Key: attachrecord.AttachKey(task.Target), ModRevision: current.Revision}},
 	}
 	runtimeConditions, err := repository.attachRuntimeClaimConditions(ctx, task, revision)
 	if err != nil {
@@ -43,13 +44,13 @@ func (repository *TaskRepository) prepareAttachTaskClaim(
 	change.conditions = append(change.conditions, runtimeConditions...)
 	if task.Type == TaskDetach {
 		if current.Record.Status != core.AttachDetaching ||
-			current.Record.Operation != AttachOperationDetach ||
+			current.Record.Operation != attachrecord.AttachOperationDetach ||
 			current.Record.TaskID != task.ID {
 			return attachTaskChange{}, attachStateError(current.Record, "cannot claim detaching Task")
 		}
 		return change, nil
 	}
-	provisioning, err := MarkAttachProvisioning(current.Record, task.ID)
+	provisioning, err := attachrecord.MarkAttachProvisioning(current.Record, task.ID)
 	if err != nil {
 		return attachTaskChange{}, err
 	}
@@ -73,13 +74,13 @@ func (repository *TaskRepository) prepareAttachTaskRetry(
 	if err != nil {
 		return attachTaskChange{}, err
 	}
-	retrying, err := RetryAttachOperation(current.Record, retry.ID)
+	retrying, err := attachrecord.RetryAttachOperation(current.Record, retry.ID)
 	if err != nil {
 		return attachTaskChange{}, err
 	}
 	change, err := encodeAttachTaskChange(attachTaskChange{
 		applies:    true,
-		conditions: []etcdstore.Condition{{Key: attachKey(source.Target), ModRevision: current.Revision}},
+		conditions: []etcdstore.Condition{{Key: attachrecord.AttachKey(source.Target), ModRevision: current.Revision}},
 	}, retrying)
 	if err != nil {
 		return attachTaskChange{}, err
@@ -123,29 +124,29 @@ func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 	}
 	succeeded := terminalStatus == TaskStatusCompleted
 	if task.Type == TaskAttach {
-		var terminal AttachRecord
+		var terminal attachrecord.Record
 		var completeErr error
 		if terminalStatus == TaskStatusAborted && current.Record.Status == core.AttachPending {
-			terminal, completeErr = AbortPendingAttachProvisioning(current.Record, task.ID)
+			terminal, completeErr = attachrecord.AbortPendingAttachProvisioning(current.Record, task.ID)
 		} else {
-			terminal, completeErr = CompleteAttachProvisioning(current.Record, task.ID, succeeded)
+			terminal, completeErr = attachrecord.CompleteAttachProvisioning(current.Record, task.ID, succeeded)
 		}
 		if completeErr != nil {
 			return attachTaskChange{}, completeErr
 		}
 		return encodeAttachTaskChange(attachTaskChange{
 			applies:    true,
-			conditions: []etcdstore.Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
+			conditions: []etcdstore.Condition{{Key: attachrecord.AttachKey(task.Target), ModRevision: current.Revision}},
 		}, terminal)
 	}
-	terminal, err := CompleteAttachDetaching(current.Record, task.ID, succeeded)
+	terminal, err := attachrecord.CompleteAttachDetaching(current.Record, task.ID, succeeded)
 	if err != nil {
 		return attachTaskChange{}, err
 	}
 	if !succeeded {
 		return encodeAttachTaskChange(attachTaskChange{
 			applies:    true,
-			conditions: []etcdstore.Condition{{Key: attachKey(task.Target), ModRevision: current.Revision}},
+			conditions: []etcdstore.Condition{{Key: attachrecord.AttachKey(task.Target), ModRevision: current.Revision}},
 		}, terminal)
 	}
 	conditions, mutations, values, err := prepareAttachRemoval(
@@ -180,12 +181,12 @@ func (repository *TaskRepository) validateAttachTaskAcknowledgementReplay(
 		return err
 	}
 	expectedStatus := core.AttachFailed
-	expectedOperation := AttachOperationProvision
+	expectedOperation := attachrecord.AttachOperationProvision
 	if task.Type == TaskAttach && terminalStatus == TaskStatusCompleted {
 		expectedStatus = core.AttachReady
 	}
 	if task.Type == TaskDetach {
-		expectedOperation = AttachOperationDetach
+		expectedOperation = attachrecord.AttachOperationDetach
 		if terminalStatus == TaskStatusCompleted {
 			expectedStatus = core.AttachDetached
 		}
@@ -201,25 +202,25 @@ func (repository *TaskRepository) readTaskAttach(
 	ctx context.Context,
 	task TaskRecord,
 	revision int64,
-) (Versioned[AttachRecord], error) {
+) (Versioned[attachrecord.Record], error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{attachKey(task.Target)}, Revision: revision,
+		Keys: []string{attachrecord.AttachKey(task.Target)}, Revision: revision,
 	})
 	if err != nil {
-		return Versioned[AttachRecord]{}, err
+		return Versioned[attachrecord.Record]{}, err
 	}
 	if result == nil || result.ReadRevision != revision || len(result.Values) != 1 || result.Values[0] == nil {
-		return Versioned[AttachRecord]{}, errs.New(errs.KindInternal, "Attach Task target is missing")
+		return Versioned[attachrecord.Record]{}, errs.New(errs.KindInternal, "Attach Task target is missing")
 	}
 	value := result.Values[0]
-	record, err := decodeAttachRecord(value.Value)
+	record, err := attachrecord.DecodeAttachRecord(value.Value)
 	if err != nil {
-		return Versioned[AttachRecord]{}, err
+		return Versioned[attachrecord.Record]{}, err
 	}
 	if record.ID != task.Target {
-		return Versioned[AttachRecord]{}, corruptAttachRecord()
+		return Versioned[attachrecord.Record]{}, attachrecord.CorruptAttachRecord()
 	}
-	return Versioned[AttachRecord]{
+	return Versioned[attachrecord.Record]{
 		Record: record, Revision: value.ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }
@@ -244,16 +245,16 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		input.EnvironmentID != task.Params[TaskMutationEnvironmentParam] {
 		return errs.New(errs.KindInternal, "attach detach replay evidence is corrupt")
 	}
-	if len(input.ConsumerServiceIDs) != 1 || len(input.GrantAttachIDs) > MaximumAttachGrants {
+	if len(input.ConsumerServiceIDs) != 1 || len(input.GrantAttachIDs) > attachrecord.MaximumAttachGrants {
 		return errs.New(errs.KindInternal, "attach detach replay removal evidence exceeds Attach bounds")
 	}
 	keys := []string{
-		attachKey(task.Target),
-		attachNameKey(input.EnvironmentID, input.AttachName),
-		attachOwnerKey(input.EnvironmentID, task.Target),
-		attachBackingServiceKey(input.BackingServiceID, task.Target),
-		attachBackingProjectKey(input.BackingProjectID, task.Target),
-		attachFactsKey(task.Target),
+		attachrecord.AttachKey(task.Target),
+		attachrecord.AttachNameKey(input.EnvironmentID, input.AttachName),
+		attachrecord.AttachOwnerKey(input.EnvironmentID, task.Target),
+		attachrecord.AttachBackingServiceKey(input.BackingServiceID, task.Target),
+		attachrecord.AttachBackingProjectKey(input.BackingProjectID, task.Target),
+		attachrecord.AttachFactsKey(task.Target),
 	}
 	exclusionKey, err := backupSourceTargetExclusionKey(BackupSourceTargetAttach, task.Target)
 	if err != nil {
@@ -262,13 +263,13 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	exclusionIndex := len(keys)
 	keys = append(keys, exclusionKey)
 	for _, serviceID := range input.ConsumerServiceIDs {
-		keys = append(keys, attachServiceKey(serviceID, task.Target))
+		keys = append(keys, attachrecord.AttachServiceKey(serviceID, task.Target))
 	}
 	for _, grantID := range input.GrantAttachIDs {
-		keys = append(keys, attachGrantedByKey(grantID, task.Target))
+		keys = append(keys, attachrecord.AttachGrantedByKey(grantID, task.Target))
 	}
 	if len(input.GrantAttachIDs) != 0 {
-		keys = append(keys, attachDependentGrantKey(task.Target))
+		keys = append(keys, attachrecord.AttachDependentGrantKey(task.Target))
 	}
 	replayTargetIndex := -1
 	markerKey := ""
@@ -337,7 +338,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		return errs.New(errs.KindStateConflict, "completed attach detach retained durable companion state")
 	}
 	if successorNameOwnerID != "" {
-		successorKey := attachKey(successorNameOwnerID)
+		successorKey := attachrecord.AttachKey(successorNameOwnerID)
 		successor, successorErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{successorKey}, Revision: revision,
 		})
@@ -350,14 +351,14 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		}
 		defer clearKeyValues(successor.Values)
 		primary := successor.Values[0]
-		successorRecord, decodeErr := decodeAttachRecord(primary.Value)
+		successorRecord, decodeErr := attachrecord.DecodeAttachRecord(primary.Value)
 		if decodeErr != nil || primary.Key != successorKey || successorRecord.ID != successorNameOwnerID ||
 			successorRecord.EnvironmentID != input.EnvironmentID || successorRecord.Name != input.AttachName {
 			return errs.New(errs.KindInternal, "attach detach replay successor name owner is corrupt")
 		}
 	}
 	grants, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: attachGrantedByPrefix(task.Target), Limit: 1, Revision: revision,
+		Prefix: attachrecord.AttachGrantedByPrefix(task.Target), Limit: 1, Revision: revision,
 	})
 	if err != nil {
 		return err
@@ -372,7 +373,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		return errs.New(errs.KindStateConflict, "attach detach replay retained grant membership")
 	}
 	dependentGrants, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: attachDependentGrantPrefix(task.Target),
+		Prefix: attachrecord.AttachDependentGrantPrefix(task.Target),
 		Limit:  2, Revision: revision,
 	})
 	if err != nil {
@@ -385,7 +386,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		dependentGrants.More || len(dependentGrants.Values) > 1 {
 		return errs.New(errs.KindInternal, "attach detach replay dependent grant evidence is incomplete")
 	}
-	storedDependentGrants, err := readAttachDependentGrantIndex(dependentGrants, task.Target)
+	storedDependentGrants, err := attachrecord.ReadAttachDependentGrantIndex(dependentGrants, task.Target)
 	if err != nil {
 		return err
 	}
@@ -415,14 +416,14 @@ func taskOwnsAttachLifecycle(task TaskRecord) (bool, error) {
 	return true, nil
 }
 
-func encodeAttachTaskChange(change attachTaskChange, record AttachRecord) (attachTaskChange, error) {
-	value, err := encodeAttachRecord(record)
+func encodeAttachTaskChange(change attachTaskChange, record attachrecord.Record) (attachTaskChange, error) {
+	value, err := attachrecord.EncodeAttachRecord(record)
 	if err != nil {
 		return attachTaskChange{}, err
 	}
 	change.mutates = true
 	change.values = append(change.values, value)
-	change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachKey(record.ID), Value: value})
+	change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(record.ID), Value: value})
 	return change, nil
 }
 

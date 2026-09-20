@@ -6,6 +6,7 @@ import (
 	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -121,8 +122,8 @@ func (service *MutationService) createAttachOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	var identity *controllerpkg.AttachPlanIdentity
-	var metadata []etcd.AttachFactSetMetadata
-	var encryptedFacts *etcd.AttachEncryptedFacts
+	var metadata []attachrecord.FactSetMetadata
+	var encryptedFacts *attachrecord.EncryptedFacts
 	var hookInputs *etcd.BackingHookEncryptedInputs
 	if ownsCredential {
 		identity, metadata, encryptedFacts, hookInputs, err = service.prepareAttachFacts(
@@ -150,7 +151,7 @@ func (service *MutationService) createAttachOnce(
 	if hookInputs != nil {
 		defer clear(hookInputs.Ciphertext)
 	}
-	record, err := etcd.NewPendingAttachRecord(
+	record, err := attachrecord.NewPendingAttachRecord(
 		attachID, environmentID, name, scope.BackingProject.Record.ID, scope.BackingEnvironment.Record.ID,
 		scope.BackingService.Record.Desired.ID, scope.BackingService.Record.BackingNetworkID,
 		consumer.Record.Desired.ID, credentialAttachID, grantIDs, metadata, taskID, now,
@@ -170,7 +171,7 @@ func (service *MutationService) createAttachOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	prepared, err := service.plans.SealDraft(
-		ctx, etcd.Versioned[etcd.AttachRecord]{Record: record}, renderInput, task, identity, encryptedFacts, hookInputs,
+		ctx, etcd.Versioned[attachrecord.Record]{Record: record}, renderInput, task, identity, encryptedFacts, hookInputs,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err

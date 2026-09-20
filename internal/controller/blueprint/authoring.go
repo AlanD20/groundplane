@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"sort"
@@ -326,7 +327,7 @@ func environmentBlueprintAuthoringComponents(
 
 func (service *Service) environmentBlueprintAuthoringAttachments(
 	ctx context.Context,
-	records []etcd.Versioned[etcd.AttachRecord],
+	records []etcd.Versioned[attachrecord.Record],
 	serviceNames map[string]string,
 ) (map[string]core.AttachmentSpec, error) {
 	names := make(map[string]string, len(records))
@@ -503,8 +504,8 @@ func addBlueprintResourceKey(values map[string]map[string]struct{}, resource, ke
 func environmentBlueprintBackupValidationTargets(
 	snapshot environmentBlueprintSnapshot,
 	parsed blueprintparser.Result,
-	currentAttaches []etcd.Versioned[etcd.AttachRecord],
-) (etcd.EnvironmentComposeProjection, []etcd.Versioned[etcd.AttachRecord], error) {
+	currentAttaches []etcd.Versioned[attachrecord.Record],
+) (etcd.EnvironmentComposeProjection, []etcd.Versioned[attachrecord.Record], error) {
 	projection := snapshot.projection.Record
 	projection.EnvironmentID = snapshot.environment.Record.ID
 	volumeSlugs, err := environmentBlueprintVolumeSlugs(parsed.Project, projection, snapshot.hasHead)
@@ -534,7 +535,7 @@ func environmentBlueprintBackupValidationTargets(
 	for _, volume := range byKey {
 		projection.Volumes = append(projection.Volumes, volume)
 	}
-	attaches := append([]etcd.Versioned[etcd.AttachRecord](nil), currentAttaches...)
+	attaches := append([]etcd.Versioned[attachrecord.Record](nil), currentAttaches...)
 	attachIDs := make(map[string]string, len(attaches)+len(parsed.Extensions.Attachments))
 	for _, attach := range attaches {
 		attachIDs[attach.Record.Name] = attach.Record.ID
@@ -556,7 +557,7 @@ func environmentBlueprintBackupValidationTargets(
 		if spec.Credential.Mode == "new" {
 			credentialID = attachIDs[name]
 		}
-		attaches = append(attaches, etcd.Versioned[etcd.AttachRecord]{Record: etcd.AttachRecord{
+		attaches = append(attaches, etcd.Versioned[attachrecord.Record]{Record: attachrecord.Record{
 			ID: attachIDs[name], EnvironmentID: snapshot.environment.Record.ID,
 			Name: name, CredentialAttachID: credentialID,
 		}})

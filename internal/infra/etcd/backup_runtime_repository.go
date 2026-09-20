@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -1527,8 +1528,8 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 		case BackupRuntimeSourceAttach:
 			snapshot := source.Snapshot.Postgres
 			read, readErr := repository.readFixedKeys(ctx, []string{
-				attachKey(source.TargetID),
-				attachFactsKey(source.TargetID),
+				attachrecord.AttachKey(source.TargetID),
+				attachrecord.AttachFactsKey(source.TargetID),
 				hierarchyrecord.ProjectKey(
 					snapshot.BackingProjectID,
 				),
@@ -1553,8 +1554,8 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				key      string
 				revision int64
 			}{
-				{attachKey(source.TargetID), source.TargetRevision},
-				{attachFactsKey(source.TargetID), snapshot.AttachFactsRevision},
+				{attachrecord.AttachKey(source.TargetID), source.TargetRevision},
+				{attachrecord.AttachFactsKey(source.TargetID), snapshot.AttachFactsRevision},
 				{hierarchyrecord.ProjectKey(snapshot.BackingProjectID), snapshot.BackingProjectRevision},
 				{hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID), snapshot.BackingEnvironmentRevision},
 				{environmentBlueprintHeadKey(snapshot.BackingEnvironmentID), snapshot.BackingServiceRevision},
@@ -1724,8 +1725,8 @@ func validateBackupPostgresPublicationEvidence(
 		values[4].ModRevision != snapshot.BackingServiceRevision {
 		return errs.New(errs.KindStateConflict, "postgres backup publication evidence changed")
 	}
-	attach, attachErr := decodeAttachRecord(values[0].Value)
-	facts, factsErr := decodeAttachEncryptedFacts(values[1].Value)
+	attach, attachErr := attachrecord.DecodeAttachRecord(values[0].Value)
+	facts, factsErr := attachrecord.DecodeAttachEncryptedFacts(values[1].Value)
 	defer clear(facts.Ciphertext)
 	project, projectErr := hierarchyrecord.DecodeProject(values[2].Value)
 	environment, environmentErr := hierarchyrecord.DecodeEnvironment(values[3].Value)

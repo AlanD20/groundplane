@@ -3,6 +3,7 @@ package attachments
 import (
 	"context"
 	"encoding/json"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"slices"
 	"strings"
@@ -43,7 +44,7 @@ func (service *FactService) SealCustomHookBundle(
 	projectID string,
 	operationID string,
 	configuration backinghook.Configuration,
-) ([]etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, *etcd.BackingHookEncryptedInputs, error) {
+) ([]attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts, *etcd.BackingHookEncryptedInputs, error) {
 	if ctx == nil || ids.Validate(ids.KindAttach, attachID) != nil ||
 		ids.Validate(ids.KindProject, projectID) != nil || ids.Validate(ids.KindOperation, operationID) != nil ||
 		service.secrets == nil || service.random == nil {
@@ -67,17 +68,17 @@ func (service *FactService) SealCustomHookBundle(
 	slices.SortFunc(bundle.HookInputs, func(left, right attachFactValue) int {
 		return strings.Compare(left.Key, right.Key)
 	})
-	metadata := []etcd.AttachFactSetMetadata(nil)
+	metadata := []attachrecord.FactSetMetadata(nil)
 	if len(configuration.Facts) != 0 {
 		facts := append([]backinghook.FactDefinition(nil), configuration.Facts...)
 		slices.SortFunc(facts, func(left, right backinghook.FactDefinition) int {
 			return strings.Compare(left.Key, right.Key)
 		})
-		definitions := make([]etcd.AttachFactDefinition, len(facts))
+		definitions := make([]attachrecord.FactDefinition, len(facts))
 		for index, fact := range facts {
-			definitions[index] = etcd.AttachFactDefinition{Key: fact.Key, Secret: fact.Secret}
+			definitions[index] = attachrecord.FactDefinition{Key: fact.Key, Secret: fact.Secret}
 		}
-		metadata = []etcd.AttachFactSetMetadata{{Facts: definitions}}
+		metadata = []attachrecord.FactSetMetadata{{Facts: definitions}}
 		bundle.Sets = []attachFactValueSet{{Facts: []attachFactValue{}}}
 	}
 	encrypted, err := service.sealHookBundle(ctx, attachID, bundle)
@@ -201,7 +202,7 @@ func (service *FactService) resolveBackingHookTaskInput(
 
 func (service *FactService) ResolveHookInput(
 	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
+	current etcd.Versioned[attachrecord.Record],
 	task etcd.TaskRecord,
 	hookContext backinghook.Context,
 	consume controllerpkg.BackingHookInputConsumer,
@@ -213,10 +214,10 @@ func (service *FactService) ResolveHookInput(
 		hookContext.ServiceID != current.Record.ServiceID {
 		return errs.New(errs.KindValidationFailed, "Backing hook Task input request is invalid")
 	}
-	allowed := hookContext.Event == backinghook.Attach && current.Record.Operation == etcd.AttachOperationProvision &&
+	allowed := hookContext.Event == backinghook.Attach && current.Record.Operation == attachrecord.AttachOperationProvision &&
 		(current.Record.Status == core.AttachPending || current.Record.Status == core.AttachProvisioning)
 	allowed = allowed || hookContext.Event == backinghook.Detach &&
-		current.Record.Operation == etcd.AttachOperationDetach && current.Record.Status == core.AttachDetaching
+		current.Record.Operation == attachrecord.AttachOperationDetach && current.Record.Status == core.AttachDetaching
 	if !allowed {
 		return errs.New(errs.KindStateConflict, "Backing hook input is unavailable in the current lifecycle")
 	}
@@ -227,8 +228,8 @@ func (service *FactService) ResolveHookInput(
 
 func (service *FactService) ResolveDraftHookInput(
 	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
-	stored *etcd.AttachEncryptedFacts,
+	current etcd.Versioned[attachrecord.Record],
+	stored *attachrecord.EncryptedFacts,
 	task etcd.TaskRecord,
 	hookInputs *etcd.BackingHookEncryptedInputs,
 	hookContext backinghook.Context,
@@ -300,7 +301,7 @@ func (service *FactService) resolveLifecycleHookInput(
 
 func (service *FactService) consumeHookInput(
 	ctx context.Context,
-	record etcd.AttachRecord,
+	record attachrecord.Record,
 	task etcd.TaskRecord,
 	draft *etcd.BackingHookEncryptedInputs,
 	hookContext backinghook.Context,
@@ -364,19 +365,19 @@ func (service *FactService) appendBackingHookTaskInputs(
 
 func (service *FactService) SealHookResult(
 	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
+	current etcd.Versioned[attachrecord.Record],
 	schema []backinghook.FactDefinition,
 	output backinghook.Output,
-) (etcd.AttachEncryptedFacts, error) {
+) (attachrecord.EncryptedFacts, error) {
 	if ctx == nil || current.Revision <= 0 || !current.Record.HookBundle ||
-		current.Record.Operation != etcd.AttachOperationProvision ||
+		current.Record.Operation != attachrecord.AttachOperationProvision ||
 		(current.Record.Status != core.AttachPending && current.Record.Status != core.AttachProvisioning) {
-		return etcd.AttachEncryptedFacts{}, errs.New(errs.KindStateConflict, "Backing hook result owner is unavailable")
+		return attachrecord.EncryptedFacts{}, errs.New(errs.KindStateConflict, "Backing hook result owner is unavailable")
 	}
 	if err := backinghook.ValidateOutput(schema, output); err != nil {
-		return etcd.AttachEncryptedFacts{}, err
+		return attachrecord.EncryptedFacts{}, err
 	}
-	var sealed etcd.AttachEncryptedFacts
+	var sealed attachrecord.EncryptedFacts
 	err := service.openBundle(ctx, current, func(bundle *attachFactBundle) error {
 		if len(schema) == 0 {
 			if len(bundle.Sets) != 0 || len(current.Record.FactSets) != 0 {
@@ -414,20 +415,20 @@ func (service *FactService) sealHookBundle(
 	ctx context.Context,
 	attachID string,
 	bundle attachFactBundle,
-) (etcd.AttachEncryptedFacts, error) {
+) (attachrecord.EncryptedFacts, error) {
 	payload, err := json.Marshal(bundle)
 	if err != nil {
-		return etcd.AttachEncryptedFacts{}, errs.Wrap(errs.KindInternal, err)
+		return attachrecord.EncryptedFacts{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clearAttachBytes(payload)
 	envelope, err := service.protector.Seal(ctx, payload)
 	if err != nil {
-		return etcd.AttachEncryptedFacts{}, err
+		return attachrecord.EncryptedFacts{}, err
 	}
 	ciphertext := envelope.Ciphertext()
 	defer clearAttachBytes(ciphertext)
 	metadata := envelope.Metadata()
-	return etcd.NewAttachEncryptedFacts(
+	return attachrecord.NewAttachEncryptedFacts(
 		attachID, uint8(metadata.Version), string(metadata.Cipher),
 		string(metadata.Digest.Algorithm), ciphertext,
 	)

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"slices"
@@ -35,7 +36,7 @@ type backingZoneCascadeRepository interface {
 		string,
 		string,
 		int64,
-	) ([]etcd.Versioned[etcd.AttachRecord], error)
+	) ([]etcd.Versioned[attachrecord.Record], error)
 	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
 	GetSystemTaskInitiation(context.Context, string) (etcd.TaskInitiation, error)
 	GetZoneRemovalIntent(context.Context, string) (etcd.Versioned[etcd.ZoneRemovalIntent], bool, error)
@@ -158,7 +159,7 @@ func (service *backingZoneCascadeService) Execute(ctx context.Context, task etcd
 func (service *backingZoneCascadeService) advanceAttach(
 	ctx context.Context,
 	parent etcd.TaskRecord,
-	attach etcd.AttachRecord,
+	attach attachrecord.Record,
 ) error {
 	var response etcd.IdempotencyResponse
 	var err error
@@ -171,14 +172,14 @@ func (service *backingZoneCascadeService) advanceAttach(
 	}
 	switch {
 	case attach.Status == core.AttachReady ||
-		(attach.Status == core.AttachFailed && attach.Operation == etcd.AttachOperationProvision):
+		(attach.Status == core.AttachFailed && attach.Operation == attachrecord.AttachOperationProvision):
 		response, err = service.detaches.DetachAttachWithInitiation(
 			ctx,
 			attach.ID,
 			cascadeIdempotencyKey("detach", parent.ID, attach.ID),
 			initiation,
 		)
-	case attach.Status == core.AttachFailed && attach.Operation == etcd.AttachOperationDetach:
+	case attach.Status == core.AttachFailed && attach.Operation == attachrecord.AttachOperationDetach:
 		response, err = service.retries.RetryTaskWithInitiation(
 			ctx,
 			attach.TaskID,
@@ -378,9 +379,9 @@ func (service *backingZoneCascadeService) waitForTask(
 }
 
 func orderBackingZoneCascadeAttaches(
-	attaches []etcd.Versioned[etcd.AttachRecord],
-) ([]etcd.Versioned[etcd.AttachRecord], error) {
-	byID := make(map[string]etcd.Versioned[etcd.AttachRecord], len(attaches))
+	attaches []etcd.Versioned[attachrecord.Record],
+) ([]etcd.Versioned[attachrecord.Record], error) {
+	byID := make(map[string]etcd.Versioned[attachrecord.Record], len(attaches))
 	indegree := make(map[string]int, len(attaches))
 	edges := make(map[string][]string, len(attaches))
 	for _, attach := range attaches {
@@ -406,7 +407,7 @@ func orderBackingZoneCascadeAttaches(
 		}
 	}
 	slices.Sort(ready)
-	result := make([]etcd.Versioned[etcd.AttachRecord], 0, len(attaches))
+	result := make([]etcd.Versioned[attachrecord.Record], 0, len(attaches))
 	for len(ready) != 0 {
 		id := ready[0]
 		ready = ready[1:]

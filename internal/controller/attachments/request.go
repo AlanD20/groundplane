@@ -2,7 +2,8 @@ package attachments
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
@@ -45,15 +46,15 @@ func normalizeAttachRequest(request apiTypes.AttachRequest) (apiTypes.AttachRequ
 		)
 	}
 	if request.Name != "" {
-		if err := etcd.ValidateAttachName(request.Name); err != nil {
+		if err := attachrecord.ValidateAttachName(request.Name); err != nil {
 			return apiTypes.AttachRequest{}, err
 		}
 	}
-	if len(request.GrantAttachIDs) > etcd.MaximumAttachGrants {
+	if len(request.GrantAttachIDs) > attachrecord.MaximumAttachGrants {
 		return apiTypes.AttachRequest{}, errs.Newf(
 			errs.KindValidationFailed,
 			"Attach may have at most %d grants",
-			etcd.MaximumAttachGrants,
+			attachrecord.MaximumAttachGrants,
 		)
 	}
 	slices.Sort(request.GrantAttachIDs)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -17,24 +18,24 @@ func (service *MutationService) ListAttaches(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.AttachRecord], error) {
+) (etcd.Page[attachrecord.Record], error) {
 	if ctx == nil {
-		return etcd.Page[etcd.AttachRecord]{}, errs.New(errs.KindInternal, "Attach list context is required")
+		return etcd.Page[attachrecord.Record]{}, errs.New(errs.KindInternal, "Attach list context is required")
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.Page[etcd.AttachRecord]{}, errs.New(
+		return etcd.Page[attachrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach list requires a stable Environment id",
 		)
 	}
 	if request.Limit < 0 {
-		return etcd.Page[etcd.AttachRecord]{}, errs.New(
+		return etcd.Page[attachrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach list limit must be a positive integer",
 		)
 	}
 	if _, err := service.repository.GetEnvironment(ctx, environmentID); err != nil {
-		return etcd.Page[etcd.AttachRecord]{}, err
+		return etcd.Page[attachrecord.Record]{}, err
 	}
 	return service.repository.ListAttaches(ctx, environmentID, request)
 }
@@ -51,7 +52,7 @@ func (service *MutationService) RenameAttach(
 	if ids.Validate(ids.KindAttach, attachID) != nil {
 		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Attach id is invalid")
 	}
-	if err := etcd.ValidateAttachName(request.Name); err != nil {
+	if err := attachrecord.ValidateAttachName(request.Name); err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
 	for attempt := 0; attempt < maximumAttachMutationTries; attempt++ {
@@ -176,7 +177,7 @@ func (service *MutationService) replayAttachRename(
 	return requestidempotency.CloneResponse(resolution.Response), nil
 }
 
-func attachAPI(record etcd.AttachRecord) apiTypes.Attach {
+func attachAPI(record attachrecord.Record) apiTypes.Attach {
 	return apiTypes.Attach{
 		ID: record.ID, Name: record.Name,
 		ServiceID: record.ServiceID, Credential: attachAPICredential(record),
@@ -188,7 +189,7 @@ func attachAPI(record etcd.AttachRecord) apiTypes.Attach {
 	}
 }
 
-func attachAPICredential(record etcd.AttachRecord) apiTypes.AttachCredential {
+func attachAPICredential(record attachrecord.Record) apiTypes.AttachCredential {
 	if record.OwnsCredential() {
 		return apiTypes.AttachCredential{Mode: apiTypes.AttachCredentialNew}
 	}
@@ -197,7 +198,7 @@ func attachAPICredential(record etcd.AttachRecord) apiTypes.AttachCredential {
 	}
 }
 
-func attachAPIFactSets(factSets []etcd.AttachFactSetMetadata) []apiTypes.AttachFactSet {
+func attachAPIFactSets(factSets []attachrecord.FactSetMetadata) []apiTypes.AttachFactSet {
 	response := make([]apiTypes.AttachFactSet, len(factSets))
 	for setIndex, set := range factSets {
 		facts := make([]apiTypes.AttachFact, len(set.Facts))

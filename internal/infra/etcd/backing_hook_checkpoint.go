@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -32,24 +33,24 @@ type BackingHookCheckpointInput struct {
 	Event           string
 	State           BackingHookCheckpointState
 	ResultSHA256    string
-	Facts           *AttachEncryptedFacts
+	Facts           *attachrecord.EncryptedFacts
 	At              time.Time
 }
 
 type BackingHookCheckpointRecord struct {
-	TaskID         string                     `json:"task_id"`
-	OperationID    string                     `json:"operation_id"`
-	AssignmentID   string                     `json:"assignment_id"`
-	ExecutionEpoch uint32                     `json:"execution_epoch"`
-	StepID         string                     `json:"step_id"`
-	PlanHash       string                     `json:"plan_hash"`
-	AttachID       string                     `json:"attach_id,omitempty"`
-	Event          string                     `json:"event"`
-	State          BackingHookCheckpointState `json:"state"`
-	ResultSHA256   string                     `json:"result_sha256,omitempty"`
-	Facts          *AttachEncryptedFacts      `json:"facts,omitempty"`
-	StartedAt      time.Time                  `json:"started_at"`
-	ResultAt       *time.Time                 `json:"result_at,omitempty"`
+	TaskID         string                       `json:"task_id"`
+	OperationID    string                       `json:"operation_id"`
+	AssignmentID   string                       `json:"assignment_id"`
+	ExecutionEpoch uint32                       `json:"execution_epoch"`
+	StepID         string                       `json:"step_id"`
+	PlanHash       string                       `json:"plan_hash"`
+	AttachID       string                       `json:"attach_id,omitempty"`
+	Event          string                       `json:"event"`
+	State          BackingHookCheckpointState   `json:"state"`
+	ResultSHA256   string                       `json:"result_sha256,omitempty"`
+	Facts          *attachrecord.EncryptedFacts `json:"facts,omitempty"`
+	StartedAt      time.Time                    `json:"started_at"`
+	ResultAt       *time.Time                   `json:"result_at,omitempty"`
 }
 
 // CheckpointBackingHook fences one execution boundary against the exact live
@@ -236,7 +237,7 @@ func validateBackingHookCheckpointInput(input BackingHookCheckpointInput) error 
 			return errs.New(errs.KindValidationFailed, "Backing hook RESULT digest is invalid")
 		}
 		if input.Event == "attach" {
-			if input.Facts == nil || validateAttachEncryptedFacts(*input.Facts) != nil || input.Facts.AttachID != input.AttachID {
+			if input.Facts == nil || attachrecord.ValidateAttachEncryptedFacts(*input.Facts) != nil || input.Facts.AttachID != input.AttachID {
 				return errs.New(errs.KindValidationFailed, "Backing hook RESULT facts are invalid")
 			}
 		} else if input.Facts != nil {
@@ -275,7 +276,7 @@ func sameBackingHookCheckpointIdentity(record BackingHookCheckpointRecord, input
 		record.AttachID == input.AttachID && record.Event == input.Event
 }
 
-func cloneAttachEncryptedFacts(value *AttachEncryptedFacts) *AttachEncryptedFacts {
+func cloneAttachEncryptedFacts(value *attachrecord.EncryptedFacts) *attachrecord.EncryptedFacts {
 	if value == nil {
 		return nil
 	}

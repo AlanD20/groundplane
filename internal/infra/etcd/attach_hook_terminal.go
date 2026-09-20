@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -51,7 +52,7 @@ func (repository *TaskRepository) applyBackingHookTerminal(
 	if checkpoint.Facts == nil || checkpoint.Facts.AttachID != task.Target {
 		return errs.New(errs.KindInternal, "Attach hook checkpoint facts are missing")
 	}
-	factKey := attachFactsKey(task.Target)
+	factKey := attachrecord.AttachFactsKey(task.Target)
 	current, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{factKey}, Revision: revision})
 	if err != nil {
 		return err
@@ -63,7 +64,7 @@ func (repository *TaskRepository) applyBackingHookTerminal(
 		return errs.New(errs.KindInternal, "Attach hook input bundle is missing")
 	}
 	defer clearKeyValues(current.Values)
-	value, err := encodeAttachEncryptedFacts(*checkpoint.Facts)
+	value, err := attachrecord.EncodeAttachEncryptedFacts(*checkpoint.Facts)
 	if err != nil {
 		return err
 	}

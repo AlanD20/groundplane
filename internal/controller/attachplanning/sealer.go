@@ -4,6 +4,7 @@ package attachplanning
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -33,28 +34,28 @@ type Repository interface {
 		string,
 		string,
 	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
-	GetAttach(context.Context, string) (etcd.Versioned[etcd.AttachRecord], error)
+	GetAttach(context.Context, string) (etcd.Versioned[attachrecord.Record], error)
 	GetAttachTaskRenderInput(context.Context, string) (etcd.Versioned[etcd.AttachTaskRenderInput], error)
 }
 
 type Facts interface {
 	ResolveTaskIdentity(
 		context.Context,
-		etcd.Versioned[etcd.AttachRecord],
+		etcd.Versioned[attachrecord.Record],
 		string,
 		controllerpkg.AttachPlanIdentityConsumer,
 	) error
 	ResolveHookInput(
 		context.Context,
-		etcd.Versioned[etcd.AttachRecord],
+		etcd.Versioned[attachrecord.Record],
 		etcd.TaskRecord,
 		backinghook.Context,
 		controllerpkg.BackingHookInputConsumer,
 	) error
 	ResolveDraftHookInput(
 		context.Context,
-		etcd.Versioned[etcd.AttachRecord],
-		*etcd.AttachEncryptedFacts,
+		etcd.Versioned[attachrecord.Record],
+		*attachrecord.EncryptedFacts,
 		etcd.TaskRecord,
 		*etcd.BackingHookEncryptedInputs,
 		backinghook.Context,
@@ -91,11 +92,11 @@ func New(
 
 func (sealer *Sealer) SealDraft(
 	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
+	current etcd.Versioned[attachrecord.Record],
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	identity *controllerpkg.AttachPlanIdentity,
-	hookBundle *etcd.AttachEncryptedFacts,
+	hookBundle *attachrecord.EncryptedFacts,
 	hookInputs *etcd.BackingHookEncryptedInputs,
 ) (serviceruntimerecord.AttachPreparation, error) {
 	state := &draftAttachPlanState{
@@ -120,16 +121,16 @@ func (sealer *Sealer) SealDraft(
 type draftAttachPlanState struct {
 	repository  Repository
 	facts       Facts
-	current     etcd.Versioned[etcd.AttachRecord]
+	current     etcd.Versioned[attachrecord.Record]
 	renderInput etcd.AttachTaskRenderInput
 	identity    *controllerpkg.AttachPlanIdentity
-	hookBundle  *etcd.AttachEncryptedFacts
+	hookBundle  *attachrecord.EncryptedFacts
 	hookInputs  *etcd.BackingHookEncryptedInputs
 }
 
 func (state *draftAttachPlanState) ResolveHookInput(
 	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
+	current etcd.Versioned[attachrecord.Record],
 	task etcd.TaskRecord,
 	hookContext backinghook.Context,
 	consume controllerpkg.BackingHookInputConsumer,
@@ -145,7 +146,7 @@ func (state *draftAttachPlanState) ResolveHookInput(
 func (state *draftAttachPlanState) GetAttach(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.AttachRecord], error) {
+) (etcd.Versioned[attachrecord.Record], error) {
 	if id == state.current.Record.ID {
 		return state.current, nil
 	}
@@ -171,7 +172,7 @@ func (state *draftAttachPlanState) GetBlueprintAttachTaskIntent(
 
 func (state *draftAttachPlanState) ResolveTaskIdentity(
 	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
+	current etcd.Versioned[attachrecord.Record],
 	taskID string,
 	consume controllerpkg.AttachPlanIdentityConsumer,
 ) error {

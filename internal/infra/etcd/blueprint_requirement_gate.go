@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -232,7 +233,7 @@ func prepareBlueprintRequirementGatePublication(
 	prepared.conditions = append(prepared.conditions, etcdstore.Condition{Key: blueprintRequirementGateKey(task.ID)})
 	for _, requirement := range gate.DAG.Requirements {
 		prepared.conditions = append(prepared.conditions, etcdstore.Condition{
-			Key: attachKey(requirement.TargetID), ModRevision: requirement.TargetRevision,
+			Key: attachrecord.AttachKey(requirement.TargetID), ModRevision: requirement.TargetRevision,
 		})
 	}
 	return prepared, nil
@@ -308,7 +309,7 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 	}
 	for _, requirement := range gate.DAG.Requirements {
 		attachRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{attachKey(requirement.TargetID)}, Revision: revision,
+			Keys: []string{attachrecord.AttachKey(requirement.TargetID)}, Revision: revision,
 		})
 		if readErr != nil {
 			return blueprintRequirementGateClaimEvidence{}, true, false, readErr
@@ -321,12 +322,12 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 		if attachValue == nil {
 			return blueprintRequirementGateClaimEvidence{}, true, false, nil
 		}
-		attach, decodeErr := decodeAttachRecord(attachValue.Value)
+		attach, decodeErr := attachrecord.DecodeAttachRecord(attachValue.Value)
 		if decodeErr != nil || attach.ID != requirement.TargetID || attach.TaskID != requirement.TargetTaskID {
 			return blueprintRequirementGateClaimEvidence{}, true, false, corruptBlueprintRequirementGate()
 		}
 		evidence.conditions = append(evidence.conditions, etcdstore.Condition{
-			Key: attachKey(attach.ID), ModRevision: attachValue.ModRevision,
+			Key: attachrecord.AttachKey(attach.ID), ModRevision: attachValue.ModRevision,
 		})
 		switch requirement.Condition {
 		case core.RequirementExists:

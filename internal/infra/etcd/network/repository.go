@@ -6,6 +6,7 @@ package network
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -20,7 +21,7 @@ import (
 // persistence records must not cross the Network capability's public service
 // boundary.
 type RemovalDatabaseResolver interface {
-	ResolveRemovalDatabase(context.Context, etcd.Versioned[etcd.AttachRecord], func(string) error) error
+	ResolveRemovalDatabase(context.Context, etcd.Versioned[attachrecord.Record], func(string) error) error
 }
 
 // Repository owns all durable records used by the Network capability.
@@ -269,13 +270,13 @@ func (repository *Repository) ListAttachesByBackingNetworkAtRevision(
 	projectID string,
 	networkID string,
 	revision int64,
-) ([]etcd.Versioned[etcd.AttachRecord], error) {
+) ([]etcd.Versioned[attachrecord.Record], error) {
 	return repository.attaches.ListAttachesByBackingNetworkAtRevision(ctx, projectID, networkID, revision)
 }
 
 func (repository *Repository) ResolveRemovalDatabase(
 	ctx context.Context,
-	attach etcd.Versioned[etcd.AttachRecord],
+	attach etcd.Versioned[attachrecord.Record],
 	yield func(string) error,
 ) error {
 	return repository.facts.ResolveRemovalDatabase(ctx, attach, yield)

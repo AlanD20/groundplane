@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"io"
 	"slices"
 	"strings"
@@ -24,11 +25,11 @@ type GrantInput struct {
 }
 
 type FactRepository interface {
-	ResolveAttach(context.Context, string, string) (etcd.Versioned[etcd.AttachRecord], error)
+	ResolveAttach(context.Context, string, string) (etcd.Versioned[attachrecord.Record], error)
 	GetAttachFacts(
 		context.Context,
-		etcd.Versioned[etcd.AttachRecord],
-	) (etcd.AttachEncryptedFacts, bool, error)
+		etcd.Versioned[attachrecord.Record],
+	) (attachrecord.EncryptedFacts, bool, error)
 }
 
 type FactService struct {
@@ -56,7 +57,7 @@ func (service *FactService) SealFactSets(
 	adapter adapters.Adapter,
 	own adapters.Input,
 	grants []GrantInput,
-) ([]etcd.AttachFactSetMetadata, *etcd.AttachEncryptedFacts, error) {
+) ([]attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts, error) {
 	if ctx == nil {
 		return nil, nil, errs.New(errs.KindValidationFailed, "Attach fact context is required")
 	}
@@ -92,7 +93,7 @@ func (service *FactService) SealFactSets(
 	}
 
 	sets := make([]attachFactValueSet, 0, len(canonicalGrants)+1)
-	metadata := make([]etcd.AttachFactSetMetadata, 0, len(canonicalGrants)+1)
+	metadata := make([]attachrecord.FactSetMetadata, 0, len(canonicalGrants)+1)
 	ownedFacts := make([][]backinghook.Fact, 0, len(canonicalGrants)+1)
 	defer func() {
 		for _, facts := range ownedFacts {
@@ -108,13 +109,13 @@ func (service *FactService) SealFactSets(
 		slices.SortFunc(facts, func(left backinghook.Fact, right backinghook.Fact) int {
 			return strings.Compare(left.Key, right.Key)
 		})
-		factMetadata := make([]etcd.AttachFactDefinition, 0, len(facts))
+		factMetadata := make([]attachrecord.FactDefinition, 0, len(facts))
 		values := make([]attachFactValue, 0, len(facts))
 		for _, fact := range facts {
-			factMetadata = append(factMetadata, etcd.AttachFactDefinition{Key: fact.Key, Secret: fact.Secret})
+			factMetadata = append(factMetadata, attachrecord.FactDefinition{Key: fact.Key, Secret: fact.Secret})
 			values = append(values, attachFactValue{Key: fact.Key, Value: fact.Value})
 		}
-		metadata = append(metadata, etcd.AttachFactSetMetadata{
+		metadata = append(metadata, attachrecord.FactSetMetadata{
 			GrantAttachID: grantAttachID,
 			Facts:         factMetadata,
 		})
@@ -155,7 +156,7 @@ func (service *FactService) SealFactSets(
 	ciphertext := envelope.Ciphertext()
 	defer clearAttachBytes(ciphertext)
 	envelopeMetadata := envelope.Metadata()
-	facts, err := etcd.NewAttachEncryptedFacts(
+	facts, err := attachrecord.NewAttachEncryptedFacts(
 		attachID,
 		uint8(envelopeMetadata.Version),
 		string(envelopeMetadata.Cipher),
@@ -172,7 +173,7 @@ func (service *FactService) SealFactSets(
 // synchronous plan construction. Public fact readiness rules remain unchanged.
 func (service *FactService) ResolveTaskIdentity(
 	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
+	current etcd.Versioned[attachrecord.Record],
 	taskID string,
 	consume controllerpkg.AttachPlanIdentityConsumer,
 ) error {
@@ -180,9 +181,9 @@ func (service *FactService) ResolveTaskIdentity(
 		current.Record.TaskID != taskID || !current.Record.OwnsCredential() {
 		return errs.New(errs.KindValidationFailed, "Attach task identity request is invalid")
 	}
-	allowed := current.Record.Operation == etcd.AttachOperationProvision &&
+	allowed := current.Record.Operation == attachrecord.AttachOperationProvision &&
 		(current.Record.Status == core.AttachPending || current.Record.Status == core.AttachProvisioning)
-	allowed = allowed || current.Record.Operation == etcd.AttachOperationDetach &&
+	allowed = allowed || current.Record.Operation == attachrecord.AttachOperationDetach &&
 		current.Record.Status == core.AttachDetaching
 	if !allowed {
 		return errs.New(errs.KindStateConflict, "Attach task identity is unavailable in the current lifecycle")
@@ -209,7 +210,7 @@ func (service *FactService) ResolveTaskIdentity(
 // construct another ready Attach's grant procedure and fact set.
 func (service *FactService) ResolveReadyDatabase(
 	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
+	current etcd.Versioned[attachrecord.Record],
 	consume func(string) error,
 ) error {
 	if ctx == nil || consume == nil {
@@ -230,8 +231,8 @@ func (service *FactService) ResolveReadyDatabase(
 // and exposes the exact ready Attach database/role pair during consume.
 func (service *FactService) ResolveBackupIdentity(
 	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
-	stored etcd.AttachEncryptedFacts,
+	current etcd.Versioned[attachrecord.Record],
+	stored attachrecord.EncryptedFacts,
 	consume func(etcd.BackupPostgresIdentity) error,
 ) error {
 	if ctx == nil || consume == nil || current.Record.Status != core.AttachReady ||
@@ -255,7 +256,7 @@ func (service *FactService) ResolveBackupIdentity(
 // database side effect, so its sealed identity remains part of the cascade.
 func (service *FactService) ResolveRemovalDatabase(
 	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
+	current etcd.Versioned[attachrecord.Record],
 	consume func(string) error,
 ) error {
 	if ctx == nil || consume == nil {
@@ -344,7 +345,7 @@ func (service *FactService) ResolveFact(
 
 func (service *FactService) openBundle(
 	ctx context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
+	current etcd.Versioned[attachrecord.Record],
 	consume func(*attachFactBundle) error,
 ) error {
 	stored, ok, err := service.repository.GetAttachFacts(ctx, current)
@@ -360,8 +361,8 @@ func (service *FactService) openBundle(
 
 func (service *FactService) openStoredBundle(
 	ctx context.Context,
-	record etcd.AttachRecord,
-	stored etcd.AttachEncryptedFacts,
+	record attachrecord.Record,
+	stored attachrecord.EncryptedFacts,
 	consume func(*attachFactBundle) error,
 ) error {
 	envelope, err := secretvalue.Restore(secretvalue.Metadata{
@@ -420,10 +421,10 @@ type attachFactValue struct {
 }
 
 func attachFactMetadataDefinition(
-	sets []etcd.AttachFactSetMetadata,
+	sets []attachrecord.FactSetMetadata,
 	grantAttachID string,
 	key string,
-) (etcd.AttachFactDefinition, bool) {
+) (attachrecord.FactDefinition, bool) {
 	for _, set := range sets {
 		if set.GrantAttachID != grantAttachID {
 			continue
@@ -433,12 +434,12 @@ func attachFactMetadataDefinition(
 				return fact, true
 			}
 		}
-		return etcd.AttachFactDefinition{}, false
+		return attachrecord.FactDefinition{}, false
 	}
-	return etcd.AttachFactDefinition{}, false
+	return attachrecord.FactDefinition{}, false
 }
 
-func validAttachFactBundle(bundle attachFactBundle, record etcd.AttachRecord) bool {
+func validAttachFactBundle(bundle attachFactBundle, record attachrecord.Record) bool {
 	if (bundle.Version != 3 && bundle.Version != 4) || bundle.AttachID != record.ID ||
 		(bundle.Version == 3 && !validAttachTaskIdentityAuthentication(bundle.Identity)) ||
 		(bundle.Version == 4 && !record.HookBundle) ||

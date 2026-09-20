@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -124,8 +125,8 @@ func prepareBlueprintBackupPolicyPublication(
 					)
 				}
 			} else {
-				compare(backupPolicyCompareAttach, source.record.TargetID, attachKey(source.record.TargetID), source.attach.Revision)
-				compare(backupPolicyCompareTargetOwnerIndex, source.record.TargetID, attachOwnerKey(state.environmentID, source.record.TargetID), source.attachOwner.ModRevision)
+				compare(backupPolicyCompareAttach, source.record.TargetID, attachrecord.AttachKey(source.record.TargetID), source.attach.Revision)
+				compare(backupPolicyCompareTargetOwnerIndex, source.record.TargetID, attachrecord.AttachOwnerKey(state.environmentID, source.record.TargetID), source.attachOwner.ModRevision)
 				compare(backupPolicyCompareTargetTombstone, source.record.TargetID, deletionTombstoneKey("attach", source.record.TargetID), 0)
 			}
 		}

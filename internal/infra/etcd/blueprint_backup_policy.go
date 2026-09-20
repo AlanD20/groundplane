@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sync"
@@ -16,7 +17,7 @@ type blueprintBackupPolicySourceEvidence struct {
 	primary          *etcdstore.KeyValue
 	environmentIndex *etcdstore.KeyValue
 	identityIndex    *etcdstore.KeyValue
-	attach           *Versioned[AttachRecord]
+	attach           *Versioned[attachrecord.Record]
 	attachOwner      *etcdstore.KeyValue
 	candidateAttach  bool
 }

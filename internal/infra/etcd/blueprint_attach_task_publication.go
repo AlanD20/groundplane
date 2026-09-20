@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -56,22 +57,22 @@ func prepareBlueprintAttachTaskPublication(
 		candidateIDs[input.Record.ID] = struct{}{}
 	}
 	retainedPublished := make(map[string]struct{})
-	appendRetained := func(retained Versioned[AttachRecord]) error {
+	appendRetained := func(retained Versioned[attachrecord.Record]) error {
 		if _, exists := retainedPublished[retained.Record.ID]; exists {
 			return nil
 		}
-		value, encodeErr := encodeAttachRecord(retained.Record)
+		value, encodeErr := attachrecord.EncodeAttachRecord(retained.Record)
 		if encodeErr != nil {
 			return encodeErr
 		}
 		retainedPublished[retained.Record.ID] = struct{}{}
 		publication.values = append(publication.values, value)
 		publication.conditions = append(publication.conditions,
-			etcdstore.Condition{Key: attachKey(retained.Record.ID), ModRevision: retained.Revision},
+			etcdstore.Condition{Key: attachrecord.AttachKey(retained.Record.ID), ModRevision: retained.Revision},
 			etcdstore.Condition{Key: deletionTombstoneKey("attach", retained.Record.ID)},
 		)
 		publication.mutations = append(publication.mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: attachKey(retained.Record.ID), Value: value,
+			Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(retained.Record.ID), Value: value,
 		})
 		return nil
 	}
@@ -89,19 +90,19 @@ func prepareBlueprintAttachTaskPublication(
 				"Blueprint Attach consumer Service is absent from the candidate projection",
 			)
 		}
-		recordValue, encodeErr := encodeAttachRecord(record)
+		recordValue, encodeErr := attachrecord.EncodeAttachRecord(record)
 		if encodeErr != nil {
 			clearPreparedBlueprintAttachTaskPublication(publication)
 			return preparedBlueprintAttachTaskPublication{}, encodeErr
 		}
 		publication.values = append(publication.values, recordValue)
 		publication.conditions = append(publication.conditions,
-			etcdstore.Condition{Key: attachKey(record.ID)},
-			etcdstore.Condition{Key: attachNameKey(record.EnvironmentID, record.Name)},
-			etcdstore.Condition{Key: attachOwnerKey(record.EnvironmentID, record.ID)},
-			etcdstore.Condition{Key: attachServiceKey(record.ServiceID, record.ID)},
-			etcdstore.Condition{Key: attachBackingServiceKey(record.BackingServiceID, record.ID)},
-			etcdstore.Condition{Key: attachBackingProjectKey(record.BackingProjectID, record.ID)},
+			etcdstore.Condition{Key: attachrecord.AttachKey(record.ID)},
+			etcdstore.Condition{Key: attachrecord.AttachNameKey(record.EnvironmentID, record.Name)},
+			etcdstore.Condition{Key: attachrecord.AttachOwnerKey(record.EnvironmentID, record.ID)},
+			etcdstore.Condition{Key: attachrecord.AttachServiceKey(record.ServiceID, record.ID)},
+			etcdstore.Condition{Key: attachrecord.AttachBackingServiceKey(record.BackingServiceID, record.ID)},
+			etcdstore.Condition{Key: attachrecord.AttachBackingProjectKey(record.BackingProjectID, record.ID)},
 			etcdstore.Condition{Key: deletionTombstoneKey("attach", record.ID)},
 			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(record.BackingProjectID), ModRevision: input.BackingProject.Revision},
 			etcdstore.Condition{Key: hierarchyrecord.EnvironmentKey(record.BackingEnvironmentID), ModRevision: input.BackingEnvironment.Revision},
@@ -109,35 +110,35 @@ func prepareBlueprintAttachTaskPublication(
 		)
 		publication.mutations = append(
 			publication.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachKey(record.ID), Value: recordValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(record.ID), Value: recordValue},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   attachNameKey(record.EnvironmentID, record.Name),
+				Key:   attachrecord.AttachNameKey(record.EnvironmentID, record.Name),
 				Value: []byte(record.ID),
 			},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachServiceKey(record.ServiceID, record.ID), Value: []byte(record.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachServiceKey(record.ServiceID, record.ID), Value: []byte(record.ID)},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   attachBackingServiceKey(record.BackingServiceID, record.ID),
+				Key:   attachrecord.AttachBackingServiceKey(record.BackingServiceID, record.ID),
 				Value: []byte(record.ID),
 			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   attachBackingProjectKey(record.BackingProjectID, record.ID),
+				Key:   attachrecord.AttachBackingProjectKey(record.BackingProjectID, record.ID),
 				Value: []byte(record.ID),
 			},
 		)
 		if input.Facts != nil {
-			factValue, factErr := encodeAttachEncryptedFacts(*input.Facts)
+			factValue, factErr := attachrecord.EncodeAttachEncryptedFacts(*input.Facts)
 			if factErr != nil {
 				clearPreparedBlueprintAttachTaskPublication(publication)
 				return preparedBlueprintAttachTaskPublication{}, factErr
 			}
 			publication.values = append(publication.values, factValue)
-			publication.conditions = append(publication.conditions, etcdstore.Condition{Key: attachFactsKey(record.ID)})
+			publication.conditions = append(publication.conditions, etcdstore.Condition{Key: attachrecord.AttachFactsKey(record.ID)})
 			publication.mutations = append(publication.mutations, etcdstore.Mutation{
-				Type: etcdstore.MutationPut, Key: attachFactsKey(record.ID), Value: factValue,
+				Type: etcdstore.MutationPut, Key: attachrecord.AttachFactsKey(record.ID), Value: factValue,
 			})
 		}
 		if !record.OwnsCredential() {
@@ -148,10 +149,10 @@ func prepareBlueprintAttachTaskPublication(
 				}
 			}
 			publication.conditions = append(publication.conditions, etcdstore.Condition{
-				Key: attachCredentialByKey(record.CredentialAttachID, record.ID),
+				Key: attachrecord.AttachCredentialByKey(record.CredentialAttachID, record.ID),
 			})
 			publication.mutations = append(publication.mutations, etcdstore.Mutation{
-				Type: etcdstore.MutationPut, Key: attachCredentialByKey(record.CredentialAttachID, record.ID), Value: []byte(record.ID),
+				Type: etcdstore.MutationPut, Key: attachrecord.AttachCredentialByKey(record.CredentialAttachID, record.ID), Value: []byte(record.ID),
 			})
 		}
 		for _, grantID := range record.GrantAttachIDs {
@@ -168,22 +169,22 @@ func prepareBlueprintAttachTaskPublication(
 			}
 			publication.conditions = append(
 				publication.conditions,
-				etcdstore.Condition{Key: attachGrantedByKey(grantID, record.ID)},
+				etcdstore.Condition{Key: attachrecord.AttachGrantedByKey(grantID, record.ID)},
 			)
 			publication.mutations = append(publication.mutations, etcdstore.Mutation{
-				Type: etcdstore.MutationPut, Key: attachGrantedByKey(grantID, record.ID), Value: []byte(record.ID),
+				Type: etcdstore.MutationPut, Key: attachrecord.AttachGrantedByKey(grantID, record.ID), Value: []byte(record.ID),
 			})
 		}
 		if len(record.GrantAttachIDs) != 0 {
-			dependentValue, dependentErr := encodeAttachDependentGrantIndex(record.ID, record.GrantAttachIDs)
+			dependentValue, dependentErr := attachrecord.EncodeAttachDependentGrantIndex(record.ID, record.GrantAttachIDs)
 			if dependentErr != nil {
 				clearPreparedBlueprintAttachTaskPublication(publication)
 				return preparedBlueprintAttachTaskPublication{}, dependentErr
 			}
 			publication.values = append(publication.values, dependentValue)
-			publication.conditions = append(publication.conditions, etcdstore.Condition{Key: attachDependentGrantKey(record.ID)})
+			publication.conditions = append(publication.conditions, etcdstore.Condition{Key: attachrecord.AttachDependentGrantKey(record.ID)})
 			publication.mutations = append(publication.mutations, etcdstore.Mutation{
-				Type: etcdstore.MutationPut, Key: attachDependentGrantKey(record.ID), Value: dependentValue,
+				Type: etcdstore.MutationPut, Key: attachrecord.AttachDependentGrantKey(record.ID), Value: dependentValue,
 			})
 		}
 	}

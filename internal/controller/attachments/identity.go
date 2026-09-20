@@ -2,12 +2,13 @@ package attachments
 
 import (
 	"encoding/base64"
+	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"io"
 	"strconv"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -74,7 +75,7 @@ func suggestAttachName(labels attachNameLabels, existing map[string]struct{}) (s
 		if _, occupied := existing[candidate]; occupied {
 			continue
 		}
-		if err := etcd.ValidateAttachName(candidate); err != nil {
+		if err := attachrecord.ValidateAttachName(candidate); err != nil {
 			return "", err
 		}
 		return candidate, nil
@@ -87,7 +88,7 @@ func attachNameCandidate(base string, ordinal int) string {
 		return base
 	}
 	suffix := "-" + strconv.Itoa(ordinal)
-	limit := etcd.MaximumAttachNameBytes - len(suffix)
+	limit := attachrecord.MaximumAttachNameBytes - len(suffix)
 	trimmed := strings.TrimRight(base[:min(len(base), limit)], "-")
 	return trimmed + suffix
 }

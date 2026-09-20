@@ -1,4 +1,4 @@
-package etcd
+package attachments
 
 import (
 	"crypto/sha256"
@@ -26,53 +26,53 @@ var (
 	attachNamePattern    = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 )
 
-type AttachOperation string
+type Operation string
 
 const (
-	AttachOperationProvision AttachOperation = "provision"
-	AttachOperationDetach    AttachOperation = "detach"
+	AttachOperationProvision Operation = "provision"
+	AttachOperationDetach    Operation = "detach"
 )
 
-// AttachFactDefinition is listable, non-secret schema metadata. It never
+// FactDefinition is listable, non-secret schema metadata. It never
 // contains a rendered fact value.
-type AttachFactDefinition struct {
+type FactDefinition struct {
 	Key    string `json:"key"`
 	Secret bool   `json:"secret"`
 }
 
-// AttachFactSetMetadata distinguishes the owning Attach's facts from the
+// FactSetMetadata distinguishes the owning Attach's facts from the
 // additional connection sets produced for grants. Empty GrantAttachID selects
 // the owning Attach's database.
-type AttachFactSetMetadata struct {
-	GrantAttachID string                 `json:"grant_attach_id,omitempty"`
-	Facts         []AttachFactDefinition `json:"facts"`
+type FactSetMetadata struct {
+	GrantAttachID string           `json:"grant_attach_id,omitempty"`
+	Facts         []FactDefinition `json:"facts"`
 }
 
-// AttachRecord stores only stable ownership, lifecycle, the resolved backing
+// Record stores only stable ownership, lifecycle, the resolved backing
 // network binding, and listable fact schema. Rendered fact bytes live in the
 // separately encrypted envelope.
-type AttachRecord struct {
-	ID                   string                  `json:"id"`
-	EnvironmentID        string                  `json:"environment_id"`
-	Name                 string                  `json:"name"`
-	BackingProjectID     string                  `json:"backing_project_id"`
-	BackingEnvironmentID string                  `json:"backing_environment_id"`
-	BackingServiceID     string                  `json:"backing_service_id"`
-	BackingNetworkID     string                  `json:"backing_network_id"`
-	ServiceID            string                  `json:"service_id"`
-	CredentialAttachID   string                  `json:"credential_attach_id"`
-	GrantAttachIDs       []string                `json:"grant_attach_ids,omitempty"`
-	FactSets             []AttachFactSetMetadata `json:"fact_sets,omitempty"`
-	HookBundle           bool                    `json:"hook_bundle,omitempty"`
-	Status               core.AttachStatus       `json:"status"`
-	Operation            AttachOperation         `json:"operation"`
-	TaskID               string                  `json:"task_id"`
-	CreatedAt            time.Time               `json:"created_at"`
+type Record struct {
+	ID                   string            `json:"id"`
+	EnvironmentID        string            `json:"environment_id"`
+	Name                 string            `json:"name"`
+	BackingProjectID     string            `json:"backing_project_id"`
+	BackingEnvironmentID string            `json:"backing_environment_id"`
+	BackingServiceID     string            `json:"backing_service_id"`
+	BackingNetworkID     string            `json:"backing_network_id"`
+	ServiceID            string            `json:"service_id"`
+	CredentialAttachID   string            `json:"credential_attach_id"`
+	GrantAttachIDs       []string          `json:"grant_attach_ids,omitempty"`
+	FactSets             []FactSetMetadata `json:"fact_sets,omitempty"`
+	HookBundle           bool              `json:"hook_bundle,omitempty"`
+	Status               core.AttachStatus `json:"status"`
+	Operation            Operation         `json:"operation"`
+	TaskID               string            `json:"task_id"`
+	CreatedAt            time.Time         `json:"created_at"`
 }
 
-// AttachEncryptedFacts is an opaque Controller-key envelope. Plaintext shape
+// EncryptedFacts is an opaque Controller-key envelope. Plaintext shape
 // and cryptographic operations belong to the application layer.
-type AttachEncryptedFacts struct {
+type EncryptedFacts struct {
 	AttachID         string `json:"attach_id"`
 	EnvelopeVersion  uint8  `json:"envelope_version"`
 	Cipher           string `json:"cipher"`
@@ -92,11 +92,11 @@ func NewPendingAttachRecord(
 	serviceID string,
 	credentialAttachID string,
 	grantAttachIDs []string,
-	factSets []AttachFactSetMetadata,
+	factSets []FactSetMetadata,
 	taskID string,
 	createdAt time.Time,
-) (AttachRecord, error) {
-	record := AttachRecord{
+) (Record, error) {
+	record := Record{
 		ID:                   id,
 		EnvironmentID:        environmentID,
 		Name:                 name,
@@ -107,28 +107,28 @@ func NewPendingAttachRecord(
 		ServiceID:            serviceID,
 		CredentialAttachID:   credentialAttachID,
 		GrantAttachIDs:       append([]string(nil), grantAttachIDs...),
-		FactSets:             cloneAttachFactSets(factSets),
+		FactSets:             CloneAttachFactSets(factSets),
 		Status:               core.AttachPending,
 		Operation:            AttachOperationProvision,
 		TaskID:               taskID,
 		CreatedAt:            createdAt.UTC(),
 	}
 	slices.Sort(record.GrantAttachIDs)
-	slices.SortFunc(record.FactSets, func(left AttachFactSetMetadata, right AttachFactSetMetadata) int {
+	slices.SortFunc(record.FactSets, func(left FactSetMetadata, right FactSetMetadata) int {
 		return strings.Compare(left.GrantAttachID, right.GrantAttachID)
 	})
 	for index := range record.FactSets {
-		slices.SortFunc(record.FactSets[index].Facts, func(left AttachFactDefinition, right AttachFactDefinition) int {
+		slices.SortFunc(record.FactSets[index].Facts, func(left FactDefinition, right FactDefinition) int {
 			return strings.Compare(left.Key, right.Key)
 		})
 	}
-	if err := validateAttachRecord(record); err != nil {
-		return AttachRecord{}, err
+	if err := ValidateAttachRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-func (record AttachRecord) OwnsCredential() bool {
+func (record Record) OwnsCredential() bool {
 	return record.ID != "" && record.CredentialAttachID == record.ID
 }
 
@@ -138,9 +138,9 @@ func NewAttachEncryptedFacts(
 	cipher string,
 	digestAlgorithm string,
 	ciphertext []byte,
-) (AttachEncryptedFacts, error) {
+) (EncryptedFacts, error) {
 	digest := sha256.Sum256(ciphertext)
-	value := AttachEncryptedFacts{
+	value := EncryptedFacts{
 		AttachID:         attachID,
 		EnvelopeVersion:  envelopeVersion,
 		Cipher:           cipher,
@@ -148,57 +148,57 @@ func NewAttachEncryptedFacts(
 		CiphertextSHA256: hex.EncodeToString(digest[:]),
 		Ciphertext:       append([]byte(nil), ciphertext...),
 	}
-	if err := validateAttachEncryptedFacts(value); err != nil {
+	if err := ValidateAttachEncryptedFacts(value); err != nil {
 		clear(value.Ciphertext)
-		return AttachEncryptedFacts{}, err
+		return EncryptedFacts{}, err
 	}
 	return value, nil
 }
 
-func MarkAttachProvisioning(record AttachRecord, taskID string) (AttachRecord, error) {
+func MarkAttachProvisioning(record Record, taskID string) (Record, error) {
 	if record.Status != core.AttachPending || record.Operation != AttachOperationProvision || record.TaskID != taskID {
-		return AttachRecord{}, attachStateError(record, "cannot start provisioning")
+		return Record{}, attachStateError(record, "cannot start provisioning")
 	}
 	record.Status = core.AttachProvisioning
-	if err := validateAttachRecord(record); err != nil {
-		return AttachRecord{}, err
+	if err := ValidateAttachRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-func AbortPendingAttachProvisioning(record AttachRecord, taskID string) (AttachRecord, error) {
+func AbortPendingAttachProvisioning(record Record, taskID string) (Record, error) {
 	if record.Status != core.AttachPending || record.Operation != AttachOperationProvision || record.TaskID != taskID {
-		return AttachRecord{}, attachStateError(record, "cannot abort pending provisioning")
+		return Record{}, attachStateError(record, "cannot abort pending provisioning")
 	}
 	record.Status = core.AttachFailed
-	if err := validateAttachRecord(record); err != nil {
-		return AttachRecord{}, err
+	if err := ValidateAttachRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-func CompleteAttachProvisioning(record AttachRecord, taskID string, succeeded bool) (AttachRecord, error) {
+func CompleteAttachProvisioning(record Record, taskID string, succeeded bool) (Record, error) {
 	if record.Status != core.AttachProvisioning || record.Operation != AttachOperationProvision ||
 		record.TaskID != taskID {
-		return AttachRecord{}, attachStateError(record, "cannot complete provisioning")
+		return Record{}, attachStateError(record, "cannot complete provisioning")
 	}
 	if succeeded {
 		record.Status = core.AttachReady
 	} else {
 		record.Status = core.AttachFailed
 	}
-	if err := validateAttachRecord(record); err != nil {
-		return AttachRecord{}, err
+	if err := ValidateAttachRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-func RetryAttachOperation(record AttachRecord, taskID string) (AttachRecord, error) {
+func RetryAttachOperation(record Record, taskID string) (Record, error) {
 	if record.Status != core.AttachFailed {
-		return AttachRecord{}, attachStateError(record, "cannot retry operation")
+		return Record{}, attachStateError(record, "cannot retry operation")
 	}
 	if err := validateAttachStableID(ids.KindTask, taskID, "Attach retry task"); err != nil {
-		return AttachRecord{}, err
+		return Record{}, err
 	}
 	record.TaskID = taskID
 	switch record.Operation {
@@ -207,47 +207,47 @@ func RetryAttachOperation(record AttachRecord, taskID string) (AttachRecord, err
 	case AttachOperationDetach:
 		record.Status = core.AttachDetaching
 	default:
-		return AttachRecord{}, attachStateError(record, "cannot retry unknown operation")
+		return Record{}, attachStateError(record, "cannot retry unknown operation")
 	}
-	if err := validateAttachRecord(record); err != nil {
-		return AttachRecord{}, err
+	if err := ValidateAttachRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-func BeginAttachDetaching(record AttachRecord, taskID string) (AttachRecord, error) {
+func BeginAttachDetaching(record Record, taskID string) (Record, error) {
 	if record.Status != core.AttachReady &&
 		(record.Status != core.AttachFailed || record.Operation != AttachOperationProvision) {
-		return AttachRecord{}, attachStateError(record, "cannot begin detaching")
+		return Record{}, attachStateError(record, "cannot begin detaching")
 	}
 	if err := validateAttachStableID(ids.KindTask, taskID, "Attach detach task"); err != nil {
-		return AttachRecord{}, err
+		return Record{}, err
 	}
 	record.Status = core.AttachDetaching
 	record.Operation = AttachOperationDetach
 	record.TaskID = taskID
-	if err := validateAttachRecord(record); err != nil {
-		return AttachRecord{}, err
+	if err := ValidateAttachRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-func CompleteAttachDetaching(record AttachRecord, taskID string, succeeded bool) (AttachRecord, error) {
+func CompleteAttachDetaching(record Record, taskID string, succeeded bool) (Record, error) {
 	if record.Status != core.AttachDetaching || record.Operation != AttachOperationDetach || record.TaskID != taskID {
-		return AttachRecord{}, attachStateError(record, "cannot complete detaching")
+		return Record{}, attachStateError(record, "cannot complete detaching")
 	}
 	if succeeded {
 		record.Status = core.AttachDetached
 	} else {
 		record.Status = core.AttachFailed
 	}
-	if err := validateAttachRecord(record); err != nil {
-		return AttachRecord{}, err
+	if err := ValidateAttachRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-func validateAttachRecord(record AttachRecord) error {
+func ValidateAttachRecord(record Record) error {
 	for _, check := range []struct {
 		kind  ids.Kind
 		value string
@@ -276,7 +276,7 @@ func validateAttachRecord(record AttachRecord) error {
 	if len(record.GrantAttachIDs) > MaximumAttachGrants {
 		return errs.Newf(errs.KindValidationFailed, "Attach may have at most %d grants", MaximumAttachGrants)
 	}
-	if err := validateSortedStableIDs(record.GrantAttachIDs, ids.KindAttach, "Attach grant_attach_ids"); err != nil {
+	if err := ValidateSortedStableIDs(record.GrantAttachIDs, ids.KindAttach, "Attach grant_attach_ids"); err != nil {
 		return err
 	}
 	for _, grantID := range record.GrantAttachIDs {
@@ -322,7 +322,7 @@ func validateAttachRecord(record AttachRecord) error {
 	return nil
 }
 
-func validateInheritedAttachFactSets(factSets []AttachFactSetMetadata) error {
+func validateInheritedAttachFactSets(factSets []FactSetMetadata) error {
 	if len(factSets) == 0 {
 		return nil
 	}
@@ -344,7 +344,7 @@ func ValidateAttachName(name string) error {
 	return nil
 }
 
-func validateAttachEncryptedFacts(value AttachEncryptedFacts) error {
+func ValidateAttachEncryptedFacts(value EncryptedFacts) error {
 	if err := validateAttachStableID(ids.KindAttach, value.AttachID, "Attach fact envelope"); err != nil {
 		return err
 	}
@@ -369,7 +369,7 @@ func validateAttachEncryptedFacts(value AttachEncryptedFacts) error {
 	return nil
 }
 
-func validateAttachFactSets(factSets []AttachFactSetMetadata, grantAttachIDs []string) error {
+func validateAttachFactSets(factSets []FactSetMetadata, grantAttachIDs []string) error {
 	if len(factSets) == 0 {
 		if len(grantAttachIDs) != 0 {
 			return errs.New(errs.KindValidationFailed, "Attach grants require corresponding fact sets")
@@ -402,7 +402,7 @@ func validateAttachFactSets(factSets []AttachFactSetMetadata, grantAttachIDs []s
 	return nil
 }
 
-func validateSortedStableIDs(values []string, kind ids.Kind, field string) error {
+func ValidateSortedStableIDs(values []string, kind ids.Kind, field string) error {
 	prior := ""
 	for _, value := range values {
 		if err := validateAttachStableID(kind, value, field); err != nil {
@@ -423,19 +423,19 @@ func validateAttachStableID(kind ids.Kind, value string, field string) error {
 	return nil
 }
 
-func attachStateError(record AttachRecord, message string) error {
+func attachStateError(record Record, message string) error {
 	return errs.Newf(errs.KindStateConflict, "%s for Attach %s in state %s", message, record.ID, record.Status)
 }
 
-func cloneAttachFactSets(factSets []AttachFactSetMetadata) []AttachFactSetMetadata {
+func CloneAttachFactSets(factSets []FactSetMetadata) []FactSetMetadata {
 	if factSets == nil {
 		return nil
 	}
-	cloned := make([]AttachFactSetMetadata, len(factSets))
+	cloned := make([]FactSetMetadata, len(factSets))
 	for index, factSet := range factSets {
-		cloned[index] = AttachFactSetMetadata{
+		cloned[index] = FactSetMetadata{
 			GrantAttachID: factSet.GrantAttachID,
-			Facts:         append([]AttachFactDefinition(nil), factSet.Facts...),
+			Facts:         append([]FactDefinition(nil), factSet.Facts...),
 		}
 	}
 	return cloned
