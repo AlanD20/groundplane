@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	backinghookruntime "github.com/AlanD20/groundplane/internal/agent/backinghookruntime"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -35,7 +36,7 @@ func (p *WorkerPool) executeBackingHookStep(
 	if err != nil {
 		return err
 	}
-	output, err := ExecuteBackingHook(ctx, p.runner, containerID, definition, input, schema)
+	output, err := backinghookruntime.Execute(ctx, p.runner, containerID, definition, input, schema)
 	if err != nil {
 		return err
 	}

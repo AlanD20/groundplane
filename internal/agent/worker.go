@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
@@ -59,7 +60,7 @@ type WorkerPool struct {
 	hostResolution         HostResolutionRuntime
 	scriptRuntime          ScriptRuntime
 	materializations       *filematerialization.Inbox
-	managedConfigs         *managedConfigInbox
+	managedConfigs         *componentaction.Inbox
 	backupSecrets          *backupSecretSlotInbox
 	backupCheckpoints      *backupCheckpointInbox
 	scriptCheckpoints      *scriptCheckpointInbox
@@ -83,7 +84,7 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		outputs:                make(chan WorkerOutput, size),
 		reservations:           make(map[string]*taskReservation, size),
 		materializations:       filematerialization.NewInbox(),
-		managedConfigs:         newManagedConfigInbox(),
+		managedConfigs:         componentaction.NewInbox(),
 		backupSecrets:          newBackupSecretSlotInbox(),
 		backupCheckpoints:      newBackupCheckpointInbox(),
 		scriptCheckpoints:      newScriptCheckpointInbox(),

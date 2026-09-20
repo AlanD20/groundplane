@@ -98,7 +98,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			}
 			if err == nil {
 				if p.componentActions == nil {
-					err = closeManagedConfigSource(payload.Source, "agent: Component action runtime is not configured")
+					err = componentaction.CloseSourceWithError(payload.Source, "agent: Component action runtime is not configured")
 				} else {
 					var actionResult *componentaction.ComponentActionResult
 					actionResult, err = p.componentActions.ExecuteComponentAction(
