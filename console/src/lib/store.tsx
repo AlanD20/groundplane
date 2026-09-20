@@ -1,5 +1,14 @@
 "use client";
 import {
+  createComponentActions,
+  type ComponentActions,
+} from "@/features/component/actions";
+import {
+  useComponentRefresh,
+  type ComponentState,
+  type ComponentRefreshActions,
+} from "@/features/component/use-component-refresh";
+import {
   createAttachActions,
   type AttachActions,
 } from "@/features/attach/actions";
@@ -42,10 +51,7 @@ import {
   listAllZones,
   listAllRoutes,
 } from "@/features/environment/network-api";
-import {
-  listAllComponents,
-  listPlatformComponents,
-} from "@/features/component/api";
+import { listAllComponents } from "@/features/component/api";
 import { listAllReleases, projectReleaseSummary } from "@/features/release/api";
 import { listAllAgents } from "@/features/agent/api";
 import {
@@ -98,13 +104,11 @@ import type {
   BackingServiceCreateRequest,
   BackingServiceCreatedResponse,
 } from "@/features/backing-service/api";
-import { hydratePlatformComponents } from "./platform-component-hydration";
 import { useControllerPlatform } from "@/features/platform-controller/use-controller-platform";
 import type {
   ActivityEntry,
   EnvFile,
   Environment,
-  EnvironmentComponent,
   Project,
   Service,
   ServiceRuntimeIntent,
@@ -113,7 +117,6 @@ import type {
   TaskJournalSurface,
   Tenant,
   PlatformInfra,
-  ManagedConfigFile,
 } from "./types";
 import {
   createBlueprintActions,
@@ -123,7 +126,6 @@ import {
   adapters as seedAdapters,
   platform as seedPlatform,
 } from "./mock-data";
-import { createEnvironmentComponents, routerProjection } from "./components";
 import { applyAuthoritativeEnvironmentScalars } from "./environment-authoritative";
 import { useEnvironmentLifecycle } from "./environment-lifecycle";
 import type {
@@ -213,28 +215,6 @@ type AgentConfigResponse =
 type AgentConfigRequest =
   operations["agent.config.set"]["requestBody"]["content"]["application/json"];
 type HierarchyTaskAccepted = { task_id: string };
-type ComponentTaskAccepted =
-  operations["component.enable"]["responses"][202]["content"]["application/json"];
-type ComponentConfigResponse =
-  operations["component-config.show"]["responses"][200]["content"]["application/json"];
-type ComponentConfigMutationResponse =
-  operations["component-config.set"]["responses"][200]["content"]["application/json"];
-type ComponentConfigInput =
-  | { zone_ids: string[]; caddyfile_template?: string; alias?: string }
-  | {
-      zone_ids: string[];
-      credential:
-        | { mode: "existing"; secret_id: string }
-        | { mode: "new"; secret_name: string; token: string };
-    }
-  | {
-      upstream_auto: boolean;
-      upstream_resolvers: string[];
-      forwarders: { domain: string; resolvers: string[] }[];
-      tailnet_delegation: boolean;
-      corefile_template: string;
-    };
-
 function tenantFromAPI(tenant: TenantCreateResponse): Tenant {
   return {
     id: tenant.id,
@@ -492,7 +472,8 @@ async function listAllBackingProjects(
 
 type State = ReusableSecretState &
   ConnectorState &
-  RunnerState & {
+  RunnerState &
+  ComponentState & {
     // UI preference: typed confirmation before revealing a secret value
     requireRevealConfirm: boolean;
     tenants: Tenant[];
@@ -508,11 +489,6 @@ type State = ReusableSecretState &
     activity: ActivityEntry[];
     taskJournals: Record<string, TaskJournalState>;
     platform: PlatformInfra;
-    platformComponentsLoading: boolean;
-    platformComponentError: string | null;
-    managedConfigFiles: ManagedConfigFile[];
-    managedConfigLoading: boolean;
-    managedConfigError: string | null;
     agentsLoading: boolean;
     agentError: string | null;
     agentConfig: AgentConfigResponse | null;
@@ -578,6 +554,8 @@ type StoreContext = State &
   ReleaseGroupActions &
   AttachActions &
   EntryActions &
+  ComponentActions &
+  ComponentRefreshActions &
   ReturnType<typeof useControllerPlatform> &
   ReturnType<typeof useBackupStore> & {
     adapters: typeof seedAdapters;
@@ -588,17 +566,6 @@ type StoreContext = State &
       onEvent: (event: TransientLogEvent) => void,
     ) => Promise<void>;
     setRequireRevealConfirm: (v: boolean) => void;
-    refreshPlatformComponents: (
-      signal?: AbortSignal,
-    ) => Promise<PlatformInfra["components"]>;
-    refreshComponentConfig: (
-      componentId: string,
-      signal?: AbortSignal,
-    ) => Promise<ManagedConfigFile[]>;
-    refreshEnvironmentComponents: (
-      environmentId: string,
-      signal?: AbortSignal,
-    ) => Promise<EnvironmentComponent[]>;
     refreshEnvironmentReleases: (
       environmentId: string,
       signal?: AbortSignal,
@@ -698,16 +665,6 @@ type StoreContext = State &
     addBackingProject: (
       input: BackingServiceCreateRequest,
     ) => Promise<BackingServiceCreatedResponse>;
-    setComponentEnabled: (
-      componentId: string,
-      enabled: boolean,
-      config?: ComponentConfigInput,
-    ) => Promise<string>;
-    reconcileEnvironmentComponent: (componentId: string) => Promise<string>;
-    updateComponentConfig: (
-      componentId: string,
-      config: ComponentConfigInput,
-    ) => Promise<string | null>;
   };
 
 const Ctx = createContext<StoreContext | null>(null);
@@ -879,79 +836,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  const refreshPlatformComponents = useCallback(
-    async (signal?: AbortSignal) => {
-      const hydrated = hydratePlatformComponents(
-        await listPlatformComponents(signal),
-      );
-      update((draft) => {
-        draft.platform.components = hydrated.components;
-        if (hydrated.dns) draft.platform.dns = hydrated.dns;
-        draft.platformComponentsLoading = false;
-        draft.platformComponentError = null;
-      });
-      return hydrated.components;
-    },
-    [update],
-  );
-
-  const refreshComponentConfig = useCallback(
-    async (componentId: string, signal?: AbortSignal) => {
-      update((draft) => {
-        draft.managedConfigLoading = true;
-        draft.managedConfigError = null;
-      });
-      try {
-        const response = await controllerRequest<ComponentConfigResponse>(
-          `/components/${encodeURIComponent(componentId)}/config`,
-          200,
-          { signal },
-        );
-        const files = response.managed_files.map((file) => ({
-          path: file.path,
-          template: file.template,
-          rendered: file.rendered,
-        }));
-        update((draft) => {
-          draft.managedConfigFiles = files;
-          draft.managedConfigLoading = false;
-          draft.managedConfigError = null;
-        });
-        return files;
-      } catch (error) {
-        update((draft) => {
-          draft.managedConfigLoading = false;
-          draft.managedConfigError =
-            error instanceof Error
-              ? error.message
-              : "Unable to load managed Component config";
-        });
-        throw error;
-      }
-    },
-    [update],
-  );
-
-  const refreshEnvironmentComponents = useCallback(
-    async (environmentId: string, signal?: AbortSignal) => {
-      const components = await listAllComponents(environmentId, signal);
-      update((draft) => {
-        for (const project of [
-          ...draft.tenantProjects,
-          ...draft.backingProjects,
-        ]) {
-          const environment = project.environments?.find(
-            (candidate) => candidate.id === environmentId,
-          );
-          if (!environment) continue;
-          environment.components = components;
-          return;
-        }
-      });
-      return components;
-    },
-    [update],
-  );
+  const {
+    refreshPlatformComponents,
+    refreshComponentConfig,
+    refreshEnvironmentComponents,
+  } = useComponentRefresh(update);
 
   const refreshEnvironmentReleases = useCallback(
     async (environmentId: string, signal?: AbortSignal) => {
@@ -1987,46 +1876,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         });
         return created;
       },
-      setComponentEnabled: async (componentId, enabled, config) => {
-        const action = enabled ? "enable" : "disable";
-        const accepted = await controllerRequest<ComponentTaskAccepted>(
-          `/components/${encodeURIComponent(componentId)}/${action}`,
-          202,
-          {
-            method: "POST",
-            ...(enabled && config ? { body: { config } } : {}),
-          },
-        );
-        if (!accepted.task_id)
-          throw new Error(
-            `Controller response is missing Component ${action} task_id`,
-          );
-        return accepted.task_id;
-      },
-      reconcileEnvironmentComponent: async (componentId) => {
-        const accepted = await controllerRequest<ComponentTaskAccepted>(
-          `/components/${encodeURIComponent(componentId)}/update`,
-          202,
-          { method: "POST" },
-        );
-        if (!accepted.task_id)
-          throw new Error(
-            "Controller response is missing Component update task_id",
-          );
-        return accepted.task_id;
-      },
-      updateComponentConfig: async (componentId, config) => {
-        const result = await controllerRequest<ComponentConfigMutationResponse>(
-          `/components/${encodeURIComponent(componentId)}/config`,
-          200,
-          { method: "PUT", body: { config } },
-        );
-        if (!result.reconcile_task_id)
-          throw new Error(
-            "Controller response is missing Component config reconcile_task_id",
-          );
-        return result.reconcile_task_id;
-      },
+      ...createComponentActions(),
     };
   }, [
     state,
