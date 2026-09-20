@@ -404,9 +404,12 @@ func rejectComponentGeneratedServiceTarget(projection etcd.EnvironmentComposePro
 }
 
 func cloneEnvironmentDesiredProjection(current etcd.EnvironmentComposeProjection) etcd.EnvironmentComposeProjection {
-	runtimeFiles := make([]core.BlueprintFile, len(current.RuntimeFiles))
-	for index, file := range current.RuntimeFiles {
-		runtimeFiles[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
+	var runtimeFiles []core.BlueprintFile
+	if current.RuntimeFiles != nil {
+		runtimeFiles = make([]core.BlueprintFile, len(current.RuntimeFiles))
+		for index, file := range current.RuntimeFiles {
+			runtimeFiles[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
+		}
 	}
 	result := etcd.EnvironmentComposeProjection{
 		EnvironmentID: current.EnvironmentID, RevisionID: current.RevisionID,
