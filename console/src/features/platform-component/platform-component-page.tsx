@@ -1,82 +1,104 @@
-'use client'
+"use client";
 
-import { useRequiredParams } from '@/lib/router'
-import { Link } from 'react-router-dom'
-import {
-  ArrowLeft,
-  Copy,
-  Network,
-  Plus,
-  RefreshCw,
-  Save,
-} from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useStore } from '@/lib/store'
-import { environmentPlatformIngress } from '@/lib/environment-platform-ingress'
-import { PageHeader } from '@/components/common/page-header'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { StatusBadge } from '@/components/common/status-badge'
-import { MetaPill } from '@/components/common/meta-pill'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { CodeEditor } from '@/components/ui/code-editor'
+import { useRequiredParams } from "@/lib/router";
+import { Link } from "react-router-dom";
+import { ArrowLeft, Copy, Network, Plus, RefreshCw, Save } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useStore } from "@/lib/store";
+import { environmentPlatformIngress } from "@/features/environment/platform-ingress";
+import { PageHeader } from "@/components/common/page-header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatusBadge } from "@/components/common/status-badge";
+import { MetaPill } from "@/components/common/meta-pill";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { CodeEditor } from "@/components/ui/code-editor";
 
 const kindIcon: Record<string, React.ReactNode> = {
   coredns: <Network className="size-4 text-muted-foreground" />,
-}
+};
 
 export default function PlatformComponentPage() {
-  const params = useRequiredParams('component')
+  const params = useRequiredParams("component");
   const {
-    platform, tenantProjects, platformComponentsLoading, platformComponentError,
-    managedConfigFiles, managedConfigLoading, managedConfigError,
-    setComponentEnabled, updateComponentConfig, refreshPlatformComponents, refreshComponentConfig,
-  } = useStore()
-  const component = platform.components.find((c) => c.kind === params.component)
-  const componentId = component?.kind === 'coredns' ? component.id : undefined
+    platform,
+    tenantProjects,
+    platformComponentsLoading,
+    platformComponentError,
+    managedConfigFiles,
+    managedConfigLoading,
+    managedConfigError,
+    setComponentEnabled,
+    updateComponentConfig,
+    refreshPlatformComponents,
+    refreshComponentConfig,
+  } = useStore();
+  const component = platform.components.find(
+    (c) => c.kind === params.component,
+  );
+  const componentId = component?.kind === "coredns" ? component.id : undefined;
 
   useEffect(() => {
-    if (!componentId) return
-    const controller = new AbortController()
-    void refreshComponentConfig(componentId, controller.signal).catch(() => undefined)
-    return () => controller.abort()
-  }, [componentId, refreshComponentConfig])
+    if (!componentId) return;
+    const controller = new AbortController();
+    void refreshComponentConfig(componentId, controller.signal).catch(
+      () => undefined,
+    );
+    return () => controller.abort();
+  }, [componentId, refreshComponentConfig]);
 
-  const { unavailable: environmentsWithoutComponentProjection } = environmentPlatformIngress(tenantProjects)
-  const dnsConfig = platform.dns.upstream !== undefined && platform.dns.upstreamAuto !== undefined && platform.dns.tailnetDelegation !== undefined && platform.dns.forwarders !== undefined && platform.dns.corefileTemplate !== undefined
-    ? {
-        upstream: platform.dns.upstream,
-        upstreamAuto: platform.dns.upstreamAuto,
-        tailnetDelegation: platform.dns.tailnetDelegation,
-        corefileTemplate: platform.dns.corefileTemplate,
-        forwarders: platform.dns.forwarders,
-      }
-    : undefined
+  const { unavailable: environmentsWithoutComponentProjection } =
+    environmentPlatformIngress(tenantProjects);
+  const dnsConfig =
+    platform.dns.upstream !== undefined &&
+    platform.dns.upstreamAuto !== undefined &&
+    platform.dns.tailnetDelegation !== undefined &&
+    platform.dns.forwarders !== undefined &&
+    platform.dns.corefileTemplate !== undefined
+      ? {
+          upstream: platform.dns.upstream,
+          upstreamAuto: platform.dns.upstreamAuto,
+          tailnetDelegation: platform.dns.tailnetDelegation,
+          corefileTemplate: platform.dns.corefileTemplate,
+          forwarders: platform.dns.forwarders,
+        }
+      : undefined;
   const editableDNSConfig = dnsConfig ?? {
-    upstream: '',
+    upstream: "",
     upstreamAuto: false,
     tailnetDelegation: false,
-    corefileTemplate: '',
+    corefileTemplate: "",
     forwarders: [],
-  }
+  };
 
   if (platformComponentsLoading) {
-    return <div className="py-10 text-sm text-muted-foreground">Loading platform components…</div>
+    return (
+      <div className="py-10 text-sm text-muted-foreground">
+        Loading platform components…
+      </div>
+    );
   }
   if (platformComponentError) {
     return (
       <div className="flex flex-col items-start gap-4 py-10">
         <p className="text-sm text-destructive">{platformComponentError}</p>
-        <Button variant="outline" onClick={() => void refreshPlatformComponents()}><RefreshCw className="size-4" /> Retry</Button>
+        <Button
+          variant="outline"
+          onClick={() => void refreshPlatformComponents()}
+        >
+          <RefreshCw className="size-4" /> Retry
+        </Button>
       </div>
-    )
+    );
   }
-  if (!component || component.kind !== 'coredns') {
+  if (!component || component.kind !== "coredns") {
     return (
       <div className="flex flex-col items-start gap-4 py-10">
-        <p className="text-sm text-muted-foreground">Unknown platform component.</p>
+        <p className="text-sm text-muted-foreground">
+          Unknown platform component.
+        </p>
         <Link
           to="/platform/components"
           className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted hover:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50"
@@ -84,7 +106,7 @@ export default function PlatformComponentPage() {
           <ArrowLeft className="size-4" /> Back to Components
         </Link>
       </div>
-    )
+    );
   }
 
   return (
@@ -103,7 +125,9 @@ export default function PlatformComponentPage() {
         icon={kindIcon[component.kind]}
         meta={
           <>
-            <MetaPill icon={kindIcon[component.kind]}>{component.name}</MetaPill>
+            <MetaPill icon={kindIcon[component.kind]}>
+              {component.name}
+            </MetaPill>
             <MetaPill icon={<RefreshCw />}>
               {component.image}:{component.version}
             </MetaPill>
@@ -124,13 +148,24 @@ export default function PlatformComponentPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-1.5 text-sm">
-            <Row label="Image" value={`${component.image}:${component.version}`} mono />
+            <Row
+              label="Image"
+              value={`${component.image}:${component.version}`}
+              mono
+            />
             <Row label="Runtime" value={component.runtime} />
-            {component.hostNetwork ? <Row label="Network" value="host network" mono /> : null}
+            {component.hostNetwork ? (
+              <Row label="Network" value="host network" mono />
+            ) : null}
             <div className="mt-1">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Mounts</span>
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+                Mounts
+              </span>
               {component.mounts.map((m) => (
-                <div key={m} className="font-mono text-xs text-muted-foreground">
+                <div
+                  key={m}
+                  className="font-mono text-xs text-muted-foreground"
+                >
                   {m}
                 </div>
               ))}
@@ -153,82 +188,106 @@ export default function PlatformComponentPage() {
           forwarders={editableDNSConfig.forwarders}
           enabled={platform.dns.enabled}
           configured={dnsConfig !== undefined}
-      managedFiles={managedConfigFiles}
-      managedConfigLoading={managedConfigLoading}
-      managedConfigError={managedConfigError}
-      onRefreshManagedConfig={() => refreshComponentConfig(component.id)}
+          managedFiles={managedConfigFiles}
+          managedConfigLoading={managedConfigLoading}
+          managedConfigError={managedConfigError}
+          onRefreshManagedConfig={() => refreshComponentConfig(component.id)}
           onEnabled={async (enabled) => {
-            await setComponentEnabled(component.id, enabled)
-            await refreshPlatformComponents()
+            await setComponentEnabled(component.id, enabled);
+            await refreshPlatformComponents();
           }}
-          onTailnet={(tailnetDelegation) => replaceCoreDNSConfig(
-            updateComponentConfig,
-            refreshPlatformComponents,
-      refreshComponentConfig,
-            component.id,
-            editableDNSConfig,
-            { tailnetDelegation },
-          )}
-          onAddForwarder={(domain, upstream) => replaceCoreDNSConfig(
-            updateComponentConfig,
-            refreshPlatformComponents,
-      refreshComponentConfig,
-            component.id,
-            editableDNSConfig,
-            { forwarders: [...editableDNSConfig.forwarders, { domain, upstream }] },
-          )}
-          onRemoveForwarder={(index) => replaceCoreDNSConfig(
-            updateComponentConfig,
-            refreshPlatformComponents,
-      refreshComponentConfig,
-            component.id,
-            editableDNSConfig,
-            { forwarders: editableDNSConfig.forwarders.filter((_, candidateIndex) => candidateIndex !== index) },
-          )}
-          onSave={(upstream, upstreamAuto, corefileTemplate) => replaceCoreDNSConfig(
-            updateComponentConfig,
-            refreshPlatformComponents,
-      refreshComponentConfig,
-            component.id,
-            editableDNSConfig,
-            { upstream, upstreamAuto, corefileTemplate },
-          )}
+          onTailnet={(tailnetDelegation) =>
+            replaceCoreDNSConfig(
+              updateComponentConfig,
+              refreshPlatformComponents,
+              refreshComponentConfig,
+              component.id,
+              editableDNSConfig,
+              { tailnetDelegation },
+            )
+          }
+          onAddForwarder={(domain, upstream) =>
+            replaceCoreDNSConfig(
+              updateComponentConfig,
+              refreshPlatformComponents,
+              refreshComponentConfig,
+              component.id,
+              editableDNSConfig,
+              {
+                forwarders: [
+                  ...editableDNSConfig.forwarders,
+                  { domain, upstream },
+                ],
+              },
+            )
+          }
+          onRemoveForwarder={(index) =>
+            replaceCoreDNSConfig(
+              updateComponentConfig,
+              refreshPlatformComponents,
+              refreshComponentConfig,
+              component.id,
+              editableDNSConfig,
+              {
+                forwarders: editableDNSConfig.forwarders.filter(
+                  (_, candidateIndex) => candidateIndex !== index,
+                ),
+              },
+            )
+          }
+          onSave={(upstream, upstreamAuto, corefileTemplate) =>
+            replaceCoreDNSConfig(
+              updateComponentConfig,
+              refreshPlatformComponents,
+              refreshComponentConfig,
+              component.id,
+              editableDNSConfig,
+              { upstream, upstreamAuto, corefileTemplate },
+            )
+          }
         />
       </div>
 
       {environmentsWithoutComponentProjection > 0 && (
-        <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning" role="status">
-          Ingress for {environmentsWithoutComponentProjection} Environment{environmentsWithoutComponentProjection === 1 ? '' : 's'} is unavailable because the Controller did not publish an authoritative Component projection.
+        <p
+          className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+          role="status"
+        >
+          Ingress for {environmentsWithoutComponentProjection} Environment
+          {environmentsWithoutComponentProjection === 1 ? "" : "s"} is
+          unavailable because the Controller did not publish an authoritative
+          Component projection.
         </p>
       )}
-
     </div>
-  )
+  );
 }
 
 type CoreDNSConfigUpdate = {
-  upstream?: string
-  upstreamAuto?: boolean
-  tailnetDelegation?: boolean
-  corefileTemplate?: string
-  forwarders?: { domain: string; upstream: string }[]
-}
+  upstream?: string;
+  upstreamAuto?: boolean;
+  tailnetDelegation?: boolean;
+  corefileTemplate?: string;
+  forwarders?: { domain: string; upstream: string }[];
+};
 
 async function replaceCoreDNSConfig(
-  updateComponentConfig: ReturnType<typeof useStore>['updateComponentConfig'],
-  refreshPlatformComponents: ReturnType<typeof useStore>['refreshPlatformComponents'],
-  refreshComponentConfig: ReturnType<typeof useStore>['refreshComponentConfig'],
+  updateComponentConfig: ReturnType<typeof useStore>["updateComponentConfig"],
+  refreshPlatformComponents: ReturnType<
+    typeof useStore
+  >["refreshPlatformComponents"],
+  refreshComponentConfig: ReturnType<typeof useStore>["refreshComponentConfig"],
   componentId: string,
   current: {
-    upstream: string
-    upstreamAuto: boolean
-    tailnetDelegation: boolean
-    corefileTemplate: string
-    forwarders: { domain: string; upstream: string }[]
+    upstream: string;
+    upstreamAuto: boolean;
+    tailnetDelegation: boolean;
+    corefileTemplate: string;
+    forwarders: { domain: string; upstream: string }[];
   },
   update: CoreDNSConfigUpdate,
 ) {
-  const next = { ...current, ...update }
+  const next = { ...current, ...update };
   await updateComponentConfig(componentId, {
     upstream_auto: next.upstreamAuto,
     upstream_resolvers: next.upstreamAuto ? [] : resolverList(next.upstream),
@@ -238,13 +297,16 @@ async function replaceCoreDNSConfig(
     })),
     tailnet_delegation: next.tailnetDelegation,
     corefile_template: next.corefileTemplate,
-  })
-  await refreshPlatformComponents()
-  await refreshComponentConfig(componentId)
+  });
+  await refreshPlatformComponents();
+  await refreshComponentConfig(componentId);
 }
 
 function resolverList(value: string): string[] {
-  return value.trim().split(/[\s,]+/).filter(Boolean)
+  return value
+    .trim()
+    .split(/[\s,]+/)
+    .filter(Boolean);
 }
 
 function CoreDnsSettings({
@@ -265,52 +327,64 @@ function CoreDnsSettings({
   onRemoveForwarder,
   onSave,
 }: {
-  upstream: string
-  upstreamAuto: boolean
-  tailnetDelegation: boolean
-  corefileTemplate: string
-  forwarders: { domain: string; upstream: string }[]
-  enabled: boolean
-  configured: boolean
-  managedFiles: ReturnType<typeof useStore>['managedConfigFiles']
-  managedConfigLoading: boolean
-  managedConfigError: string | null
-  onRefreshManagedConfig: () => Promise<unknown>
-  onEnabled: (v: boolean) => Promise<void>
-  onTailnet: (v: boolean) => Promise<void>
-  onAddForwarder: (domain: string, upstream: string) => Promise<void>
-  onRemoveForwarder: (index: number) => Promise<void>
-  onSave: (upstream: string, upstreamAuto: boolean, corefileTemplate: string) => Promise<void>
+  upstream: string;
+  upstreamAuto: boolean;
+  tailnetDelegation: boolean;
+  corefileTemplate: string;
+  forwarders: { domain: string; upstream: string }[];
+  enabled: boolean;
+  configured: boolean;
+  managedFiles: ReturnType<typeof useStore>["managedConfigFiles"];
+  managedConfigLoading: boolean;
+  managedConfigError: string | null;
+  onRefreshManagedConfig: () => Promise<unknown>;
+  onEnabled: (v: boolean) => Promise<void>;
+  onTailnet: (v: boolean) => Promise<void>;
+  onAddForwarder: (domain: string, upstream: string) => Promise<void>;
+  onRemoveForwarder: (index: number) => Promise<void>;
+  onSave: (
+    upstream: string,
+    upstreamAuto: boolean,
+    corefileTemplate: string,
+  ) => Promise<void>;
 }) {
-  const [u, setU] = useState(upstream)
-  const [auto, setAuto] = useState(upstreamAuto)
-  const [template, setTemplate] = useState(corefileTemplate)
-  const [fwdDomain, setFwdDomain] = useState('')
-  const [fwdUpstream, setFwdUpstream] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
-  const managedCorefile = managedFiles.find((file) => file.path === '/etc/groundplane/coredns/Corefile')
+  const [u, setU] = useState(upstream);
+  const [auto, setAuto] = useState(upstreamAuto);
+  const [template, setTemplate] = useState(corefileTemplate);
+  const [fwdDomain, setFwdDomain] = useState("");
+  const [fwdUpstream, setFwdUpstream] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const managedCorefile = managedFiles.find(
+    (file) => file.path === "/etc/groundplane/coredns/Corefile",
+  );
 
   async function mutate(action: () => Promise<void>) {
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
     try {
-      await action()
+      await action();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to update CoreDNS')
+      setError(
+        cause instanceof Error ? cause.message : "Unable to update CoreDNS",
+      );
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
   async function copyRenderedCorefile() {
-    if (!managedCorefile) return
-    setError(null)
+    if (!managedCorefile) return;
+    setError(null);
     try {
-      await navigator.clipboard.writeText(managedCorefile.rendered)
-      setCopied(true)
+      await navigator.clipboard.writeText(managedCorefile.rendered);
+      setCopied(true);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to copy rendered Corefile')
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to copy rendered Corefile",
+      );
     }
   }
   return (
@@ -318,12 +392,15 @@ function CoreDnsSettings({
       <CardHeader>
         <CardTitle className="flex items-center justify-between text-sm">
           <span>Settings</span>
-          <StatusBadge status={enabled ? 'healthy' : 'stopped'} />
+          <StatusBadge status={enabled ? "healthy" : "stopped"} />
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {!configured ? (
-          <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning" role="status">
+          <p
+            className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+            role="status"
+          >
             Save a complete resolver configuration before enabling CoreDNS.
           </p>
         ) : null}
@@ -331,11 +408,16 @@ function CoreDnsSettings({
           <div className="flex flex-col">
             <span className="text-sm font-medium">Local resolver</span>
             <span className="text-xs text-muted-foreground">
-              deployed by the Agent in groundplane-infra; the Controller renders the Corefile — reloads are graceful,
-              zero-downtime, and a bad edit is rejected while the old instance keeps serving.
+              deployed by the Agent in groundplane-infra; the Controller renders
+              the Corefile — reloads are graceful, zero-downtime, and a bad edit
+              is rejected while the old instance keeps serving.
             </span>
           </div>
-          <Switch checked={enabled} disabled={saving || !configured} onCheckedChange={(value) => void mutate(() => onEnabled(value))} />
+          <Switch
+            checked={enabled}
+            disabled={saving || !configured}
+            onCheckedChange={(value) => void mutate(() => onEnabled(value))}
+          />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
@@ -354,8 +436,9 @@ function CoreDnsSettings({
           <div className="flex flex-col">
             <span className="text-sm font-medium">Auto upstream</span>
             <span className="text-xs text-muted-foreground">
-              read the resolvers from the host&apos;s /etc/resolv.conf at render time — the input above is just a
-              fallback preview. Off = pinned to the values you type.
+              read the resolvers from the host&apos;s /etc/resolv.conf at render
+              time — the input above is just a fallback preview. Off = pinned to
+              the values you type.
             </span>
           </div>
           <Switch checked={auto} disabled={saving} onCheckedChange={setAuto} />
@@ -364,11 +447,16 @@ function CoreDnsSettings({
           <div className="flex flex-col">
             <span className="text-sm font-medium">Tailnet delegation</span>
             <span className="text-xs text-muted-foreground">
-              forwards the tailnet domain (ts.net) to 100.100.100.100 so MagicDNS names resolve through the local
-              resolver when Tailscale runs on the host
+              forwards the tailnet domain (ts.net) to 100.100.100.100 so
+              MagicDNS names resolve through the local resolver when Tailscale
+              runs on the host
             </span>
           </div>
-          <Switch checked={tailnetDelegation} disabled={saving} onCheckedChange={(value) => void mutate(() => onTailnet(value))} />
+          <Switch
+            checked={tailnetDelegation}
+            disabled={saving}
+            onCheckedChange={(value) => void mutate(() => onTailnet(value))}
+          />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="corefile-template">Template</Label>
@@ -379,65 +467,101 @@ function CoreDnsSettings({
             onValueChange={setTemplate}
           />
           <span className="text-xs text-muted-foreground">
-            Include exactly one <span className="font-mono">{'{groundplane}'}</span> marker. The Controller replaces it with bind, hosts, forwarders, catch-all, and reload directives.
+            Include exactly one{" "}
+            <span className="font-mono">{"{groundplane}"}</span> marker. The
+            Controller replaces it with bind, hosts, forwarders, catch-all, and
+            reload directives.
           </span>
         </div>
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <Label htmlFor="rendered-corefile">Controller-rendered Corefile</Label>
-          <p className="text-xs text-muted-foreground">Derived live from durable config, the host resolver baseline, and current host resolution.</p>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <Label htmlFor="rendered-corefile">
+                Controller-rendered Corefile
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Derived live from durable config, the host resolver baseline,
+                and current host resolution.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!managedCorefile || managedConfigLoading}
+              onClick={() => void copyRenderedCorefile()}
+            >
+              <Copy className="size-4" /> {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          {managedConfigLoading ? (
+            <p className="text-xs text-muted-foreground" role="status">
+              Loading rendered Corefile…
+            </p>
+          ) : null}
+          {managedConfigError ? (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 px-3 py-2">
+              <p className="text-xs text-destructive" role="alert">
+                {managedConfigError}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void onRefreshManagedConfig()}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : null}
+          {!managedConfigLoading && !managedConfigError && managedCorefile ? (
+            <CodeEditor
+              id="rendered-corefile"
+              label="Controller-rendered Corefile"
+              value={managedCorefile.rendered}
+              readOnly
+            />
+          ) : null}
+          {!managedConfigLoading && !managedConfigError && !managedCorefile ? (
+            <p className="text-xs text-muted-foreground">
+              No managed file preview is available.
+            </p>
+          ) : null}
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!managedCorefile || managedConfigLoading}
-          onClick={() => void copyRenderedCorefile()}
-        >
-          <Copy className="size-4" /> {copied ? 'Copied' : 'Copy'}
-        </Button>
-      </div>
-      {managedConfigLoading ? <p className="text-xs text-muted-foreground" role="status">Loading rendered Corefile…</p> : null}
-      {managedConfigError ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 px-3 py-2">
-          <p className="text-xs text-destructive" role="alert">{managedConfigError}</p>
-          <Button variant="outline" size="sm" onClick={() => void onRefreshManagedConfig()}>Retry</Button>
-        </div>
-      ) : null}
-      {!managedConfigLoading && !managedConfigError && managedCorefile ? (
-        <CodeEditor
-          id="rendered-corefile"
-          label="Controller-rendered Corefile"
-          value={managedCorefile.rendered}
-          readOnly
-        />
-      ) : null}
-      {!managedConfigLoading && !managedConfigError && !managedCorefile ? (
-        <p className="text-xs text-muted-foreground">No managed file preview is available.</p>
-      ) : null}
-    </div>
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium">Domain forwarders</span>
           <span className="text-xs text-muted-foreground">
-            per-zone routing: each domain is answered by its own resolvers (rendered as{' '}
-            <span className="font-mono">forward &lt;domain&gt; &lt;resolvers&gt;</span> in the Corefile) before the
-            catch-all. The tailnet delegation above is one of these, managed automatically.
+            per-zone routing: each domain is answered by its own resolvers
+            (rendered as{" "}
+            <span className="font-mono">
+              forward &lt;domain&gt; &lt;resolvers&gt;
+            </span>{" "}
+            in the Corefile) before the catch-all. The tailnet delegation above
+            is one of these, managed automatically.
           </span>
           <div className="flex flex-col gap-1.5">
             {forwarders.map((f, index) => (
-              <div key={f.domain} className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2">
+              <div
+                key={f.domain}
+                className="flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2"
+              >
                 <div className="flex items-center gap-2 font-mono text-xs">
                   <span className="text-primary">{f.domain}</span>
                   <span className="text-muted-foreground">→</span>
                   <span className="text-muted-foreground">{f.upstream}</span>
                 </div>
-                <Button variant="ghost" size="sm" disabled={saving} onClick={() => void mutate(() => onRemoveForwarder(index))}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => void mutate(() => onRemoveForwarder(index))}
+                >
                   Remove
                 </Button>
               </div>
             ))}
             {forwarders.length === 0 && (
-              <div className="text-xs text-muted-foreground">no domain forwarders — everything goes to the catch-all</div>
+              <div className="text-xs text-muted-foreground">
+                no domain forwarders — everything goes to the catch-all
+              </div>
             )}
           </div>
           <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
@@ -464,30 +588,48 @@ function CoreDnsSettings({
             <Button
               size="sm"
               disabled={saving || !fwdDomain.trim() || !fwdUpstream.trim()}
-              onClick={() => void mutate(async () => {
-                await onAddForwarder(fwdDomain.trim(), fwdUpstream.trim())
-                setFwdDomain('')
-                setFwdUpstream('')
-              })}
+              onClick={() =>
+                void mutate(async () => {
+                  await onAddForwarder(fwdDomain.trim(), fwdUpstream.trim());
+                  setFwdDomain("");
+                  setFwdUpstream("");
+                })
+              }
             >
               <Plus className="size-4" /> Add
             </Button>
           </div>
         </div>
-        {error ? <p className="text-xs text-destructive" role="alert">{error}</p> : null}
-        <Button size="sm" disabled={saving} onClick={() => void mutate(() => onSave(u, auto, template))}>
+        {error ? (
+          <p className="text-xs text-destructive" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <Button
+          size="sm"
+          disabled={saving}
+          onClick={() => void mutate(() => onSave(u, auto, template))}
+        >
           <Save className="size-4" /> Save
         </Button>
       </CardContent>
     </Card>
-  )
+  );
 }
 
-function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
+function Row({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+}) {
   return (
     <div className="flex items-center justify-between gap-2">
       <span className="text-muted-foreground">{label}</span>
-      <span className={mono ? 'font-mono text-xs' : 'text-xs'}>{value}</span>
+      <span className={mono ? "font-mono text-xs" : "text-xs"}>{value}</span>
     </div>
-  )
+  );
 }

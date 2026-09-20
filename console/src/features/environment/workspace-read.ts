@@ -1,6 +1,6 @@
 import type { operations } from "@/lib/api.generated";
 import type { Environment } from "@/lib/types";
-import { environmentFromAPI } from "@/lib/environment-projection";
+import { environmentFromAPI } from "@/features/environment/projection";
 import { listAllZones, listAllRoutes } from "./network-api";
 import { listAllServices } from "@/features/service/api";
 import { listAllEntries } from "@/features/entry/api";

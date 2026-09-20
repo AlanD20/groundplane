@@ -1,17 +1,17 @@
 import type { RefObject } from "react";
 import type { operations } from "@/lib/api.generated";
 import type { Environment } from "@/lib/types";
-import type { EnvironmentLifecycle } from "@/lib/environment-lifecycle";
+import type { EnvironmentLifecycle } from "@/features/environment/use-environment-lifecycle";
 import {
   findEnvironment,
   type EnvironmentRemovalDraft,
   type TaskResponse,
 } from "./environment-removal-model";
 import { controllerRequest } from "@/lib/controller-json-request";
-import { environmentMutationKey } from "@/lib/environment-storage";
-import { environmentFromAPI } from "@/lib/environment-projection";
-import { applyAuthoritativeEnvironmentScalars } from "@/lib/environment-authoritative";
-import { observeEnvironmentTask } from "@/lib/environment-task-observation";
+import { environmentMutationKey } from "@/features/environment/operation-storage";
+import { environmentFromAPI } from "@/features/environment/projection";
+import { applyAuthoritativeEnvironmentScalars } from "@/features/environment/authoritative-state";
+import { observeEnvironmentTask } from "@/features/environment/task-observation";
 import { newULID } from "@/lib/utils";
 import { listAllEnvironments } from "./workspace-read";
 import type { useEnvironmentMutationIntents } from "./use-mutation-intents";

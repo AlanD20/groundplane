@@ -3,7 +3,7 @@ import {
   loadEnvironmentMutationIntents,
   persistEnvironmentMutationIntents,
   type EnvironmentMutationIntent,
-} from "@/lib/environment-storage";
+} from "@/features/environment/operation-storage";
 export function useEnvironmentMutationIntents() {
   const environmentMutationIntents = useRef(loadEnvironmentMutationIntents());
   const environmentTaskControllers = useRef(new Set<AbortController>());

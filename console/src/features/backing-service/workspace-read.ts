@@ -4,7 +4,7 @@ import {
   projectFromAPI,
   type ProjectShowResponse,
 } from "@/features/project/api";
-import { environmentFromAPI } from "@/lib/environment-projection";
+import { environmentFromAPI } from "@/features/environment/projection";
 import {
   serviceFromAPI,
   type ServiceShowResponse,

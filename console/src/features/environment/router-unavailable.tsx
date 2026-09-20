@@ -1,5 +1,5 @@
-import { Router as RouterIcon } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Router as RouterIcon } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function EnvironmentRouterUnavailable() {
   return (
@@ -11,10 +11,11 @@ export function EnvironmentRouterUnavailable() {
       </CardHeader>
       <CardContent>
         <p className="text-xs text-muted-foreground">
-          Router components are not part of this Environment projection. The Controller has not published an
-          authoritative Caddy or Cloudflare Tunnel record, so no local controls are shown.
+          Router components are not part of this Environment projection. The
+          Controller has not published an authoritative Caddy or Cloudflare
+          Tunnel record, so no local controls are shown.
         </p>
       </CardContent>
     </Card>
-  )
+  );
 }

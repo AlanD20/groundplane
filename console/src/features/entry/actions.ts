@@ -1,6 +1,6 @@
 import type { RefObject } from "react";
 import type { EnvironmentEntry } from "@/lib/types";
-import { entryFromAPI } from "@/lib/entry-api";
+import { entryFromAPI } from "@/features/entry/projection";
 import { controllerRequest } from "@/lib/controller-json-request";
 
 import {

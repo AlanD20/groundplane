@@ -1,6 +1,6 @@
 import type { operations } from "@/lib/api.generated";
 import type { EnvironmentEntry } from "@/lib/types";
-import { entryFromAPI } from "@/lib/entry-api";
+import { entryFromAPI } from "@/features/entry/projection";
 import { controllerRequest } from "@/lib/controller-json-request";
 export type EntryPageResponse =
   operations["entry.list"]["responses"][200]["content"]["application/json"];

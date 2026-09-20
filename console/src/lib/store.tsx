@@ -138,7 +138,7 @@ import {
   adapters as seedAdapters,
   platform as seedPlatform,
 } from "./mock-data";
-import { useEnvironmentLifecycle } from "./environment-lifecycle";
+import { useEnvironmentLifecycle } from "@/features/environment/use-environment-lifecycle";
 import type {
   EnvironmentDeletionFailure,
   TaskResponse,
@@ -146,8 +146,8 @@ import type {
 import {
   environmentGenerationSnapshot,
   mergeEnvironmentProjectLoads,
-} from "./environment-hydration";
-import { environmentDeletionGuard } from "./environment-guard";
+} from "@/features/environment/workspace-reconciliation";
+import { environmentDeletionGuard } from "@/features/environment/mutation-guard";
 import { newId } from "./utils";
 type EnvironmentDeleteResponse =
   operations["environment.delete"]["responses"][202]["content"]["application/json"];

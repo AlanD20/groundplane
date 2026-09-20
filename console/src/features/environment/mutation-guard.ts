@@ -1,4 +1,4 @@
-import type { Environment, Project } from './types'
+import type { Environment, Project } from "@/lib/types";
 
 export function environmentDeletionGuard(
   projects: Project[],
@@ -7,6 +7,6 @@ export function environmentDeletionGuard(
 ) {
   const environment: Environment | undefined = projects
     .flatMap((project) => project.environments ?? [])
-    .find((candidate) => candidate.id === environmentId)
-  return environment?.deletionTaskId || pending(environmentId)
+    .find((candidate) => candidate.id === environmentId);
+  return environment?.deletionTaskId || pending(environmentId);
 }

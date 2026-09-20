@@ -1,4 +1,4 @@
-import type { EnvironmentNetworkCapacity } from "./environment-types";
+import type { EnvironmentNetworkCapacity } from "@/features/environment/types";
 import type { EnvironmentEntry } from "./entry-types";
 import type { ServiceObservation } from "@/features/service/service-observation";
 import type { BackingHooks } from "@/features/backing-service/api";
