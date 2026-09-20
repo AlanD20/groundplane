@@ -3,61 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Groundplane is a self-hosted control plane for running multiple projects on one Linux machine.">
-  <title>Groundplane — your applications, your machine</title>
+  <meta name="description" content="Install Groundplane on your Linux host.">
+  <title>Install Groundplane</title>
   <link rel="canonical" href="https://gp.aland20.com/">
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #101814; color: #eaf1ec; }
     * { box-sizing: border-box; }
     body { margin: 0; }
-    main, header, footer { max-width: 960px; margin: auto; padding: 24px; }
-    header { display: flex; justify-content: space-between; gap: 20px; align-items: center; border-bottom: 1px solid #34483b; }
-    header strong { letter-spacing: -.04em; font-size: 1.35rem; }
+    main { max-width: 900px; margin: 12vh auto; padding: 24px; }
     a { color: #a8e6be; text-underline-offset: .25em; }
-    a:focus-visible { outline: 3px solid #e6d492; outline-offset: 5px; }
-    .eyebrow { color: #a8e6be; letter-spacing: .12em; text-transform: uppercase; font-size: .8rem; margin-top: 64px; }
-    h1 { font-size: clamp(2.5rem, 8vw, 5rem); letter-spacing: -.06em; line-height: 1.04; max-width: 760px; margin: 22px 0; }
-    p, li { line-height: 1.65; }
-    .intro { color: #c0cec5; font-size: 1.2rem; max-width: 660px; }
-    section { margin-top: 52px; }
-    h2 { font-size: 1.6rem; letter-spacing: -.03em; }
-    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 24px; }
-    .features article { border-top: 1px solid #34483b; }
-    .features p, footer { color: #c0cec5; }
+    :focus-visible { outline: 3px solid #e6d492; outline-offset: 5px; }
+    h1 { font-size: clamp(2rem, 7vw, 3rem); letter-spacing: -.05em; margin-bottom: 12px; }
+    p { color: #c0cec5; line-height: 1.65; }
     pre { padding: 22px; border: 1px solid #34483b; background: #18251d; border-radius: 10px; overflow-x: auto; line-height: 1.7; }
     code { font-size: .9rem; }
-    .limits { border-left: 3px solid #e6d492; padding-left: 20px; color: #d5d5b9; }
-    footer { margin-top: 48px; border-top: 1px solid #34483b; font-size: .9rem; }
-    @media (max-width: 480px) { main, header, footer { padding: 20px; } .eyebrow { margin-top: 40px; } }
+    .details { font-size: .9rem; }
   </style>
 </head>
 <body>
-  <header><strong>groundplane</strong><a href="#install">Install __VERSION__</a></header>
   <main>
-    <p class="eyebrow">Self-hosted · Single-host · Linux</p>
-    <h1>Your applications.<br>Your machine.</h1>
-    <p class="intro">Run multiple projects from one control plane. Describe your applications in a Compose-compatible Blueprint, then manage them through the Console, CLI or API.</p>
-    <section class="features" aria-label="Included capabilities">
-      <article><h2>Deploy and operate</h2><p>Manage Services and Releases, inspect health and logs, and track changes through durable Tasks.</p></article>
-      <article><h2>Keep resources together</h2><p>Manage routing, PostgreSQL, Valkey, persistent Volumes, configuration and Secrets alongside your applications.</p></article>
-      <article><h2>Install and upgrade</h2><p>Prebuilt Controller and CLI binaries, an embedded web Console and containerized Agent. One installer for setup and guarded upgrades.</p></article>
-    </section>
-    <section id="install" aria-labelledby="install-title">
-      <h2 id="install-title">Install Groundplane __VERSION__</h2>
-      <p>Ubuntu 24.04 or 26.04, or Debian 13. Linux amd64 and arm64.</p>
-      <pre tabindex="0" aria-label="Download and install commands"><code>curl -fsSLO https://gp.aland20.com/install.sh
-curl -fsSLO https://gp.aland20.com/install.sh.sha256
-sha256sum --check install.sh.sha256
-# Inspect install.sh before running it.
+    <h1>Groundplane</h1>
+    <p>Install version __VERSION__ on your host.</p>
+    <pre tabindex="0" aria-label="Groundplane installation command"><code>curl -fsSL https://gp.aland20.com/install.sh -o install.sh &amp;&amp;
 sudo sh install.sh --version __VERSION__</code></pre>
-      <p>The installer verifies the downloaded bundle checksum and its file manifest before running bundled code. Checksums detect altered bytes; they are not an independent publisher signature.</p>
-      <p><a href="install.sh" download>Download installer</a> · <a href="https://github.com/AlanD20/groundplane/releases/tag/v__VERSION__">Release files and changelog</a></p>
-    </section>
-    <section class="limits" aria-labelledby="limits-title">
-      <h2 id="limits-title">Know the scope</h2>
-      <p>This is a single-host release, not a high-availability platform. Backup/Restore and complete Runner qualification remain deferred. Review the release notes and qualification limits before production use.</p>
-    </section>
+    <p class="details">Ubuntu 24.04 / 26.04 or Debian 13 · amd64 / arm64</p>
+    <p class="details">Review the <a href="install.sh">installer</a> before running it. It verifies release bundle checksums.</p>
+    <p class="details"><a href="https://github.com/AlanD20/groundplane/releases/tag/v__VERSION__">Release notes and known limits</a> · <a href="install.sh.sha256">Installer checksum</a></p>
   </main>
-  <footer>Groundplane · __VERSION__ · Hosted on GitHub Pages</footer>
 </body>
 </html>
