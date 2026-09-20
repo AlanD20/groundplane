@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 	"sort"
@@ -26,8 +27,8 @@ type connectorCreationRepository interface {
 		context.Context,
 		etcd.Versioned[etcd.EnvironmentRecord],
 		etcd.Versioned[etcd.ProjectRecord],
-		etcd.ConnectorRecord,
-		etcd.ConnectorEncryptedCredentials,
+		connectorrecord.Record,
+		connectorrecord.EncryptedCredentials,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -246,7 +247,7 @@ func (service *connectorCreationService) createConnectorOnce(
 	}
 	ciphertext := envelope.Ciphertext()
 	defer clear(ciphertext)
-	credentials, err := etcd.NewConnectorEncryptedCredentials(record.Connector.ID, ciphertext)
+	credentials, err := connectorrecord.NewEncryptedCredentials(record.Connector.ID, ciphertext)
 	if err != nil {
 		return requestidempotency.Resolution{}, err
 	}
@@ -395,8 +396,8 @@ func (repository *durableConnectorCreationRepository) CreateConnectorIdempotent(
 	ctx context.Context,
 	environment etcd.Versioned[etcd.EnvironmentRecord],
 	project etcd.Versioned[etcd.ProjectRecord],
-	record etcd.ConnectorRecord,
-	credentials etcd.ConnectorEncryptedCredentials,
+	record connectorrecord.Record,
+	credentials connectorrecord.EncryptedCredentials,
 	marker etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.connectors.CreateConnectorIdempotent(

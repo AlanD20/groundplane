@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/http"
@@ -49,7 +50,7 @@ type backupPolicyReplacementCandidate struct {
 	Current             *Versioned[BackupPolicyRecord]
 	Replacement         BackupPolicyRecord
 	Sources             []backupPolicySourceEvidence
-	Connector           *Versioned[ConnectorRecord]
+	Connector           *Versioned[connectorrecord.Record]
 	ConnectorOwnerIndex *etcdstore.KeyValue
 	ConnectorReferences []backupPolicyConnectorReferenceEvidence
 	ExistingKey         *VersionedBackupKey
@@ -267,7 +268,7 @@ func validatebackupPolicyReplacementCandidate(
 		if candidate.Connector == nil {
 			return errs.New(errs.KindValidationFailed, "enabled backup policy requires connector evidence")
 		}
-		if err := validateConnectorRecord(candidate.Connector.Record); err != nil {
+		if err := connectorrecord.ValidateRecord(candidate.Connector.Record); err != nil {
 			return err
 		}
 		if !validReplacementRevision(candidate.Connector.Revision, candidate.Connector.ReadRevision) ||
@@ -627,7 +628,7 @@ func prepareBackupPolicyReplacement(
 		plan.compare(
 			backupPolicyCompareConnector,
 			connectorID,
-			connectorRecordKey(connectorID),
+			connectorrecord.RecordKey(connectorID),
 			candidate.Connector.Revision,
 		)
 		plan.compare(

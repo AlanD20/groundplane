@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"sync"
@@ -280,47 +281,47 @@ func (repository *BackupRuntimeRepository) manualBackupConnector(
 	connectorID string,
 	environmentID string,
 	fixedRevision int64,
-) (ConnectorRecord, int64, int64, bool, error) {
+) (connectorrecord.Record, int64, int64, bool, error) {
 	read, err := repository.readFixedKeys(ctx, []string{
-		connectorRecordKey(connectorID), connectorCredentialValueKey(connectorID),
+		connectorrecord.RecordKey(connectorID), connectorrecord.CredentialValueKey(connectorID),
 	}, fixedRevision)
 	if err != nil {
-		return ConnectorRecord{}, 0, 0, false, err
+		return connectorrecord.Record{}, 0, 0, false, err
 	}
 	defer clearKeyValues(read.Values)
 	if read.Values[0] == nil {
-		return ConnectorRecord{}, 0, 0, false, errs.New(
+		return connectorrecord.Record{}, 0, 0, false, errs.New(
 			errs.KindStateConflict,
 			"backup Connector is unavailable",
 		)
 	}
-	connector, err := decodeConnectorRecord(read.Values[0].Value)
+	connector, err := connectorrecord.DecodeRecord(read.Values[0].Value)
 	if err != nil || connector.Connector.ID != connectorID ||
 		connector.Connector.EnvironmentID != environmentID ||
 		connector.Connector.Kind != backupConnectorKindS3Compatible {
-		return ConnectorRecord{}, 0, 0, false, errs.New(
+		return connectorrecord.Record{}, 0, 0, false, errs.New(
 			errs.KindStateConflict,
 			"backup Connector evidence changed",
 		)
 	}
-	hasDirect := connectorRecordHasDirectCredentials(connector)
+	hasDirect := connectorrecord.HasDirectCredentials(connector)
 	if !hasDirect {
 		if read.Values[1] != nil {
-			return ConnectorRecord{}, 0, 0, false, errs.New(
+			return connectorrecord.Record{}, 0, 0, false, errs.New(
 				errs.KindStateConflict, "backup Connector credential evidence changed",
 			)
 		}
 		return connector, read.Values[0].ModRevision, 0, false, nil
 	}
 	if read.Values[1] == nil {
-		return ConnectorRecord{}, 0, 0, false, errs.New(
+		return connectorrecord.Record{}, 0, 0, false, errs.New(
 			errs.KindStateConflict, "backup Connector credentials are unavailable",
 		)
 	}
-	credentials, err := decodeConnectorEncryptedCredentials(read.Values[1].Value)
+	credentials, err := connectorrecord.DecodeEncryptedCredentials(read.Values[1].Value)
 	if err != nil || credentials.ConnectorID != connectorID {
 		clear(credentials.Ciphertext)
-		return ConnectorRecord{}, 0, 0, false, errs.New(
+		return connectorrecord.Record{}, 0, 0, false, errs.New(
 			errs.KindStateConflict, "backup Connector credential evidence changed",
 		)
 	}

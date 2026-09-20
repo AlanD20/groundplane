@@ -1,4 +1,4 @@
-package etcd
+package connectors
 
 import (
 	"crypto/sha256"
@@ -19,14 +19,14 @@ const (
 	connectorCredentialValuePrefix = "/v1/secret-values/connectors/"
 )
 
-type ConnectorRecord struct {
+type Record struct {
 	Connector core.Connector `json:"connector"`
 }
 
-// ConnectorEncryptedCredentials is the Controller-key envelope for the JSON
+// EncryptedCredentials is the Controller-key envelope for the JSON
 // object containing only direct credential values. It is subordinate to the
 // Connector and is committed at the same revision.
-type ConnectorEncryptedCredentials struct {
+type EncryptedCredentials struct {
 	ConnectorID      string `json:"connector_id"`
 	EnvelopeVersion  uint8  `json:"envelope_version"`
 	Cipher           string `json:"cipher"`
@@ -35,59 +35,59 @@ type ConnectorEncryptedCredentials struct {
 	Ciphertext       []byte `json:"ciphertext"`
 }
 
-func NewConnectorRecord(connector core.Connector) (ConnectorRecord, error) {
+func NewRecord(connector core.Connector) (Record, error) {
 	connector.Endpoint = strings.TrimSuffix(connector.Endpoint, "/")
 	if connector.Prefix != "" && !strings.HasSuffix(connector.Prefix, "/") {
 		connector.Prefix += "/"
 	}
 	connector.Credentials = cloneConnectorCredentials(connector.Credentials)
-	record := ConnectorRecord{Connector: connector}
-	if err := validateConnectorRecord(record); err != nil {
-		return ConnectorRecord{}, err
+	record := Record{Connector: connector}
+	if err := ValidateRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-func NewConnectorEncryptedCredentials(
+func NewEncryptedCredentials(
 	connectorID string,
 	ciphertext []byte,
-) (ConnectorEncryptedCredentials, error) {
+) (EncryptedCredentials, error) {
 	digest := sha256.Sum256(ciphertext)
-	value := ConnectorEncryptedCredentials{
+	value := EncryptedCredentials{
 		ConnectorID: connectorID, EnvelopeVersion: 1, Cipher: "age-x25519",
 		DigestAlgorithm: "sha256", CiphertextSHA256: hex.EncodeToString(digest[:]),
 		Ciphertext: append([]byte(nil), ciphertext...),
 	}
-	if err := validateConnectorEncryptedCredentials(value); err != nil {
+	if err := ValidateEncryptedCredentials(value); err != nil {
 		clear(value.Ciphertext)
-		return ConnectorEncryptedCredentials{}, err
+		return EncryptedCredentials{}, err
 	}
 	return value, nil
 }
 
-func connectorRecordKey(connectorID string) string { return connectorRecordPrefix + connectorID }
+func RecordKey(connectorID string) string { return connectorRecordPrefix + connectorID }
 
-func connectorCredentialValueKey(connectorID string) string {
+func CredentialValueKey(connectorID string) string {
 	return connectorCredentialValuePrefix + connectorID
 }
 
-func encodeConnectorRecord(record ConnectorRecord) ([]byte, error) {
-	if err := validateConnectorRecord(record); err != nil {
+func EncodeRecord(record Record) ([]byte, error) {
+	if err := ValidateRecord(record); err != nil {
 		return nil, err
 	}
 	return recordcodec.Encode("connector", record)
 }
 
-func decodeConnectorRecord(value []byte) (ConnectorRecord, error) {
-	record, err := recordcodec.Decode[ConnectorRecord](value, "connector")
-	if err != nil || validateConnectorRecord(record) != nil {
-		return ConnectorRecord{}, corruptConnectorRecord()
+func DecodeRecord(value []byte) (Record, error) {
+	record, err := recordcodec.Decode[Record](value, "connector")
+	if err != nil || ValidateRecord(record) != nil {
+		return Record{}, CorruptRecord()
 	}
 	record.Connector.Credentials = cloneConnectorCredentials(record.Connector.Credentials)
 	return record, nil
 }
 
-func connectorRecordHasDirectCredentials(record ConnectorRecord) bool {
+func HasDirectCredentials(record Record) bool {
 	for _, credential := range record.Connector.Credentials {
 		if credential.Kind == core.ConnectorCredentialDirect {
 			return true
@@ -96,8 +96,8 @@ func connectorRecordHasDirectCredentials(record ConnectorRecord) bool {
 	return false
 }
 
-func encodeConnectorEncryptedCredentials(value ConnectorEncryptedCredentials) ([]byte, error) {
-	if err := validateConnectorEncryptedCredentials(value); err != nil {
+func EncodeEncryptedCredentials(value EncryptedCredentials) ([]byte, error) {
+	if err := ValidateEncryptedCredentials(value); err != nil {
 		return nil, err
 	}
 	copyOfValue := value
@@ -105,16 +105,16 @@ func encodeConnectorEncryptedCredentials(value ConnectorEncryptedCredentials) ([
 	return recordcodec.Encode("connector_credentials", copyOfValue)
 }
 
-func decodeConnectorEncryptedCredentials(value []byte) (ConnectorEncryptedCredentials, error) {
-	record, err := recordcodec.Decode[ConnectorEncryptedCredentials](value, "connector_credentials")
-	if err != nil || validateConnectorEncryptedCredentials(record) != nil {
+func DecodeEncryptedCredentials(value []byte) (EncryptedCredentials, error) {
+	record, err := recordcodec.Decode[EncryptedCredentials](value, "connector_credentials")
+	if err != nil || ValidateEncryptedCredentials(record) != nil {
 		clear(record.Ciphertext)
-		return ConnectorEncryptedCredentials{}, corruptConnectorRecord()
+		return EncryptedCredentials{}, CorruptRecord()
 	}
 	return record, nil
 }
 
-func validateConnectorRecord(record ConnectorRecord) error {
+func ValidateRecord(record Record) error {
 	connector := record.Connector
 	if recordcodec.ValidateID(ids.KindConnector, connector.ID) != nil {
 		return errs.New(errs.KindValidationFailed, "Connector stable identity is invalid")
@@ -178,7 +178,7 @@ func validateConnectorRecord(record ConnectorRecord) error {
 	return nil
 }
 
-func validateConnectorEncryptedCredentials(value ConnectorEncryptedCredentials) error {
+func ValidateEncryptedCredentials(value EncryptedCredentials) error {
 	if recordcodec.ValidateID(ids.KindConnector, value.ConnectorID) != nil || value.EnvelopeVersion != 1 ||
 		value.Cipher != "age-x25519" || value.DigestAlgorithm != "sha256" ||
 		len(value.Ciphertext) == 0 ||
@@ -235,6 +235,6 @@ func cloneConnectorCredentials(
 	return copyOfCredentials
 }
 
-func corruptConnectorRecord() error {
+func CorruptRecord() error {
 	return errs.New(errs.KindInternal, "Connector durable record is corrupt")
 }

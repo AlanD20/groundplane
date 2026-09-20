@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -639,9 +640,9 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorEvidence(
 	environmentID string,
 	connectorID string,
 	revision int64,
-) (*Versioned[ConnectorRecord], *etcdstore.KeyValue, error) {
+) (*Versioned[connectorrecord.Record], *etcdstore.KeyValue, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		connectorRecordKey(connectorID),
+		connectorrecord.RecordKey(connectorID),
 		connectorEnvironmentKey(environmentID, connectorID),
 	}, Revision: revision})
 	if err != nil {
@@ -653,17 +654,17 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorEvidence(
 	if result.Values[0] == nil {
 		return nil, nil, errs.New(errs.KindConnectorNotFound, "connector was not found")
 	}
-	record, err := decodeConnectorRecord(result.Values[0].Value)
+	record, err := connectorrecord.DecodeRecord(result.Values[0].Value)
 	if err != nil || record.Connector.ID != connectorID {
-		return nil, nil, corruptConnectorRecord()
+		return nil, nil, connectorrecord.CorruptRecord()
 	}
 	if record.Connector.EnvironmentID != environmentID {
 		return nil, nil, errs.New(errs.KindScopeUnauthorized, "connector belongs to another environment")
 	}
 	if result.Values[1] == nil || string(result.Values[1].Value) != connectorID {
-		return nil, nil, corruptConnectorRecord()
+		return nil, nil, connectorrecord.CorruptRecord()
 	}
-	return &Versioned[ConnectorRecord]{
+	return &Versioned[connectorrecord.Record]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, cloneBackupPolicyEvidenceKeyValue(result.Values[1]), nil
 }

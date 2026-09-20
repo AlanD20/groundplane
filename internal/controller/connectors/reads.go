@@ -2,6 +2,7 @@ package connectors
 
 import (
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -9,8 +10,8 @@ import (
 
 type connectorReadRepository interface {
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
-	GetConnector(context.Context, string) (etcd.Versioned[etcd.ConnectorRecord], error)
-	ListConnectors(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ConnectorRecord], error)
+	GetConnector(context.Context, string) (etcd.Versioned[connectorrecord.Record], error)
+	ListConnectors(context.Context, string, etcd.PageRequest) (etcd.Page[connectorrecord.Record], error)
 }
 
 type connectorReadService struct {
@@ -28,9 +29,9 @@ func (service *connectorReadService) ListConnectors(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.ConnectorRecord], error) {
+) (etcd.Page[connectorrecord.Record], error) {
 	if _, err := service.repository.GetEnvironment(ctx, environmentID); err != nil {
-		return etcd.Page[etcd.ConnectorRecord]{}, err
+		return etcd.Page[connectorrecord.Record]{}, err
 	}
 	return service.repository.ListConnectors(ctx, environmentID, request)
 }
@@ -38,7 +39,7 @@ func (service *connectorReadService) ListConnectors(
 func (service *connectorReadService) GetConnector(
 	ctx context.Context,
 	connectorID string,
-) (etcd.Versioned[etcd.ConnectorRecord], error) {
+) (etcd.Versioned[connectorrecord.Record], error) {
 	return service.repository.GetConnector(ctx, connectorID)
 }
 
@@ -67,7 +68,7 @@ func (repository *durableConnectorReadRepository) GetEnvironment(
 func (repository *durableConnectorReadRepository) GetConnector(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ConnectorRecord], error) {
+) (etcd.Versioned[connectorrecord.Record], error) {
 	return repository.connectors.GetConnector(ctx, id)
 }
 
@@ -75,6 +76,6 @@ func (repository *durableConnectorReadRepository) ListConnectors(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.ConnectorRecord], error) {
+) (etcd.Page[connectorrecord.Record], error) {
 	return repository.connectors.ListConnectors(ctx, environmentID, request)
 }

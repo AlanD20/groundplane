@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -147,7 +148,7 @@ func prepareBlueprintBackupPolicyPublication(
 		compare(
 			backupPolicyCompareConnector,
 			state.retainedConnectorID,
-			connectorRecordKey(state.retainedConnectorID),
+			connectorrecord.RecordKey(state.retainedConnectorID),
 			connectorRevision,
 		)
 		compare(
@@ -165,7 +166,7 @@ func prepareBlueprintBackupPolicyPublication(
 	} else if state.candidate.Connector != nil {
 		connectorID := state.candidate.Connector.Record.Connector.ID
 		compare(backupPolicyCompareConnector, connectorID, state.connectorNameIndex.Key, state.connectorNameIndex.ModRevision)
-		compare(backupPolicyCompareConnector, connectorID, connectorRecordKey(connectorID), state.candidate.Connector.Revision)
+		compare(backupPolicyCompareConnector, connectorID, connectorrecord.RecordKey(connectorID), state.candidate.Connector.Revision)
 		compare(backupPolicyCompareConnectorOwnerIndex, connectorID, state.candidate.ConnectorOwnerIndex.Key, state.candidate.ConnectorOwnerIndex.ModRevision)
 		compare(backupPolicyCompareConnectorTombstone, connectorID, deletionTombstoneKey(string(DeletionTargetConnector), connectorID), 0)
 	}

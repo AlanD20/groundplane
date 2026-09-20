@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -58,7 +59,7 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 	if policy.ConnectorID != "" {
 		keys = append(
 			keys,
-			connectorRecordKey(policy.ConnectorID),
+			connectorrecord.RecordKey(policy.ConnectorID),
 			connectorEnvironmentKey(environmentID, policy.ConnectorID),
 		)
 	}
@@ -106,14 +107,14 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 	primary, owner := support.Values[offset], support.Values[offset+1]
 	if primary == nil {
 		if owner != nil || policy.Enabled {
-			return EnvironmentBlueprintBackupPolicySnapshot{}, corruptConnectorRecord()
+			return EnvironmentBlueprintBackupPolicySnapshot{}, connectorrecord.CorruptRecord()
 		}
 		return snapshot, nil
 	}
-	record, err := decodeConnectorRecord(primary.Value)
+	record, err := connectorrecord.DecodeRecord(primary.Value)
 	if err != nil || record.Connector.ID != policy.ConnectorID ||
 		record.Connector.EnvironmentID != environmentID || owner == nil || string(owner.Value) != policy.ConnectorID {
-		return EnvironmentBlueprintBackupPolicySnapshot{}, corruptConnectorRecord()
+		return EnvironmentBlueprintBackupPolicySnapshot{}, connectorrecord.CorruptRecord()
 	}
 	snapshot.ConnectorName = record.Connector.Name
 	snapshot.ConnectorFound = true

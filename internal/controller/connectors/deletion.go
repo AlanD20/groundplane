@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	"net/http"
 	"time"
 
@@ -24,14 +25,14 @@ const (
 )
 
 type connectorDeletionRepository interface {
-	GetConnector(context.Context, string) (etcd.Versioned[etcd.ConnectorRecord], error)
+	GetConnector(context.Context, string) (etcd.Versioned[connectorrecord.Record], error)
 	GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error)
 	BeginConnectorDeletionWithTask(
 		context.Context,
 		etcd.Versioned[etcd.EnvironmentRecord],
 		etcd.Versioned[etcd.ProjectRecord],
-		etcd.Versioned[etcd.ConnectorRecord],
+		etcd.Versioned[connectorrecord.Record],
 		etcd.DeletionTombstoneRecord,
 		etcd.ConnectorRemovalIntent,
 		etcd.TaskRecord,
@@ -394,7 +395,7 @@ func NewDeletionRepository(
 func (repository *durableConnectorDeletionRepository) GetConnector(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ConnectorRecord], error) {
+) (etcd.Versioned[connectorrecord.Record], error) {
 	return repository.connectors.GetConnector(ctx, id)
 }
 
@@ -416,7 +417,7 @@ func (repository *durableConnectorDeletionRepository) BeginConnectorDeletionWith
 	ctx context.Context,
 	environment etcd.Versioned[etcd.EnvironmentRecord],
 	project etcd.Versioned[etcd.ProjectRecord],
-	current etcd.Versioned[etcd.ConnectorRecord],
+	current etcd.Versioned[connectorrecord.Record],
 	tombstone etcd.DeletionTombstoneRecord,
 	intent etcd.ConnectorRemovalIntent,
 	task etcd.TaskRecord,

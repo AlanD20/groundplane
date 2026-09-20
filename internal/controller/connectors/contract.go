@@ -2,7 +2,8 @@ package connectors
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -11,15 +12,15 @@ func prepareConnectorCreation(
 	connectorID string,
 	environmentID string,
 	input apiTypes.ConnectorCreateRequest,
-) (etcd.ConnectorRecord, map[string]string, error) {
+) (connectorrecord.Record, map[string]string, error) {
 	if input.PathStyle == nil {
-		return etcd.ConnectorRecord{}, nil, errs.New(
+		return connectorrecord.Record{}, nil, errs.New(
 			errs.KindValidationFailed,
 			"Connector path_style decision is required",
 		)
 	}
 	if len(input.Credentials) != 2 {
-		return etcd.ConnectorRecord{}, nil, errs.New(
+		return connectorrecord.Record{}, nil, errs.New(
 			errs.KindValidationFailed,
 			"Connector credentials must contain access_key and secret_key",
 		)
@@ -32,14 +33,14 @@ func prepareConnectorCreation(
 		credential, ok := input.Credentials[string(name)]
 		if !ok {
 			clearConnectorDirectValues(direct)
-			return etcd.ConnectorRecord{}, nil, errs.New(
+			return connectorrecord.Record{}, nil, errs.New(
 				errs.KindValidationFailed,
 				"Connector credentials must contain access_key and secret_key",
 			)
 		}
 		if (credential.SecretRef == "") == (credential.Value == "") {
 			clearConnectorDirectValues(direct)
-			return etcd.ConnectorRecord{}, nil, errs.New(
+			return connectorrecord.Record{}, nil, errs.New(
 				errs.KindValidationFailed,
 				"Connector credential requires exactly one secret_ref or value",
 			)
@@ -53,19 +54,19 @@ func prepareConnectorCreation(
 		metadata[name] = core.ConnectorCredential{Kind: core.ConnectorCredentialDirect}
 		direct[string(name)] = credential.Value
 	}
-	record, err := etcd.NewConnectorRecord(core.Connector{
+	record, err := connectorrecord.NewRecord(core.Connector{
 		ID: connectorID, EnvironmentID: environmentID, Name: input.Name,
 		Kind: core.ConnectorKind(input.Kind), Endpoint: input.Endpoint, Bucket: input.Bucket,
 		Prefix: input.Prefix, Region: input.Region, PathStyle: *input.PathStyle, Credentials: metadata,
 	})
 	if err != nil {
 		clearConnectorDirectValues(direct)
-		return etcd.ConnectorRecord{}, nil, err
+		return connectorrecord.Record{}, nil, err
 	}
 	return record, direct, nil
 }
 
-func connectorResponse(record etcd.ConnectorRecord) apiTypes.Connector {
+func connectorResponse(record connectorrecord.Record) apiTypes.Connector {
 	connector := record.Connector
 	credentials := make(map[string]apiTypes.ConnectorCredential, len(connector.Credentials))
 	for name, credential := range connector.Credentials {

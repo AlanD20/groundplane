@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
@@ -19,7 +20,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
-	current Versioned[ConnectorRecord],
+	current Versioned[connectorrecord.Record],
 	tombstone DeletionTombstoneRecord,
 	intent ConnectorRemovalIntent,
 	task TaskRecord,
@@ -54,10 +55,10 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		taskOperationIndexKey(task.OperationID, task.ID),
 		taskActiveOperationKey(task.OperationID),
 		taskQueueKey(task.Executor, task.ID),
-		connectorRecordKey(connector.ID),
+		connectorrecord.RecordKey(connector.ID),
 		connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 		connectorNameKey(connector.EnvironmentID, connector.Name),
-		connectorCredentialValueKey(connector.ID),
+		connectorrecord.CredentialValueKey(connector.ID),
 		deletionTombstoneKey(string(DeletionTargetConnector), connector.ID),
 		connectorRemovalIntentKey(task.ID),
 		backupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID),
@@ -91,10 +92,10 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 			"connector encrypted credentials are missing",
 		)
 	}
-	credentials, err := decodeConnectorEncryptedCredentials(dependencies[2].Value)
+	credentials, err := connectorrecord.DecodeEncryptedCredentials(dependencies[2].Value)
 	if err != nil || credentials.ConnectorID != connector.ID {
 		clear(credentials.Ciphertext)
-		return IdempotencyTransactionResult{}, corruptConnectorRecord()
+		return IdempotencyTransactionResult{}, connectorrecord.CorruptRecord()
 	}
 	clear(credentials.Ciphertext)
 	referenceConditions, err := requireConnectorReferencePrefixesEmpty(
@@ -192,7 +193,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 }
 
 func validateConnectorDeletionEnvelope(
-	current Versioned[ConnectorRecord],
+	current Versioned[connectorrecord.Record],
 	tombstone DeletionTombstoneRecord,
 	intent ConnectorRemovalIntent,
 	task TaskRecord,
@@ -323,13 +324,13 @@ type connectorDeletionEvidence struct {
 	reference        int
 	referenceStart   int
 	fenceStart       int
-	current          Versioned[ConnectorRecord]
+	current          Versioned[connectorrecord.Record]
 	operationID      string
 	fence            environmentMutationFenceEvidence
 }
 
 func newConnectorDeletionEvidence(
-	current Versioned[ConnectorRecord],
+	current Versioned[connectorrecord.Record],
 	dependencies *etcdstore.GetManyResult,
 	task TaskRecord,
 	fence environmentMutationFenceEvidence,
@@ -345,7 +346,7 @@ func newConnectorDeletionEvidence(
 			{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 			{Key: taskActiveOperationKey(task.OperationID)},
 			{Key: taskQueueKey(task.Executor, task.ID)},
-			{Key: connectorRecordKey(connector.ID), ModRevision: current.Revision},
+			{Key: connectorrecord.RecordKey(connector.ID), ModRevision: current.Revision},
 			{
 				Key:         connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 				ModRevision: dependencies.Values[5].ModRevision,
@@ -355,7 +356,7 @@ func newConnectorDeletionEvidence(
 				ModRevision: dependencies.Values[6].ModRevision,
 			},
 			{
-				Key:         connectorCredentialValueKey(connector.ID),
+				Key:         connectorrecord.CredentialValueKey(connector.ID),
 				ModRevision: dependencies.Values[7].ModRevision,
 			},
 			{Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID)},
@@ -417,7 +418,7 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 				"connector encrypted credentials disappeared during deletion",
 			)
 		}
-		credentials, err := decodeConnectorEncryptedCredentials(values[evidence.credentials].Value)
+		credentials, err := connectorrecord.DecodeEncryptedCredentials(values[evidence.credentials].Value)
 		if err != nil || credentials.ConnectorID != connector.ID ||
 			values[evidence.credentials].ModRevision != evidence.conditions[evidence.credentials].ModRevision {
 			clear(credentials.Ciphertext)

@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
@@ -914,11 +915,11 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 	}
 	conditions := []etcdstore.Condition{
 		{
-			Key:         connectorRecordKey(point.ConnectorID),
+			Key:         connectorrecord.RecordKey(point.ConnectorID),
 			ModRevision: currentRun.Record.ConnectorRevision,
 		},
 		{
-			Key:         connectorCredentialValueKey(point.ConnectorID),
+			Key:         connectorrecord.CredentialValueKey(point.ConnectorID),
 			ModRevision: currentRun.Record.ConnectorCredentialsRevision,
 		},
 		{Key: backupRecoveryPointKey(point.ID)},
@@ -2149,7 +2150,7 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 		fixed, err := repository.readFixedKeys(ctx, []string{
 			backupSourceKey(point.SourceID),
 			environmentKey(point.EnvironmentID),
-			connectorRecordKey(point.ConnectorID),
+			connectorrecord.RecordKey(point.ConnectorID),
 		}, readRevision)
 		if err != nil {
 			return nil, err
@@ -2160,7 +2161,7 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 		}
 		source, sourceErr := decodeBackupSourceRecord(fixed.Values[0].Value)
 		environment, environmentErr := decodeEnvironment(fixed.Values[1].Value)
-		connector, connectorErr := decodeConnectorRecord(fixed.Values[2].Value)
+		connector, connectorErr := connectorrecord.DecodeRecord(fixed.Values[2].Value)
 		if sourceErr != nil || environmentErr != nil || connectorErr != nil ||
 			source.ID != point.SourceID || source.EnvironmentID != point.EnvironmentID ||
 			environment.ID != point.EnvironmentID || connector.Connector.ID != point.ConnectorID ||
@@ -2847,7 +2848,7 @@ func validateBackupConnectorSnapshotEvidence(values []*etcdstore.KeyValue, run B
 	if len(values) != 2 || values[0] == nil || values[0].ModRevision != run.ConnectorRevision {
 		return errs.New(errs.KindStateConflict, "backup connector snapshot changed")
 	}
-	connector, err := decodeConnectorRecord(values[0].Value)
+	connector, err := connectorrecord.DecodeRecord(values[0].Value)
 	if err != nil || connector.Connector.ID != run.ConnectorID {
 		return corruptBackupRuntimeRecord()
 	}
@@ -2857,7 +2858,7 @@ func validateBackupConnectorSnapshotEvidence(values []*etcdstore.KeyValue, run B
 	if connector.Connector.Prefix != run.ConnectorPrefix {
 		return errs.New(errs.KindStateConflict, "backup connector prefix changed")
 	}
-	hasDirectCredentials := connectorRecordHasDirectCredentials(connector)
+	hasDirectCredentials := connectorrecord.HasDirectCredentials(connector)
 	if hasDirectCredentials != run.ConnectorHasDirectCredentials {
 		return errs.New(errs.KindStateConflict, "backup connector credential mode changed")
 	}
@@ -2870,7 +2871,7 @@ func validateBackupConnectorSnapshotEvidence(values []*etcdstore.KeyValue, run B
 	if values[1] == nil || values[1].ModRevision != run.ConnectorCredentialsRevision {
 		return errs.New(errs.KindStateConflict, "backup connector credential snapshot changed")
 	}
-	credentials, err := decodeConnectorEncryptedCredentials(values[1].Value)
+	credentials, err := connectorrecord.DecodeEncryptedCredentials(values[1].Value)
 	defer clear(credentials.Ciphertext)
 	if err != nil || credentials.ConnectorID != run.ConnectorID {
 		return corruptBackupRuntimeRecord()

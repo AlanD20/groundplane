@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -35,30 +36,30 @@ func (repository *ConnectorRepository) CreateConnector(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
-	record ConnectorRecord,
-	credentials ConnectorEncryptedCredentials,
-) (Versioned[ConnectorRecord], error) {
+	record connectorrecord.Record,
+	credentials connectorrecord.EncryptedCredentials,
+) (Versioned[connectorrecord.Record], error) {
 	if err := validateConnectorHierarchy(ctx, environment, project, record); err != nil {
-		return Versioned[ConnectorRecord]{}, err
+		return Versioned[connectorrecord.Record]{}, err
 	}
 	if credentials.ConnectorID != record.Connector.ID {
-		return Versioned[ConnectorRecord]{}, errs.New(
+		return Versioned[connectorrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Connector encrypted credentials do not match the Connector",
 		)
 	}
 	secretFence, err := repository.loadConnectorSecretReferenceFence(ctx, project.Record.ID, record)
 	if err != nil {
-		return Versioned[ConnectorRecord]{}, err
+		return Versioned[connectorrecord.Record]{}, err
 	}
-	primaryValue, err := encodeConnectorRecord(record)
+	primaryValue, err := connectorrecord.EncodeRecord(record)
 	if err != nil {
-		return Versioned[ConnectorRecord]{}, err
+		return Versioned[connectorrecord.Record]{}, err
 	}
 	defer clear(primaryValue)
-	credentialValue, err := encodeConnectorEncryptedCredentials(credentials)
+	credentialValue, err := connectorrecord.EncodeEncryptedCredentials(credentials)
 	if err != nil {
-		return Versioned[ConnectorRecord]{}, err
+		return Versioned[connectorrecord.Record]{}, err
 	}
 	defer clear(credentialValue)
 	connector := record.Connector
@@ -67,26 +68,26 @@ func (repository *ConnectorRepository) CreateConnector(
 		environment,
 		project,
 		[]string{
-			connectorRecordKey(connector.ID),
+			connectorrecord.RecordKey(connector.ID),
 			connectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
-			connectorCredentialValueKey(connector.ID),
+			connectorrecord.CredentialValueKey(connector.ID),
 			deletionTombstoneKey(string(DeletionTargetConnector), connector.ID),
 		},
 	)
 	if err != nil {
-		return Versioned[ConnectorRecord]{}, err
+		return Versioned[connectorrecord.Record]{}, err
 	}
 	clearKeyValues(evidence.Values)
 	epochMutation, err := fence.epochRewriteMutation()
 	if err != nil {
-		return Versioned[ConnectorRecord]{}, err
+		return Versioned[connectorrecord.Record]{}, err
 	}
 	defer clear(epochMutation.Value)
 	conditions := append(connectorCreateConditions(record), fence.transactionConditions()...)
 	conditions = append(conditions, secretFence.conditions...)
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: connectorRecordKey(record.Connector.ID), Value: primaryValue},
+		{Type: etcdstore.MutationPut, Key: connectorrecord.RecordKey(record.Connector.ID), Value: primaryValue},
 		{
 			Type:  etcdstore.MutationPut,
 			Key:   connectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
@@ -99,21 +100,21 @@ func (repository *ConnectorRepository) CreateConnector(
 		},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   connectorCredentialValueKey(record.Connector.ID),
+			Key:   connectorrecord.CredentialValueKey(record.Connector.ID),
 			Value: credentialValue,
 		},
 		epochMutation,
 	})
 	if err != nil {
-		return Versioned[ConnectorRecord]{}, err
+		return Versioned[connectorrecord.Record]{}, err
 	}
 	if !result.Succeeded {
 		defer clearKeyValues(result.FailureReads)
-		return Versioned[ConnectorRecord]{}, classifyConnectorCreateConflict(
+		return Versioned[connectorrecord.Record]{}, classifyConnectorCreateConflict(
 			result.FailureReads, fence, len(secretFence.conditions),
 		)
 	}
-	return Versioned[ConnectorRecord]{
+	return Versioned[connectorrecord.Record]{
 		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
@@ -122,8 +123,8 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
-	record ConnectorRecord,
-	credentials ConnectorEncryptedCredentials,
+	record connectorrecord.Record,
+	credentials connectorrecord.EncryptedCredentials,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateConnectorHierarchy(ctx, environment, project, record); err != nil {
@@ -158,17 +159,17 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	primaryValue, err := encodeConnectorRecord(record)
+	primaryValue, err := connectorrecord.EncodeRecord(record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	credentialValue, err := encodeConnectorEncryptedCredentials(credentials)
+	credentialValue, err := connectorrecord.EncodeEncryptedCredentials(credentials)
 	if err != nil {
 		clear(primaryValue)
 		return IdempotencyTransactionResult{}, err
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: connectorRecordKey(record.Connector.ID), Value: primaryValue},
+		{Type: etcdstore.MutationPut, Key: connectorrecord.RecordKey(record.Connector.ID), Value: primaryValue},
 		{
 			Type:  etcdstore.MutationPut,
 			Key:   connectorEnvironmentKey(record.Connector.EnvironmentID, record.Connector.ID),
@@ -181,7 +182,7 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 		},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   connectorCredentialValueKey(record.Connector.ID),
+			Key:   connectorrecord.CredentialValueKey(record.Connector.ID),
 			Value: credentialValue,
 		},
 	}
@@ -191,10 +192,10 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 		environment,
 		project,
 		[]string{
-			connectorRecordKey(connector.ID),
+			connectorrecord.RecordKey(connector.ID),
 			connectorNameKey(connector.EnvironmentID, connector.Name),
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
-			connectorCredentialValueKey(connector.ID),
+			connectorrecord.CredentialValueKey(connector.ID),
 			deletionTombstoneKey(string(DeletionTargetConnector), connector.ID),
 		},
 	)
@@ -232,48 +233,48 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 func (repository *ConnectorRepository) GetConnector(
 	ctx context.Context,
 	id string,
-) (Versioned[ConnectorRecord], error) {
+) (Versioned[connectorrecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ConnectorRecord]{}, err
+		return Versioned[connectorrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindConnector, id); err != nil {
-		return Versioned[ConnectorRecord]{}, err
+		return Versioned[connectorrecord.Record]{}, err
 	}
 	return getRecord(
 		ctx,
 		repository.store,
-		connectorRecordKey(id),
+		connectorrecord.RecordKey(id),
 		id,
 		errs.KindConnectorNotFound,
-		decodeConnectorRecord,
-		func(record ConnectorRecord) string { return record.Connector.ID },
+		connectorrecord.DecodeRecord,
+		func(record connectorrecord.Record) string { return record.Connector.ID },
 	)
 }
 
 func (repository *ConnectorRepository) GetConnectorCredentials(
 	ctx context.Context,
-	current Versioned[ConnectorRecord],
-) (ConnectorEncryptedCredentials, error) {
+	current Versioned[connectorrecord.Record],
+) (connectorrecord.EncryptedCredentials, error) {
 	if err := validateConnectorVersion(current); err != nil {
-		return ConnectorEncryptedCredentials{}, err
+		return connectorrecord.EncryptedCredentials{}, err
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys:     []string{connectorCredentialValueKey(current.Record.Connector.ID)},
+		Keys:     []string{connectorrecord.CredentialValueKey(current.Record.Connector.ID)},
 		Revision: current.ReadRevision,
 	})
 	if err != nil {
-		return ConnectorEncryptedCredentials{}, err
+		return connectorrecord.EncryptedCredentials{}, err
 	}
 	if result == nil || len(result.Values) != 1 || result.Values[0] == nil {
-		return ConnectorEncryptedCredentials{}, errs.New(
+		return connectorrecord.EncryptedCredentials{}, errs.New(
 			errs.KindInternal,
 			"Connector encrypted credentials are missing",
 		)
 	}
-	value, err := decodeConnectorEncryptedCredentials(result.Values[0].Value)
+	value, err := connectorrecord.DecodeEncryptedCredentials(result.Values[0].Value)
 	if err != nil || value.ConnectorID != current.Record.Connector.ID {
 		clear(value.Ciphertext)
-		return ConnectorEncryptedCredentials{}, corruptConnectorRecord()
+		return connectorrecord.EncryptedCredentials{}, connectorrecord.CorruptRecord()
 	}
 	return value, nil
 }
@@ -282,9 +283,9 @@ func (repository *ConnectorRepository) ListConnectors(
 	ctx context.Context,
 	environmentID string,
 	request PageRequest,
-) (Page[ConnectorRecord], error) {
+) (Page[connectorrecord.Record], error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Page[ConnectorRecord]{}, err
+		return Page[connectorrecord.Record]{}, err
 	}
 	return listIndexPage(
 		ctx,
@@ -293,12 +294,12 @@ func (repository *ConnectorRepository) ListConnectors(
 		"environment",
 		environmentID,
 		connectorEnvironmentPrefix(environmentID),
-		connectorRecordKey,
+		connectorrecord.RecordKey,
 		ids.KindConnector,
 		request,
-		decodeConnectorRecord,
-		func(record ConnectorRecord) string { return record.Connector.ID },
-		func(record ConnectorRecord) bool { return record.Connector.EnvironmentID == environmentID },
+		connectorrecord.DecodeRecord,
+		func(record connectorrecord.Record) string { return record.Connector.ID },
+		func(record connectorrecord.Record) bool { return record.Connector.EnvironmentID == environmentID },
 	)
 }
 
@@ -315,14 +316,14 @@ func connectorNameKey(environmentID string, name string) string {
 }
 
 func connectorCreateConditions(
-	record ConnectorRecord,
+	record connectorrecord.Record,
 ) []etcdstore.Condition {
 	connector := record.Connector
 	conditions := []etcdstore.Condition{
-		{Key: connectorRecordKey(connector.ID)},
+		{Key: connectorrecord.RecordKey(connector.ID)},
 		{Key: connectorNameKey(connector.EnvironmentID, connector.Name)},
 		{Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
-		{Key: connectorCredentialValueKey(connector.ID)},
+		{Key: connectorrecord.CredentialValueKey(connector.ID)},
 		{Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID)},
 	}
 	return conditions
@@ -341,7 +342,7 @@ type connectorSecretCandidate struct {
 func (repository *ConnectorRepository) loadConnectorSecretReferenceFence(
 	ctx context.Context,
 	projectID string,
-	record ConnectorRecord,
+	record connectorrecord.Record,
 ) (connectorSecretReferenceFence, error) {
 	references := connectorSecretReferences(record)
 	if len(references) == 0 {
@@ -544,7 +545,7 @@ func validateConnectorHierarchy(
 	ctx context.Context,
 	environment Versioned[EnvironmentRecord],
 	project Versioned[ProjectRecord],
-	record ConnectorRecord,
+	record connectorrecord.Record,
 ) error {
 	if err := validateContext(ctx); err != nil {
 		return err
@@ -555,7 +556,7 @@ func validateConnectorHierarchy(
 	if err := validateProject(project.Record); err != nil {
 		return err
 	}
-	if err := validateConnectorRecord(record); err != nil {
+	if err := connectorrecord.ValidateRecord(record); err != nil {
 		return err
 	}
 	if environment.Revision <= 0 || environment.ReadRevision <= 0 || project.Revision <= 0 ||
@@ -572,8 +573,8 @@ func validateConnectorHierarchy(
 	return nil
 }
 
-func validateConnectorVersion(current Versioned[ConnectorRecord]) error {
-	if err := validateConnectorRecord(current.Record); err != nil {
+func validateConnectorVersion(current Versioned[connectorrecord.Record]) error {
+	if err := connectorrecord.ValidateRecord(current.Record); err != nil {
 		return err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision {

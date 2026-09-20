@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"unicode/utf16"
 	"unicode/utf8"
@@ -144,7 +145,7 @@ func (resolver *BackupSecretResolver) ResolveBackupSecretSlots(
 }
 
 func expectedBackupCredentialSources(
-	record etcd.ConnectorRecord,
+	record connectorrecord.Record,
 ) (map[core.ConnectorCredentialName]core.ConnectorCredentialKind, error) {
 	if len(record.Connector.Credentials) != 2 {
 		return nil, errs.New(errs.KindInternal, "backup Connector credential metadata is invalid")
@@ -176,7 +177,7 @@ func backupCredentialPurpose(name core.ConnectorCredentialName) (agentpb.BackupS
 
 func (resolver *BackupSecretResolver) openDirectCredentials(
 	ctx context.Context,
-	value *etcd.ConnectorEncryptedCredentials,
+	value *connectorrecord.EncryptedCredentials,
 	expected map[core.ConnectorCredentialName]core.ConnectorCredentialKind,
 ) (map[core.ConnectorCredentialName][]byte, error) {
 	metadata := secretvalue.Metadata{

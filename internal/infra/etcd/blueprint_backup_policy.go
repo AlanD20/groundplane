@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sync"
 	"time"
@@ -239,7 +240,7 @@ func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
 	environmentID string,
 	name string,
 	revision int64,
-) (string, *Versioned[ConnectorRecord], *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
+) (string, *Versioned[connectorrecord.Record], *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
 	if name == "" {
 		return "", nil, nil, nil, nil
 	}
@@ -257,14 +258,14 @@ func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
 	}
 	connectorID := string(nameRead.Values[0].Value)
 	if ids.Validate(ids.KindConnector, connectorID) != nil {
-		return "", nil, nil, nil, corruptConnectorRecord()
+		return "", nil, nil, nil, connectorrecord.CorruptRecord()
 	}
 	connector, owner, err := repository.loadBackupPolicyConnectorEvidence(ctx, environmentID, connectorID, revision)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
 	if connector.Record.Connector.Name != name {
-		return "", nil, nil, nil, corruptConnectorRecord()
+		return "", nil, nil, nil, connectorrecord.CorruptRecord()
 	}
 	tombstone, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{deletionTombstoneKey(string(DeletionTargetConnector), connectorID)}, Revision: revision,

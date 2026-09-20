@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -185,9 +186,9 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 	connectorID string,
 	enabled bool,
 	revision int64,
-) (*Versioned[ConnectorRecord], *etcdstore.KeyValue, *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
+) (*Versioned[connectorrecord.Record], *etcdstore.KeyValue, *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
 	keys := []string{
-		connectorRecordKey(connectorID), connectorEnvironmentKey(environmentID, connectorID),
+		connectorrecord.RecordKey(connectorID), connectorEnvironmentKey(environmentID, connectorID),
 		deletionTombstoneKey(string(DeletionTargetConnector), connectorID),
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -201,14 +202,14 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 	tombstone := cloneBackupPolicyEvidenceKeyValue(result.Values[2])
 	if result.Values[0] == nil {
 		if enabled || result.Values[1] != nil {
-			return nil, nil, nil, nil, corruptConnectorRecord()
+			return nil, nil, nil, nil, connectorrecord.CorruptRecord()
 		}
 		return nil, nil, nil, tombstone, nil
 	}
-	record, err := decodeConnectorRecord(result.Values[0].Value)
+	record, err := connectorrecord.DecodeRecord(result.Values[0].Value)
 	if err != nil || record.Connector.ID != connectorID || record.Connector.EnvironmentID != environmentID ||
 		result.Values[1] == nil || string(result.Values[1].Value) != connectorID || result.Values[2] != nil {
-		return nil, nil, nil, nil, corruptConnectorRecord()
+		return nil, nil, nil, nil, connectorrecord.CorruptRecord()
 	}
 	name, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{connectorNameKey(environmentID, record.Connector.Name)}, Revision: revision,
@@ -218,10 +219,10 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 	}
 	if name == nil || name.ReadRevision != revision || len(name.Values) != 1 || name.Values[0] == nil ||
 		string(name.Values[0].Value) != connectorID {
-		return nil, nil, nil, nil, corruptConnectorRecord()
+		return nil, nil, nil, nil, connectorrecord.CorruptRecord()
 	}
 	defer clearKeyValues(name.Values)
-	return &Versioned[ConnectorRecord]{
+	return &Versioned[connectorrecord.Record]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: revision,
 	}, cloneBackupPolicyEvidenceKeyValue(result.Values[1]), cloneBackupPolicyEvidenceKeyValue(name.Values[0]), tombstone, nil
 }

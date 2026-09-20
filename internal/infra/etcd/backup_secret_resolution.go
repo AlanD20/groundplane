@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"time"
@@ -36,7 +37,7 @@ type BackupSecretResolutionEvidence struct {
 	EnvironmentRevision int64
 	Project             ProjectRecord
 	ProjectRevision     int64
-	Connector           ConnectorRecord
+	Connector           connectorrecord.Record
 	ConnectorRevision   int64
 	Run                 *BackupRunRecord
 	Dispatch            *BackupRecoveryPointPruneDispatchRecord
@@ -45,7 +46,7 @@ type BackupSecretResolutionEvidence struct {
 	Prune               *BackupRecoveryPointPruneRecord
 	Source              BackupSourceRecord
 	SourceRevision      int64
-	Credentials         ConnectorEncryptedCredentials
+	Credentials         connectorrecord.EncryptedCredentials
 	HasCredentials      bool
 	SecretValues        []BackupSecretValueEvidence
 }
@@ -447,7 +448,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 			sourceIDs[source.SourceID] = position
 			dynamic.sources[source.SourceID] = position
 		}
-		position := dynamic.add(connectorRecordKey(evidence.Run.ConnectorID))
+		position := dynamic.add(connectorrecord.RecordKey(evidence.Run.ConnectorID))
 		connectorIDs[evidence.Run.ConnectorID] = position
 		dynamic.connectors[evidence.Run.ConnectorID] = position
 	} else if evidence.Dispatch != nil {
@@ -461,7 +462,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 					sourcePosition := dynamic.add(backupSourceKey(prune.SourceId))
 					sourceIDs[prune.SourceId] = sourcePosition
 					dynamic.sources[prune.SourceId] = sourcePosition
-					connectorPosition := dynamic.add(connectorRecordKey(prune.ConnectorId))
+					connectorPosition := dynamic.add(connectorrecord.RecordKey(prune.ConnectorId))
 					connectorIDs[prune.ConnectorId] = connectorPosition
 					dynamic.connectors[prune.ConnectorId] = connectorPosition
 				}
@@ -479,7 +480,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 		dynamic.connectorFences[connectorID] = dynamic.add(
 			deletionTombstoneKey(string(DeletionTargetConnector), connectorID),
 		)
-		dynamic.credentials[connectorID] = dynamic.add(connectorCredentialValueKey(connectorID))
+		dynamic.credentials[connectorID] = dynamic.add(connectorrecord.CredentialValueKey(connectorID))
 	}
 	if evidence.Run != nil {
 		source := evidence.Run.Sources[stepIndex]
@@ -582,7 +583,7 @@ func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
 		if value == nil {
 			return errs.New(errs.KindStateConflict, "backup connector evidence is unavailable")
 		}
-		connector, decodeErr := decodeConnectorRecord(value.Value)
+		connector, decodeErr := connectorrecord.DecodeRecord(value.Value)
 		if decodeErr != nil || connector.Connector.ID != connectorID ||
 			connector.Connector.EnvironmentID != environmentID {
 			return errs.New(errs.KindInternal, "backup connector evidence is corrupt")
@@ -780,7 +781,7 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 		}
 		source, sourceErr := decodeBackupSourceRecord(sourceValue.Value)
 		environment, environmentErr := decodeEnvironment(environmentValue.Value)
-		connector, connectorErr := decodeConnectorRecord(connectorValue.Value)
+		connector, connectorErr := connectorrecord.DecodeRecord(connectorValue.Value)
 		if sourceErr != nil {
 			return errs.New(errs.KindStateConflict, "backup prune source authority is corrupt")
 		}
@@ -873,11 +874,11 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 	dynamic.last = second
 	connector := evidence.Connector.Connector
 	if evidence.Run != nil {
-		if connectorRecordHasDirectCredentials(evidence.Connector) != evidence.Run.ConnectorHasDirectCredentials {
+		if connectorrecord.HasDirectCredentials(evidence.Connector) != evidence.Run.ConnectorHasDirectCredentials {
 			return errs.New(errs.KindStateConflict, "backup connector credential mode changed")
 		}
 	}
-	if connectorRecordHasDirectCredentials(evidence.Connector) {
+	if connectorrecord.HasDirectCredentials(evidence.Connector) {
 		position, ok := dynamic.credentials[connector.ID]
 		if !ok {
 			return errs.New(errs.KindInternal, "backup connector credential evidence is unavailable")
@@ -893,7 +894,7 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 		if value == nil || value.ModRevision != expectedRevision {
 			return errs.New(errs.KindStateConflict, "backup connector credential snapshot changed")
 		}
-		credentials, err := decodeConnectorEncryptedCredentials(value.Value)
+		credentials, err := connectorrecord.DecodeEncryptedCredentials(value.Value)
 		if err != nil || credentials.ConnectorID != connector.ID {
 			return errs.New(errs.KindInternal, "backup connector credential evidence is corrupt")
 		}

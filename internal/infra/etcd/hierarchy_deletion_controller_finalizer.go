@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -403,19 +404,19 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionConnector
 	ctx context.Context,
 	action HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
-	primary, err := repository.readHierarchyDeletionPrimary(ctx, connectorRecordKey(action.TargetID), action)
+	primary, err := repository.readHierarchyDeletionPrimary(ctx, connectorrecord.RecordKey(action.TargetID), action)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	defer clear(primary.Value)
-	record, err := decodeConnectorRecord(primary.Value)
+	record, err := connectorrecord.DecodeRecord(primary.Value)
 	if err != nil || record.Connector.ID != action.TargetID {
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
 	keys := []string{
 		connectorEnvironmentKey(record.Connector.EnvironmentID, action.TargetID),
 		connectorNameKey(record.Connector.EnvironmentID, record.Connector.Name),
-		connectorCredentialValueKey(action.TargetID),
+		connectorrecord.CredentialValueKey(action.TargetID),
 	}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
 	if err != nil {

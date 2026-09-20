@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -105,7 +106,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		}
 		if policy.Enabled {
 			keys = append(keys,
-				connectorRecordKey(policy.ConnectorID),
+				connectorrecord.RecordKey(policy.ConnectorID),
 				connectorEnvironmentKey(environmentID, policy.ConnectorID),
 				backupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID),
 				deletionTombstoneKey(string(DeletionTargetConnector), policy.ConnectorID),
@@ -235,16 +236,16 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		reference := support.Values[offset+2]
 		deletionFence := support.Values[offset+3]
 		if connectorValue == nil || ownerIndex == nil || reference == nil {
-			return BackupPolicyProjection{}, corruptConnectorRecord()
+			return BackupPolicyProjection{}, connectorrecord.CorruptRecord()
 		}
-		connector, decodeErr := decodeConnectorRecord(connectorValue.Value)
+		connector, decodeErr := connectorrecord.DecodeRecord(connectorValue.Value)
 		if decodeErr != nil || connector.Connector.ID != policy.ConnectorID ||
 			connector.Connector.EnvironmentID != environmentID ||
 			ownerIndex.Key != connectorEnvironmentKey(environmentID, policy.ConnectorID) ||
 			string(ownerIndex.Value) != policy.ConnectorID ||
 			reference.Key != backupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID) ||
 			string(reference.Value) != environmentID {
-			return BackupPolicyProjection{}, corruptConnectorRecord()
+			return BackupPolicyProjection{}, connectorrecord.CorruptRecord()
 		}
 		if deletionFence != nil {
 			return BackupPolicyProjection{}, errs.New(

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -19,8 +20,8 @@ import (
 )
 
 type ConnectorReader interface {
-	GetConnector(context.Context, string) (etcd.Versioned[etcd.ConnectorRecord], error)
-	ListConnectors(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ConnectorRecord], error)
+	GetConnector(context.Context, string) (etcd.Versioned[connectorrecord.Record], error)
+	ListConnectors(context.Context, string, etcd.PageRequest) (etcd.Page[connectorrecord.Record], error)
 }
 
 type ConnectorMutator interface {
@@ -237,7 +238,7 @@ func (s *Server) writeConnectorProblem(ctx huma.Context, detail string) {
 	}
 }
 
-func connectorAPI(record etcd.ConnectorRecord) apiTypes.Connector {
+func connectorAPI(record connectorrecord.Record) apiTypes.Connector {
 	connector := record.Connector
 	credentials := make(map[string]apiTypes.ConnectorCredential, len(connector.Credentials))
 	for name, credential := range connector.Credentials {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -362,7 +363,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	defer clearKeyValues(anchor.Values)
 	connectorEvidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			connectorRecordKey(record.ConnectorID), connectorCredentialValueKey(record.ConnectorID),
+			connectorrecord.RecordKey(record.ConnectorID), connectorrecord.CredentialValueKey(record.ConnectorID),
 		},
 		Revision: fixedRevision,
 	})
@@ -496,9 +497,9 @@ func backupRunExternalConditions(
 	conditions []etcdstore.Condition,
 ) []etcdstore.Condition {
 	allowed := make(map[string]struct{}, len(run.Sources)*2+2)
-	allowed[connectorRecordKey(run.ConnectorID)] = struct{}{}
+	allowed[connectorrecord.RecordKey(run.ConnectorID)] = struct{}{}
 	if run.ConnectorHasDirectCredentials {
-		allowed[connectorCredentialValueKey(run.ConnectorID)] = struct{}{}
+		allowed[connectorrecord.CredentialValueKey(run.ConnectorID)] = struct{}{}
 	}
 	for _, source := range run.Sources {
 		allowed[backupSourceKey(source.SourceID)] = struct{}{}

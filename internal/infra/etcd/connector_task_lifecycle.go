@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/http"
@@ -44,7 +45,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			connectorRecordKey(source.Target),
+			connectorrecord.RecordKey(source.Target),
 			deletionTombstoneKey(string(DeletionTargetConnector), source.Target),
 			connectorRemovalIntentKey(retry.ID),
 		},
@@ -59,9 +60,9 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	if stored.Values[0] == nil || stored.Values[1] != nil || stored.Values[2] != nil {
 		return connectorTaskChange{}, errs.New(errs.KindStateConflict, "connector is not available for deletion retry")
 	}
-	record, err := decodeConnectorRecord(stored.Values[0].Value)
+	record, err := connectorrecord.DecodeRecord(stored.Values[0].Value)
 	if err != nil || record.Connector.ID != source.Target {
-		return connectorTaskChange{}, corruptConnectorRecord()
+		return connectorTaskChange{}, connectorrecord.CorruptRecord()
 	}
 	connector := record.Connector
 	if connector.EnvironmentID != source.Params[TaskConnectorEnvironmentParam] ||
@@ -75,7 +76,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		Keys: []string{
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorNameKey(connector.EnvironmentID, connector.Name),
-			connectorCredentialValueKey(connector.ID),
+			connectorrecord.CredentialValueKey(connector.ID),
 			environmentKey(connector.EnvironmentID),
 			deletionTombstoneKey(string(DeletionTargetEnvironment), connector.EnvironmentID),
 		},
@@ -96,7 +97,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	if dependencies.Values[2] == nil {
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are missing")
 	}
-	credentials, err := decodeConnectorEncryptedCredentials(dependencies.Values[2].Value)
+	credentials, err := connectorrecord.DecodeEncryptedCredentials(dependencies.Values[2].Value)
 	if err != nil || credentials.ConnectorID != connector.ID {
 		clear(credentials.Ciphertext)
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are corrupt")
@@ -144,7 +145,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	change := connectorTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: connectorRecordKey(connector.ID), ModRevision: stored.Values[0].ModRevision},
+			{Key: connectorrecord.RecordKey(connector.ID), ModRevision: stored.Values[0].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID)},
 			{Key: connectorRemovalIntentKey(retry.ID)},
 			{
@@ -155,7 +156,7 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 				Key:         connectorNameKey(connector.EnvironmentID, connector.Name),
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
-			{Key: connectorCredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
+			{Key: connectorrecord.CredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
 			{Key: environmentKey(environment.ID), ModRevision: dependencies.Values[3].ModRevision},
 			{Key: deletionTombstoneKey(string(DeletionTargetEnvironment), environment.ID)},
 			{Key: projectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
@@ -225,7 +226,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			connectorRecordKey(task.Target),
+			connectorrecord.RecordKey(task.Target),
 			deletionTombstoneKey(string(DeletionTargetConnector), task.Target),
 			connectorRemovalIntentKey(task.ID),
 		},
@@ -238,9 +239,9 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		stored.Values[1] == nil || stored.Values[2] == nil {
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector deletion state is inconsistent")
 	}
-	record, err := decodeConnectorRecord(stored.Values[0].Value)
+	record, err := connectorrecord.DecodeRecord(stored.Values[0].Value)
 	if err != nil || record.Connector.ID != task.Target {
-		return connectorTaskChange{}, corruptConnectorRecord()
+		return connectorTaskChange{}, connectorrecord.CorruptRecord()
 	}
 	connector := record.Connector
 	if connector.EnvironmentID != task.Params[TaskConnectorEnvironmentParam] ||
@@ -272,7 +273,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		Keys: []string{
 			connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 			connectorNameKey(connector.EnvironmentID, connector.Name),
-			connectorCredentialValueKey(connector.ID),
+			connectorrecord.CredentialValueKey(connector.ID),
 		},
 		Revision: revision,
 	})
@@ -291,7 +292,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	if dependencies.Values[2] == nil {
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are missing")
 	}
-	credentials, err := decodeConnectorEncryptedCredentials(dependencies.Values[2].Value)
+	credentials, err := connectorrecord.DecodeEncryptedCredentials(dependencies.Values[2].Value)
 	if err != nil || credentials.ConnectorID != connector.ID {
 		clear(credentials.Ciphertext)
 		return connectorTaskChange{}, errs.New(errs.KindInternal, "connector credentials are corrupt")
@@ -309,7 +310,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	change := connectorTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: connectorRecordKey(task.Target), ModRevision: stored.Values[0].ModRevision},
+			{Key: connectorrecord.RecordKey(task.Target), ModRevision: stored.Values[0].ModRevision},
 			{
 				Key:         deletionTombstoneKey(string(DeletionTargetConnector), task.Target),
 				ModRevision: stored.Values[1].ModRevision,
@@ -323,7 +324,7 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 				Key:         connectorNameKey(connector.EnvironmentID, connector.Name),
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
-			{Key: connectorCredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
+			{Key: connectorrecord.CredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(DeletionTargetConnector), task.Target)},
@@ -335,8 +336,8 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 		change.mutations = append(change.mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorNameKey(connector.EnvironmentID, connector.Name)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorCredentialValueKey(connector.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorRecordKey(connector.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorrecord.CredentialValueKey(connector.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorrecord.RecordKey(connector.ID)},
 		)
 	}
 	return change, nil
@@ -355,10 +356,10 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 	environmentID := task.Params[TaskConnectorEnvironmentParam]
 	name := task.Params[TaskConnectorNameParam]
 	keys := []string{
-		connectorRecordKey(task.Target),
+		connectorrecord.RecordKey(task.Target),
 		connectorEnvironmentKey(environmentID, task.Target),
 		connectorNameKey(environmentID, name),
-		connectorCredentialValueKey(task.Target),
+		connectorrecord.CredentialValueKey(task.Target),
 		deletionTombstoneKey(string(DeletionTargetConnector), task.Target),
 		connectorRemovalIntentKey(task.ID),
 	}
@@ -431,13 +432,13 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 			return errs.New(errs.KindStateConflict, "failed connector deletion lost target state")
 		}
 	}
-	record, err := decodeConnectorRecord(stored.Values[0].Value)
+	record, err := connectorrecord.DecodeRecord(stored.Values[0].Value)
 	if err != nil || record.Connector.ID != task.Target || record.Connector.EnvironmentID != environmentID ||
 		record.Connector.Name != name || string(stored.Values[1].Value) != task.Target ||
 		string(stored.Values[2].Value) != task.Target {
 		return errs.New(errs.KindStateConflict, "failed connector deletion retained corrupt target state")
 	}
-	credentials, err := decodeConnectorEncryptedCredentials(stored.Values[3].Value)
+	credentials, err := connectorrecord.DecodeEncryptedCredentials(stored.Values[3].Value)
 	if err != nil || credentials.ConnectorID != task.Target {
 		clear(credentials.Ciphertext)
 		return errs.New(errs.KindStateConflict, "failed connector deletion retained corrupt credentials")
