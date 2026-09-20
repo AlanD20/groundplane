@@ -19,7 +19,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
-	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -331,38 +330,10 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	scriptRepository := service.repository
-	currentScripts, scriptsReadRevision, err := service.listBlueprintScripts(ctx, environmentID, scriptRepository)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	scriptServices := make([]etcd.ServiceRecord, len(desiredServices))
-	for index, desiredService := range desiredServices {
-		scriptServices[index] = etcd.ServiceRecord{EnvironmentID: environmentID, Desired: desiredService}
-	}
-	previousScripts := make([]scriptrecord.Record, len(currentScripts))
-	for index, currentScript := range currentScripts {
-		previousScripts[index] = currentScript.Record
-	}
-	reconciledScripts, err := desiredrevision.ReconcileBlueprintScripts(
-		environmentID,
-		parsed.Extensions.Scripts,
-		scriptServices,
-		previousScripts,
+	reconciledScripts, scriptPublication, err := service.prepareApplyScripts(
+		ctx, environmentID, claim.RevisionID, parsed.Extensions.Scripts, desiredServices,
 		desiredrevision.BlueprintScriptResources{Volumes: changes.Current.Volumes, Entries: reconciledEntries.Current},
 		allocator.Named,
-	)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	scriptPublication, err := scriptRepository.PrepareBlueprintScriptPublication(
-		ctx,
-		environmentID,
-		scriptsReadRevision,
-		claim.RevisionID,
-		currentScripts,
-		reconciledScripts.Current,
-		reconciledScripts.BodyGenerations,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
@@ -389,50 +360,7 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	currentRoutes, err := service.listBlueprintRoutes(ctx, environmentID)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	if !preserveRoutes {
-		parsed.Extensions.Routes, err = preserveEnvironmentBlueprintRoutes(
-			parsed.Extensions.Routes, desiredServices, currentRoutes,
-		)
-		if err != nil {
-			return etcd.IdempotencyResponse{}, err
-		}
-	}
-	previousRoutes := make([]controller.RouteIdentity, len(currentRoutes))
-	for index, route := range currentRoutes {
-		previousRoutes[index] = controller.RouteIdentity{
-			ID: route.Record.Desired.ID, Host: route.Record.Desired.Host, Path: route.Record.Desired.Path,
-		}
-	}
-	reconciledRoutes := controller.BlueprintRouteChanges{}
-	if preserveRoutes {
-		reconciledRoutes.Current = make([]core.Route, len(currentRoutes))
-		for index, route := range currentRoutes {
-			reconciledRoutes.Current[index] = route.Record.Desired
-		}
-	} else {
-		reconciledRoutes, err = controller.ReconcileBlueprintRoutes(
-			parsed.Extensions.Routes,
-			desiredServices,
-			previousRoutes,
-			allocator.New,
-		)
-		if err != nil {
-			return etcd.IdempotencyResponse{}, err
-		}
-	}
-	if len(reconciledRoutes.RemovedRouteIDs) != 0 {
-		return etcd.IdempotencyResponse{}, errs.New(
-			errs.KindResourceInUse,
-			"Blueprint omits an existing Route; remove it explicitly before apply",
-		)
-	}
-	routeChanges, err := prepareEnvironmentBlueprintRouteChanges(
-		environmentID, reconciledRoutes.Current, currentRoutes,
-	)
+	reconciledRoutes, routeChanges, err := service.prepareApplyRoutes(ctx, environmentID, &parsed, desiredServices, preserveRoutes, allocator.New)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
