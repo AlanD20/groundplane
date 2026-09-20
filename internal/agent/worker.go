@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	checkpointmailbox "github.com/AlanD20/groundplane/internal/agent/checkpointmailbox"
 	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	composeruntime "github.com/AlanD20/groundplane/internal/agent/composeruntime"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
@@ -63,8 +64,8 @@ type WorkerPool struct {
 	materializations       *filematerialization.Inbox
 	managedConfigs         *componentaction.Inbox
 	backupSecrets          *backupSecretSlotInbox
-	backupCheckpoints      *backupCheckpointInbox
-	scriptCheckpoints      *scriptCheckpointInbox
+	backupCheckpoints      *checkpointmailbox.BackupInbox
+	scriptCheckpoints      *checkpointmailbox.ScriptInbox
 	backingHookCheckpoints *backingHookCheckpointInbox
 	volumeCheckpoints      *volumeCheckpointInbox
 	taskEventAcks          *taskEventAckInbox
@@ -87,8 +88,8 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		materializations:       filematerialization.NewInbox(),
 		managedConfigs:         componentaction.NewInbox(),
 		backupSecrets:          newBackupSecretSlotInbox(),
-		backupCheckpoints:      newBackupCheckpointInbox(),
-		scriptCheckpoints:      newScriptCheckpointInbox(),
+		backupCheckpoints:      checkpointmailbox.NewBackupInbox(),
+		scriptCheckpoints:      checkpointmailbox.NewScriptInbox(),
 		backingHookCheckpoints: newBackingHookCheckpointInbox(),
 		volumeCheckpoints:      &volumeCheckpointInbox{pending: make(map[string]*volumeCheckpointWaiter)},
 		taskEventAcks:          &taskEventAckInbox{receipts: make(map[taskEventAckKey]*taskEventReceipt)},
