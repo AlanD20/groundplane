@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"sort"
 	"strings"
 
@@ -81,8 +82,8 @@ func (repository *ZoneRepository) ListZones(
 	}
 	next := ""
 	if end < len(desired) {
-		next, err = encodeCursor(cursorPayload{
-			Version: cursorVersion, Revision: projection.ReadRevision,
+		next, err = recordcodec.EncodeCursor(recordcodec.Cursor{
+			Version: recordcodec.CursorVersion, Revision: projection.ReadRevision,
 			LastID: desired[end-1].Desired.ID, Query: query,
 		})
 		if err != nil {

@@ -893,8 +893,8 @@ func (repository *RunnerRepository) listTenantRunners(
 		}
 	}
 	if end < len(quota.RunnerIDs) {
-		page.NextCursor, err = encodeCursor(cursorPayload{
-			Version: cursorVersion, Revision: read.ReadRevision, LastID: quota.RunnerIDs[end-1], Query: query,
+		page.NextCursor, err = recordcodec.EncodeCursor(recordcodec.Cursor{
+			Version: recordcodec.CursorVersion, Revision: read.ReadRevision, LastID: quota.RunnerIDs[end-1], Query: query,
 		})
 		if err != nil {
 			return Page[RunnerRecord]{}, err

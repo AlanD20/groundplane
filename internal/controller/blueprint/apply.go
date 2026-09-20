@@ -20,12 +20,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
-	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"net/http"
 	"net/netip"
-	"sort"
 	"strings"
 	"time"
 )
@@ -205,74 +203,14 @@ func (service *Service) applyBlueprintOnce(
 	candidateTaskID := ids.New(ids.KindTask)
 	candidateCreatedAt := service.now().UTC()
 
-	if preserveRoutes && hasProjection {
-		// Component-only edits preserve the selected native workload, including
-		// its companion files. The revision guard above binds these bytes to
-		// the authoring document; external Blueprint inputs remain closed.
-		bundle.Files = append(
-			append([]core.BlueprintFile(nil), bundle.Files...),
-			previousProjection.Record.RuntimeFiles...)
-		sort.Slice(
-			bundle.Files,
-			func(left, right int) bool { return bundle.Files[left].Path < bundle.Files[right].Path },
-		)
-	}
-	parsed, err := blueprintparser.Parse(ctx, blueprintparser.EnvironmentScope{
-		EnvironmentID: environmentID,
-		Tenant:        tenant.Record.Slug, Project: project.Record.Slug, Environment: environment.Record.Name,
-	}, bundle)
+	preflight, err := service.prepareApplyPreflight(ctx, environmentID, bundle, baseline, preserveRoutes)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	if err := controller.ValidateEnvironmentBlueprintAvailability(parsed); err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	currentAttaches, attachReadRevision, err := service.listBlueprintAttaches(ctx, environmentID)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	requirements, err := environmentBlueprintRequirements(
-		parsed.Extensions.Requires,
-		parsed.Extensions.Attachments,
-		currentAttaches,
-		attachReadRevision,
-	)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	submittedServiceNames := environmentBlueprintServiceNames(parsed.Project)
-	var priorProject *composetypes.Project
-	if hasProjection {
-		priorProject, err = controller.LoadNormalizedEnvironmentProject(ctx, previousProjection.Record)
-		if err != nil {
-			return etcd.IdempotencyResponse{}, err
-		}
-	}
-	desiredEnvironment := environment
-	desiredEnvironment.Record.NetworkPool = parsed.Extensions.NetworkPool
-	if err := preserveEnvironmentBlueprintResources(
-		parsed.Project, priorProject, previous, previousProjection.Record.Volumes, hasProjection,
-	); err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	preflightServices, err := service.listBlueprintServices(ctx, environmentID)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	preflightExtensions, err := preserveEnvironmentBlueprintServiceExtensions(
-		parsed.ServiceExtensions, submittedServiceNames, previous.Services, previousProjection.Record.ServiceExtensions,
-	)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	workloads, err := service.blueprintReleases.PreflightBlueprint(ctx, blueprintrelease.BlueprintPreflightInput{
-		EnvironmentID: environmentID, Project: parsed.Project, PriorProject: priorProject,
-		PreviousIdentities: previous, ServiceExtensions: preflightExtensions,
-		CurrentServices: preflightServices, AuthoredGroups: parsed.Extensions.ReleaseGroups,
-	}, service.releaseGroups)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
+	bundle, parsed := preflight.bundle, preflight.parsed
+	currentAttaches, attachReadRevision := preflight.currentAttaches, preflight.attachReadRevision
+	requirements, submittedServiceNames := preflight.requirements, preflight.submittedServiceNames
+	priorProject, desiredEnvironment, workloads := preflight.priorProject, preflight.desiredEnvironment, preflight.workloads
 	claim, err := desiredrevision.Claim(
 		ctx, service.repository, desiredrevision.ClaimInput{
 			EnvironmentID: environmentID, CandidateTaskID: candidateTaskID,

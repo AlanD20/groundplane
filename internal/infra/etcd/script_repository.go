@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -237,7 +238,7 @@ func (repository *ScriptRepository) ListScripts(
 	}
 	revision := int64(0)
 	if request.Cursor != "" {
-		cursor, cursorErr := decodeCursor(request.Cursor)
+		cursor, cursorErr := recordcodec.DecodeCursor(request.Cursor)
 		if cursorErr != nil {
 			return Page[ScriptRecord]{}, cursorErr
 		}
