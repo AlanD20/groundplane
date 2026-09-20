@@ -36,12 +36,12 @@ type ComponentExecutionRepository interface {
 		string,
 	) (etcdstore.Versioned[etcd.PlatformComponentTaskRenderInput], error)
 	GetComponent(context.Context, string) (etcdstore.Versioned[componentrecord.Record], error)
-	GetHostResolverBaseline(context.Context) (etcdstore.Versioned[etcd.HostResolverBaselineRecord], bool, error)
 }
 
 type PlatformExecutionPlanner struct {
 	volumeRoot string
 	components ComponentExecutionRepository
+	baselines  ResolverBaselineReader
 	catalog    ExecutionCatalog
 }
 
@@ -55,12 +55,13 @@ type resolvedPlatformComponent struct {
 func NewPlatformComponentExecutionPlanner(
 	volumeRoot string,
 	components ComponentExecutionRepository,
+	baselines ResolverBaselineReader,
 	catalog ExecutionCatalog,
 ) (*PlatformExecutionPlanner, error) {
-	if volumeRoot == "" || components == nil || catalog == nil {
+	if volumeRoot == "" || components == nil || baselines == nil || catalog == nil {
 		return nil, errs.New(errs.KindInternal, "Platform Component execution planner dependencies are required")
 	}
-	return &PlatformExecutionPlanner{volumeRoot: volumeRoot, components: components, catalog: catalog}, nil
+	return &PlatformExecutionPlanner{volumeRoot: volumeRoot, components: components, baselines: baselines, catalog: catalog}, nil
 }
 
 func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
@@ -227,7 +228,7 @@ func (planner *PlatformExecutionPlanner) resolve(
 			"Platform Component Task desired state was superseded",
 		)
 	}
-	baseline, found, err := planner.components.GetHostResolverBaseline(ctx)
+	baseline, found, err := planner.baselines.GetHostResolverBaseline(ctx)
 	if err != nil {
 		return resolvedPlatformComponent{}, err
 	}

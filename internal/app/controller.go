@@ -14,6 +14,7 @@ import (
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 	"log/slog"
 	"os"
 	"time"
@@ -346,6 +347,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Component repository: %w", err)
 	}
+	resolverBaselines, err := resolverbaseline.New(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize host resolver baseline repository: %w", err)
+	}
 	platformComponents, err := etcd.DefaultPlatformComponents(detectTailnetDelegationDefault())
 	if err != nil {
 		_ = store.Close()
@@ -527,7 +533,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	platformRenderPlanner, err := controllerdns.NewPlatformRenderPlanner(
 		componentRecords,
-		componentRecords,
+		resolverBaselines,
 		componentRecords,
 		controllerdns.BaselineCapture(hostresolution.CaptureBaseline),
 		coreDNSRenderer,
@@ -568,7 +574,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize platform resolver projection: %w", err)
 	}
 	platformComponentExecution, err := controllerdns.NewPlatformComponentExecutionPlanner(
-		cfg.Storage.VolumeRoot, componentRecords, actionCatalog,
+		cfg.Storage.VolumeRoot, componentRecords, resolverBaselines, actionCatalog,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -740,7 +746,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Network desired revision persistence: %w", err)
 	}
-	componentReads, err := newComponentReadService(componentRecords, networkRecords, componentCatalog)
+	componentReads, err := newComponentReadService(componentRecords, resolverBaselines, networkRecords, componentCatalog)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Component reads: %w", err)

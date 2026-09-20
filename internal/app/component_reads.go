@@ -7,14 +7,16 @@ import (
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 )
 
 func newComponentReadService(
 	components *etcd.ComponentRepository,
+	baselines *resolverbaseline.Repository,
 	network *networketcd.Repository,
 	catalog []componentrender.EnvironmentComponentRegistration,
 ) (*componentcapability.ReadService, error) {
-	platform, err := componentregistration.NewDNSManagedConfigProjector(components, components)
+	platform, err := componentregistration.NewDNSManagedConfigProjector(components, baselines)
 	if err != nil {
 		return nil, err
 	}

@@ -6,6 +6,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	resolverbaseline "github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 	"net/netip"
 	"runtime"
 	"time"
@@ -27,12 +28,12 @@ type PlatformProjectionReader interface {
 }
 
 type BaselineRepository interface {
-	GetHostResolverBaseline(context.Context) (etcdstore.Versioned[etcd.HostResolverBaselineRecord], bool, error)
+	GetHostResolverBaseline(context.Context) (etcdstore.Versioned[resolverbaseline.Record], bool, error)
 	EnsureHostResolverBaseline(
 		context.Context,
 		[]byte,
 		time.Time,
-	) (etcdstore.Versioned[etcd.HostResolverBaselineRecord], error)
+	) (etcdstore.Versioned[resolverbaseline.Record], error)
 }
 
 type BaselineCapture func(context.Context) ([]byte, error)
