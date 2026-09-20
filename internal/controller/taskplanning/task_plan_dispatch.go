@@ -6,6 +6,7 @@ import (
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	"github.com/AlanD20/groundplane/internal/controller/configurationrecovery"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	releasedomain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -22,7 +23,7 @@ type TaskPlanResolver struct {
 	services              attachPlanServiceReader
 	attachIdentities      attachPlanIdentityResolver
 	componentCatalog      []componentrender.EnvironmentComponentRegistration
-	serviceProxyImage     *etcd.ReleaseProxyImage
+	serviceProxyImage     *releasedomain.ProxyImage
 	routeState            routeProviderStateReader
 	releases              *etcd.ReleaseLedger
 	backupRuns            backupRunPlanReader

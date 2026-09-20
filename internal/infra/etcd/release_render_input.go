@@ -41,7 +41,7 @@ type ReleaseRenderInput struct {
 	ProxyPorts           []uint16                           `json:"proxy_ports"`
 	ProxyConfigDigest    string                             `json:"proxy_config_digest"`
 	PriorProxyDigest     string                             `json:"prior_proxy_digest"`
-	ProxyImage           *ReleaseProxyImage                 `json:"proxy_image,omitempty"`
+	ProxyImage           *domain.ProxyImage                 `json:"proxy_image,omitempty"`
 	core.ServiceDependencyPlans
 	TenantID            string                       `json:"tenant_id"`
 	TenantSlug          string                       `json:"tenant_slug"`

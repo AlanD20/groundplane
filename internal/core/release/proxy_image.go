@@ -1,4 +1,4 @@
-package etcd
+package release
 
 import (
 	"encoding/hex"
@@ -8,19 +8,19 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// ReleaseProxyImage is the frozen image authority of one stable Service proxy.
+// ProxyImage is the frozen image authority of one stable Service proxy.
 // It is separate from the operator workload and survives historical rerenders.
-type ReleaseProxyImage struct {
+type ProxyImage struct {
 	Repository  string                   `json:"repository"`
 	IndexDigest string                   `json:"index_digest"`
 	Platform    componentsdk.OCIPlatform `json:"platform"`
 }
 
-func (image ReleaseProxyImage) Reference() string {
+func (image ProxyImage) Reference() string {
 	return image.Repository + "@sha256:" + image.Platform.ChildDigest
 }
 
-func (image ReleaseProxyImage) Validate() error {
+func (image ProxyImage) Validate() error {
 	p := image.Platform
 	if image.Repository == "" || strings.ContainsAny(image.Repository, "@ \t\r\n") ||
 		p.OS != "linux" || p.Architecture != "amd64" && p.Architecture != "arm64" ||

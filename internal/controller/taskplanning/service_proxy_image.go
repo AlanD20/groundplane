@@ -1,6 +1,7 @@
 package taskplanning
 
 import (
+	releasedomain "github.com/AlanD20/groundplane/internal/core/release"
 	"runtime"
 	"sort"
 
@@ -19,7 +20,7 @@ func (resolver *TaskPlanResolver) EnableServiceProxyImage(image componentsdk.OCI
 	if resolver == nil || !found {
 		return errs.New(errs.KindInternal, "compiled Service proxy image is unavailable for this host")
 	}
-	resolver.serviceProxyImage = &etcd.ReleaseProxyImage{
+	resolver.serviceProxyImage = &releasedomain.ProxyImage{
 		Repository: image.Repository, IndexDigest: image.IndexDigest, Platform: platform,
 	}
 	return nil
@@ -61,7 +62,7 @@ func (resolver *TaskPlanResolver) PrepareReleaseProxyImage(
 }
 
 func bindServiceProxyImage(
-	image *etcd.ReleaseProxyImage,
+	image *releasedomain.ProxyImage,
 	native *composetypes.ServiceConfig,
 	service *agentpb.ComposeService,
 ) error {
