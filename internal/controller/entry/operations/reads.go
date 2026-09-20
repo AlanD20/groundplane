@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"unicode/utf8"
@@ -30,7 +31,7 @@ type entryReadRepository interface {
 		context.Context,
 		string,
 		string,
-	) (etcd.SecretEntryValueGeneration, bool, error)
+	) (entryvalues.SecretGeneration, bool, error)
 }
 
 type entryReadService struct {
@@ -142,13 +143,13 @@ func (service *entryReadService) RevealEntry(ctx context.Context, entryID string
 type durableEntryReadRepository struct {
 	hierarchy *etcd.HierarchyRepository
 	entries   *etcd.EntryRepository
-	values    *etcd.EntryValueGenerationRepository
+	values    *entryvalues.Repository
 }
 
 func NewReadRepository(
 	hierarchy *etcd.HierarchyRepository,
 	entries *etcd.EntryRepository,
-	values *etcd.EntryValueGenerationRepository,
+	values *entryvalues.Repository,
 ) (*durableEntryReadRepository, error) {
 	if hierarchy == nil || entries == nil || values == nil {
 		return nil, errs.New(errs.KindInternal, "Entry read repositories are not configured")
@@ -222,6 +223,6 @@ func (repository *durableEntryReadRepository) GetSecretEntryValue(
 	ctx context.Context,
 	entryID string,
 	generationID string,
-) (etcd.SecretEntryValueGeneration, bool, error) {
+) (entryvalues.SecretGeneration, bool, error) {
 	return repository.values.GetSecret(ctx, entryID, generationID)
 }

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
@@ -31,8 +32,8 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEntryFina
 	}
 	effects.conditions = append(effects.conditions, fences...)
 	effects.mutations = append(effects.mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryPlainValueGenerationPrefix + record.Entry.ID + "/", Prefix: true},
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entrySecretValueGenerationPrefix + record.Entry.ID + "/", Prefix: true},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryvalues.PlainPrefix + record.Entry.ID + "/", Prefix: true},
+		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryvalues.SecretPrefix + record.Entry.ID + "/", Prefix: true},
 	)
 	return effects, nil
 }

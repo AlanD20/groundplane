@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"io"
@@ -30,8 +31,8 @@ type materializationBlueprintReader interface {
 }
 
 type materializationEntryValueReader interface {
-	GetPlain(context.Context, string, string) (etcd.PlainEntryValueGeneration, bool, error)
-	GetSecret(context.Context, string, string) (etcd.SecretEntryValueGeneration, bool, error)
+	GetPlain(context.Context, string, string) (entryvalues.PlainGeneration, bool, error)
+	GetSecret(context.Context, string, string) (entryvalues.SecretGeneration, bool, error)
 }
 
 type materializationComponentFileReader interface {

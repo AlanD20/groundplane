@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 	"log/slog"
@@ -273,7 +274,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
 	}
-	entryValues, err := etcd.NewEntryValueGenerationRepository(store)
+	entryValues, err := entryvalues.New(store)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Entry value generation repository: %w", err)

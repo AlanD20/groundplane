@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
@@ -205,13 +206,13 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		}
 
 		for _, binding := range snapshot.EntryBindings {
-			key := plainEntryValueGenerationKey(
+			key := entryvalues.PlainKey(
 				binding.EntryId,
 				binding.ValueGenerationId,
 			)
 			sourceDigest := ""
 			if binding.Secret {
-				key = secretEntryValueGenerationKey(
+				key = entryvalues.SecretKey(
 					binding.EntryId,
 					binding.ValueGenerationId,
 				)
@@ -226,14 +227,14 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 				return nil, readErr
 			}
 			if binding.Secret {
-				generation, decodeErr := decodeSecretEntryValueGeneration(value.Value)
+				generation, decodeErr := entryvalues.DecodeSecret(value.Value)
 				if decodeErr != nil {
 					return nil, decodeErr
 				}
 				sourceDigest = generation.CiphertextSHA256
 				clear(generation.Ciphertext)
 			} else {
-				generation, decodeErr := decodePlainEntryValueGeneration(value.Value)
+				generation, decodeErr := entryvalues.DecodePlain(value.Value)
 				if decodeErr != nil {
 					return nil, decodeErr
 				}

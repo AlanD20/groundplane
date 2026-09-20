@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -366,8 +367,8 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 		change.mutations = append(change.mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryOwnerKey(entry.EnvironmentID, entry.Entry.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryrecord.RecordKey(intent.EntryID)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryPlainValueGenerationPrefix + intent.EntryID + "/", Prefix: true},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entrySecretValueGenerationPrefix + intent.EntryID + "/", Prefix: true},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryvalues.PlainPrefix + intent.EntryID + "/", Prefix: true},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryvalues.SecretPrefix + intent.EntryID + "/", Prefix: true},
 		)
 		if intent.CandidateProjection != nil {
 			projectionValue, encodeErr := encodeEnvironmentComposeProjection(*intent.CandidateProjection)

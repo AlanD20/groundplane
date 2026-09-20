@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -174,8 +175,8 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: keys[0], Value: reference},
 			{Type: etcdstore.MutationPut, Key: keys[1], Value: descriptorValue}, {Type: etcdstore.MutationDelete, Key: locatorKey},
 			{Type: etcdstore.MutationDelete, Key: keys[4]},
-			{Type: etcdstore.MutationDelete, Key: entryPlainValueGenerationPrefix + intent.EntryID + "/", Prefix: true},
-			{Type: etcdstore.MutationDelete, Key: entrySecretValueGenerationPrefix + intent.EntryID + "/", Prefix: true}},
+			{Type: etcdstore.MutationDelete, Key: entryvalues.PlainPrefix + intent.EntryID + "/", Prefix: true},
+			{Type: etcdstore.MutationDelete, Key: entryvalues.SecretPrefix + intent.EntryID + "/", Prefix: true}},
 		values: [][]byte{descriptorValue, reference}}
 	change.conditions = append(change.conditions, sources...)
 	change.conditions = append(

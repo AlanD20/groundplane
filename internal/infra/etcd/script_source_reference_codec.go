@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -157,14 +158,14 @@ func validateScriptSourceRecord(key string, value []byte, reference ScriptSource
 			return errs.New(errs.KindValidationFailed, "Script runner snapshot membership evidence is invalid")
 		}
 	case ScriptSourceEntryValue:
-		if key == plainEntryValueGenerationKey(source.EntryID, source.ValueGenerationID) {
-			record, err := decodePlainEntryValueGeneration(value)
+		if key == entryvalues.PlainKey(source.EntryID, source.ValueGenerationID) {
+			record, err := entryvalues.DecodePlain(value)
 			if err != nil || record.EnvironmentID != reference.SourceOwnerID || record.EntryID != source.EntryID ||
 				record.GenerationID != source.ValueGenerationID || record.PlaintextSHA256 != reference.SourceDigest {
 				return errs.New(errs.KindValidationFailed, "Script Entry source evidence is invalid")
 			}
-		} else if key == secretEntryValueGenerationKey(source.EntryID, source.ValueGenerationID) {
-			record, err := decodeSecretEntryValueGeneration(value)
+		} else if key == entryvalues.SecretKey(source.EntryID, source.ValueGenerationID) {
+			record, err := entryvalues.DecodeSecret(value)
 			if err != nil || record.EnvironmentID != reference.SourceOwnerID || record.EntryID != source.EntryID ||
 				record.GenerationID != source.ValueGenerationID || record.CiphertextSHA256 != reference.SourceDigest {
 				return errs.New(errs.KindValidationFailed, "Script Entry source evidence is invalid")

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"slices"
@@ -147,9 +148,9 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 			return nil, errs.New(errs.KindValidationFailed, "manual Script Entry binding does not match its source")
 		}
 		delete(selected, binding.EntryId)
-		key := plainEntryValueGenerationKey(binding.EntryId, binding.ValueGenerationId)
+		key := entryvalues.PlainKey(binding.EntryId, binding.ValueGenerationId)
 		if binding.Secret {
-			key = secretEntryValueGenerationKey(binding.EntryId, binding.ValueGenerationId)
+			key = entryvalues.SecretKey(binding.EntryId, binding.ValueGenerationId)
 		}
 		value, err := scriptExecutionValueAt(ctx, repository.store, key, sources.Revision)
 		if err != nil {
@@ -161,14 +162,14 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 		}
 		reference.SourceModRevision = value.ModRevision
 		if binding.Secret {
-			generation, decodeErr := decodeSecretEntryValueGeneration(value.Value)
+			generation, decodeErr := entryvalues.DecodeSecret(value.Value)
 			if decodeErr != nil {
 				return nil, decodeErr
 			}
 			reference.SourceDigest = generation.CiphertextSHA256
 			clear(generation.Ciphertext)
 		} else {
-			generation, decodeErr := decodePlainEntryValueGeneration(value.Value)
+			generation, decodeErr := entryvalues.DecodePlain(value.Value)
 			if decodeErr != nil {
 				return nil, decodeErr
 			}

@@ -7,6 +7,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -106,7 +107,7 @@ type durableRepository struct {
 	services   *etcd.ServiceRepository
 	routes     *etcd.RouteRepository
 	entries    *etcd.EntryRepository
-	values     *etcd.EntryValueGenerationRepository
+	values     *entryvalues.Repository
 	attaches   *etcd.AttachRepository
 	components *etcd.ComponentRepository
 	scripts    *etcd.ScriptRepository
@@ -121,7 +122,7 @@ func NewRepository(
 	services *etcd.ServiceRepository,
 	routes *etcd.RouteRepository,
 	entries *etcd.EntryRepository,
-	values *etcd.EntryValueGenerationRepository,
+	values *entryvalues.Repository,
 	attaches *etcd.AttachRepository,
 	components *etcd.ComponentRepository,
 	scripts *etcd.ScriptRepository,

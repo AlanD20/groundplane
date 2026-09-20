@@ -9,6 +9,7 @@ import (
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
 	"time"
@@ -116,7 +117,7 @@ func (service *CreationService) backingCreationEntries(
 			generation.Secret = &encrypted
 		} else {
 			digest := sha256.Sum256(value)
-			generation.Plain = &etcd.PlainEntryValueGeneration{
+			generation.Plain = &entryvalues.PlainGeneration{
 				EnvironmentID: environmentID, EntryID: entryID, GenerationID: generationID,
 				Content: append([]byte(nil), value...), PlaintextSHA256: hex.EncodeToString(digest[:]), CreatedAt: createdAt,
 			}
@@ -177,14 +178,14 @@ func sealBackingEntry(
 	environmentID, entryID, generationID string,
 	value []byte,
 	createdAt time.Time,
-) (etcd.SecretEntryValueGeneration, error) {
+) (entryvalues.SecretGeneration, error) {
 	envelope, err := protector.Seal(ctx, value)
 	if err != nil {
-		return etcd.SecretEntryValueGeneration{}, err
+		return entryvalues.SecretGeneration{}, err
 	}
 	defer envelope.Clear()
 	metadata := envelope.Metadata()
-	return etcd.SecretEntryValueGeneration{
+	return entryvalues.SecretGeneration{
 		EnvironmentID: environmentID, EntryID: entryID, GenerationID: generationID,
 		EnvelopeVersion: uint8(metadata.Version), Cipher: string(metadata.Cipher),
 		DigestAlgorithm: string(metadata.Digest.Algorithm), CiphertextSHA256: metadata.Digest.Value,

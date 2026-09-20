@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -19,8 +20,8 @@ const blueprintEntryEnvironmentPrefix = "/v1/indexes/entries/blueprint-environme
 
 // EntryValueGeneration is the closed atomic value input for an Entry mutation.
 type EntryValueGeneration struct {
-	Plain  *PlainEntryValueGeneration
-	Secret *SecretEntryValueGeneration
+	Plain  *entryvalues.PlainGeneration
+	Secret *entryvalues.SecretGeneration
 }
 
 type EntryRepository struct {
@@ -482,16 +483,16 @@ func prepareEntryGeneration(
 			!bytes.Equal(generation.Plain.Content, []byte(record.Entry.Source.Literal)) {
 			return "", nil, errs.New(errs.KindValidationFailed, "Entry plain literal does not match its generation")
 		}
-		value, err := encodePlainEntryValueGeneration(*generation.Plain)
-		return plainEntryValueGenerationKey(record.Entry.ID, record.CurrentValueGenerationID), value, err
+		value, err := entryvalues.EncodePlain(*generation.Plain)
+		return entryvalues.PlainKey(record.Entry.ID, record.CurrentValueGenerationID), value, err
 	}
 	if !record.Entry.Secret || generation.Secret.EnvironmentID != record.EnvironmentID ||
 		generation.Secret.EntryID != record.Entry.ID ||
 		generation.Secret.GenerationID != record.CurrentValueGenerationID {
 		return "", nil, errs.New(errs.KindValidationFailed, "Entry secret value generation does not match metadata")
 	}
-	value, err := encodeSecretEntryValueGeneration(*generation.Secret)
-	return secretEntryValueGenerationKey(record.Entry.ID, record.CurrentValueGenerationID), value, err
+	value, err := entryvalues.EncodeSecret(*generation.Secret)
+	return entryvalues.SecretKey(record.Entry.ID, record.CurrentValueGenerationID), value, err
 }
 
 func (repository *EntryRepository) loadEntryMutationFence(

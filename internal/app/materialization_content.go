@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -14,7 +15,7 @@ import (
 func initializeTaskMaterializationResolver(
 	store etcdstore.Store,
 	blueprints *etcd.HierarchyRepository,
-	values *etcd.EntryValueGenerationRepository,
+	values *entryvalues.Repository,
 	secrets *etcd.SecretRepository,
 	plans *taskplanning.TaskPlanResolver,
 	protector *secretvalue.Protector,

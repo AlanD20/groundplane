@@ -1,4 +1,4 @@
-package etcd
+package entryvalues
 
 import (
 	"bytes"
@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	entryPlainValueGenerationPrefix  = "/v1/entry-values/plain/"
-	entrySecretValueGenerationPrefix = "/v1/secret-values/entries/"
+	PlainPrefix  = "/v1/entry-values/plain/"
+	SecretPrefix = "/v1/secret-values/entries/"
 )
 
-type PlainEntryValueGeneration struct {
+type PlainGeneration struct {
 	EnvironmentID   string
 	EntryID         string
 	GenerationID    string
@@ -28,9 +28,9 @@ type PlainEntryValueGeneration struct {
 	CreatedAt       time.Time
 }
 
-// SecretEntryValueGeneration contains only Controller-key envelope data.
+// SecretGeneration contains only Controller-key envelope data.
 // Plaintext length and digest remain in the authenticated execution plan.
-type SecretEntryValueGeneration struct {
+type SecretGeneration struct {
 	EnvironmentID    string
 	EntryID          string
 	GenerationID     string
@@ -68,26 +68,26 @@ type entryValueGenerationStore interface {
 	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
-type EntryValueGenerationRepository struct {
+type Repository struct {
 	store entryValueGenerationStore
 }
 
-func NewEntryValueGenerationRepository(store etcdstore.Store) (*EntryValueGenerationRepository, error) {
+func New(store etcdstore.Store) (*Repository, error) {
 	return newEntryValueGenerationRepository(store)
 }
 
 func newEntryValueGenerationRepository(
 	store entryValueGenerationStore,
-) (*EntryValueGenerationRepository, error) {
+) (*Repository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "Entry value generation store is required")
 	}
-	return &EntryValueGenerationRepository{store: store}, nil
+	return &Repository{store: store}, nil
 }
 
-func (repository *EntryValueGenerationRepository) CreatePlain(
+func (repository *Repository) CreatePlain(
 	ctx context.Context,
-	record PlainEntryValueGeneration,
+	record PlainGeneration,
 ) error {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
@@ -95,12 +95,12 @@ func (repository *EntryValueGenerationRepository) CreatePlain(
 	if repository == nil || repository.store == nil {
 		return errs.New(errs.KindInternal, "Entry value generation repository is not configured")
 	}
-	encoded, err := encodePlainEntryValueGeneration(record)
+	encoded, err := EncodePlain(record)
 	if err != nil {
 		return err
 	}
 	defer clear(encoded)
-	key := plainEntryValueGenerationKey(record.EntryID, record.GenerationID)
+	key := PlainKey(record.EntryID, record.GenerationID)
 	result, err := repository.store.Transact(
 		ctx,
 		[]etcdstore.Condition{{Key: key, ModRevision: 0}},
@@ -123,9 +123,9 @@ func (repository *EntryValueGenerationRepository) CreatePlain(
 	return errs.New(errs.KindStateConflict, "Entry plain value generation id is already occupied")
 }
 
-func (repository *EntryValueGenerationRepository) CreateSecret(
+func (repository *Repository) CreateSecret(
 	ctx context.Context,
-	record SecretEntryValueGeneration,
+	record SecretGeneration,
 ) error {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
@@ -133,12 +133,12 @@ func (repository *EntryValueGenerationRepository) CreateSecret(
 	if repository == nil || repository.store == nil {
 		return errs.New(errs.KindInternal, "Entry value generation repository is not configured")
 	}
-	encoded, err := encodeSecretEntryValueGeneration(record)
+	encoded, err := EncodeSecret(record)
 	if err != nil {
 		return err
 	}
 	defer clear(encoded)
-	key := secretEntryValueGenerationKey(record.EntryID, record.GenerationID)
+	key := SecretKey(record.EntryID, record.GenerationID)
 	result, err := repository.store.Transact(
 		ctx,
 		[]etcdstore.Condition{{Key: key, ModRevision: 0}},
@@ -161,91 +161,91 @@ func (repository *EntryValueGenerationRepository) CreateSecret(
 	return errs.New(errs.KindStateConflict, "Entry secret value generation id is already occupied")
 }
 
-func (repository *EntryValueGenerationRepository) GetPlain(
+func (repository *Repository) GetPlain(
 	ctx context.Context,
 	entryID string,
 	generationID string,
-) (PlainEntryValueGeneration, bool, error) {
+) (PlainGeneration, bool, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return PlainEntryValueGeneration{}, false, err
+		return PlainGeneration{}, false, err
 	}
 	if repository == nil || repository.store == nil {
-		return PlainEntryValueGeneration{}, false, errs.New(
+		return PlainGeneration{}, false, errs.New(
 			errs.KindInternal,
 			"Entry value generation repository is not configured",
 		)
 	}
 	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil || recordcodec.ValidateID(ids.KindConfig, generationID) != nil {
-		return PlainEntryValueGeneration{}, false, errs.New(
+		return PlainGeneration{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Entry plain value generation identity is invalid",
 		)
 	}
-	result, err := repository.store.Get(ctx, plainEntryValueGenerationKey(entryID, generationID))
+	result, err := repository.store.Get(ctx, PlainKey(entryID, generationID))
 	if err != nil {
-		return PlainEntryValueGeneration{}, false, err
+		return PlainGeneration{}, false, err
 	}
 	if result == nil {
-		return PlainEntryValueGeneration{}, false, errs.New(errs.KindInternal, "Entry value generation read is empty")
+		return PlainGeneration{}, false, errs.New(errs.KindInternal, "Entry value generation read is empty")
 	}
 	if result.Entry == nil {
-		return PlainEntryValueGeneration{}, false, nil
+		return PlainGeneration{}, false, nil
 	}
-	record, err := decodePlainEntryValueGeneration(result.Entry.Value)
+	record, err := DecodePlain(result.Entry.Value)
 	if err != nil || record.EntryID != entryID || record.GenerationID != generationID {
 		clear(record.Content)
-		return PlainEntryValueGeneration{}, false, corruptEntryValueGeneration()
+		return PlainGeneration{}, false, corruptEntryValueGeneration()
 	}
 	return record, true, nil
 }
 
-func (repository *EntryValueGenerationRepository) GetSecret(
+func (repository *Repository) GetSecret(
 	ctx context.Context,
 	entryID string,
 	generationID string,
-) (SecretEntryValueGeneration, bool, error) {
+) (SecretGeneration, bool, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return SecretEntryValueGeneration{}, false, err
+		return SecretGeneration{}, false, err
 	}
 	if repository == nil || repository.store == nil {
-		return SecretEntryValueGeneration{}, false, errs.New(
+		return SecretGeneration{}, false, errs.New(
 			errs.KindInternal,
 			"Entry value generation repository is not configured",
 		)
 	}
 	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil || recordcodec.ValidateID(ids.KindConfig, generationID) != nil {
-		return SecretEntryValueGeneration{}, false, errs.New(
+		return SecretGeneration{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Entry secret value generation identity is invalid",
 		)
 	}
-	result, err := repository.store.Get(ctx, secretEntryValueGenerationKey(entryID, generationID))
+	result, err := repository.store.Get(ctx, SecretKey(entryID, generationID))
 	if err != nil {
-		return SecretEntryValueGeneration{}, false, err
+		return SecretGeneration{}, false, err
 	}
 	if result == nil {
-		return SecretEntryValueGeneration{}, false, errs.New(errs.KindInternal, "Entry value generation read is empty")
+		return SecretGeneration{}, false, errs.New(errs.KindInternal, "Entry value generation read is empty")
 	}
 	if result.Entry == nil {
-		return SecretEntryValueGeneration{}, false, nil
+		return SecretGeneration{}, false, nil
 	}
-	record, err := decodeSecretEntryValueGeneration(result.Entry.Value)
+	record, err := DecodeSecret(result.Entry.Value)
 	if err != nil || record.EntryID != entryID || record.GenerationID != generationID {
 		clear(record.Ciphertext)
-		return SecretEntryValueGeneration{}, false, corruptEntryValueGeneration()
+		return SecretGeneration{}, false, corruptEntryValueGeneration()
 	}
 	return record, true, nil
 }
 
-func plainEntryValueGenerationKey(entryID string, generationID string) string {
-	return entryPlainValueGenerationPrefix + entryID + "/" + generationID
+func PlainKey(entryID string, generationID string) string {
+	return PlainPrefix + entryID + "/" + generationID
 }
 
-func secretEntryValueGenerationKey(entryID string, generationID string) string {
-	return entrySecretValueGenerationPrefix + entryID + "/" + generationID
+func SecretKey(entryID string, generationID string) string {
+	return SecretPrefix + entryID + "/" + generationID
 }
 
-func encodePlainEntryValueGeneration(record PlainEntryValueGeneration) ([]byte, error) {
+func EncodePlain(record PlainGeneration) ([]byte, error) {
 	if err := validatePlainEntryValueGeneration(record); err != nil {
 		return nil, err
 	}
@@ -256,28 +256,28 @@ func encodePlainEntryValueGeneration(record PlainEntryValueGeneration) ([]byte, 
 	})
 }
 
-func decodePlainEntryValueGeneration(value []byte) (PlainEntryValueGeneration, error) {
+func DecodePlain(value []byte) (PlainGeneration, error) {
 	data, err := recordcodec.Decode[plainEntryValueGenerationData](value, "entry_plain_value_generation")
 	if err != nil {
-		return PlainEntryValueGeneration{}, err
+		return PlainGeneration{}, err
 	}
 	createdAt, err := recordcodec.ParseCanonicalTimestamp(data.CreatedAt)
 	if err != nil {
 		clear(data.Content)
-		return PlainEntryValueGeneration{}, corruptEntryValueGeneration()
+		return PlainGeneration{}, corruptEntryValueGeneration()
 	}
-	record := PlainEntryValueGeneration{
+	record := PlainGeneration{
 		EnvironmentID: data.EnvironmentID, EntryID: data.EntryID, GenerationID: data.GenerationID,
 		Content: data.Content, PlaintextSHA256: data.PlaintextSHA256, CreatedAt: createdAt,
 	}
 	if err := validatePlainEntryValueGeneration(record); err != nil {
 		clear(record.Content)
-		return PlainEntryValueGeneration{}, corruptEntryValueGeneration()
+		return PlainGeneration{}, corruptEntryValueGeneration()
 	}
 	return record, nil
 }
 
-func encodeSecretEntryValueGeneration(record SecretEntryValueGeneration) ([]byte, error) {
+func EncodeSecret(record SecretGeneration) ([]byte, error) {
 	if err := validateSecretEntryValueGeneration(record); err != nil {
 		return nil, err
 	}
@@ -289,29 +289,29 @@ func encodeSecretEntryValueGeneration(record SecretEntryValueGeneration) ([]byte
 	})
 }
 
-func decodeSecretEntryValueGeneration(value []byte) (SecretEntryValueGeneration, error) {
+func DecodeSecret(value []byte) (SecretGeneration, error) {
 	data, err := recordcodec.Decode[secretEntryValueGenerationData](value, "entry_secret_value_generation")
 	if err != nil {
-		return SecretEntryValueGeneration{}, err
+		return SecretGeneration{}, err
 	}
 	createdAt, err := recordcodec.ParseCanonicalTimestamp(data.CreatedAt)
 	if err != nil {
 		clear(data.Ciphertext)
-		return SecretEntryValueGeneration{}, corruptEntryValueGeneration()
+		return SecretGeneration{}, corruptEntryValueGeneration()
 	}
-	record := SecretEntryValueGeneration{
+	record := SecretGeneration{
 		EnvironmentID: data.EnvironmentID, EntryID: data.EntryID, GenerationID: data.GenerationID,
 		EnvelopeVersion: data.EnvelopeVersion, Cipher: data.Cipher, DigestAlgorithm: data.DigestAlgorithm,
 		CiphertextSHA256: data.CiphertextSHA256, Ciphertext: data.Ciphertext, CreatedAt: createdAt,
 	}
 	if err := validateSecretEntryValueGeneration(record); err != nil {
 		clear(record.Ciphertext)
-		return SecretEntryValueGeneration{}, corruptEntryValueGeneration()
+		return SecretGeneration{}, corruptEntryValueGeneration()
 	}
 	return record, nil
 }
 
-func validatePlainEntryValueGeneration(record PlainEntryValueGeneration) error {
+func validatePlainEntryValueGeneration(record PlainGeneration) error {
 	if err := validateEntryValueGenerationIdentity(
 		record.EnvironmentID,
 		record.EntryID,
@@ -331,7 +331,7 @@ func validatePlainEntryValueGeneration(record PlainEntryValueGeneration) error {
 	return nil
 }
 
-func validateSecretEntryValueGeneration(record SecretEntryValueGeneration) error {
+func validateSecretEntryValueGeneration(record SecretGeneration) error {
 	if err := validateEntryValueGenerationIdentity(
 		record.EnvironmentID,
 		record.EntryID,
@@ -367,13 +367,13 @@ func validateEntryValueGenerationIdentity(
 	return recordcodec.ValidateTimestamp("Entry value generation created_at", createdAt)
 }
 
-func equalPlainEntryValueGeneration(left PlainEntryValueGeneration, right PlainEntryValueGeneration) bool {
+func equalPlainEntryValueGeneration(left PlainGeneration, right PlainGeneration) bool {
 	return left.EnvironmentID == right.EnvironmentID && left.EntryID == right.EntryID &&
 		left.GenerationID == right.GenerationID && left.PlaintextSHA256 == right.PlaintextSHA256 &&
 		left.CreatedAt.Equal(right.CreatedAt) && bytes.Equal(left.Content, right.Content)
 }
 
-func equalSecretEntryValueGeneration(left SecretEntryValueGeneration, right SecretEntryValueGeneration) bool {
+func equalSecretEntryValueGeneration(left SecretGeneration, right SecretGeneration) bool {
 	return left.EnvironmentID == right.EnvironmentID && left.EntryID == right.EntryID &&
 		left.GenerationID == right.GenerationID && left.EnvelopeVersion == right.EnvelopeVersion &&
 		left.Cipher == right.Cipher && left.DigestAlgorithm == right.DigestAlgorithm &&

@@ -4,6 +4,7 @@ import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -525,9 +526,9 @@ func backingServiceCreationConditions(
 		)
 	}
 	for index, entry := range creation.Entries {
-		generationKey := secretEntryValueGenerationKey(entry.Entry.ID, entry.CurrentValueGenerationID)
+		generationKey := entryvalues.SecretKey(entry.Entry.ID, entry.CurrentValueGenerationID)
 		if creation.EntryValues[index].Plain != nil {
-			generationKey = plainEntryValueGenerationKey(entry.Entry.ID, entry.CurrentValueGenerationID)
+			generationKey = entryvalues.PlainKey(entry.Entry.ID, entry.CurrentValueGenerationID)
 		}
 		conditions = append(conditions,
 			etcdstore.Condition{Key: entryrecord.RecordKey(entry.Entry.ID)},

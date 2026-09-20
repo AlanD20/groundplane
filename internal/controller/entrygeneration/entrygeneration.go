@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -110,7 +111,7 @@ func (service *EntryGenerationService) Generate(
 		}
 		if !entry.Secret {
 			digest := sha256.Sum256(value)
-			generation.Plain = &etcd.PlainEntryValueGeneration{
+			generation.Plain = &entryvalues.PlainGeneration{
 				EnvironmentID:   environmentID,
 				EntryID:         entry.ID,
 				GenerationID:    generationID,
@@ -130,7 +131,7 @@ func (service *EntryGenerationService) Generate(
 			return errs.New(errs.KindValidationFailed, "Encrypted Entry generation exceeds the maximum size")
 		}
 		metadata := envelope.Metadata()
-		generation.Secret = &etcd.SecretEntryValueGeneration{
+		generation.Secret = &entryvalues.SecretGeneration{
 			EnvironmentID:    environmentID,
 			EntryID:          entry.ID,
 			GenerationID:     generationID,

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
@@ -62,11 +63,11 @@ func (repository *EntryRepository) DeleteEntry(
 		{Type: etcdstore.MutationDelete, Key: entryrecord.RecordKey(current.Record.Entry.ID)},
 		{Type: etcdstore.MutationDelete, Key: entryOwnerKey(current.Record.EnvironmentID, current.Record.Entry.ID)},
 		{
-			Type: etcdstore.MutationDelete, Key: entryPlainValueGenerationPrefix + current.Record.Entry.ID + "/",
+			Type: etcdstore.MutationDelete, Key: entryvalues.PlainPrefix + current.Record.Entry.ID + "/",
 			Prefix: true,
 		},
 		{
-			Type: etcdstore.MutationDelete, Key: entrySecretValueGenerationPrefix + current.Record.Entry.ID + "/",
+			Type: etcdstore.MutationDelete, Key: entryvalues.SecretPrefix + current.Record.Entry.ID + "/",
 			Prefix: true,
 		},
 		epochMutation,
