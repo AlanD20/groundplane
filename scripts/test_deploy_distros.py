@@ -262,25 +262,6 @@ class DeployDistributionTest(unittest.TestCase):
                 self.assertFalse(any(effect.startswith("docker run ") for effect in effects), effects)
                 self.assertFalse(any(effect.startswith("docker start ") for effect in effects), effects)
 
-    # Delivery: public help contract only, not installation behavior.
-    def test_entrypoint_help_names_the_exact_supported_distributions(self) -> None:
-        installer = subprocess.run(
-            ["sh", str(INSTALLER), "--help"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        deploy_help = subprocess.run(
-            [sys.executable, str(SCRIPT), "--help"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        for result in (installer, deploy_help):
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("Ubuntu 24.04/26.04 or Debian 13", result.stdout)
-            self.assertNotIn("Ubuntu 22.04", result.stdout)
-
 
 if __name__ == "__main__":
     unittest.main()

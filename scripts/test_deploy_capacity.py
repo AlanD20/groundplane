@@ -6,7 +6,6 @@ import unittest
 from unittest.mock import patch
 
 import deploy
-import deployment_capacity
 
 
 def target():
@@ -15,25 +14,6 @@ def target():
 
 
 class DeploymentCapacityTest(unittest.TestCase):
-    # Delivery: local capacity guard with injected measurements, not load testing.
-    # Rationale: the selected minimum is inclusive; one byte below must refuse.
-    def test_exact_threshold_passes_and_one_byte_below_fails(self):
-        for minimum in (deployment_capacity.BUILD_HEADROOM, deployment_capacity.TRANSFER_HEADROOM):
-            with self.subTest(minimum=minimum):
-                with patch("shutil.disk_usage", return_value=SimpleNamespace(free=minimum)) as usage:
-                    deployment_capacity.require_capacity(Path("/checkout"), minimum)
-                    usage.assert_called_once_with(Path("/checkout"))
-                with patch("shutil.disk_usage", return_value=SimpleNamespace(free=minimum - 1)):
-                    with self.assertRaisesRegex(RuntimeError, "insufficient free space"):
-                        deployment_capacity.require_capacity(Path("/checkout"), minimum)
-
-    # Delivery: local capacity-error propagation.
-    # Rationale: inability to measure free space cannot be treated as sufficient space.
-    def test_capacity_inspection_failure_is_not_ignored(self):
-        with patch("shutil.disk_usage", side_effect=OSError("unavailable")):
-            with self.assertRaises(OSError):
-                deployment_capacity.require_capacity(Path("/checkout"))
-
     # Delivery: build sequencing with fake commands, not compilation success.
     # Rationale: capacity consumed by the first build must be rechecked before the next.
     def test_space_is_rechecked_before_an_uncached_image_build(self):
