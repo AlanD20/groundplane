@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"math"
 
 	ref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
@@ -81,7 +82,7 @@ func (adapter *scriptSourceReferenceStore) AdjustScriptPrimary(
 		record.ScriptSetGeneration != source.ScriptSetGeneration || record.Desired.ID != source.ScriptID {
 		return nil, errs.New(errs.KindInternal, "Script source primary is corrupt")
 	}
-	stored, err := decodeEnvelope[storedScriptRecord](value, "script")
+	stored, err := recordcodec.Decode[storedScriptRecord](value, "script")
 	if err != nil || stored.ActiveReferences != record.ActiveReferences {
 		return nil, errs.New(errs.KindInternal, "Script source primary is corrupt")
 	}
@@ -97,7 +98,7 @@ func (adapter *scriptSourceReferenceStore) AdjustScriptPrimary(
 		}
 		stored.ActiveReferences -= decrement
 	}
-	return encodeEnvelope("script", stored)
+	return recordcodec.Encode("script", stored)
 }
 
 func convertScriptSourceConditions(input []ref.Condition) []etcdstore.Condition {

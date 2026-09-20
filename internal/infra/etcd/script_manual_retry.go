@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -108,7 +109,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 	if err := validateScriptExecutionRecord(execution); err != nil {
 		return scriptTaskChange{}, err
 	}
-	encoded, err := encodeEnvelope("script-execution", execution)
+	encoded, err := recordcodec.Encode("script-execution", execution)
 	if err != nil {
 		return scriptTaskChange{}, err
 	}

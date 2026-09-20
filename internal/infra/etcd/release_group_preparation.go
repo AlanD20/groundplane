@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -121,7 +122,7 @@ func (repository *TaskRepository) PrepareReleaseGroupRemove(
 }
 
 func encodeReleaseGroup(group domain.Group) ([]byte, error) {
-	return encodeEnvelope("release_group", releaseGroupStoredRecord{
+	return recordcodec.Encode("release_group", releaseGroupStoredRecord{
 		ID: group.ID, EnvironmentID: group.EnvironmentID, Name: group.Name,
 		ServiceIDs: group.ServiceIDs, Order: group.Order,
 		DefaultTag: group.DefaultTag, OnFailure: group.OnFailure,

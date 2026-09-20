@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -270,10 +271,10 @@ func encodeComponentObservation(record ComponentObservationRecord) ([]byte, erro
 	if err := validateComponentObservation(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("component_observation", record)
+	return recordcodec.Encode("component_observation", record)
 }
 func decodeComponentObservation(value []byte) (ComponentObservationRecord, error) {
-	record, err := decodeEnvelope[ComponentObservationRecord](value, "component_observation")
+	record, err := recordcodec.Decode[ComponentObservationRecord](value, "component_observation")
 	if err != nil || validateComponentObservation(record) != nil {
 		return ComponentObservationRecord{}, errs.New(errs.KindInternal, "Component observation is corrupt")
 	}

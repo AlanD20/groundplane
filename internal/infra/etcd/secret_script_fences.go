@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/infra/tasksecretpinrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -36,7 +37,7 @@ func classifySecretScriptReferences(secretID string, values []*etcdstore.KeyValu
 			count.ReferencedExecutionCount == 0 {
 			return errs.New(errs.KindInternal, "Secret Script reference count is corrupt")
 		}
-		reference, err := decodeEnvelope[ScriptSourceReference](
+		reference, err := recordcodec.Decode[ScriptSourceReference](
 			values[1].Value,
 			"script-source-reference",
 		)

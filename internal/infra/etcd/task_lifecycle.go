@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -95,13 +96,13 @@ func encodeTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
 }
 
 func decodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
-	if rejectDuplicateJSONFields(value) != nil {
+	if recordcodec.RejectDuplicateFields(value) != nil {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var data taskAssignmentJSON
-	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil || data.Schema != 3 {
+	if err := decoder.Decode(&data); err != nil || recordcodec.RequireEOF(decoder) != nil || data.Schema != 3 {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
 	}
 	assignedAt, err := parseCanonicalTimestamp(data.AssignedAt)

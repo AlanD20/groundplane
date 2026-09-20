@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -249,7 +250,7 @@ func encodePlainEntryValueGeneration(record PlainEntryValueGeneration) ([]byte, 
 	if err := validatePlainEntryValueGeneration(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("entry_plain_value_generation", plainEntryValueGenerationData{
+	return recordcodec.Encode("entry_plain_value_generation", plainEntryValueGenerationData{
 		EnvironmentID: record.EnvironmentID, EntryID: record.EntryID, GenerationID: record.GenerationID,
 		Content: append([]byte(nil), record.Content...), PlaintextSHA256: record.PlaintextSHA256,
 		CreatedAt: record.CreatedAt.Format(time.RFC3339Nano),
@@ -257,7 +258,7 @@ func encodePlainEntryValueGeneration(record PlainEntryValueGeneration) ([]byte, 
 }
 
 func decodePlainEntryValueGeneration(value []byte) (PlainEntryValueGeneration, error) {
-	data, err := decodeEnvelope[plainEntryValueGenerationData](value, "entry_plain_value_generation")
+	data, err := recordcodec.Decode[plainEntryValueGenerationData](value, "entry_plain_value_generation")
 	if err != nil {
 		return PlainEntryValueGeneration{}, err
 	}
@@ -281,7 +282,7 @@ func encodeSecretEntryValueGeneration(record SecretEntryValueGeneration) ([]byte
 	if err := validateSecretEntryValueGeneration(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("entry_secret_value_generation", secretEntryValueGenerationData{
+	return recordcodec.Encode("entry_secret_value_generation", secretEntryValueGenerationData{
 		EnvironmentID: record.EnvironmentID, EntryID: record.EntryID, GenerationID: record.GenerationID,
 		EnvelopeVersion: record.EnvelopeVersion, Cipher: record.Cipher,
 		DigestAlgorithm: record.DigestAlgorithm, CiphertextSHA256: record.CiphertextSHA256,
@@ -290,7 +291,7 @@ func encodeSecretEntryValueGeneration(record SecretEntryValueGeneration) ([]byte
 }
 
 func decodeSecretEntryValueGeneration(value []byte) (SecretEntryValueGeneration, error) {
-	data, err := decodeEnvelope[secretEntryValueGenerationData](value, "entry_secret_value_generation")
+	data, err := recordcodec.Decode[secretEntryValueGenerationData](value, "entry_secret_value_generation")
 	if err != nil {
 		return SecretEntryValueGeneration{}, err
 	}

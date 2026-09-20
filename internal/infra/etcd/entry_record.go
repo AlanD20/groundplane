@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -84,11 +85,11 @@ func encodeEntryRecord(record EntryRecord) ([]byte, error) {
 	if err := validateEntryRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("entry", record)
+	return recordcodec.Encode("entry", record)
 }
 
 func decodeEntryRecord(value []byte) (EntryRecord, error) {
-	record, err := decodeEnvelope[EntryRecord](value, "entry")
+	record, err := recordcodec.Decode[EntryRecord](value, "entry")
 	if err != nil || validateEntryRecord(record) != nil {
 		return EntryRecord{}, corruptEntryRecord()
 	}

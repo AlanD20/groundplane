@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strconv"
 	"strings"
 
@@ -198,11 +199,11 @@ func encodeScriptRecord(record ScriptRecord) ([]byte, error) {
 			Execution: record.Desired.Execution,
 		},
 	}
-	return encodeEnvelope("script", stored)
+	return recordcodec.Encode("script", stored)
 }
 
 func decodeScriptRecord(value []byte) (ScriptRecord, error) {
-	stored, err := decodeEnvelope[storedScriptRecord](value, "script")
+	stored, err := recordcodec.Decode[storedScriptRecord](value, "script")
 	if err != nil {
 		return ScriptRecord{}, err
 	}
@@ -234,11 +235,11 @@ func encodeScriptSetGeneration(record ScriptSetGenerationRecord) ([]byte, error)
 	if err := validateScriptSetGeneration(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("script_set_generation", record)
+	return recordcodec.Encode("script_set_generation", record)
 }
 
 func decodeScriptSetGeneration(value []byte) (ScriptSetGenerationRecord, error) {
-	record, err := decodeEnvelope[ScriptSetGenerationRecord](value, "script_set_generation")
+	record, err := recordcodec.Decode[ScriptSetGenerationRecord](value, "script_set_generation")
 	if err != nil || validateScriptSetGeneration(record) != nil {
 		return ScriptSetGenerationRecord{}, corruptRecord()
 	}
@@ -250,11 +251,11 @@ func encodeScriptLocator(record scriptLocatorRecord) ([]byte, error) {
 		validateID(ids.KindEnvironment, record.EnvironmentID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "Script locator is invalid")
 	}
-	return encodeEnvelope("script_locator", record)
+	return recordcodec.Encode("script_locator", record)
 }
 
 func decodeScriptLocator(value []byte) (scriptLocatorRecord, error) {
-	record, err := decodeEnvelope[scriptLocatorRecord](value, "script_locator")
+	record, err := recordcodec.Decode[scriptLocatorRecord](value, "script_locator")
 	if err != nil || validateID(ids.KindScript, record.ScriptID) != nil ||
 		validateID(ids.KindEnvironment, record.EnvironmentID) != nil {
 		return scriptLocatorRecord{}, corruptRecord()
@@ -402,11 +403,11 @@ func encodeScriptBodyGeneration(generation ScriptBodyGenerationRecord) ([]byte, 
 	if err := validateScriptBodyGeneration(generation); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("script_body_generation", generation)
+	return recordcodec.Encode("script_body_generation", generation)
 }
 
 func decodeScriptBodyGeneration(value []byte) (ScriptBodyGenerationRecord, error) {
-	generation, err := decodeEnvelope[ScriptBodyGenerationRecord](value, "script_body_generation")
+	generation, err := recordcodec.Decode[ScriptBodyGenerationRecord](value, "script_body_generation")
 	if err != nil {
 		return ScriptBodyGenerationRecord{}, err
 	}

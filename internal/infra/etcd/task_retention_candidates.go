@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 )
 
@@ -85,7 +86,7 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 	if err != nil {
 		return false, err
 	}
-	execution, err := decodeEnvelope[ScriptExecutionRecord](sources.Values[1].Value, "script-execution")
+	execution, err := recordcodec.Decode[ScriptExecutionRecord](sources.Values[1].Value, "script-execution")
 	if err != nil || validateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
 		!manualScriptRootMatches(
 			execution,

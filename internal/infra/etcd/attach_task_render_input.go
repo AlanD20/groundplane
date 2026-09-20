@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -95,7 +96,7 @@ func encodeAttachTaskRenderInput(input AttachTaskRenderInput) ([]byte, error) {
 	if err := validateAttachTaskRenderInput(input); err != nil {
 		return nil, err
 	}
-	value, err := encodeEnvelope("attach-task-render-input", input)
+	value, err := recordcodec.Encode("attach-task-render-input", input)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +108,7 @@ func encodeAttachTaskRenderInput(input AttachTaskRenderInput) ([]byte, error) {
 }
 
 func decodeAttachTaskRenderInput(value []byte) (AttachTaskRenderInput, error) {
-	input, err := decodeEnvelope[AttachTaskRenderInput](value, "attach-task-render-input")
+	input, err := recordcodec.Decode[AttachTaskRenderInput](value, "attach-task-render-input")
 	if err != nil {
 		return AttachTaskRenderInput{}, err
 	}

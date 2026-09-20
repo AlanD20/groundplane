@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -26,14 +27,14 @@ func encodeReleaseGroupCollectionEpoch(environmentID string) ([]byte, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
 		return nil, errs.New(errs.KindInternal, "release group collection epoch scope is invalid")
 	}
-	return encodeEnvelope(
+	return recordcodec.Encode(
 		"release-group-collection-epoch",
 		releaseGroupCollectionEpochRecord{EnvironmentID: environmentID},
 	)
 }
 
 func validateReleaseGroupCollectionEpoch(value []byte, environmentID string) error {
-	record, err := decodeEnvelope[releaseGroupCollectionEpochRecord](
+	record, err := recordcodec.Decode[releaseGroupCollectionEpochRecord](
 		value,
 		"release-group-collection-epoch",
 	)

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"reflect"
 	"sort"
 	"time"
@@ -287,7 +288,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 			return ComponentTaskPreparation{}, corruptComponentAddressRegistry()
 		}
 		if registryValue != nil {
-			decoded, decodeErr := decodeEnvelope[componentAddressRegistry](
+			decoded, decodeErr := recordcodec.Decode[componentAddressRegistry](
 				registryValue.Value,
 				"component_address_registry",
 			)

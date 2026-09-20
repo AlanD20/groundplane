@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/http"
 	"sort"
 	"strings"
@@ -62,7 +63,7 @@ func (repository *RunnerRepository) EnsureRunnerNetworkPool(
 	registry := runnerallocation.SystemPoolRegistry{
 		RunnerNetworkPool: config.RunnerPool.String(), Reservations: map[string]string{},
 	}
-	value, err := encodeEnvelope("system_pool_registry", registry)
+	value, err := recordcodec.Encode("system_pool_registry", registry)
 	if err != nil {
 		return err
 	}
@@ -469,7 +470,7 @@ func encodeRunnerCreateValues(
 		result.clear()
 		return runnerCreateValues{}, err
 	}
-	result.quota, err = encodeEnvelope("runner_tenant_quota", quota)
+	result.quota, err = recordcodec.Encode("runner_tenant_quota", quota)
 	if err != nil {
 		result.clear()
 		return runnerCreateValues{}, err
@@ -479,7 +480,7 @@ func encodeRunnerCreateValues(
 		result.clear()
 		return runnerCreateValues{}, err
 	}
-	result.system, err = encodeEnvelope("system_pool_registry", system)
+	result.system, err = recordcodec.Encode("system_pool_registry", system)
 	if err != nil {
 		result.clear()
 		return runnerCreateValues{}, err

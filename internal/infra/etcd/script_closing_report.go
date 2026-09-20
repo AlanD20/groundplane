@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -96,7 +97,7 @@ func (repository *TaskRepository) readScriptClosingReport(
 	if value == nil {
 		return scriptClosingReport{}, nil, nil
 	}
-	report, err := decodeEnvelope[scriptClosingReport](value.Value, scriptClosingReportEnvelope(current.Task.Record))
+	report, err := recordcodec.Decode[scriptClosingReport](value.Value, scriptClosingReportEnvelope(current.Task.Record))
 	if err != nil {
 		return scriptClosingReport{}, nil, err
 	}
@@ -146,7 +147,7 @@ func (repository *TaskRepository) prepareScriptClosingReport(
 	if err := report.validate(current); err != nil {
 		return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, err
 	}
-	encoded, err := encodeEnvelope(scriptClosingReportEnvelope(task), report)
+	encoded, err := recordcodec.Encode(scriptClosingReportEnvelope(task), report)
 	return report, etcdstore.Condition{Key: key}, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded}, err
 }
 

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -86,7 +87,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(environmentValue)
-	poolRegistryValue, err := encodeEnvelope("environment_pool_registry", poolRegistry.Record)
+	poolRegistryValue, err := recordcodec.Encode("environment_pool_registry", poolRegistry.Record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

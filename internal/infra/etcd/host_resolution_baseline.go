@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -69,7 +70,7 @@ func (repository *ComponentRepository) EnsureHostResolverBaseline(
 	if err := validateHostResolverBaseline(record); err != nil {
 		return Versioned[HostResolverBaselineRecord]{}, err
 	}
-	encoded, err := encodeEnvelope("host_resolver_baseline", record)
+	encoded, err := recordcodec.Encode("host_resolver_baseline", record)
 	if err != nil {
 		return Versioned[HostResolverBaselineRecord]{}, err
 	}
@@ -115,7 +116,7 @@ func validateHostResolverBaseline(record HostResolverBaselineRecord) error {
 }
 
 func decodeHostResolverBaseline(value []byte) (HostResolverBaselineRecord, error) {
-	record, err := decodeEnvelope[HostResolverBaselineRecord](value, "host_resolver_baseline")
+	record, err := recordcodec.Decode[HostResolverBaselineRecord](value, "host_resolver_baseline")
 	if err != nil || validateHostResolverBaseline(record) != nil {
 		return HostResolverBaselineRecord{}, errs.New(errs.KindInternal, "host resolver baseline is corrupt")
 	}

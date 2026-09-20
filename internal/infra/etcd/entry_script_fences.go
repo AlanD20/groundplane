@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -29,7 +30,7 @@ func classifyEntryScriptReferences(entryID string, values []*etcdstore.KeyValue)
 		values[0].Key != scriptSourceCountKey(count.Source) || count.ReferencedExecutionCount == 0 {
 		return errs.New(errs.KindInternal, "Entry Script reference count is corrupt")
 	}
-	reference, err := decodeEnvelope[ScriptSourceReference](values[1].Value, "script-source-reference")
+	reference, err := recordcodec.Decode[ScriptSourceReference](values[1].Value, "script-source-reference")
 	if err != nil || reference.Source != count.Source || scriptSourceForwardReferenceKey(reference) != values[1].Key {
 		return errs.New(errs.KindInternal, "Entry Script source membership is corrupt")
 	}

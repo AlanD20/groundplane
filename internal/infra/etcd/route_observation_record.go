@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -68,11 +69,11 @@ func encodeRouteObservation(record RouteObservationRecord) ([]byte, error) {
 	if err := validateRouteObservationRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("route_observation", record)
+	return recordcodec.Encode("route_observation", record)
 }
 
 func decodeRouteObservation(value []byte) (RouteObservationRecord, error) {
-	record, err := decodeEnvelope[RouteObservationRecord](value, "route_observation")
+	record, err := recordcodec.Decode[RouteObservationRecord](value, "route_observation")
 	if err != nil {
 		return RouteObservationRecord{}, err
 	}

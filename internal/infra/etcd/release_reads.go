@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"strings"
 
@@ -384,7 +385,7 @@ func (ledger *ReleaseLedger) readViewAt(
 }
 
 func decodeReleaseIndex(value []byte, serviceFilter string) (string, error) {
-	if rejectDuplicateJSONFields(value) != nil {
+	if recordcodec.RejectDuplicateFields(value) != nil {
 		return "", corruptReleaseRecord()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
@@ -392,7 +393,7 @@ func decodeReleaseIndex(value []byte, serviceFilter string) (string, error) {
 	publicationID := ""
 	if serviceFilter == "" {
 		var decoded releaseEnvironmentIndexValue
-		if decoder.Decode(&decoded) != nil || requireJSONEOF(decoder) != nil || decoded.Schema != 1 ||
+		if decoder.Decode(&decoded) != nil || recordcodec.RequireEOF(decoder) != nil || decoded.Schema != 1 ||
 			ids.Validate(
 				ids.KindService,
 				decoded.ServiceID,
@@ -402,7 +403,7 @@ func decodeReleaseIndex(value []byte, serviceFilter string) (string, error) {
 		publicationID = decoded.PublicationID
 	} else {
 		var decoded releaseServiceIndexValue
-		if decoder.Decode(&decoded) != nil || requireJSONEOF(decoder) != nil || decoded.Schema != 1 || validatePublicationID(decoded.PublicationID) != nil {
+		if decoder.Decode(&decoded) != nil || recordcodec.RequireEOF(decoder) != nil || decoded.Schema != 1 || validatePublicationID(decoded.PublicationID) != nil {
 			return "", corruptReleaseRecord()
 		}
 		publicationID = decoded.PublicationID
@@ -420,13 +421,13 @@ func encodeReleaseCursor(value releaseCursor) (string, error) {
 
 func decodeReleaseCursor(value string) (releaseCursor, error) {
 	decoded, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil || rejectDuplicateJSONFields(decoded) != nil {
+	if err != nil || recordcodec.RejectDuplicateFields(decoded) != nil {
 		return releaseCursor{}, errs.New(errs.KindMalformedRequest, "release cursor is invalid")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(decoded))
 	decoder.DisallowUnknownFields()
 	var cursor releaseCursor
-	if decoder.Decode(&cursor) != nil || requireJSONEOF(decoder) != nil || cursor.Schema != 1 || cursor.Revision <= 0 ||
+	if decoder.Decode(&cursor) != nil || recordcodec.RequireEOF(decoder) != nil || cursor.Schema != 1 || cursor.Revision <= 0 ||
 		ids.Validate(
 			ids.KindEnvironment,
 			cursor.EnvironmentID,

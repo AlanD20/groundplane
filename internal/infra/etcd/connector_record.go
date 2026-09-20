@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -73,11 +74,11 @@ func encodeConnectorRecord(record ConnectorRecord) ([]byte, error) {
 	if err := validateConnectorRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("connector", record)
+	return recordcodec.Encode("connector", record)
 }
 
 func decodeConnectorRecord(value []byte) (ConnectorRecord, error) {
-	record, err := decodeEnvelope[ConnectorRecord](value, "connector")
+	record, err := recordcodec.Decode[ConnectorRecord](value, "connector")
 	if err != nil || validateConnectorRecord(record) != nil {
 		return ConnectorRecord{}, corruptConnectorRecord()
 	}
@@ -100,11 +101,11 @@ func encodeConnectorEncryptedCredentials(value ConnectorEncryptedCredentials) ([
 	}
 	copyOfValue := value
 	copyOfValue.Ciphertext = append([]byte(nil), value.Ciphertext...)
-	return encodeEnvelope("connector_credentials", copyOfValue)
+	return recordcodec.Encode("connector_credentials", copyOfValue)
 }
 
 func decodeConnectorEncryptedCredentials(value []byte) (ConnectorEncryptedCredentials, error) {
-	record, err := decodeEnvelope[ConnectorEncryptedCredentials](value, "connector_credentials")
+	record, err := recordcodec.Decode[ConnectorEncryptedCredentials](value, "connector_credentials")
 	if err != nil || validateConnectorEncryptedCredentials(record) != nil {
 		clear(record.Ciphertext)
 		return ConnectorEncryptedCredentials{}, corruptConnectorRecord()

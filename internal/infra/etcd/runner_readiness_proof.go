@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -172,14 +173,14 @@ func encodeRunnerReadinessProof(record RunnerReadinessProofRecord) ([]byte, erro
 	if err := validateRunnerReadinessProof(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("runner_readiness_proof", record)
+	return recordcodec.Encode("runner_readiness_proof", record)
 }
 
 func decodeRunnerReadinessProof(value []byte) (RunnerReadinessProofRecord, error) {
 	if len(value) > maximumRunnerPersistenceBytes {
 		return RunnerReadinessProofRecord{}, errs.New(errs.KindInternal, "runner readiness proof is corrupt")
 	}
-	record, err := decodeEnvelope[RunnerReadinessProofRecord](value, "runner_readiness_proof")
+	record, err := recordcodec.Decode[RunnerReadinessProofRecord](value, "runner_readiness_proof")
 	if err != nil || validateRunnerReadinessProof(record) != nil {
 		return RunnerReadinessProofRecord{}, errs.New(errs.KindInternal, "runner readiness proof is corrupt")
 	}

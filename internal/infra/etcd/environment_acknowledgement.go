@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 	"time"
 
@@ -305,7 +306,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	if err != nil {
 		return nil, nil, err
 	}
-	poolRegistry, err := decodeEnvelope[EnvironmentPoolRegistry](
+	poolRegistry, err := recordcodec.Decode[EnvironmentPoolRegistry](
 		stored.Values[4].Value,
 		"environment_pool_registry",
 	)
@@ -404,7 +405,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentPoolRegistryKey},
 			)
 		} else {
-			poolRegistryValue, err := encodeEnvelope("environment_pool_registry", nextPoolRegistry)
+			poolRegistryValue, err := recordcodec.Encode("environment_pool_registry", nextPoolRegistry)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -563,7 +564,7 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 			return err
 		}
 		if stored.Values[4] != nil {
-			poolRegistry, err := decodeEnvelope[EnvironmentPoolRegistry](
+			poolRegistry, err := recordcodec.Decode[EnvironmentPoolRegistry](
 				stored.Values[4].Value,
 				"environment_pool_registry",
 			)
@@ -616,7 +617,7 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 	if stored.Values[4] == nil {
 		return errs.New(errs.KindStateConflict, "environment deletion lost its pool")
 	}
-	poolRegistry, err := decodeEnvelope[EnvironmentPoolRegistry](
+	poolRegistry, err := recordcodec.Decode[EnvironmentPoolRegistry](
 		stored.Values[4].Value,
 		"environment_pool_registry",
 	)

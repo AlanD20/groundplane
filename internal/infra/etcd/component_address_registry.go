@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -38,7 +39,7 @@ func getComponentAddressRegistry(
 			ReadRevision: result.ReadRevision,
 		}, nil
 	}
-	registry, err := decodeEnvelope[componentAddressRegistry](result.Entry.Value, "component_address_registry")
+	registry, err := recordcodec.Decode[componentAddressRegistry](result.Entry.Value, "component_address_registry")
 	if err != nil || validateComponentAddressRegistry(zone, registry) != nil {
 		return Versioned[componentAddressRegistry]{}, corruptComponentAddressRegistry()
 	}
@@ -177,7 +178,7 @@ func encodeComponentAddressRegistry(zone ZoneRecord, registry componentAddressRe
 	if err := validateComponentAddressRegistry(zone, registry); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("component_address_registry", registry)
+	return recordcodec.Encode("component_address_registry", registry)
 }
 
 func cloneComponentAddressRegistry(registry componentAddressRegistry) componentAddressRegistry {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -229,7 +230,7 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 		if encodeErr != nil {
 			return pendingScriptAbortChange{}, encodeErr
 		}
-		encoded, encodeErr := encodeEnvelope("script-execution", next)
+		encoded, encodeErr := recordcodec.Encode("script-execution", next)
 		if encodeErr != nil {
 			return pendingScriptAbortChange{}, encodeErr
 		}
@@ -257,7 +258,7 @@ func decodePendingScriptAbortExecutions(
 		if value == nil {
 			return nil, corruptReleaseRecord()
 		}
-		record, err := decodeEnvelope[ScriptExecutionRecord](value.Value, "script-execution")
+		record, err := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
 		if err != nil || validateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
 			record.StepID != steps[index].stepID || record.PlanHash != task.PlanHash {

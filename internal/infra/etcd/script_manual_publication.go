@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -125,7 +126,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	}
 	conditions = append(conditions, sourceConditions...)
 	conditions = append(conditions, fragment.conditions...)
-	executionValue, err := encodeEnvelope("script-execution", execution)
+	executionValue, err := recordcodec.Encode("script-execution", execution)
 	if err != nil {
 		return result, err
 	}
@@ -164,7 +165,7 @@ func (repository *ScriptRepository) prepareManualScriptSnapshot(
 	ctx context.Context,
 	execution ScriptExecutionRecord,
 ) (int64, error) {
-	value, err := encodeEnvelope("script-runner-snapshot", storedScriptRunnerSnapshot{
+	value, err := recordcodec.Encode("script-runner-snapshot", storedScriptRunnerSnapshot{
 		ExecutionID: execution.ID, SnapshotID: execution.SnapshotID, SHA256: execution.SnapshotSHA256, Payload: execution.Snapshot,
 	})
 	if err != nil {

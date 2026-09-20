@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"time"
 
@@ -185,7 +186,7 @@ func (repository *TaskRepository) blueprintCandidateAttemptAuthority(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
 		return blueprintCandidateAttemptAuthorityRecord{}, etcdstore.Condition{}, corruptReleaseRecord()
 	}
-	record, err := decodeEnvelope[blueprintCandidateAttemptAuthorityRecord](
+	record, err := recordcodec.Decode[blueprintCandidateAttemptAuthorityRecord](
 		read.Values[0].Value, "blueprint-candidate-attempt-authority",
 	)
 	if err != nil || validateBlueprintCandidateAttemptAuthorityRecord(record, task) != nil {
@@ -252,7 +253,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAuthority(
 	if validateBlueprintCandidateAttemptAuthorityRecord(authority, task) != nil {
 		return nil, nil, corruptReleaseRecord()
 	}
-	value, err := encodeEnvelope("blueprint-candidate-attempt-authority", authority)
+	value, err := recordcodec.Encode("blueprint-candidate-attempt-authority", authority)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -300,7 +301,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateClaimEpoch(
 			return etcdstore.Condition{}, etcdstore.Mutation{}, corruptReleaseRecord()
 		}
 	} else {
-		authority, decodeErr := decodeEnvelope[blueprintCandidateAttemptAuthorityRecord](
+		authority, decodeErr := recordcodec.Decode[blueprintCandidateAttemptAuthorityRecord](
 			read.Values[0].Value, "blueprint-candidate-attempt-authority",
 		)
 		if decodeErr != nil || validateBlueprintCandidateAttemptAuthorityRecord(authority, task) != nil {

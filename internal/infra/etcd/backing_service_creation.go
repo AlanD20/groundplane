@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -109,12 +110,12 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(scriptSetValue)
-	poolRegistryValue, err := encodeEnvelope("environment_pool_registry", creation.PoolRegistry.Record)
+	poolRegistryValue, err := recordcodec.Encode("environment_pool_registry", creation.PoolRegistry.Record)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(poolRegistryValue)
-	zoneRegistryValue, err := encodeEnvelope("zone_pool_registry", zonePoolRegistry{
+	zoneRegistryValue, err := recordcodec.Encode("zone_pool_registry", zonePoolRegistry{
 		Reservations: map[string]string{creation.Zone.Desired.ID: creation.Zone.Desired.Subnet},
 	})
 	if err != nil {

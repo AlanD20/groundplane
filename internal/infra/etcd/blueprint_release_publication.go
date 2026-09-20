@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"time"
 
@@ -445,7 +446,7 @@ func prepareBlueprintReleaseHookPublicationFragment(
 				"Blueprint release hook execution evidence is invalid",
 			)
 		}
-		executionValue, err := encodeEnvelope("script-execution", execution)
+		executionValue, err := recordcodec.Encode("script-execution", execution)
 		if err != nil {
 			clearReleaseHookPublicationFragment(fragment)
 			return releaseHookPublicationFragment{}, err
@@ -469,7 +470,7 @@ func prepareBlueprintReleaseHookPublicationFragment(
 }
 
 func encodeBlueprintReleaseHookSnapshot(execution ScriptExecutionRecord) ([]byte, error) {
-	return encodeEnvelope("script-runner-snapshot", storedScriptRunnerSnapshot{
+	return recordcodec.Encode("script-runner-snapshot", storedScriptRunnerSnapshot{
 		ExecutionID: execution.ID, SnapshotID: execution.SnapshotID,
 		SHA256: execution.SnapshotSHA256, Payload: execution.Snapshot,
 	})

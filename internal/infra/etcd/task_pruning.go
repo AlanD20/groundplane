@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -30,11 +31,11 @@ func encodeTaskPruneIntent(intent taskPruneIntent) ([]byte, error) {
 	if err := validateTaskPruneIntent(intent); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("task_prune_intent", intent)
+	return recordcodec.Encode("task_prune_intent", intent)
 }
 
 func decodeTaskPruneIntent(value []byte) (taskPruneIntent, error) {
-	intent, err := decodeEnvelope[taskPruneIntent](value, "task_prune_intent")
+	intent, err := recordcodec.Decode[taskPruneIntent](value, "task_prune_intent")
 	if err != nil {
 		return taskPruneIntent{}, err
 	}

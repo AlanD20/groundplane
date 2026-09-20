@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 	"time"
 
@@ -135,7 +136,7 @@ func (repository *ScriptRepository) GetScriptExecution(
 		)
 	}
 	defer clear(result.Entry.Value)
-	record, err := decodeEnvelope[ScriptExecutionRecord](result.Entry.Value, "script-execution")
+	record, err := recordcodec.Decode[ScriptExecutionRecord](result.Entry.Value, "script-execution")
 	if err != nil || validateScriptExecutionRecord(record) != nil || record.ID != executionID {
 		return Versioned[ScriptExecutionRecord]{}, errs.New(errs.KindInternal, "Script execution record is corrupt")
 	}
@@ -171,7 +172,7 @@ func (repository *ScriptRepository) CheckpointScriptExecution(
 		if err != nil {
 			return Versioned[ScriptExecutionRecord]{}, err
 		}
-		value, err := encodeEnvelope("script-execution", next)
+		value, err := recordcodec.Encode("script-execution", next)
 		if err != nil {
 			return Versioned[ScriptExecutionRecord]{}, err
 		}
@@ -211,7 +212,7 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script checkpoint assignment is unavailable")
 	}
 	defer clearKeyValues(primary.Values)
-	execution, executionErr := decodeEnvelope[ScriptExecutionRecord](primary.Values[0].Value, "script-execution")
+	execution, executionErr := recordcodec.Decode[ScriptExecutionRecord](primary.Values[0].Value, "script-execution")
 	task, taskErr := decodeTaskRecord(primary.Values[1].Value)
 	assignment, assignmentErr := decodeTaskAssignment(primary.Values[2].Value)
 	if executionErr != nil || taskErr != nil || assignmentErr != nil ||

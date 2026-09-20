@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -205,11 +206,11 @@ func encodeBackupPolicyRecord(record BackupPolicyRecord) ([]byte, error) {
 	if err := validateBackupPolicyRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("backup-policy", record)
+	return recordcodec.Encode("backup-policy", record)
 }
 
 func decodeBackupPolicyRecord(value []byte) (BackupPolicyRecord, error) {
-	record, err := decodeEnvelope[BackupPolicyRecord](value, "backup-policy")
+	record, err := recordcodec.Decode[BackupPolicyRecord](value, "backup-policy")
 	if err != nil {
 		return BackupPolicyRecord{}, err
 	}
@@ -223,11 +224,11 @@ func encodeBackupSourceRecord(record BackupSourceRecord) ([]byte, error) {
 	if err := validateBackupSourceRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("backup-source", record)
+	return recordcodec.Encode("backup-source", record)
 }
 
 func decodeBackupSourceRecord(value []byte) (BackupSourceRecord, error) {
-	record, err := decodeEnvelope[BackupSourceRecord](value, "backup-source")
+	record, err := recordcodec.Decode[BackupSourceRecord](value, "backup-source")
 	if err != nil {
 		return BackupSourceRecord{}, err
 	}
@@ -241,11 +242,11 @@ func encodeBackupKeyRecord(record BackupKeyRecord) ([]byte, error) {
 	if err := validateBackupKeyRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("backup-key", record)
+	return recordcodec.Encode("backup-key", record)
 }
 
 func decodeBackupKeyRecord(value []byte) (BackupKeyRecord, error) {
-	record, err := decodeEnvelope[BackupKeyRecord](value, "backup-key")
+	record, err := recordcodec.Decode[BackupKeyRecord](value, "backup-key")
 	if err != nil {
 		return BackupKeyRecord{}, err
 	}
@@ -259,11 +260,11 @@ func encodeBackupKeyEncryptedValue(value BackupKeyEncryptedValue) ([]byte, error
 	if err := validateBackupKeyEncryptedValue(value); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("backup-key-value", value)
+	return recordcodec.Encode("backup-key-value", value)
 }
 
 func decodeBackupKeyEncryptedValue(value []byte) (BackupKeyEncryptedValue, error) {
-	record, err := decodeEnvelope[BackupKeyEncryptedValue](value, "backup-key-value")
+	record, err := recordcodec.Decode[BackupKeyEncryptedValue](value, "backup-key-value")
 	if err != nil {
 		return BackupKeyEncryptedValue{}, err
 	}

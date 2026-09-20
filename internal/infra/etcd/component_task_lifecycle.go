@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"reflect"
 	"sort"
 	"time"
@@ -236,7 +237,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		registry := componentAddressRegistry{Reservations: map[string]string{}}
 		var decodeErr error
 		if registryValue != nil {
-			registry, decodeErr = decodeEnvelope[componentAddressRegistry](
+			registry, decodeErr = recordcodec.Decode[componentAddressRegistry](
 				registryValue.Value,
 				"component_address_registry",
 			)
@@ -545,7 +546,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		var decodeErr error
 		registry := componentAddressRegistry{Reservations: map[string]string{}}
 		if registryValue != nil {
-			registry, decodeErr = decodeEnvelope[componentAddressRegistry](
+			registry, decodeErr = recordcodec.Decode[componentAddressRegistry](
 				registryValue.Value,
 				"component_address_registry",
 			)

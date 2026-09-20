@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
@@ -41,7 +42,7 @@ func releaseGroupNameKey(environmentID, name string) string {
 }
 
 func decodeReleaseGroupStored(value []byte) (domain.Group, error) {
-	record, err := decodeEnvelope[releaseGroupStoredRecord](value, "release_group")
+	record, err := recordcodec.Decode[releaseGroupStoredRecord](value, "release_group")
 	if err != nil {
 		return domain.Group{}, err
 	}

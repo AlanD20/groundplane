@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"path"
 	"strings"
 	"time"
@@ -1726,7 +1727,7 @@ func encodeBackupRuntimeRecord[T any](
 	if err := validate(record); err != nil {
 		return nil, err
 	}
-	value, err := encodeEnvelope(kind, record)
+	value, err := recordcodec.Encode(kind, record)
 	if err != nil {
 		return nil, err
 	}
@@ -1745,7 +1746,7 @@ func decodeBackupRuntimeRecord[T any](
 	if len(value) == 0 || len(value) > maximumBackupRuntimeRecordBytes {
 		return zero, corruptBackupRuntimeRecord()
 	}
-	record, err := decodeEnvelope[T](value, kind)
+	record, err := recordcodec.Decode[T](value, kind)
 	if err != nil {
 		return zero, err
 	}
@@ -1939,7 +1940,7 @@ func decodeBackupKeyRotationRecord(value []byte) (BackupKeyRotationRecord, error
 	if len(value) == 0 || len(value) > maximumBackupRuntimeRecordBytes {
 		return BackupKeyRotationRecord{}, corruptBackupRuntimeRecord()
 	}
-	record, err := decodeEnvelope[BackupKeyRotationRecord](value, "backup-key-rotation")
+	record, err := recordcodec.Decode[BackupKeyRotationRecord](value, "backup-key-rotation")
 	if err != nil || validateBackupKeyRotationRecord(record) != nil {
 		clear(record.NextEncryptedIdentity)
 		return BackupKeyRotationRecord{}, corruptBackupRuntimeRecord()

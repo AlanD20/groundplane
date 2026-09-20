@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -536,13 +537,13 @@ func encodeIdempotencyMarker(marker IdempotencyMarker) ([]byte, error) {
 }
 
 func decodeIdempotencyMarker(value []byte, locator IdempotencyLocator) (IdempotencyMarker, error) {
-	if len(value) == 0 || len(value) > maximumMarkerBytes || rejectDuplicateJSONFields(value) != nil {
+	if len(value) == 0 || len(value) > maximumMarkerBytes || recordcodec.RejectDuplicateFields(value) != nil {
 		return IdempotencyMarker{}, corruptIdempotencyMarker()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var data idempotencyMarkerJSON
-	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil || data.Schema != 2 {
+	if err := decoder.Decode(&data); err != nil || recordcodec.RequireEOF(decoder) != nil || data.Schema != 2 {
 		return IdempotencyMarker{}, corruptIdempotencyMarker()
 	}
 	ciphertext, err := decodeRawBase64(data.Intent.Ciphertext)
@@ -730,13 +731,13 @@ func encodeTaskReference(taskID string) ([]byte, error) {
 }
 
 func decodeTaskReference(value []byte) (string, error) {
-	if rejectDuplicateJSONFields(value) != nil {
+	if recordcodec.RejectDuplicateFields(value) != nil {
 		return "", errs.New(errs.KindInternal, "task index record is invalid")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var data taskReferenceJSON
-	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil ||
+	if err := decoder.Decode(&data); err != nil || recordcodec.RequireEOF(decoder) != nil ||
 		data.Schema != 1 || ids.Validate(ids.KindTask, data.RecordID) != nil {
 		return "", errs.New(errs.KindInternal, "task index record is invalid")
 	}
@@ -744,13 +745,13 @@ func decodeTaskReference(value []byte) (string, error) {
 }
 
 func decodeRetentionReference(value []byte, markerKey string) error {
-	if len(value) == 0 || rejectDuplicateJSONFields(value) != nil {
+	if len(value) == 0 || recordcodec.RejectDuplicateFields(value) != nil {
 		return corruptIdempotencyMarker()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var data retentionReferenceJSON
-	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil ||
+	if err := decoder.Decode(&data); err != nil || recordcodec.RequireEOF(decoder) != nil ||
 		data.Schema != 1 || data.MarkerKey != markerKey {
 		return corruptIdempotencyMarker()
 	}
@@ -765,13 +766,13 @@ func encodeReplayTargetReference(markerKey string) ([]byte, error) {
 }
 
 func decodeReplayTargetReference(value []byte, markerKey string) error {
-	if len(value) == 0 || rejectDuplicateJSONFields(value) != nil {
+	if len(value) == 0 || recordcodec.RejectDuplicateFields(value) != nil {
 		return corruptIdempotencyMarker()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var data replayTargetReferenceJSON
-	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil ||
+	if err := decoder.Decode(&data); err != nil || recordcodec.RequireEOF(decoder) != nil ||
 		data.Schema != 1 || data.MarkerKey != markerKey {
 		return corruptIdempotencyMarker()
 	}

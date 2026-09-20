@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -28,7 +29,7 @@ func (repository *ScriptRepository) GetScriptExecutionPlan(
 	if read == nil || read.Entry == nil {
 		return nil, errs.New(errs.KindStateConflict, "Script execution record is missing")
 	}
-	record, err := decodeEnvelope[ScriptExecutionRecord](read.Entry.Value, "script-execution")
+	record, err := recordcodec.Decode[ScriptExecutionRecord](read.Entry.Value, "script-execution")
 	if err != nil || validateScriptExecutionRecord(record) != nil || record.CurrentTaskID != task.ID ||
 		record.OperationID != task.OperationID || record.StepID != task.Steps[0].ID || record.PlanHash != task.PlanHash {
 		return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")
@@ -78,7 +79,7 @@ func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
 		if read == nil || read.Entry == nil {
 			return nil, false, errs.New(errs.KindStateConflict, "release Script execution record is missing")
 		}
-		record, err := decodeEnvelope[ScriptExecutionRecord](read.Entry.Value, "script-execution")
+		record, err := recordcodec.Decode[ScriptExecutionRecord](read.Entry.Value, "script-execution")
 		if err != nil || validateScriptExecutionRecord(record) != nil || record.ID != executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID || record.StepID != stepID ||
 			record.PlanHash != task.PlanHash {
@@ -153,7 +154,7 @@ func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
 		if executionRead == nil || executionRead.Entry == nil {
 			return nil, errs.New(errs.KindStateConflict, "Script execution record is missing")
 		}
-		execution, decodeErr := decodeEnvelope[ScriptExecutionRecord](executionRead.Entry.Value, "script-execution")
+		execution, decodeErr := recordcodec.Decode[ScriptExecutionRecord](executionRead.Entry.Value, "script-execution")
 		if decodeErr != nil || validateScriptExecutionRecord(execution) != nil || execution.CurrentTaskID != task.ID ||
 			execution.OperationID != task.OperationID || execution.StepID != steps[metadata.ScriptExecutionId] ||
 			execution.PlanHash != task.PlanHash || !execution.ActiveReference {

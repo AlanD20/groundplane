@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 	"path"
 	"regexp"
@@ -233,7 +234,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRe
 		)
 	}
 	defer clearKeyValues(registries.Values)
-	global, err := decodeEnvelope[EnvironmentPoolRegistry](
+	global, err := recordcodec.Decode[EnvironmentPoolRegistry](
 		registries.Values[0].Value,
 		"environment_pool_registry",
 	)
@@ -259,7 +260,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRe
 	if err != nil {
 		return preparedEnvironmentBlueprintPoolChange{}, err
 	}
-	prepared.registryValue, err = encodeEnvelope("environment_pool_registry", nextGlobal)
+	prepared.registryValue, err = recordcodec.Encode("environment_pool_registry", nextGlobal)
 	if err != nil {
 		clear(prepared.environmentValue)
 		return preparedEnvironmentBlueprintPoolChange{}, err
@@ -381,7 +382,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintZonePoolAtRevi
 			return preparedEnvironmentBlueprintZonePool{}, err
 		}
 	}
-	value, err := encodeEnvelope("zone_pool_registry", next)
+	value, err := recordcodec.Encode("zone_pool_registry", next)
 	if err != nil {
 		return preparedEnvironmentBlueprintZonePool{}, err
 	}
@@ -411,7 +412,7 @@ func (repository *HierarchyRepository) getEnvironmentBlueprintZoneRegistryAtRevi
 			Record: zonePoolRegistry{Reservations: map[string]string{}}, ReadRevision: readRevision,
 		}, nil
 	}
-	registry, err := decodeEnvelope[zonePoolRegistry](result.Values[0].Value, "zone_pool_registry")
+	registry, err := recordcodec.Decode[zonePoolRegistry](result.Values[0].Value, "zone_pool_registry")
 	if err != nil || validateZonePoolRegistry(registry) != nil {
 		return Versioned[zonePoolRegistry]{}, corruptZonePoolRegistry()
 	}
@@ -525,11 +526,11 @@ func encodeEnvironmentBlueprintManifest(revision EnvironmentBlueprintRevision) (
 			Path: file.Path, Size: len(file.Content), SHA256: hex.EncodeToString(digest[:]),
 		}
 	}
-	return encodeEnvelope("environment-blueprint-revision", manifest)
+	return recordcodec.Encode("environment-blueprint-revision", manifest)
 }
 
 func decodeEnvironmentBlueprintManifest(value []byte) (environmentBlueprintManifest, error) {
-	manifest, err := decodeEnvelope[environmentBlueprintManifest](
+	manifest, err := recordcodec.Decode[environmentBlueprintManifest](
 		value,
 		"environment-blueprint-revision",
 	)

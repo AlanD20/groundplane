@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"sort"
 	"time"
@@ -265,11 +266,11 @@ func encodeZoneRemovalIntent(intent ZoneRemovalIntent) ([]byte, error) {
 	if err := validateZoneRemovalIntent(intent); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("zone_removal_intent", intent)
+	return recordcodec.Encode("zone_removal_intent", intent)
 }
 
 func decodeZoneRemovalIntent(value []byte) (ZoneRemovalIntent, error) {
-	intent, err := decodeEnvelope[ZoneRemovalIntent](value, "zone_removal_intent")
+	intent, err := recordcodec.Decode[ZoneRemovalIntent](value, "zone_removal_intent")
 	if err != nil || validateZoneRemovalIntent(intent) != nil {
 		return ZoneRemovalIntent{}, corruptZoneRemovalIntent()
 	}

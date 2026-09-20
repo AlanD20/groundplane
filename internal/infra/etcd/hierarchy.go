@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -108,7 +109,7 @@ func (repository *HierarchyRepository) CreateTenant(
 	if err := validateTenant(record); err != nil {
 		return Versioned[TenantRecord]{}, err
 	}
-	value, err := encodeEnvelope("tenant", record)
+	value, err := recordcodec.Encode("tenant", record)
 	if err != nil {
 		return Versioned[TenantRecord]{}, err
 	}
@@ -459,7 +460,7 @@ func (repository *HierarchyRepository) CreateProject(
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: tenantKey(record.TenantID), ModRevision: owner.Revision})
 	}
-	value, err := encodeEnvelope("project", record)
+	value, err := recordcodec.Encode("project", record)
 	if err != nil {
 		return Versioned[ProjectRecord]{}, err
 	}

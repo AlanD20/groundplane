@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -169,11 +170,11 @@ func encodeRouteMutationIntent(intent RouteMutationIntent) ([]byte, error) {
 	if err := validateRouteMutationIntent(intent); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("route_mutation_intent", intent)
+	return recordcodec.Encode("route_mutation_intent", intent)
 }
 
 func decodeRouteMutationIntent(value []byte) (RouteMutationIntent, error) {
-	intent, err := decodeEnvelope[RouteMutationIntent](value, "route_mutation_intent")
+	intent, err := recordcodec.Decode[RouteMutationIntent](value, "route_mutation_intent")
 	if err != nil {
 		return RouteMutationIntent{}, err
 	}

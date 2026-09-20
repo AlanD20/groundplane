@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -116,7 +117,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	executions := make([]ScriptExecutionRecord, len(steps))
 	for index, step := range steps {
 		value := read.Values[index+executionOffset]
-		record, decodeErr := decodeEnvelope[ScriptExecutionRecord](value.Value, "script-execution")
+		record, decodeErr := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
 		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || !taskOwnsScriptExecution(task, record) ||
 			record.ID != step.executionID || record.StepID != step.stepID || record.CurrentTaskID != task.ID ||
 			record.OperationID != task.OperationID || record.PlanHash != task.PlanHash {
@@ -330,7 +331,7 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 			clearMutationValues(mutations)
 			return scriptTerminalSourceRelease{}, corruptReleaseRecord()
 		}
-		encoded, encodeErr := encodeEnvelope("script-execution", next)
+		encoded, encodeErr := recordcodec.Encode("script-execution", next)
 		if encodeErr != nil {
 			clearMutationValues(mutations)
 			return scriptTerminalSourceRelease{}, encodeErr

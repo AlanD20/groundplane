@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -91,7 +92,7 @@ func encodeServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) ([]byt
 	if err := validateServiceLifecycleRenderInput(input); err != nil {
 		return nil, err
 	}
-	value, err := encodeEnvelope("service_lifecycle_render_input", input)
+	value, err := recordcodec.Encode("service_lifecycle_render_input", input)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +104,7 @@ func encodeServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) ([]byt
 }
 
 func decodeServiceLifecycleRenderInput(value []byte) (ServiceLifecycleRenderInput, error) {
-	input, err := decodeEnvelope[ServiceLifecycleRenderInput](value, "service_lifecycle_render_input")
+	input, err := recordcodec.Decode[ServiceLifecycleRenderInput](value, "service_lifecycle_render_input")
 	if err != nil || validateServiceLifecycleRenderInput(input) != nil {
 		return ServiceLifecycleRenderInput{}, corruptServiceLifecycleRenderInput()
 	}

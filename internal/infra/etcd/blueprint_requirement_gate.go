@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -122,11 +123,11 @@ func encodeBlueprintRequirementGate(gate BlueprintRequirementGate) ([]byte, erro
 	if err := gate.validate(); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("blueprint-requirement-gate", gate)
+	return recordcodec.Encode("blueprint-requirement-gate", gate)
 }
 
 func decodeBlueprintRequirementGate(value []byte) (BlueprintRequirementGate, error) {
-	gate, err := decodeEnvelope[BlueprintRequirementGate](value, "blueprint-requirement-gate")
+	gate, err := recordcodec.Decode[BlueprintRequirementGate](value, "blueprint-requirement-gate")
 	if err != nil || gate.validate() != nil {
 		return BlueprintRequirementGate{}, corruptBlueprintRequirementGate()
 	}

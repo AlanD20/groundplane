@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -40,7 +41,7 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 	if err != nil {
 		return Versioned[BackingServiceCreationStage]{}, err
 	}
-	value, err := encodeEnvelope("backing_service_creation_stage", candidate)
+	value, err := recordcodec.Encode("backing_service_creation_stage", candidate)
 	if err != nil {
 		return Versioned[BackingServiceCreationStage]{}, err
 	}
@@ -97,7 +98,7 @@ func backingServiceCreationStageKey(locator IdempotencyLocator) (string, error) 
 }
 
 func decodeBackingServiceCreationStage(value []byte) (BackingServiceCreationStage, error) {
-	record, err := decodeEnvelope[BackingServiceCreationStage](value, "backing_service_creation_stage")
+	record, err := recordcodec.Decode[BackingServiceCreationStage](value, "backing_service_creation_stage")
 	if err != nil || validateBackingServiceCreationStage(record) != nil {
 		return BackingServiceCreationStage{}, errs.New(errs.KindInternal, "Backing-service creation stage is corrupt")
 	}

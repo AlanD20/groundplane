@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"math"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -164,11 +165,11 @@ func encodeRouteRecord(record RouteRecord) ([]byte, error) {
 	if err := validateRouteRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("route", record)
+	return recordcodec.Encode("route", record)
 }
 
 func decodeRouteRecord(value []byte) (RouteRecord, error) {
-	record, err := decodeEnvelope[RouteRecord](value, "route")
+	record, err := recordcodec.Decode[RouteRecord](value, "route")
 	if err != nil {
 		return RouteRecord{}, err
 	}

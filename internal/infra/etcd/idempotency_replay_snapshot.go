@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -145,8 +146,8 @@ func (repository *IdempotencyRepository) ResolveReplayLocatorAtRevision(
 	var reference replayTargetReferenceJSON
 	decoder := json.NewDecoder(bytes.NewReader(result.Entry.Value))
 	decoder.DisallowUnknownFields()
-	if rejectDuplicateJSONFields(result.Entry.Value) != nil || decoder.Decode(&reference) != nil ||
-		requireJSONEOF(decoder) != nil || reference.Schema != 1 {
+	if recordcodec.RejectDuplicateFields(result.Entry.Value) != nil || decoder.Decode(&reference) != nil ||
+		recordcodec.RequireEOF(decoder) != nil || reference.Schema != 1 {
 		return IdempotencyLocator{}, 0, false, corruptIdempotencyMarker()
 	}
 	locator, err := parseIdempotencyMarkerKey(reference.MarkerKey)
@@ -214,8 +215,8 @@ func (repository *IdempotencyRepository) ResolveReplayLocatorAtSnapshot(
 	var reference replayTargetReferenceJSON
 	decoder := json.NewDecoder(bytes.NewReader(targets.Values[0].Value))
 	decoder.DisallowUnknownFields()
-	if rejectDuplicateJSONFields(targets.Values[0].Value) != nil || decoder.Decode(&reference) != nil ||
-		requireJSONEOF(decoder) != nil || reference.Schema != 1 {
+	if recordcodec.RejectDuplicateFields(targets.Values[0].Value) != nil || decoder.Decode(&reference) != nil ||
+		recordcodec.RequireEOF(decoder) != nil || reference.Schema != 1 {
 		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
 	}
 	locator, err := parseIdempotencyMarkerKey(reference.MarkerKey)

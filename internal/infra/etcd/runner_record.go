@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"bytes"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 	"net/url"
 	"slices"
@@ -390,14 +391,14 @@ func encodeRunnerDesiredRecord(record RunnerDesiredRecord) ([]byte, error) {
 	if err := validateRunnerDesired(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("runner_desired", record)
+	return recordcodec.Encode("runner_desired", record)
 }
 
 func decodeRunnerDesiredRecord(value []byte) (RunnerDesiredRecord, error) {
 	if len(value) > maximumRunnerPersistenceBytes {
 		return RunnerDesiredRecord{}, errs.New(errs.KindInternal, "runner desired record is corrupt")
 	}
-	record, err := decodeEnvelope[RunnerDesiredRecord](value, "runner_desired")
+	record, err := recordcodec.Decode[RunnerDesiredRecord](value, "runner_desired")
 	if err != nil || validateRunnerDesired(record) != nil {
 		return RunnerDesiredRecord{}, errs.New(errs.KindInternal, "runner desired record is corrupt")
 	}
@@ -417,14 +418,14 @@ func encodeRunnerLifecycleRecord(record RunnerLifecycleRecord) ([]byte, error) {
 	if err := validateRunnerLifecycle(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("runner_lifecycle", record)
+	return recordcodec.Encode("runner_lifecycle", record)
 }
 
 func decodeRunnerLifecycleRecord(value []byte) (RunnerLifecycleRecord, error) {
 	if len(value) > maximumRunnerPersistenceBytes {
 		return RunnerLifecycleRecord{}, errs.New(errs.KindInternal, "runner lifecycle record is corrupt")
 	}
-	record, err := decodeEnvelope[RunnerLifecycleRecord](value, "runner_lifecycle")
+	record, err := recordcodec.Decode[RunnerLifecycleRecord](value, "runner_lifecycle")
 	if err != nil || validateRunnerLifecycle(record) != nil {
 		return RunnerLifecycleRecord{}, errs.New(errs.KindInternal, "runner lifecycle record is corrupt")
 	}
@@ -462,14 +463,14 @@ func encodeRunnerRuntimeOwnership(record RunnerRuntimeOwnershipRecord) ([]byte, 
 	if err := validateRunnerRuntimeOwnership(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("runner_runtime_ownership", record)
+	return recordcodec.Encode("runner_runtime_ownership", record)
 }
 
 func decodeRunnerRuntimeOwnership(value []byte) (RunnerRuntimeOwnershipRecord, error) {
 	if len(value) > maximumRunnerPersistenceBytes {
 		return RunnerRuntimeOwnershipRecord{}, errs.New(errs.KindInternal, "runner runtime ownership record is corrupt")
 	}
-	record, err := decodeEnvelope[RunnerRuntimeOwnershipRecord](value, "runner_runtime_ownership")
+	record, err := recordcodec.Decode[RunnerRuntimeOwnershipRecord](value, "runner_runtime_ownership")
 	if err != nil || validateRunnerRuntimeOwnership(record) != nil {
 		return RunnerRuntimeOwnershipRecord{}, errs.New(errs.KindInternal, "runner runtime ownership record is corrupt")
 	}
@@ -484,14 +485,14 @@ func encodeRunnerObservation(record RunnerObservationRecord) ([]byte, error) {
 	if err := validateRunnerObservation(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("runner_observation", record)
+	return recordcodec.Encode("runner_observation", record)
 }
 
 func decodeRunnerObservation(value []byte) (RunnerObservationRecord, error) {
 	if len(value) > maximumRunnerPersistenceBytes {
 		return RunnerObservationRecord{}, errs.New(errs.KindInternal, "runner observation is corrupt")
 	}
-	record, err := decodeEnvelope[RunnerObservationRecord](value, "runner_observation")
+	record, err := recordcodec.Decode[RunnerObservationRecord](value, "runner_observation")
 	if err != nil || validateRunnerObservation(record) != nil {
 		return RunnerObservationRecord{}, errs.New(errs.KindInternal, "runner observation is corrupt")
 	}

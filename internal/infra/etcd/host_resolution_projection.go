@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 	"sort"
 	"strings"
@@ -130,11 +131,11 @@ func encodeHostResolutionProjectionRecord(record HostResolutionProjectionRecord)
 	if err := validateHostResolutionProjectionRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("host_resolution_projection", record)
+	return recordcodec.Encode("host_resolution_projection", record)
 }
 
 func decodeHostResolutionProjectionRecord(value []byte) (HostResolutionProjectionRecord, error) {
-	record, err := decodeEnvelope[HostResolutionProjectionRecord](value, "host_resolution_projection")
+	record, err := recordcodec.Decode[HostResolutionProjectionRecord](value, "host_resolution_projection")
 	if err != nil || validateHostResolutionProjectionRecord(record) != nil {
 		return HostResolutionProjectionRecord{}, errs.New(errs.KindInternal, "host-resolution projection is corrupt")
 	}

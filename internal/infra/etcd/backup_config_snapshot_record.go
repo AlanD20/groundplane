@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -536,7 +537,7 @@ func parseBackupConfigTimestamp(value string) (time.Time, error) {
 }
 
 func encodeBoundedBackupConfigEnvelope[T any](kind string, record T) ([]byte, error) {
-	encoded, err := encodeEnvelope(kind, record)
+	encoded, err := recordcodec.Encode(kind, record)
 	if err != nil {
 		return nil, err
 	}
@@ -552,7 +553,7 @@ func decodeBoundedBackupConfigEnvelope[T any](value []byte, kind string) (T, err
 	if len(value) == 0 || len(value) > maximumBackupConfigDurableRecordBytes {
 		return zero, corruptBackupConfigRecord()
 	}
-	return decodeEnvelope[T](value, kind)
+	return recordcodec.Decode[T](value, kind)
 }
 
 func clearBackupConfigProtectedChunk(protected *BackupConfigProtectedChunkPayload) {

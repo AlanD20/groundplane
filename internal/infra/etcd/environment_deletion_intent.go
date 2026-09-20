@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -63,11 +64,11 @@ func encodeEnvironmentDeletionIntent(record EnvironmentDeletionIntentRecord) ([]
 	if err := validateEnvironmentDeletionIntent(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("environment_deletion_intent", record)
+	return recordcodec.Encode("environment_deletion_intent", record)
 }
 
 func decodeEnvironmentDeletionIntent(value []byte) (EnvironmentDeletionIntentRecord, error) {
-	record, err := decodeEnvelope[EnvironmentDeletionIntentRecord](
+	record, err := recordcodec.Decode[EnvironmentDeletionIntentRecord](
 		value,
 		"environment_deletion_intent",
 	)

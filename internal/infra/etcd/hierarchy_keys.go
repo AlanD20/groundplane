@@ -6,10 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"io"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 	"unicode/utf8"
 
@@ -29,12 +28,6 @@ const (
 	cursorVersion                  = 1
 	cursorOrder                    = "id_asc"
 )
-
-type recordEnvelope[T any] struct {
-	Schema int    `json:"schema"`
-	Kind   string `json:"kind"`
-	Data   T      `json:"data"`
-}
 
 type cursorPayload struct {
 	Version  int    `json:"v"`
@@ -211,18 +204,12 @@ func validateEnvironment(record EnvironmentRecord) error {
 	return nil
 }
 
-func encodeEnvelope[T any](kind string, record T) ([]byte, error) {
-	value, err := json.Marshal(recordEnvelope[T]{Schema: 1, Kind: kind, Data: record})
-	if err != nil {
-		return nil, errs.Wrap(errs.KindInternal, err)
-	}
-	return value, nil
+func encodeTenant(record TenantRecord) ([]byte, error) { return recordcodec.Encode("tenant", record) }
+func encodeProject(record ProjectRecord) ([]byte, error) {
+	return recordcodec.Encode("project", record)
 }
-
-func encodeTenant(record TenantRecord) ([]byte, error)   { return encodeEnvelope("tenant", record) }
-func encodeProject(record ProjectRecord) ([]byte, error) { return encodeEnvelope("project", record) }
 func decodeTenant(value []byte) (TenantRecord, error) {
-	record, err := decodeEnvelope[TenantRecord](value, "tenant")
+	record, err := recordcodec.Decode[TenantRecord](value, "tenant")
 	if err != nil {
 		return TenantRecord{}, err
 	}
@@ -233,7 +220,7 @@ func decodeTenant(value []byte) (TenantRecord, error) {
 }
 
 func decodeProject(value []byte) (ProjectRecord, error) {
-	record, err := decodeEnvelope[ProjectRecord](value, "project")
+	record, err := recordcodec.Decode[ProjectRecord](value, "project")
 	if err != nil {
 		return ProjectRecord{}, err
 	}
@@ -241,94 +228,6 @@ func decodeProject(value []byte) (ProjectRecord, error) {
 		return ProjectRecord{}, corruptRecord()
 	}
 	return record, nil
-}
-
-func decodeEnvelope[T any](value []byte, kind string) (T, error) {
-	var zero T
-	if err := rejectDuplicateJSONFields(value); err != nil {
-		return zero, errs.New(errs.KindInternal, "durable record contains duplicate or malformed JSON fields")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(value))
-	decoder.DisallowUnknownFields()
-	var envelope recordEnvelope[T]
-	if err := decoder.Decode(&envelope); err != nil {
-		return zero, errs.New(errs.KindInternal, "durable record schema is invalid")
-	}
-	if err := requireJSONEOF(decoder); err != nil {
-		return zero, errs.New(errs.KindInternal, "durable record has trailing JSON data")
-	}
-	if envelope.Schema != 1 || envelope.Kind != kind {
-		return zero, errs.New(errs.KindInternal, "durable record envelope does not match its repository")
-	}
-	return envelope.Data, nil
-}
-
-func rejectDuplicateJSONFields(value []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(value))
-	if err := walkJSONValue(decoder); err != nil {
-		return err
-	}
-	return requireJSONEOF(decoder)
-}
-
-func walkJSONValue(decoder *json.Decoder) error {
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, ok := token.(json.Delim)
-	if !ok {
-		return nil
-	}
-	switch delimiter {
-	case '{':
-		seen := make(map[string]struct{})
-		for decoder.More() {
-			keyToken, err := decoder.Token()
-			if err != nil {
-				return err
-			}
-			key, ok := keyToken.(string)
-			if !ok {
-				return fmt.Errorf("JSON object key is not a string")
-			}
-			if _, exists := seen[key]; exists {
-				return fmt.Errorf("duplicate JSON field %q", key)
-			}
-			seen[key] = struct{}{}
-			if err := walkJSONValue(decoder); err != nil {
-				return err
-			}
-		}
-		closing, err := decoder.Token()
-		if err != nil || closing != json.Delim('}') {
-			return fmt.Errorf("JSON object is not closed")
-		}
-	case '[':
-		for decoder.More() {
-			if err := walkJSONValue(decoder); err != nil {
-				return err
-			}
-		}
-		closing, err := decoder.Token()
-		if err != nil || closing != json.Delim(']') {
-			return fmt.Errorf("JSON array is not closed")
-		}
-	default:
-		return fmt.Errorf("unexpected JSON delimiter")
-	}
-	return nil
-}
-
-func requireJSONEOF(decoder *json.Decoder) error {
-	var trailing json.RawMessage
-	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return fmt.Errorf("unexpected trailing JSON value")
-		}
-		return err
-	}
-	return nil
 }
 
 func corruptRecord() error {
@@ -623,13 +522,13 @@ func decodeCursor(value string) (cursorPayload, error) {
 	if err != nil || base64.RawURLEncoding.EncodeToString(decoded) != value {
 		return cursorPayload{}, errs.New(errs.KindMalformedRequest, "cursor is malformed")
 	}
-	if err := rejectDuplicateJSONFields(decoded); err != nil {
+	if err := recordcodec.RejectDuplicateFields(decoded); err != nil {
 		return cursorPayload{}, errs.New(errs.KindMalformedRequest, "cursor is malformed")
 	}
 	decoder := json.NewDecoder(bytes.NewReader(decoded))
 	decoder.DisallowUnknownFields()
 	var cursor cursorPayload
-	if err := decoder.Decode(&cursor); err != nil || requireJSONEOF(decoder) != nil {
+	if err := decoder.Decode(&cursor); err != nil || recordcodec.RequireEOF(decoder) != nil {
 		return cursorPayload{}, errs.New(errs.KindMalformedRequest, "cursor is malformed")
 	}
 	if cursor.Version != cursorVersion || cursor.Revision <= 0 || cursor.LastID == "" || cursor.Query == "" {

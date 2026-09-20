@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backupschedule"
@@ -72,7 +73,7 @@ func encodeEnvironmentCoordinationRecord(record EnvironmentCoordinationRecord) (
 	if err := validateEnvironmentCoordinationRecord(record); err != nil {
 		return nil, err
 	}
-	value, err := encodeEnvelope("environment-coordination", record)
+	value, err := recordcodec.Encode("environment-coordination", record)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +88,7 @@ func decodeEnvironmentCoordinationRecord(value []byte) (EnvironmentCoordinationR
 	if len(value) == 0 || len(value) > maximumEnvironmentCoordinationRecordBytes {
 		return EnvironmentCoordinationRecord{}, corruptEnvironmentCoordination()
 	}
-	record, err := decodeEnvelope[EnvironmentCoordinationRecord](value, "environment-coordination")
+	record, err := recordcodec.Decode[EnvironmentCoordinationRecord](value, "environment-coordination")
 	if err != nil || validateEnvironmentCoordinationRecord(record) != nil {
 		return EnvironmentCoordinationRecord{}, corruptEnvironmentCoordination()
 	}

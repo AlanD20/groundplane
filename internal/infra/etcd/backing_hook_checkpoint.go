@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -84,7 +85,7 @@ func (repository *AttachRepository) CheckpointBackingHook(
 		if err != nil {
 			return Versioned[BackingHookCheckpointRecord]{}, false, err
 		}
-		value, err := encodeEnvelope("backing-hook-checkpoint", next)
+		value, err := recordcodec.Encode("backing-hook-checkpoint", next)
 		if err != nil {
 			return Versioned[BackingHookCheckpointRecord]{}, false, err
 		}
@@ -175,7 +176,7 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 		anchor.conditions = append(anchor.conditions, etcdstore.Condition{Key: checkpointKey, ModRevision: 0})
 		return anchor, nil
 	}
-	record, err := decodeEnvelope[BackingHookCheckpointRecord](
+	record, err := recordcodec.Decode[BackingHookCheckpointRecord](
 		primary.Values[2].Value,
 		"backing-hook-checkpoint",
 	)

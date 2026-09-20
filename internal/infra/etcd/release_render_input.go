@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -81,13 +82,13 @@ func EncodeReleaseRenderInput(input ReleaseRenderInput) (json.RawMessage, error)
 }
 
 func decodeReleaseRenderInput(value []byte) (ReleaseRenderInput, error) {
-	if rejectDuplicateJSONFields(value) != nil {
+	if recordcodec.RejectDuplicateFields(value) != nil {
 		return ReleaseRenderInput{}, corruptReleaseRecord()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var input ReleaseRenderInput
-	if err := decoder.Decode(&input); err != nil || requireJSONEOF(decoder) != nil ||
+	if err := decoder.Decode(&input); err != nil || recordcodec.RequireEOF(decoder) != nil ||
 		validateReleaseRenderInput(input) != nil {
 		return ReleaseRenderInput{}, corruptReleaseRecord()
 	}

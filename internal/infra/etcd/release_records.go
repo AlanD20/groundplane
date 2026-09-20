@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"strings"
 	"time"
@@ -199,13 +200,13 @@ func encodeReleaseRecord[T any](kind string, value T) ([]byte, error) {
 
 func decodeReleaseRecord[T any](value []byte, kind string) (T, error) {
 	var zero T
-	if rejectDuplicateJSONFields(value) != nil {
+	if recordcodec.RejectDuplicateFields(value) != nil {
 		return zero, corruptReleaseRecord()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var envelope releaseEnvelope[T]
-	if err := decoder.Decode(&envelope); err != nil || requireJSONEOF(decoder) != nil || envelope.Schema != 1 ||
+	if err := decoder.Decode(&envelope); err != nil || recordcodec.RequireEOF(decoder) != nil || envelope.Schema != 1 ||
 		envelope.Kind != kind {
 		return zero, corruptReleaseRecord()
 	}

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -80,11 +81,11 @@ func encodeConnectorRemovalIntent(intent ConnectorRemovalIntent) ([]byte, error)
 	if err := validateConnectorRemovalIntent(intent); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("connector_removal_intent", intent)
+	return recordcodec.Encode("connector_removal_intent", intent)
 }
 
 func decodeConnectorRemovalIntent(value []byte) (ConnectorRemovalIntent, error) {
-	intent, err := decodeEnvelope[ConnectorRemovalIntent](value, "connector_removal_intent")
+	intent, err := recordcodec.Decode[ConnectorRemovalIntent](value, "connector_removal_intent")
 	if err != nil || validateConnectorRemovalIntent(intent) != nil {
 		return ConnectorRemovalIntent{}, corruptConnectorRemovalIntent()
 	}

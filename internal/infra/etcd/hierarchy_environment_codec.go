@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -18,7 +19,7 @@ func encodeEnvironment(record EnvironmentRecord) ([]byte, error) {
 		CreatedAt         string                       `json:"created_at"`
 		DeletionTaskID    string                       `json:"deletion_task_id,omitempty"`
 	}
-	return encodeEnvelope("environment", environmentData{
+	return recordcodec.Encode("environment", environmentData{
 		ID: record.ID, ProjectID: record.ProjectID, Name: record.Name, NetworkPool: record.NetworkPool,
 		VolumeDir: record.VolumeDir, ProvisioningState: record.ProvisioningState,
 		CreateTaskID: record.CreateTaskID, CreatedAt: record.CreatedAt.Format(time.RFC3339Nano),
@@ -38,7 +39,7 @@ func decodeEnvironment(value []byte) (EnvironmentRecord, error) {
 		CreatedAt         string                       `json:"created_at"`
 		DeletionTaskID    string                       `json:"deletion_task_id,omitempty"`
 	}
-	data, err := decodeEnvelope[environmentData](value, "environment")
+	data, err := recordcodec.Decode[environmentData](value, "environment")
 	if err != nil {
 		return EnvironmentRecord{}, err
 	}

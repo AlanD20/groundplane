@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"path"
 	"strings"
 	"time"
@@ -92,11 +93,11 @@ func encodeSecretRecord(record SecretRecord) ([]byte, error) {
 	if err := validateSecretRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("secret", record)
+	return recordcodec.Encode("secret", record)
 }
 
 func decodeSecretRecord(value []byte) (SecretRecord, error) {
-	record, err := decodeEnvelope[SecretRecord](value, "secret")
+	record, err := recordcodec.Decode[SecretRecord](value, "secret")
 	if err != nil || validateSecretRecord(record) != nil {
 		return SecretRecord{}, corruptSecretRecord()
 	}
@@ -109,11 +110,11 @@ func encodeSecretEncryptedValue(value SecretEncryptedValue) ([]byte, error) {
 	}
 	copyOfValue := value
 	copyOfValue.Ciphertext = append([]byte(nil), value.Ciphertext...)
-	return encodeEnvelope("secret_value", copyOfValue)
+	return recordcodec.Encode("secret_value", copyOfValue)
 }
 
 func decodeSecretEncryptedValue(value []byte) (SecretEncryptedValue, error) {
-	record, err := decodeEnvelope[SecretEncryptedValue](value, "secret_value")
+	record, err := recordcodec.Decode[SecretEncryptedValue](value, "secret_value")
 	if err != nil || validateSecretEncryptedValue(record) != nil {
 		clear(record.Ciphertext)
 		return SecretEncryptedValue{}, corruptSecretRecord()

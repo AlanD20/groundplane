@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"sort"
 	"strings"
 
@@ -375,7 +376,7 @@ func encodeEnvironmentComposeProjection(projection EnvironmentComposeProjection)
 	if err := validateEnvironmentComposeProjection(projection); err != nil {
 		return nil, err
 	}
-	value, err := encodeEnvelope("environment-compose-projection", projection)
+	value, err := recordcodec.Encode("environment-compose-projection", projection)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +395,7 @@ func EncodeEnvironmentComposeProjectionStorage(projection EnvironmentComposeProj
 }
 
 func decodeEnvironmentComposeProjection(value []byte) (EnvironmentComposeProjection, error) {
-	projection, err := decodeEnvelope[EnvironmentComposeProjection](value, "environment-compose-projection")
+	projection, err := recordcodec.Decode[EnvironmentComposeProjection](value, "environment-compose-projection")
 	if err != nil {
 		return EnvironmentComposeProjection{}, err
 	}

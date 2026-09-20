@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -237,13 +238,13 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
 	defer clearKeyValues(values.Values)
-	pool, err := decodeEnvelope[zonePoolRegistry](values.Values[0].Value, "zone_pool_registry")
+	pool, err := recordcodec.Decode[zonePoolRegistry](values.Values[0].Value, "zone_pool_registry")
 	if err != nil || validateZonePoolRegistry(pool) != nil ||
 		pool.Reservations[action.TargetID] != evidence.Desired.Subnet {
 		return hierarchyDeletionControllerEffects{}, corruptZonePoolRegistry()
 	}
 	if values.Values[1] != nil {
-		addresses, decodeErr := decodeEnvelope[componentAddressRegistry](
+		addresses, decodeErr := recordcodec.Decode[componentAddressRegistry](
 			values.Values[1].Value,
 			"component_address_registry",
 		)
@@ -273,7 +274,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinal
 		effects.mutations = append(effects.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: poolKey})
 		return effects, nil
 	}
-	poolValue, err := encodeEnvelope("zone_pool_registry", nextPool)
+	poolValue, err := recordcodec.Encode("zone_pool_registry", nextPool)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
@@ -473,7 +474,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 		fixedInputDigest = hierarchyDeletionBytesDigest(frozenValue)
 		clear(frozenValue)
 	}
-	registry, err := decodeEnvelope[EnvironmentPoolRegistry](result.Values[1].Value, "environment_pool_registry")
+	registry, err := recordcodec.Decode[EnvironmentPoolRegistry](result.Values[1].Value, "environment_pool_registry")
 	if err != nil || validateEnvironmentPoolRegistry(registry) != nil {
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
@@ -484,7 +485,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionReservati
 	mutation := etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentPoolRegistryKey}
 	values := [][]byte(nil)
 	if len(next.Reservations) != 0 {
-		value, encodeErr := encodeEnvelope("environment_pool_registry", next)
+		value, encodeErr := recordcodec.Encode("environment_pool_registry", next)
 		if encodeErr != nil {
 			return hierarchyDeletionControllerEffects{}, encodeErr
 		}
@@ -548,11 +549,11 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	quotaValue, err := encodeEnvelope("runner_tenant_quota", quota)
+	quotaValue, err := recordcodec.Encode("runner_tenant_quota", quota)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	systemValue, err := encodeEnvelope("system_pool_registry", system)
+	systemValue, err := recordcodec.Encode("system_pool_registry", system)
 	if err != nil {
 		clear(quotaValue)
 		return hierarchyDeletionControllerEffects{}, err

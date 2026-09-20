@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 	"unicode/utf8"
 
@@ -586,11 +587,11 @@ func encodeDeletionTombstone(record DeletionTombstoneRecord) ([]byte, error) {
 	if err := validateDeletionTombstone(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("deletion-tombstone", record)
+	return recordcodec.Encode("deletion-tombstone", record)
 }
 
 func decodeDeletionTombstone(value []byte) (DeletionTombstoneRecord, error) {
-	record, err := decodeEnvelope[DeletionTombstoneRecord](value, "deletion-tombstone")
+	record, err := recordcodec.Decode[DeletionTombstoneRecord](value, "deletion-tombstone")
 	if err != nil {
 		return DeletionTombstoneRecord{}, err
 	}

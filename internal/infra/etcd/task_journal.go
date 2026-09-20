@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"math"
 	"strings"
 	"time"
@@ -887,7 +888,7 @@ func canonicalTaskEventPayload(state TaskEventState, value json.RawMessage) (jso
 	if !validTaskEventState(state) {
 		return nil, "", errs.New(errs.KindValidationFailed, "task event status is invalid")
 	}
-	if len(value) == 0 || rejectDuplicateJSONFields(value) != nil {
+	if len(value) == 0 || recordcodec.RejectDuplicateFields(value) != nil {
 		return nil, "", errs.New(errs.KindValidationFailed, "task event payload must be one valid JSON value")
 	}
 	var compact bytes.Buffer
@@ -907,7 +908,7 @@ func encodeTaskEventRecord(record TaskEventRecord) ([]byte, error) {
 	if err := validateTaskEventRecord(record); err != nil {
 		return nil, err
 	}
-	value, err := encodeEnvelope("task_event", taskEventRecordData{
+	value, err := recordcodec.Encode("task_event", taskEventRecordData{
 		Sequence: record.Sequence, Identity: record.Identity, State: record.State,
 		Payload: record.Payload, PayloadSHA256: record.PayloadSHA256,
 		ReceivedAt: record.ReceivedAt.UTC().Format(time.RFC3339Nano),
@@ -926,7 +927,7 @@ func encodeTaskEventRecord(record TaskEventRecord) ([]byte, error) {
 }
 
 func decodeTaskEventRecord(value []byte) (TaskEventRecord, error) {
-	data, err := decodeEnvelope[taskEventRecordData](value, "task_event")
+	data, err := recordcodec.Decode[taskEventRecordData](value, "task_event")
 	if err != nil {
 		return TaskEventRecord{}, err
 	}
@@ -951,11 +952,11 @@ func encodeTaskEventDedupRecord(record TaskEventDedupRecord) ([]byte, error) {
 	if err := validateTaskEventDedupRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("task_event_dedup", record)
+	return recordcodec.Encode("task_event_dedup", record)
 }
 
 func decodeTaskEventDedupRecord(value []byte) (TaskEventDedupRecord, error) {
-	record, err := decodeEnvelope[TaskEventDedupRecord](value, "task_event_dedup")
+	record, err := recordcodec.Decode[TaskEventDedupRecord](value, "task_event_dedup")
 	if err != nil {
 		return TaskEventDedupRecord{}, err
 	}

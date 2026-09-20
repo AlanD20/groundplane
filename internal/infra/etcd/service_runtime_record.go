@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -52,7 +53,7 @@ func encodeServiceRuntimeRecord(record ServiceRuntimeRecord) ([]byte, error) {
 	if err := validateServiceRuntimeRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("service_runtime", record)
+	return recordcodec.Encode("service_runtime", record)
 }
 
 // EncodeServiceRuntimeRecordStorage returns the exact value used by Blueprint
@@ -62,7 +63,7 @@ func EncodeServiceRuntimeRecordStorage(record ServiceRecord) ([]byte, error) {
 }
 
 func decodeServiceRuntimeRecord(value []byte) (ServiceRuntimeRecord, error) {
-	record, err := decodeEnvelope[ServiceRuntimeRecord](value, "service_runtime")
+	record, err := recordcodec.Decode[ServiceRuntimeRecord](value, "service_runtime")
 	if err != nil || validateServiceRuntimeRecord(record) != nil {
 		return ServiceRuntimeRecord{}, corruptRecord()
 	}

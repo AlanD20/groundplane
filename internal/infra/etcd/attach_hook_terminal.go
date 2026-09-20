@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -98,7 +99,7 @@ func (repository *TaskRepository) requireBackingHookResultCheckpoint(
 		)
 	}
 	defer clearKeyValues(checkpointResult.Values)
-	checkpoint, err := decodeEnvelope[BackingHookCheckpointRecord](
+	checkpoint, err := recordcodec.Decode[BackingHookCheckpointRecord](
 		checkpointResult.Values[0].Value,
 		"backing-hook-checkpoint",
 	)

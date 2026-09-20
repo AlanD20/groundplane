@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"time"
 
@@ -529,7 +530,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 	if validateBlueprintCandidateAttempts(attemptAuthority, retry, seal) != nil {
 		return releaseTaskRetryChange{}, corruptReleaseRecord()
 	}
-	attemptAuthorityValue, err := encodeEnvelope(
+	attemptAuthorityValue, err := recordcodec.Encode(
 		"blueprint-candidate-attempt-authority", attemptAuthority,
 	)
 	if err != nil {

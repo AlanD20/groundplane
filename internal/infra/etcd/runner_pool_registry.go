@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -47,14 +48,14 @@ func encodeRunnerHostSlotRecord(record RunnerHostSlotRecord) ([]byte, error) {
 	if err := validateRunnerHostSlotRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("runner_host_slot", record)
+	return recordcodec.Encode("runner_host_slot", record)
 }
 
 func decodeRunnerHostSlotRecord(value []byte) (RunnerHostSlotRecord, error) {
 	if len(value) > maximumRunnerPersistenceBytes {
 		return RunnerHostSlotRecord{}, corruptRunnerHostSlotRecord()
 	}
-	record, err := decodeEnvelope[RunnerHostSlotRecord](value, "runner_host_slot")
+	record, err := recordcodec.Decode[RunnerHostSlotRecord](value, "runner_host_slot")
 	if err != nil || validateRunnerHostSlotRecord(record) != nil {
 		return RunnerHostSlotRecord{}, corruptRunnerHostSlotRecord()
 	}
@@ -65,7 +66,7 @@ func decodeRunnerTenantQuota(value []byte) (runnerallocation.RunnerTenantQuota, 
 	if len(value) > maximumRunnerPersistenceBytes {
 		return runnerallocation.RunnerTenantQuota{}, corruptRunnerTenantQuota()
 	}
-	quota, err := decodeEnvelope[runnerallocation.RunnerTenantQuota](value, "runner_tenant_quota")
+	quota, err := recordcodec.Decode[runnerallocation.RunnerTenantQuota](value, "runner_tenant_quota")
 	if err != nil || quota.Validate() != nil {
 		return runnerallocation.RunnerTenantQuota{}, corruptRunnerTenantQuota()
 	}
@@ -80,7 +81,7 @@ func decodeSystemPoolRegistry(value []byte) (runnerallocation.SystemPoolRegistry
 	if len(value) > maximumRunnerPersistenceBytes {
 		return runnerallocation.SystemPoolRegistry{}, corruptSystemPoolRegistry()
 	}
-	registry, err := decodeEnvelope[runnerallocation.SystemPoolRegistry](value, "system_pool_registry")
+	registry, err := recordcodec.Decode[runnerallocation.SystemPoolRegistry](value, "system_pool_registry")
 	if err != nil || registry.ValidateReservations() != nil {
 		return runnerallocation.SystemPoolRegistry{}, corruptSystemPoolRegistry()
 	}

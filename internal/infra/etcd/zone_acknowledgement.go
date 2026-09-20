@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -60,12 +61,12 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		(tombstone.Phase != DeletionPhaseHostEffects && tombstone.Phase != DeletionPhaseFinalizing) {
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal tombstone changed")
 	}
-	pool, err := decodeEnvelope[zonePoolRegistry](state.Values[1].Value, "zone_pool_registry")
+	pool, err := recordcodec.Decode[zonePoolRegistry](state.Values[1].Value, "zone_pool_registry")
 	if err != nil || validateZonePoolRegistry(pool) != nil || pool.Reservations[task.Target] != zone.Desired.Subnet {
 		return nil, nil, errs.New(errs.KindInternal, "Zone subnet reservation is inconsistent")
 	}
 	if state.Values[2] != nil {
-		addresses, decodeErr := decodeEnvelope[componentAddressRegistry](
+		addresses, decodeErr := recordcodec.Decode[componentAddressRegistry](
 			state.Values[2].Value,
 			"component_address_registry",
 		)
@@ -150,7 +151,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	if len(nextPool.Reservations) == 0 {
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[1]})
 	} else {
-		poolValue, encodeErr := encodeEnvelope("zone_pool_registry", nextPool)
+		poolValue, encodeErr := recordcodec.Encode("zone_pool_registry", nextPool)
 		if encodeErr != nil {
 			clearMutationValues(mutations)
 			return nil, nil, encodeErr
@@ -195,7 +196,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 			return errs.New(errs.KindStateConflict, "completed Zone removal retained old desired state")
 		}
 		if state.Values[1] != nil {
-			pool, poolErr := decodeEnvelope[zonePoolRegistry](state.Values[1].Value, "zone_pool_registry")
+			pool, poolErr := recordcodec.Decode[zonePoolRegistry](state.Values[1].Value, "zone_pool_registry")
 			if poolErr != nil || validateZonePoolRegistry(pool) != nil {
 				return errs.New(errs.KindInternal, "Zone pool registry is inconsistent")
 			}
@@ -220,7 +221,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	if err != nil {
 		return err
 	}
-	pool, err := decodeEnvelope[zonePoolRegistry](state.Values[1].Value, "zone_pool_registry")
+	pool, err := recordcodec.Decode[zonePoolRegistry](state.Values[1].Value, "zone_pool_registry")
 	if err != nil || validateZonePoolRegistry(pool) != nil || pool.Reservations[task.Target] != zone.Desired.Subnet {
 		return errs.New(errs.KindStateConflict, "failed Zone removal changed its subnet reservation")
 	}

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -29,7 +30,7 @@ func (repository *ScriptRepository) manualScriptExecutionAtRevision(
 	if err != nil {
 		return ScriptExecutionRecord{}, nil, err
 	}
-	execution, err := decodeEnvelope[ScriptExecutionRecord](value.Value, "script-execution")
+	execution, err := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
 	if err != nil || validateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
 		execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
 		execution.EnvironmentID != task.Owner.EnvironmentID || execution.PlanHash != task.PlanHash ||

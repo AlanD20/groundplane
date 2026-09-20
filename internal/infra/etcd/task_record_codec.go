@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -46,7 +47,7 @@ func encodeTaskRecord(record TaskRecord) ([]byte, error) {
 	if err := validateTaskRecord(record); err != nil {
 		return nil, err
 	}
-	value, err := encodeEnvelope("task", taskRecordToData(record))
+	value, err := recordcodec.Encode("task", taskRecordToData(record))
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +64,7 @@ func encodeTaskRecord(record TaskRecord) ([]byte, error) {
 func EncodeTaskStorageRecord(record TaskRecord) ([]byte, error) { return encodeTaskRecord(record) }
 
 func decodeTaskRecord(value []byte) (TaskRecord, error) {
-	data, err := decodeEnvelope[taskRecordData](value, "task")
+	data, err := recordcodec.Decode[taskRecordData](value, "task")
 	if err != nil {
 		return TaskRecord{}, err
 	}

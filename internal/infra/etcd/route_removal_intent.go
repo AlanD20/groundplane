@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -122,11 +123,11 @@ func encodeRouteRemovalIntent(intent RouteRemovalIntent) ([]byte, error) {
 	if err := validateRouteRemovalIntent(intent); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("route_removal_intent", intent)
+	return recordcodec.Encode("route_removal_intent", intent)
 }
 
 func decodeRouteRemovalIntent(value []byte) (RouteRemovalIntent, error) {
-	intent, err := decodeEnvelope[RouteRemovalIntent](value, "route_removal_intent")
+	intent, err := recordcodec.Decode[RouteRemovalIntent](value, "route_removal_intent")
 	if err != nil {
 		return RouteRemovalIntent{}, err
 	}

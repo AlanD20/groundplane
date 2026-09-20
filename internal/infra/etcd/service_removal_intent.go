@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"time"
 
@@ -474,11 +475,11 @@ func encodeServiceRemovalIntent(intent ServiceRemovalIntent) ([]byte, error) {
 	if err := validateServiceRemovalIntent(intent); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("service_removal_intent", intent)
+	return recordcodec.Encode("service_removal_intent", intent)
 }
 
 func decodeServiceRemovalIntent(value []byte) (ServiceRemovalIntent, error) {
-	intent, err := decodeEnvelope[ServiceRemovalIntent](value, "service_removal_intent")
+	intent, err := recordcodec.Decode[ServiceRemovalIntent](value, "service_removal_intent")
 	if err != nil || validateServiceRemovalIntent(intent) != nil {
 		return ServiceRemovalIntent{}, corruptServiceRemovalIntent()
 	}

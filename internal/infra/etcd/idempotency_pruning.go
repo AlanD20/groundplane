@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -310,7 +311,7 @@ func (repository *IdempotencyRepository) loadPruneScan(ctx context.Context) (ide
 		return idempotencyPruneScan{}, nil
 	}
 	defer clear(read.Entry.Value)
-	cursor, err := decodeEnvelope[idempotencyPruneCursor](read.Entry.Value, "idempotency_prune_cursor")
+	cursor, err := recordcodec.Decode[idempotencyPruneCursor](read.Entry.Value, "idempotency_prune_cursor")
 	if err != nil || read.Entry.Key != idempotencyPruneCursorKey || read.Entry.ModRevision <= 0 {
 		return idempotencyPruneScan{}, corruptIdempotencyMarker()
 	}
@@ -377,7 +378,7 @@ func (repository *IdempotencyRepository) pruneRetainedBatch(
 			conditions = append(conditions, etcdstore.Condition{Key: idempotencyPruneCursorKey, ModRevision: scan.CursorRevision})
 			mutation := etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: idempotencyPruneCursorKey}
 			if after != "" {
-				value, err := encodeEnvelope("idempotency_prune_cursor", idempotencyPruneCursor{After: after})
+				value, err := recordcodec.Encode("idempotency_prune_cursor", idempotencyPruneCursor{After: after})
 				if err != nil {
 					return 0, err
 				}

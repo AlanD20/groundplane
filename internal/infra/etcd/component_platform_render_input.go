@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net"
 	"net/netip"
 	"sort"
@@ -102,7 +103,7 @@ func encodePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderInp
 	if err := validatePlatformComponentTaskRenderInput(input); err != nil {
 		return nil, err
 	}
-	value, err := encodeEnvelope("platform_component_task_render_input", input)
+	value, err := recordcodec.Encode("platform_component_task_render_input", input)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +115,7 @@ func encodePlatformComponentTaskRenderInput(input PlatformComponentTaskRenderInp
 }
 
 func decodePlatformComponentTaskRenderInput(value []byte) (PlatformComponentTaskRenderInput, error) {
-	input, err := decodeEnvelope[PlatformComponentTaskRenderInput](value, "platform_component_task_render_input")
+	input, err := recordcodec.Decode[PlatformComponentTaskRenderInput](value, "platform_component_task_render_input")
 	if err != nil || validatePlatformComponentTaskRenderInput(input) != nil {
 		return PlatformComponentTaskRenderInput{}, errs.New(
 			errs.KindInternal,

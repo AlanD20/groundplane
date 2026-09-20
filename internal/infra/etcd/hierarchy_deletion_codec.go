@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"regexp"
 	"slices"
 	"strings"
@@ -39,12 +40,12 @@ func encodeHierarchyDeletionRecord(value any, maximum int) ([]byte, error) {
 }
 
 func decodeHierarchyDeletionRecord(value []byte, maximum int, target any) error {
-	if len(value) == 0 || len(value) > maximum || rejectDuplicateJSONFields(value) != nil {
+	if len(value) == 0 || len(value) > maximum || recordcodec.RejectDuplicateFields(value) != nil {
 		return corruptHierarchyDeletion()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil || requireJSONEOF(decoder) != nil {
+	if err := decoder.Decode(target); err != nil || recordcodec.RequireEOF(decoder) != nil {
 		return corruptHierarchyDeletion()
 	}
 	return nil

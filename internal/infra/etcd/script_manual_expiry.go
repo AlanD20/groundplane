@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -27,7 +28,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 5 || read.Values[1] == nil {
 		return false, corruptTaskPruneIntent()
 	}
-	execution, err := decodeEnvelope[ScriptExecutionRecord](read.Values[1].Value, "script-execution")
+	execution, err := recordcodec.Decode[ScriptExecutionRecord](read.Values[1].Value, "script-execution")
 	if err != nil || validateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
 		execution.OperationID != task.OperationID || execution.PlanHash != task.PlanHash ||
 		execution.EnvironmentID != task.Owner.EnvironmentID {
@@ -73,7 +74,7 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 			return false, err
 		}
 		defer fragment.Clear()
-		encoded, err := encodeEnvelope("script-execution", next)
+		encoded, err := recordcodec.Encode("script-execution", next)
 		if err != nil {
 			return false, err
 		}

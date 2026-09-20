@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -1720,7 +1721,7 @@ func encodeAttachDependentGrantIndex(attachID string, grantAttachIDs []string) (
 }
 
 func decodeAttachDependentGrantIndex(value []byte, attachID string) ([]string, error) {
-	if rejectDuplicateJSONFields(value) != nil {
+	if recordcodec.RejectDuplicateFields(value) != nil {
 		return nil, corruptAttachRecord()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
@@ -1729,7 +1730,7 @@ func decodeAttachDependentGrantIndex(value []byte, attachID string) ([]string, e
 		AttachID       string   `json:"attach_id"`
 		GrantAttachIDs []string `json:"grant_attach_ids"`
 	}
-	if decoder.Decode(&index) != nil || requireJSONEOF(decoder) != nil ||
+	if decoder.Decode(&index) != nil || recordcodec.RequireEOF(decoder) != nil ||
 		index.AttachID != attachID ||
 		validateSortedStableIDs(index.GrantAttachIDs, ids.KindAttach, "Attach dependent grant_attach_ids") != nil {
 		return nil, corruptAttachRecord()

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"time"
 
@@ -199,11 +200,11 @@ func encodeReleaseRecoveryRecord(record releaseRecoveryRecord) ([]byte, error) {
 	if err := validateReleaseRecoveryRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("release-recovery", record)
+	return recordcodec.Encode("release-recovery", record)
 }
 
 func decodeReleaseRecoveryRecord(value []byte) (releaseRecoveryRecord, error) {
-	record, err := decodeEnvelope[releaseRecoveryRecord](value, "release-recovery")
+	record, err := recordcodec.Decode[releaseRecoveryRecord](value, "release-recovery")
 	if err != nil || validateReleaseRecoveryRecord(record) != nil {
 		return releaseRecoveryRecord{}, errs.New(errs.KindInternal, "release recovery record is corrupt")
 	}

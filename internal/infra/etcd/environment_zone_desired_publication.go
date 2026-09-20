@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -76,7 +77,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	registryValue, err := encodeEnvelope("zone_pool_registry", nextRegistry)
+	registryValue, err := recordcodec.Encode("zone_pool_registry", nextRegistry)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

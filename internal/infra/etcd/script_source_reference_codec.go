@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"io"
 	"strings"
 
@@ -202,7 +203,7 @@ func decodeScriptRunnerSnapshotSource(
 	value []byte,
 	reference ScriptSourceReference,
 ) (*agentpb.ResolvedRunnerSnapshot, string, error) {
-	snapshot, err := decodeEnvelope[storedScriptRunnerSnapshot](value, "script-runner-snapshot")
+	snapshot, err := recordcodec.Decode[storedScriptRunnerSnapshot](value, "script-runner-snapshot")
 	digest := sha256.Sum256(snapshot.Payload)
 	var payload agentpb.ResolvedRunnerSnapshot
 	if err != nil || snapshot.SnapshotID == "" || key != scriptRunnerSnapshotKey(snapshot.SnapshotID) ||
@@ -325,13 +326,13 @@ func scriptSourceMaterializationRecordKey(environmentID string, renderGeneration
 }
 
 func decodeScriptSourceCount(value []byte) (ScriptSourceCount, error) {
-	return decodeEnvelope[ScriptSourceCount](value, "script-source-count")
+	return recordcodec.Decode[ScriptSourceCount](value, "script-source-count")
 }
 func decodeScriptSourcePreparation(value []byte) (ScriptSourcePreparation, error) {
-	return decodeEnvelope[ScriptSourcePreparation](value, "script-source-preparation")
+	return recordcodec.Decode[ScriptSourcePreparation](value, "script-source-preparation")
 }
 func decodeScriptOperationSourceRoot(value []byte) (ScriptOperationSourceRoot, error) {
-	root, err := decodeEnvelope[ScriptOperationSourceRoot](value, "script-operation-source-root")
+	root, err := recordcodec.Decode[ScriptOperationSourceRoot](value, "script-operation-source-root")
 	if err != nil || ids.Validate(ids.KindOperation, root.OperationID) != nil || root.MembershipCount == 0 ||
 		!validLowerSHA256(root.MembershipSHA256) || root.ReleaseCursor > root.MembershipCount {
 		return ScriptOperationSourceRoot{}, errs.New(

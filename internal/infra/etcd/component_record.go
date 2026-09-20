@@ -2,6 +2,7 @@ package etcd
 
 import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 	"reflect"
 
@@ -200,11 +201,11 @@ func encodeComponentRecord(record ComponentRecord) ([]byte, error) {
 	if err := validateComponentRecord(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("component", record)
+	return recordcodec.Encode("component", record)
 }
 
 func decodeComponentRecord(value []byte) (ComponentRecord, error) {
-	record, err := decodeEnvelope[ComponentRecord](value, "component")
+	record, err := recordcodec.Decode[ComponentRecord](value, "component")
 	if err != nil {
 		return ComponentRecord{}, err
 	}

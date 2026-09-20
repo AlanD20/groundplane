@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -449,13 +450,13 @@ func encodeTaskMaterializationWriter(record taskMaterializationWriterRecord) ([]
 }
 
 func decodeTaskMaterializationWriter(value []byte) (taskMaterializationWriterRecord, error) {
-	if rejectDuplicateJSONFields(value) != nil {
+	if recordcodec.RejectDuplicateFields(value) != nil {
 		return taskMaterializationWriterRecord{}, corruptTaskMaterializationWriter()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var data taskMaterializationWriterJSON
-	if err := decoder.Decode(&data); err != nil || requireJSONEOF(decoder) != nil || data.Schema != 2 {
+	if err := decoder.Decode(&data); err != nil || recordcodec.RequireEOF(decoder) != nil || data.Schema != 2 {
 		return taskMaterializationWriterRecord{}, corruptTaskMaterializationWriter()
 	}
 	record := taskMaterializationWriterRecord{

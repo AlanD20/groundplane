@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -117,14 +118,14 @@ func encodeRunnerRemovalIntent(intent RunnerRemovalIntent) ([]byte, error) {
 	if err := validateRunnerRemovalIntent(intent); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("runner_removal_intent", intent)
+	return recordcodec.Encode("runner_removal_intent", intent)
 }
 
 func decodeRunnerRemovalIntent(value []byte) (RunnerRemovalIntent, error) {
 	if len(value) > maximumRunnerPersistenceBytes {
 		return RunnerRemovalIntent{}, errs.New(errs.KindInternal, "runner removal intent is corrupt")
 	}
-	intent, err := decodeEnvelope[RunnerRemovalIntent](value, "runner_removal_intent")
+	intent, err := recordcodec.Decode[RunnerRemovalIntent](value, "runner_removal_intent")
 	if err != nil || validateRunnerRemovalIntent(intent) != nil {
 		return RunnerRemovalIntent{}, errs.New(errs.KindInternal, "runner removal intent is corrupt")
 	}
@@ -146,14 +147,14 @@ func encodeRunnerDeletionTombstone(record DeletionTombstoneRecord) ([]byte, erro
 	if err := validateRunnerDeletionTombstone(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("deletion-tombstone", record)
+	return recordcodec.Encode("deletion-tombstone", record)
 }
 
 func decodeRunnerDeletionTombstone(value []byte) (DeletionTombstoneRecord, error) {
 	if len(value) > maximumRunnerPersistenceBytes {
 		return DeletionTombstoneRecord{}, errs.New(errs.KindInternal, "runner deletion tombstone is corrupt")
 	}
-	record, err := decodeEnvelope[DeletionTombstoneRecord](value, "deletion-tombstone")
+	record, err := recordcodec.Decode[DeletionTombstoneRecord](value, "deletion-tombstone")
 	if err != nil || validateRunnerDeletionTombstone(record) != nil {
 		return DeletionTombstoneRecord{}, errs.New(errs.KindInternal, "runner deletion tombstone is corrupt")
 	}
@@ -667,11 +668,11 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	quotaValue, err := encodeEnvelope("runner_tenant_quota", quota)
+	quotaValue, err := recordcodec.Encode("runner_tenant_quota", quota)
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	systemValue, err := encodeEnvelope("system_pool_registry", system)
+	systemValue, err := recordcodec.Encode("system_pool_registry", system)
 	if err != nil {
 		clear(quotaValue)
 		return runnerTaskChange{}, err

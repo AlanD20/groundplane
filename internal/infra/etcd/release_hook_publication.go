@@ -2,6 +2,7 @@ package etcd
 
 import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"math"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -72,12 +73,12 @@ func prepareReleaseHookPublicationFragment(
 		updatedScripts[execution.ScriptID] = updated
 		scriptRevisions[execution.ScriptID] = sources.Script.Revision
 
-		executionValue, err := encodeEnvelope("script-execution", execution)
+		executionValue, err := recordcodec.Encode("script-execution", execution)
 		if err != nil {
 			clearReleaseHookPublicationFragment(fragment)
 			return releaseHookPublicationFragment{}, err
 		}
-		snapshotValue, err := encodeEnvelope("script-runner-snapshot", struct {
+		snapshotValue, err := recordcodec.Encode("script-runner-snapshot", struct {
 			ExecutionID string `json:"script_execution_id"`
 			SnapshotID  string `json:"snapshot_id"`
 			SHA256      string `json:"sha256"`
@@ -88,7 +89,7 @@ func prepareReleaseHookPublicationFragment(
 			clearReleaseHookPublicationFragment(fragment)
 			return releaseHookPublicationFragment{}, err
 		}
-		bodyReference, err := encodeEnvelope("script-body-reference", struct {
+		bodyReference, err := recordcodec.Encode("script-body-reference", struct {
 			ExecutionID         string `json:"script_execution_id"`
 			ScriptID            string `json:"script_id"`
 			Generation          uint64 `json:"generation"`

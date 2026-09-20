@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -155,7 +156,7 @@ func (repository *HierarchyRepository) GetEnvironmentPoolRegistry(
 			ReadRevision: result.ReadRevision,
 		}, nil
 	}
-	registry, err := decodeEnvelope[EnvironmentPoolRegistry](result.Entry.Value, "environment_pool_registry")
+	registry, err := recordcodec.Decode[EnvironmentPoolRegistry](result.Entry.Value, "environment_pool_registry")
 	if err != nil || validateEnvironmentPoolRegistry(registry) != nil {
 		return Versioned[EnvironmentPoolRegistry]{}, corruptEnvironmentPoolRegistry()
 	}

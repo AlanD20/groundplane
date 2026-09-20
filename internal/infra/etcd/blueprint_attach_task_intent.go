@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"sort"
 	"time"
@@ -200,11 +201,11 @@ func encodeBlueprintAttachTaskIntent(intent BlueprintAttachTaskIntent) ([]byte, 
 	if err := validateBlueprintAttachTaskIntent(intent); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("blueprint_attach_task_intent", intent)
+	return recordcodec.Encode("blueprint_attach_task_intent", intent)
 }
 
 func decodeBlueprintAttachTaskIntent(value []byte) (BlueprintAttachTaskIntent, error) {
-	intent, err := decodeEnvelope[BlueprintAttachTaskIntent](value, "blueprint_attach_task_intent")
+	intent, err := recordcodec.Decode[BlueprintAttachTaskIntent](value, "blueprint_attach_task_intent")
 	if err != nil {
 		return BlueprintAttachTaskIntent{}, err
 	}

@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -132,11 +133,11 @@ func encodeBackingHookEncryptedInputs(record BackingHookEncryptedInputs) ([]byte
 	if err := validateBackingHookEncryptedInputs(record); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("backing-hook-task-inputs", record)
+	return recordcodec.Encode("backing-hook-task-inputs", record)
 }
 
 func decodeBackingHookEncryptedInputs(value []byte) (BackingHookEncryptedInputs, error) {
-	record, err := decodeEnvelope[BackingHookEncryptedInputs](value, "backing-hook-task-inputs")
+	record, err := recordcodec.Decode[BackingHookEncryptedInputs](value, "backing-hook-task-inputs")
 	if err != nil || validateBackingHookEncryptedInputs(record) != nil {
 		clear(record.Ciphertext)
 		return BackingHookEncryptedInputs{}, corruptRecord()

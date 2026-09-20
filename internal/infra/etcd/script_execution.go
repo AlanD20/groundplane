@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"math"
 	"strconv"
 	"strings"
@@ -143,7 +144,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 		if value == nil {
 			return false, corruptReleaseRecord()
 		}
-		record, decodeErr := decodeEnvelope[ScriptExecutionRecord](value.Value, "script-execution")
+		record, decodeErr := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
 		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || record.ID != step.executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
 			record.StepID != step.stepID || record.PlanHash != task.PlanHash {
@@ -217,7 +218,7 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 		if validateScriptExecutionRecord(next) != nil {
 			return false, corruptReleaseRecord()
 		}
-		executionValue, encodeErr := encodeEnvelope("script-execution", next)
+		executionValue, encodeErr := recordcodec.Encode("script-execution", next)
 		if encodeErr != nil {
 			return false, encodeErr
 		}
@@ -296,7 +297,7 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 			transfer.clear()
 			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script execution state is unknown")
 		}
-		record, decodeErr := decodeEnvelope[ScriptExecutionRecord](value.Value, "script-execution")
+		record, decodeErr := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
 		if decodeErr != nil || validateScriptExecutionRecord(record) != nil {
 			transfer.clear()
 			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script execution state is unknown")
@@ -321,7 +322,7 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 		next.CurrentTaskID = retry.ID
 		next.AssignmentID = ""
 		next.UpdatedAt = retry.CreatedAt.UTC()
-		encoded, encodeErr := encodeEnvelope("script-execution", next)
+		encoded, encodeErr := recordcodec.Encode("script-execution", next)
 		if encodeErr != nil {
 			transfer.clear()
 			return releaseHookExecutionRetryTransfer{}, encodeErr
@@ -388,7 +389,7 @@ func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 		if value == nil {
 			return false, nil, corruptReleaseRecord()
 		}
-		record, decodeErr := decodeEnvelope[ScriptExecutionRecord](value.Value, "script-execution")
+		record, decodeErr := recordcodec.Decode[ScriptExecutionRecord](value.Value, "script-execution")
 		if decodeErr != nil || validateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
 			record.StepID != steps[index].stepID || record.PlanHash != task.PlanHash ||
@@ -492,7 +493,7 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 }
 
 func validateScriptBodyReference(value []byte, execution ScriptExecutionRecord) error {
-	reference, err := decodeEnvelope[struct {
+	reference, err := recordcodec.Decode[struct {
 		ExecutionID         string `json:"script_execution_id"`
 		ScriptID            string `json:"script_id"`
 		Generation          uint64 `json:"generation"`
@@ -507,12 +508,12 @@ func validateScriptBodyReference(value []byte, execution ScriptExecutionRecord) 
 }
 
 func decrementStoredScriptActiveReferences(value []byte, scriptID string) ([]byte, error) {
-	stored, err := decodeEnvelope[storedScriptRecord](value, "script")
+	stored, err := recordcodec.Decode[storedScriptRecord](value, "script")
 	if err != nil || stored.Desired.ID != scriptID || stored.ActiveReferences == 0 {
 		return nil, corruptReleaseRecord()
 	}
 	stored.ActiveReferences--
-	encoded, err := encodeEnvelope("script", stored)
+	encoded, err := recordcodec.Encode("script", stored)
 	if err != nil {
 		return nil, err
 	}

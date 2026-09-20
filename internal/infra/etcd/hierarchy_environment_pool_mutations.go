@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ipam"
@@ -118,7 +119,7 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 			"Environment pool reservation registry is missing",
 		)
 	}
-	global, err := decodeEnvelope[EnvironmentPoolRegistry](
+	global, err := recordcodec.Decode[EnvironmentPoolRegistry](
 		registries.Values[0].Value,
 		"environment_pool_registry",
 	)
@@ -144,7 +145,7 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 	zones := zonePoolRegistry{Reservations: map[string]string{}}
 	zoneRevision := int64(0)
 	if registries.Values[1] != nil {
-		zones, err = decodeEnvelope[zonePoolRegistry](
+		zones, err = recordcodec.Decode[zonePoolRegistry](
 			registries.Values[1].Value,
 			"zone_pool_registry",
 		)
@@ -178,7 +179,7 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(environmentValue)
-	globalValue, err := encodeEnvelope("environment_pool_registry", nextGlobal)
+	globalValue, err := recordcodec.Encode("environment_pool_registry", nextGlobal)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -54,7 +55,7 @@ func (r *ZoneRepository) getZonePoolRegistryAtRevision(
 			Record: zonePoolRegistry{Reservations: map[string]string{}}, ReadRevision: result.ReadRevision,
 		}, nil
 	}
-	registry, err := decodeEnvelope[zonePoolRegistry](result.Values[0].Value, "zone_pool_registry")
+	registry, err := recordcodec.Decode[zonePoolRegistry](result.Values[0].Value, "zone_pool_registry")
 	if err != nil || validateZonePoolRegistry(registry) != nil {
 		return Versioned[zonePoolRegistry]{}, corruptZonePoolRegistry()
 	}

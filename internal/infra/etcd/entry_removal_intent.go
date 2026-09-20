@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -151,11 +152,11 @@ func encodeEntryRemovalIntent(intent EntryRemovalIntent) ([]byte, error) {
 	if err := validateEntryRemovalIntent(intent); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("entry_removal_intent", intent)
+	return recordcodec.Encode("entry_removal_intent", intent)
 }
 
 func decodeEntryRemovalIntent(value []byte) (EntryRemovalIntent, error) {
-	intent, err := decodeEnvelope[EntryRemovalIntent](value, "entry_removal_intent")
+	intent, err := recordcodec.Decode[EntryRemovalIntent](value, "entry_removal_intent")
 	if err != nil {
 		return EntryRemovalIntent{}, err
 	}

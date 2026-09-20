@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -781,7 +782,7 @@ func encodeLocalAgentValues(record LocalAgentRecord) ([]byte, []byte, []byte, []
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	token, err := encodeEnvelope("agent_channel_token", localAgentTokenData{
+	token, err := recordcodec.Encode("agent_channel_token", localAgentTokenData{
 		AgentID: record.ID, Generation: record.Generation,
 		Ciphertext: base64.RawURLEncoding.EncodeToString(record.EncryptedToken),
 		CreatedAt:  record.CreatedAt.Format(time.RFC3339Nano),
@@ -798,7 +799,7 @@ func encodeLocalAgentValues(record LocalAgentRecord) ([]byte, []byte, []byte, []
 }
 
 func encodeLocalAgentConfig(record LocalAgentRecord) ([]byte, error) {
-	return encodeEnvelope("agent_config", localAgentConfigData{
+	return recordcodec.Encode("agent_config", localAgentConfigData{
 		AgentID: record.ID, Generation: record.Generation,
 		PullIntervalSeconds: record.Config.PullIntervalSeconds,
 		MaxConcurrentTasks:  record.Config.MaxConcurrentTasks,
@@ -811,7 +812,7 @@ func encodeLocalAgentPrimary(record LocalAgentRecord) ([]byte, error) {
 	if !record.ReadyAt.IsZero() {
 		readyAt = record.ReadyAt.Format(time.RFC3339Nano)
 	}
-	return encodeEnvelope("agent", localAgentPrimaryData{
+	return recordcodec.Encode("agent", localAgentPrimaryData{
 		ID: record.ID, EnrollmentTaskID: record.EnrollmentTaskID,
 		Image: record.Image, Generation: record.Generation,
 		Phase: record.Phase, CreatedAt: record.CreatedAt.Format(time.RFC3339Nano), ReadyAt: readyAt,
@@ -819,7 +820,7 @@ func encodeLocalAgentPrimary(record LocalAgentRecord) ([]byte, error) {
 }
 
 func decodeLocalAgentPrimary(value []byte) (LocalAgentRecord, error) {
-	data, err := decodeEnvelope[localAgentPrimaryData](value, "agent")
+	data, err := recordcodec.Decode[localAgentPrimaryData](value, "agent")
 	if err != nil {
 		return LocalAgentRecord{}, err
 	}
@@ -846,7 +847,7 @@ func decodeLocalAgentPrimary(value []byte) (LocalAgentRecord, error) {
 }
 
 func decodeLocalAgentConfig(value []byte) (decodedLocalAgentConfig, error) {
-	data, err := decodeEnvelope[localAgentConfigData](value, "agent_config")
+	data, err := recordcodec.Decode[localAgentConfigData](value, "agent_config")
 	if err != nil {
 		return decodedLocalAgentConfig{}, err
 	}
@@ -863,7 +864,7 @@ func decodeLocalAgentConfig(value []byte) (decodedLocalAgentConfig, error) {
 }
 
 func decodeLocalAgentToken(value []byte) (decodedLocalAgentToken, error) {
-	data, err := decodeEnvelope[localAgentTokenData](value, "agent_channel_token")
+	data, err := recordcodec.Decode[localAgentTokenData](value, "agent_channel_token")
 	if err != nil {
 		return decodedLocalAgentToken{}, err
 	}
@@ -897,13 +898,13 @@ func encodeLocalAgentReference(agentID string) ([]byte, error) {
 }
 
 func decodeLocalAgentReference(value []byte) (string, error) {
-	if rejectDuplicateJSONFields(value) != nil {
+	if recordcodec.RejectDuplicateFields(value) != nil {
 		return "", corruptRecord()
 	}
 	decoder := json.NewDecoder(bytes.NewReader(value))
 	decoder.DisallowUnknownFields()
 	var reference localAgentReference
-	if err := decoder.Decode(&reference); err != nil || requireJSONEOF(decoder) != nil ||
+	if err := decoder.Decode(&reference); err != nil || recordcodec.RequireEOF(decoder) != nil ||
 		reference.Schema != 1 || ids.Validate(ids.KindAgent, reference.RecordID) != nil {
 		return "", corruptRecord()
 	}

@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 	"reflect"
 	"sort"
@@ -85,11 +86,11 @@ func encodeComponentTaskIntent(intent ComponentTaskIntent) ([]byte, error) {
 	if err := validateComponentTaskIntent(intent); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope("component_task_intent", intent)
+	return recordcodec.Encode("component_task_intent", intent)
 }
 
 func decodeComponentTaskIntent(value []byte) (ComponentTaskIntent, error) {
-	intent, err := decodeEnvelope[ComponentTaskIntent](value, "component_task_intent")
+	intent, err := recordcodec.Decode[ComponentTaskIntent](value, "component_task_intent")
 	if err != nil {
 		return ComponentTaskIntent{}, err
 	}

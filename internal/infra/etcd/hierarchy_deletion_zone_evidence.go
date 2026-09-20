@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -46,11 +47,11 @@ func encodeHierarchyDeletionZoneEvidence(evidence hierarchyDeletionZoneEvidence)
 	if err := validateHierarchyDeletionZoneEvidence(evidence); err != nil {
 		return nil, err
 	}
-	return encodeEnvelope(hierarchyDeletionZoneEvidenceKind, evidence)
+	return recordcodec.Encode(hierarchyDeletionZoneEvidenceKind, evidence)
 }
 
 func decodeHierarchyDeletionZoneEvidence(value []byte) (hierarchyDeletionZoneEvidence, error) {
-	evidence, err := decodeEnvelope[hierarchyDeletionZoneEvidence](value, hierarchyDeletionZoneEvidenceKind)
+	evidence, err := recordcodec.Decode[hierarchyDeletionZoneEvidence](value, hierarchyDeletionZoneEvidenceKind)
 	if err != nil || validateHierarchyDeletionZoneEvidence(evidence) != nil {
 		return hierarchyDeletionZoneEvidence{}, corruptHierarchyDeletion()
 	}
