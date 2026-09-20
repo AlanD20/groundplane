@@ -25,10 +25,10 @@ type backupPolicyInitialKey struct {
 // backupPolicySourceEvidence binds one ordered policy source to the exact
 // durable target revision that was validated by the application.
 type backupPolicySourceEvidence struct {
-	Source           Versioned[backuppolicy.BackupSourceRecord]
+	Source           etcdstore.Versioned[backuppolicy.BackupSourceRecord]
 	EnvironmentIndex *etcdstore.KeyValue
 	IdentityIndex    *etcdstore.KeyValue
-	Attach           *Versioned[attachrecord.Record]
+	Attach           *etcdstore.Versioned[attachrecord.Record]
 	Volume           *backupVolumeProjectionEvidence
 	TargetOwnerIndex *etcdstore.KeyValue
 }
@@ -43,17 +43,17 @@ type backupPolicyConnectorReferenceEvidence struct {
 // backupPolicyReplacementCandidate contains the fully resolved, prevalidated
 // durable evidence for one protected Environment-scoped replacement.
 type backupPolicyReplacementCandidate struct {
-	Environment         Versioned[hierarchyrecord.EnvironmentRecord]
-	Project             Versioned[hierarchyrecord.ProjectRecord]
-	MutationEpoch       Versioned[EnvironmentMutationEpochRecord]
-	Coordination        Versioned[EnvironmentCoordinationRecord]
+	Environment         etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	Project             etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	MutationEpoch       etcdstore.Versioned[EnvironmentMutationEpochRecord]
+	Coordination        etcdstore.Versioned[EnvironmentCoordinationRecord]
 	NextCoordination    EnvironmentCoordinationRecord
 	NextRunAt           time.Time
 	ScheduleSealed      bool
-	Current             *Versioned[backuppolicy.BackupPolicyRecord]
+	Current             *etcdstore.Versioned[backuppolicy.BackupPolicyRecord]
 	Replacement         backuppolicy.BackupPolicyRecord
 	Sources             []backupPolicySourceEvidence
-	Connector           *Versioned[connectorrecord.Record]
+	Connector           *etcdstore.Versioned[connectorrecord.Record]
 	ConnectorOwnerIndex *etcdstore.KeyValue
 	ConnectorReferences []backupPolicyConnectorReferenceEvidence
 	ExistingKey         *VersionedBackupKey

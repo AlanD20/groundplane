@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
@@ -14,8 +15,8 @@ import (
 )
 
 type retainedRuntime struct {
-	applied   etcd.Versioned[etcd.EnvironmentComposeProjection]
-	services  map[string]etcd.Versioned[etcd.ServiceRecord]
+	applied   etcdstore.Versioned[etcd.EnvironmentComposeProjection]
+	services  map[string]etcdstore.Versioned[etcd.ServiceRecord]
 	snapshots map[string]etcd.BlueprintRetainedRuntimeSource
 	artifacts []*agentpb.ComposeArtifact
 }
@@ -56,7 +57,7 @@ func (service *Service) captureRetainedRuntime(
 		if result == nil {
 			result = &retainedRuntime{
 				applied:   applied,
-				services:  make(map[string]etcd.Versioned[etcd.ServiceRecord]),
+				services:  make(map[string]etcdstore.Versioned[etcd.ServiceRecord]),
 				snapshots: make(map[string]etcd.BlueprintRetainedRuntimeSource),
 			}
 		}

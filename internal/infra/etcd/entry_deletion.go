@@ -14,9 +14,9 @@ import (
 // applied-projection candidate, and publishes the Task that owns finalization.
 // The Entry and every immutable generation remain visible until success.
 func (repository *EntryRepository) BeginEntryDeletionWithTask(
-	ctx context.Context, environment Versioned[hierarchyrecord.EnvironmentRecord], project Versioned[hierarchyrecord.ProjectRecord],
-	entry Versioned[entryrecord.Record],
-	projection *Versioned[EnvironmentComposeProjection],
+	ctx context.Context, environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	entry etcdstore.Versioned[entryrecord.Record],
+	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	tombstone DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := validateEntryHierarchy(ctx, environment, project, entry.Record); err != nil {
@@ -219,7 +219,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 }
 
 func validateEntryDeletionProjection(
-	projection *Versioned[EnvironmentComposeProjection], intent EntryRemovalIntent,
+	projection *etcdstore.Versioned[EnvironmentComposeProjection], intent EntryRemovalIntent,
 ) error {
 	if intent.CurrentProjection == nil {
 		if projection != nil {
@@ -236,7 +236,7 @@ func validateEntryDeletionProjection(
 }
 
 func classifyEntryDeletionStartConflict(
-	entry Versioned[entryrecord.Record], projection *Versioned[EnvironmentComposeProjection],
+	entry etcdstore.Versioned[entryrecord.Record], projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	ownerRevision int64, operationID string,
 	fence environmentMutationFenceEvidence,
 ) idempotencyPlanClassifier {
@@ -300,8 +300,8 @@ func classifyEntryDeletionStartConflict(
 }
 
 func loadEntryTaskInitiationTenantAtRevision(
-	ctx context.Context, store hierarchyStore, project Versioned[hierarchyrecord.ProjectRecord], readRevision int64,
-) (*Versioned[hierarchyrecord.TenantRecord], error) {
+	ctx context.Context, store hierarchyStore, project etcdstore.Versioned[hierarchyrecord.ProjectRecord], readRevision int64,
+) (*etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
 	if project.Record.Kind == hierarchyrecord.ProjectKindBacking {
 		return nil, nil
 	}
@@ -323,7 +323,7 @@ func loadEntryTaskInitiationTenantAtRevision(
 		tenant.ID != project.Record.TenantID {
 		return nil, errs.New(errs.KindInternal, "task initiation tenant is corrupt")
 	}
-	return &Versioned[hierarchyrecord.TenantRecord]{
+	return &etcdstore.Versioned[hierarchyrecord.TenantRecord]{
 		Record: tenant, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }

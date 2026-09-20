@@ -564,7 +564,7 @@ func (repository *TaskRepository) validateBackupKeyRotationTaskAcknowledgementRe
 
 func (repository *TaskRepository) retryBackupKeyRotationTask(
 	ctx context.Context,
-	source Versioned[TaskRecord],
+	source etcdstore.Versioned[TaskRecord],
 	retryTaskID string,
 	actor TaskActor,
 	marker IdempotencyMarker,

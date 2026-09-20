@@ -26,29 +26,29 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	result TaskResultRecord,
 	revision int64,
 	evidenceConditions ...Condition,
-) (Versioned[TaskRecord], bool, error) {
+) (etcdstore.Versioned[TaskRecord], bool, error) {
 	if task.Params[TaskReleasePublicationParam] == "" || !result.ReconciliationRequired {
-		return Versioned[TaskRecord]{}, false, nil
+		return etcdstore.Versioned[TaskRecord]{}, false, nil
 	}
 	if assignment.ExecutionMode != TaskExecutionModeForward || result.ExecutionEpoch != assignment.ExecutionEpoch ||
 		result.ReleaseRecoveryRecordSHA256 != "" || assignment.ExecutionEpoch == math.MaxUint32 ||
 		assignment.RestorationAuthority == nil {
-		return Versioned[TaskRecord]{}, true, errs.New(
+		return etcdstore.Versioned[TaskRecord]{}, true, errs.New(
 			errs.KindStateConflict,
 			"release recovery acknowledgement authority changed",
 		)
 	}
 	_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, revision)
 	if err != nil || validateAssignmentRestorationDescriptor(task, assignment, procedure) != nil {
-		return Versioned[TaskRecord]{}, true, corruptTaskAssignment()
+		return etcdstore.Versioned[TaskRecord]{}, true, corruptTaskAssignment()
 	}
 	stepIDs, err := releaseRestorationStepIDs(procedure, assignment.RestorationAuthority.Candidates)
 	if err != nil {
-		return Versioned[TaskRecord]{}, true, err
+		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
 	reportDigest, err := canonicalPrimaryReportSHA256(status, result)
 	if err != nil {
-		return Versioned[TaskRecord]{}, true, err
+		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
 	_, mutationEvidence, err := repository.releaseCandidateMutationEvidenceAtRevision(
 		ctx,
@@ -58,7 +58,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 		revision,
 	)
 	if err != nil {
-		return Versioned[TaskRecord]{}, true, err
+		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
 	record := releaseRecoveryRecord{
 		Schema: 1, TaskID: task.ID, AssignmentID: assignment.AssignmentID, OperationID: task.OperationID,
@@ -70,12 +70,12 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	}
 	recoveryValue, err := encodeReleaseRecoveryRecord(record)
 	if err != nil {
-		return Versioned[TaskRecord]{}, true, err
+		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
 	defer clear(recoveryValue)
 	recoveryDigest, err := releaseRecoveryRecordSHA256(record)
 	if err != nil {
-		return Versioned[TaskRecord]{}, true, err
+		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
 	next := assignment
 	next.ExecutionMode = TaskExecutionModeRecoveryOnly
@@ -83,18 +83,18 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	next.ReleaseRecoveryRecordSHA256 = recoveryDigest
 	nextValue, err := encodeTaskAssignment(next)
 	if err != nil {
-		return Versioned[TaskRecord]{}, true, err
+		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
 	defer clear(nextValue)
 	timeoutKey := taskTimeoutIndexKey(task.ID, assignment.Deadline)
 	timeoutRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{timeoutKey}, Revision: revision})
 	if err != nil {
-		return Versioned[TaskRecord]{}, true, err
+		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
 	if timeoutRead == nil || timeoutRead.ReadRevision != revision || len(timeoutRead.Values) != 1 ||
 		timeoutRead.Values[0] == nil || timeoutRead.Values[0].ModRevision != assignmentValue.ModRevision ||
 		!bytes.Equal(timeoutRead.Values[0].Value, assignmentValue.Value) {
-		return Versioned[TaskRecord]{}, true, errs.New(
+		return etcdstore.Versioned[TaskRecord]{}, true, errs.New(
 			errs.KindStateConflict,
 			"release recovery timeout authority changed",
 		)
@@ -118,13 +118,13 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 		{Type: etcdstore.MutationPut, Key: releaseRecoveryKey(task.ID), Value: recoveryValue},
 	})
 	if err != nil {
-		return Versioned[TaskRecord]{}, true, err
+		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[TaskRecord]{}, false, nil
+		return etcdstore.Versioned[TaskRecord]{}, false, nil
 	}
-	return Versioned[TaskRecord]{
+	return etcdstore.Versioned[TaskRecord]{
 		Record:       task,
 		Revision:     transaction.Revision,
 		ReadRevision: transaction.Revision,

@@ -8,6 +8,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -18,45 +19,45 @@ import (
 )
 
 type Repository interface {
-	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
+	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
 	GetEnvironmentBlueprintRevision(
 		context.Context,
 		string,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	GetEnvironmentComposeProjectionRevision(
 		context.Context,
 		string,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
-	GetAttach(context.Context, string) (etcd.Versioned[attachrecord.Record], error)
-	GetAttachTaskRenderInput(context.Context, string) (etcd.Versioned[etcd.AttachTaskRenderInput], error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	GetAttach(context.Context, string) (etcdstore.Versioned[attachrecord.Record], error)
+	GetAttachTaskRenderInput(context.Context, string) (etcdstore.Versioned[etcd.AttachTaskRenderInput], error)
 }
 
 type Facts interface {
 	ResolveTaskIdentity(
 		context.Context,
-		etcd.Versioned[attachrecord.Record],
+		etcdstore.Versioned[attachrecord.Record],
 		string,
 		taskplanning.AttachPlanIdentityConsumer,
 	) error
 	ResolveHookInput(
 		context.Context,
-		etcd.Versioned[attachrecord.Record],
+		etcdstore.Versioned[attachrecord.Record],
 		etcd.TaskRecord,
 		backinghook.Context,
 		taskplanning.BackingHookInputConsumer,
 	) error
 	ResolveDraftHookInput(
 		context.Context,
-		etcd.Versioned[attachrecord.Record],
+		etcdstore.Versioned[attachrecord.Record],
 		*attachrecord.EncryptedFacts,
 		etcd.TaskRecord,
 		*etcd.BackingHookEncryptedInputs,
@@ -94,7 +95,7 @@ func New(
 
 func (sealer *Sealer) SealDraft(
 	ctx context.Context,
-	current etcd.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
 	identity *taskplanning.AttachPlanIdentity,
@@ -123,7 +124,7 @@ func (sealer *Sealer) SealDraft(
 type draftAttachPlanState struct {
 	repository  Repository
 	facts       Facts
-	current     etcd.Versioned[attachrecord.Record]
+	current     etcdstore.Versioned[attachrecord.Record]
 	renderInput etcd.AttachTaskRenderInput
 	identity    *taskplanning.AttachPlanIdentity
 	hookBundle  *attachrecord.EncryptedFacts
@@ -132,7 +133,7 @@ type draftAttachPlanState struct {
 
 func (state *draftAttachPlanState) ResolveHookInput(
 	ctx context.Context,
-	current etcd.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	task etcd.TaskRecord,
 	hookContext backinghook.Context,
 	consume taskplanning.BackingHookInputConsumer,
@@ -148,7 +149,7 @@ func (state *draftAttachPlanState) ResolveHookInput(
 func (state *draftAttachPlanState) GetAttach(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[attachrecord.Record], error) {
+) (etcdstore.Versioned[attachrecord.Record], error) {
 	if id == state.current.Record.ID {
 		return state.current, nil
 	}
@@ -158,9 +159,9 @@ func (state *draftAttachPlanState) GetAttach(
 func (state *draftAttachPlanState) GetAttachTaskRenderInput(
 	ctx context.Context,
 	planID string,
-) (etcd.Versioned[etcd.AttachTaskRenderInput], error) {
+) (etcdstore.Versioned[etcd.AttachTaskRenderInput], error) {
 	if planID == state.renderInput.PlanID {
-		return etcd.Versioned[etcd.AttachTaskRenderInput]{Record: state.renderInput}, nil
+		return etcdstore.Versioned[etcd.AttachTaskRenderInput]{Record: state.renderInput}, nil
 	}
 	return state.repository.GetAttachTaskRenderInput(ctx, planID)
 }
@@ -168,13 +169,13 @@ func (state *draftAttachPlanState) GetAttachTaskRenderInput(
 func (state *draftAttachPlanState) GetBlueprintAttachTaskIntent(
 	context.Context,
 	string,
-) (etcd.Versioned[etcd.BlueprintAttachTaskIntent], bool, error) {
-	return etcd.Versioned[etcd.BlueprintAttachTaskIntent]{}, false, nil
+) (etcdstore.Versioned[etcd.BlueprintAttachTaskIntent], bool, error) {
+	return etcdstore.Versioned[etcd.BlueprintAttachTaskIntent]{}, false, nil
 }
 
 func (state *draftAttachPlanState) ResolveTaskIdentity(
 	ctx context.Context,
-	current etcd.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	taskID string,
 	consume taskplanning.AttachPlanIdentityConsumer,
 ) error {

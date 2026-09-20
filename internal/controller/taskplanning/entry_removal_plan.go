@@ -8,6 +8,7 @@ import (
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"sort"
 
@@ -25,7 +26,7 @@ type entryRemovalPlanStateReader interface {
 	GetEntryRemovalIntent(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EntryRemovalIntent], bool, error)
+	) (etcdstore.Versioned[etcd.EntryRemovalIntent], bool, error)
 }
 
 // EntryRemovalMaterializationResolver resolves one closed durable source while

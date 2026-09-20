@@ -12,9 +12,9 @@ import (
 )
 
 type ScriptAttachSources struct {
-	Networks []Versioned[zonerecord.Record]
-	Heads    []Versioned[EnvironmentBlueprintHead]
-	Attaches []Versioned[attachrecord.Record]
+	Networks []etcdstore.Versioned[zonerecord.Record]
+	Heads    []etcdstore.Versioned[EnvironmentBlueprintHead]
+	Attaches []etcdstore.Versioned[attachrecord.Record]
 }
 
 func loadEnvironmentAttachesAtRevision(
@@ -22,9 +22,9 @@ func loadEnvironmentAttachesAtRevision(
 	store hierarchyStore,
 	environmentID string,
 	revision int64,
-) ([]Versioned[attachrecord.Record], error) {
-	var result []Versioned[attachrecord.Record]
-	request := PageRequest{Limit: 200}
+) ([]etcdstore.Versioned[attachrecord.Record], error) {
+	var result []etcdstore.Versioned[attachrecord.Record]
+	request := etcdstore.PageRequest{Limit: 200}
 	for {
 		page, err := listIndexPageAtRevision(ctx, store, "attaches", "environment", environmentID,
 			attachrecord.AttachOwnerPrefix(environmentID), attachrecord.AttachKey, ids.KindAttach, request, attachrecord.DecodeAttachRecord,
@@ -47,12 +47,12 @@ func resolveScriptAttachNetworks(
 	ctx context.Context,
 	store hierarchyStore,
 	environmentID, serviceID string,
-	attaches []Versioned[attachrecord.Record],
+	attaches []etcdstore.Versioned[attachrecord.Record],
 	revision int64,
 ) (ScriptAttachSources, error) {
 	result := ScriptAttachSources{}
-	resolved := make(map[string]Versioned[zonerecord.Record])
-	heads := make(map[string]Versioned[EnvironmentBlueprintHead])
+	resolved := make(map[string]etcdstore.Versioned[zonerecord.Record])
+	heads := make(map[string]etcdstore.Versioned[EnvironmentBlueprintHead])
 	for _, value := range attaches {
 		attach := value.Record
 		if attach.EnvironmentID != environmentID {

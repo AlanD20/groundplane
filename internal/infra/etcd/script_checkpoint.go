@@ -115,22 +115,22 @@ type scriptCheckpointAnchor struct {
 func (repository *ScriptRepository) GetScriptExecution(
 	ctx context.Context,
 	executionID string,
-) (Versioned[ScriptExecutionRecord], error) {
+) (etcdstore.Versioned[ScriptExecutionRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ScriptExecutionRecord]{}, err
+		return etcdstore.Versioned[ScriptExecutionRecord]{}, err
 	}
 	if repository == nil || repository.store == nil || !validRawScriptExecutionID(executionID) {
-		return Versioned[ScriptExecutionRecord]{}, errs.New(
+		return etcdstore.Versioned[ScriptExecutionRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"Script execution request is invalid",
 		)
 	}
 	result, err := repository.store.Get(ctx, scriptExecutionKey(executionID))
 	if err != nil {
-		return Versioned[ScriptExecutionRecord]{}, err
+		return etcdstore.Versioned[ScriptExecutionRecord]{}, err
 	}
 	if result == nil || result.Entry == nil {
-		return Versioned[ScriptExecutionRecord]{}, errs.New(
+		return etcdstore.Versioned[ScriptExecutionRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"Script execution record is missing",
 		)
@@ -138,9 +138,9 @@ func (repository *ScriptRepository) GetScriptExecution(
 	defer clear(result.Entry.Value)
 	record, err := recordcodec.Decode[ScriptExecutionRecord](result.Entry.Value, "script-execution")
 	if err != nil || validateScriptExecutionRecord(record) != nil || record.ID != executionID {
-		return Versioned[ScriptExecutionRecord]{}, errs.New(errs.KindInternal, "Script execution record is corrupt")
+		return etcdstore.Versioned[ScriptExecutionRecord]{}, errs.New(errs.KindInternal, "Script execution record is corrupt")
 	}
-	return Versioned[ScriptExecutionRecord]{
+	return etcdstore.Versioned[ScriptExecutionRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }
@@ -148,12 +148,12 @@ func (repository *ScriptRepository) GetScriptExecution(
 func (repository *ScriptRepository) CheckpointScriptExecution(
 	ctx context.Context,
 	input ScriptCheckpointInput,
-) (Versioned[ScriptExecutionRecord], error) {
+) (etcdstore.Versioned[ScriptExecutionRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ScriptExecutionRecord]{}, err
+		return etcdstore.Versioned[ScriptExecutionRecord]{}, err
 	}
 	if repository == nil || repository.store == nil || validateScriptCheckpointInput(input) != nil {
-		return Versioned[ScriptExecutionRecord]{}, errs.New(
+		return etcdstore.Versioned[ScriptExecutionRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"Script checkpoint input is invalid",
 		)
@@ -161,20 +161,20 @@ func (repository *ScriptRepository) CheckpointScriptExecution(
 	for attempt := 0; attempt < 2; attempt++ {
 		anchor, err := repository.loadScriptCheckpointAnchor(ctx, input)
 		if err != nil {
-			return Versioned[ScriptExecutionRecord]{}, err
+			return etcdstore.Versioned[ScriptExecutionRecord]{}, err
 		}
 		if anchor.record.State == input.State && anchor.record.LastCheckpointSHA256 == input.PayloadSHA256 {
-			return Versioned[ScriptExecutionRecord]{
+			return etcdstore.Versioned[ScriptExecutionRecord]{
 				Record: anchor.record, Revision: anchor.revision, ReadRevision: anchor.read,
 			}, nil
 		}
 		next, err := advanceScriptExecutionRecord(anchor.record, input)
 		if err != nil {
-			return Versioned[ScriptExecutionRecord]{}, err
+			return etcdstore.Versioned[ScriptExecutionRecord]{}, err
 		}
 		value, err := recordcodec.Encode("script-execution", next)
 		if err != nil {
-			return Versioned[ScriptExecutionRecord]{}, err
+			return etcdstore.Versioned[ScriptExecutionRecord]{}, err
 		}
 		transaction, err := repository.store.Transact(ctx, anchor.conditions, []etcdstore.Mutation{{
 			Type: etcdstore.MutationPut, Key: scriptExecutionKey(input.ExecutionID), Value: value,
@@ -182,15 +182,15 @@ func (repository *ScriptRepository) CheckpointScriptExecution(
 		clear(value)
 		clearKeyValues(transaction.FailureReads)
 		if err != nil {
-			return Versioned[ScriptExecutionRecord]{}, err
+			return etcdstore.Versioned[ScriptExecutionRecord]{}, err
 		}
 		if transaction.Succeeded {
-			return Versioned[ScriptExecutionRecord]{
+			return etcdstore.Versioned[ScriptExecutionRecord]{
 				Record: next, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 			}, nil
 		}
 	}
-	return Versioned[ScriptExecutionRecord]{}, errs.New(
+	return etcdstore.Versioned[ScriptExecutionRecord]{}, errs.New(
 		errs.KindStateConflict,
 		"Script checkpoint changed concurrently",
 	)

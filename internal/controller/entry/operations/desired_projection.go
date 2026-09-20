@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -135,7 +136,7 @@ func (service *entryDesiredMutationService) validateExposure(
 	}
 	cursor := ""
 	for {
-		page, err := service.repository.ListServices(ctx, environmentID, etcd.PageRequest{Limit: 200, Cursor: cursor})
+		page, err := service.repository.ListServices(ctx, environmentID, etcdstore.PageRequest{Limit: 200, Cursor: cursor})
 		if err != nil {
 			return err
 		}

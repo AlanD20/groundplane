@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -24,17 +25,17 @@ type backingHookPlanResolver interface {
 }
 
 type backingHookCheckpointRepository interface {
-	GetAttach(context.Context, string) (etcd.Versioned[attachrecord.Record], error)
+	GetAttach(context.Context, string) (etcdstore.Versioned[attachrecord.Record], error)
 	CheckpointBackingHook(
 		context.Context,
 		etcd.BackingHookCheckpointInput,
-	) (etcd.Versioned[etcd.BackingHookCheckpointRecord], bool, error)
+	) (etcdstore.Versioned[etcd.BackingHookCheckpointRecord], bool, error)
 }
 
 type backingHookFactSealer interface {
 	SealHookResult(
 		context.Context,
-		etcd.Versioned[attachrecord.Record],
+		etcdstore.Versioned[attachrecord.Record],
 		[]backinghook.FactDefinition,
 		backinghook.Output,
 	) (attachrecord.EncryptedFacts, error)

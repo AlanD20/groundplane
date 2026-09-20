@@ -8,6 +8,7 @@ import (
 	"errors"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
 
@@ -26,14 +27,14 @@ const (
 )
 
 type connectorDeletionRepository interface {
-	GetConnector(context.Context, string) (etcd.Versioned[connectorrecord.Record], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetConnector(context.Context, string) (etcdstore.Versioned[connectorrecord.Record], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	BeginConnectorDeletionWithTask(
 		context.Context,
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[connectorrecord.Record],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[connectorrecord.Record],
 		etcd.DeletionTombstoneRecord,
 		etcd.ConnectorRemovalIntent,
 		etcd.TaskRecord,
@@ -396,29 +397,29 @@ func NewDeletionRepository(
 func (repository *durableConnectorDeletionRepository) GetConnector(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[connectorrecord.Record], error) {
+) (etcdstore.Versioned[connectorrecord.Record], error) {
 	return repository.connectors.GetConnector(ctx, id)
 }
 
 func (repository *durableConnectorDeletionRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
 func (repository *durableConnectorDeletionRepository) GetProject(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
 func (repository *durableConnectorDeletionRepository) BeginConnectorDeletionWithTask(
 	ctx context.Context,
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
-	current etcd.Versioned[connectorrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[connectorrecord.Record],
 	tombstone etcd.DeletionTombstoneRecord,
 	intent etcd.ConnectorRemovalIntent,
 	task etcd.TaskRecord,

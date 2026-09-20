@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"slices"
 	"time"
@@ -20,7 +21,7 @@ import (
 type attachRuntimeCapture interface {
 	CaptureEntryMutationRuntime(
 		context.Context,
-		etcd.Versioned[etcd.EnvironmentComposeProjection],
+		etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	) (taskplanning.EntryMutationRuntime, error)
 }
 
@@ -83,7 +84,7 @@ func buildAttachTaskRenderInput(
 	scope etcd.AttachCreateScope,
 	runtime taskplanning.EntryMutationRuntime,
 	record attachrecord.Record,
-	attaches []etcd.Versioned[attachrecord.Record],
+	attaches []etcdstore.Versioned[attachrecord.Record],
 	task etcd.TaskRecord,
 	artifactID string,
 ) (etcd.AttachTaskRenderInput, error) {
@@ -145,8 +146,8 @@ func buildAttachTaskRenderInput(
 			)
 		}
 		unionRecords = append(
-			append([]etcd.Versioned[attachrecord.Record](nil), attaches...),
-			etcd.Versioned[attachrecord.Record]{
+			append([]etcdstore.Versioned[attachrecord.Record](nil), attaches...),
+			etcdstore.Versioned[attachrecord.Record]{
 				Record: record,
 			},
 		)

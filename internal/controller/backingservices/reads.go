@@ -2,6 +2,7 @@ package backingservices
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -9,8 +10,8 @@ import (
 )
 
 type backingServiceReadRepository interface {
-	GetBackingService(context.Context, string) (etcd.Versioned[etcd.BackingServiceRecord], error)
-	ListBackingServices(context.Context, etcd.PageRequest) (etcd.Page[etcd.BackingServiceRecord], error)
+	GetBackingService(context.Context, string) (etcdstore.Versioned[etcd.BackingServiceRecord], error)
+	ListBackingServices(context.Context, etcdstore.PageRequest) (etcdstore.Page[etcd.BackingServiceRecord], error)
 }
 
 type ReadService struct {
@@ -27,15 +28,15 @@ func NewReadService(repository backingServiceReadRepository) (*ReadService, erro
 func (service *ReadService) GetBackingService(
 	ctx context.Context,
 	projectID string,
-) (etcd.Versioned[etcd.BackingServiceRecord], error) {
+) (etcdstore.Versioned[etcd.BackingServiceRecord], error) {
 	if ctx == nil {
-		return etcd.Versioned[etcd.BackingServiceRecord]{}, errs.New(
+		return etcdstore.Versioned[etcd.BackingServiceRecord]{}, errs.New(
 			errs.KindInternal,
 			"Backing-service read context is required",
 		)
 	}
 	if ids.Validate(ids.KindProject, projectID) != nil {
-		return etcd.Versioned[etcd.BackingServiceRecord]{}, errs.New(
+		return etcdstore.Versioned[etcd.BackingServiceRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"Backing-service read requires a stable Project id",
 		)
@@ -45,16 +46,16 @@ func (service *ReadService) GetBackingService(
 
 func (service *ReadService) ListBackingServices(
 	ctx context.Context,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.BackingServiceRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[etcd.BackingServiceRecord], error) {
 	if ctx == nil {
-		return etcd.Page[etcd.BackingServiceRecord]{}, errs.New(
+		return etcdstore.Page[etcd.BackingServiceRecord]{}, errs.New(
 			errs.KindInternal,
 			"Backing-service list context is required",
 		)
 	}
 	if request.Limit < 0 {
-		return etcd.Page[etcd.BackingServiceRecord]{}, errs.New(
+		return etcdstore.Page[etcd.BackingServiceRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"Backing-service list limit must be a positive integer",
 		)

@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -215,14 +216,14 @@ func (service *serviceMutationService) rejectComponentGeneratedServiceMutation(
 func (service *serviceMutationService) serviceHierarchy(
 	ctx context.Context,
 	environmentID string,
-) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	environment, err := service.repository.GetEnvironment(ctx, environmentID)
 	if err != nil {
-		return etcd.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcd.Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return etcd.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcd.Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return environment, project, nil
 }
@@ -235,12 +236,12 @@ func (service *serviceMutationService) resolveServiceReferences(
 	if err != nil {
 		return etcd.ServiceMutationReferences{}, err
 	}
-	zoneByName := make(map[string]etcd.Versioned[zonerecord.Record], len(zones))
+	zoneByName := make(map[string]etcdstore.Versioned[zonerecord.Record], len(zones))
 	for _, zone := range zones {
 		zoneByName[zone.Record.Desired.Name] = zone
 	}
 	references := etcd.ServiceMutationReferences{
-		Zones: make([]etcd.Versioned[zonerecord.Record], 0, len(record.Desired.Zones)),
+		Zones: make([]etcdstore.Versioned[zonerecord.Record], 0, len(record.Desired.Zones)),
 	}
 	for _, name := range record.Desired.Zones {
 		zone, ok := zoneByName[name]
@@ -257,7 +258,7 @@ func (service *serviceMutationService) resolveServiceReferences(
 	if err != nil {
 		return etcd.ServiceMutationReferences{}, err
 	}
-	serviceByName := make(map[string]etcd.Versioned[etcd.ServiceRecord], len(services))
+	serviceByName := make(map[string]etcdstore.Versioned[etcd.ServiceRecord], len(services))
 	for _, candidate := range services {
 		serviceByName[candidate.Record.Desired.Name] = candidate
 	}
@@ -283,11 +284,11 @@ func (service *serviceMutationService) resolveServiceReferences(
 func (service *serviceMutationService) listAllZones(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[zonerecord.Record], error) {
-	items := []etcd.Versioned[zonerecord.Record]{}
+) ([]etcdstore.Versioned[zonerecord.Record], error) {
+	items := []etcdstore.Versioned[zonerecord.Record]{}
 	cursor := ""
 	for {
-		page, err := service.repository.ListZones(ctx, environmentID, etcd.PageRequest{Limit: 200, Cursor: cursor})
+		page, err := service.repository.ListZones(ctx, environmentID, etcdstore.PageRequest{Limit: 200, Cursor: cursor})
 		if err != nil {
 			return nil, err
 		}
@@ -302,11 +303,11 @@ func (service *serviceMutationService) listAllZones(
 func (service *serviceMutationService) listAllServices(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[etcd.ServiceRecord], error) {
-	items := []etcd.Versioned[etcd.ServiceRecord]{}
+) ([]etcdstore.Versioned[etcd.ServiceRecord], error) {
+	items := []etcdstore.Versioned[etcd.ServiceRecord]{}
 	cursor := ""
 	for {
-		page, err := service.repository.ListServices(ctx, environmentID, etcd.PageRequest{Limit: 200, Cursor: cursor})
+		page, err := service.repository.ListServices(ctx, environmentID, etcdstore.PageRequest{Limit: 200, Cursor: cursor})
 		if err != nil {
 			return nil, err
 		}

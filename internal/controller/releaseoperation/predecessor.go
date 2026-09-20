@@ -2,6 +2,7 @@ package releaseoperation
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -31,7 +32,7 @@ func captureServingRuntime(
 		return nil
 	}
 	captured, err := servicelifecycle.CaptureAcknowledgedRuntime(ctx, reader,
-		etcd.Versioned[etcd.EnvironmentComposeProjection]{ReadRevision: scope.ReadRevision},
+		etcdstore.Versioned[etcd.EnvironmentComposeProjection]{ReadRevision: scope.ReadRevision},
 		render.EnvironmentID, render.ServiceID, render.PriorArtifactID)
 	if err != nil {
 		return err

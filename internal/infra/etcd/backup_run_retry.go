@@ -24,8 +24,8 @@ type PreparedBackupRunRetry struct {
 }
 
 type backupRunRetrySource struct {
-	task            Versioned[TaskRecord]
-	run             Versioned[BackupRunRecord]
+	task            etcdstore.Versioned[TaskRecord]
+	run             etcdstore.Versioned[BackupRunRecord]
 	receiptRevision int64
 }
 
@@ -138,7 +138,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 	if err != nil || run.State != wantRunState {
 		return backupRunRetrySource{}, corruptBackupRuntimeRecord()
 	}
-	versionedTask := Versioned[TaskRecord]{
+	versionedTask := etcdstore.Versioned[TaskRecord]{
 		Record:       task,
 		Revision:     read.Values[0].ModRevision,
 		ReadRevision: read.ReadRevision,
@@ -152,7 +152,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 	}
 	return backupRunRetrySource{
 		task: versionedTask,
-		run: Versioned[BackupRunRecord]{
+		run: etcdstore.Versioned[BackupRunRecord]{
 			Record:       run,
 			Revision:     read.Values[1].ModRevision,
 			ReadRevision: read.ReadRevision,

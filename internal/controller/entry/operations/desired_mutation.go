@@ -12,6 +12,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 	"time"
@@ -19,16 +20,16 @@ import (
 
 type entryDesiredMutationRepository interface {
 	controllerrevision.Repository
-	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetEnvironmentBlueprintHead(context.Context, string) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
-	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
-	ListEnvironmentComponents(context.Context, string, etcd.PageRequest) (etcd.Page[componentrecord.Record], error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
+	ListEnvironmentComponents(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[componentrecord.Record], error)
 	ResolveBlueprintEntryEnvironment(context.Context, string) (string, bool, error)
 	BlueprintEntryValueGenerationExists(context.Context, entryrecord.Record) (bool, error)
 	CreateBlueprintEntryValueGeneration(context.Context, etcd.EntryValueGeneration) error

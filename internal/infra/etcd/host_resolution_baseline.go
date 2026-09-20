@@ -26,26 +26,26 @@ type HostResolverBaselineRecord struct {
 
 func (repository *ComponentRepository) GetHostResolverBaseline(
 	ctx context.Context,
-) (Versioned[HostResolverBaselineRecord], bool, error) {
+) (etcdstore.Versioned[HostResolverBaselineRecord], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[HostResolverBaselineRecord]{}, false, err
+		return etcdstore.Versioned[HostResolverBaselineRecord]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, hostResolverBaselineKey)
 	if err != nil {
-		return Versioned[HostResolverBaselineRecord]{}, false, err
+		return etcdstore.Versioned[HostResolverBaselineRecord]{}, false, err
 	}
 	if result == nil || result.Entry == nil {
 		readRevision := int64(0)
 		if result != nil {
 			readRevision = result.ReadRevision
 		}
-		return Versioned[HostResolverBaselineRecord]{ReadRevision: readRevision}, false, nil
+		return etcdstore.Versioned[HostResolverBaselineRecord]{ReadRevision: readRevision}, false, nil
 	}
 	record, err := decodeHostResolverBaseline(result.Entry.Value)
 	if err != nil {
-		return Versioned[HostResolverBaselineRecord]{}, false, err
+		return etcdstore.Versioned[HostResolverBaselineRecord]{}, false, err
 	}
-	return Versioned[HostResolverBaselineRecord]{
+	return etcdstore.Versioned[HostResolverBaselineRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }
@@ -54,10 +54,10 @@ func (repository *ComponentRepository) EnsureHostResolverBaseline(
 	ctx context.Context,
 	content []byte,
 	capturedAt time.Time,
-) (Versioned[HostResolverBaselineRecord], error) {
+) (etcdstore.Versioned[HostResolverBaselineRecord], error) {
 	current, found, err := repository.GetHostResolverBaseline(ctx)
 	if err != nil {
-		return Versioned[HostResolverBaselineRecord]{}, err
+		return etcdstore.Versioned[HostResolverBaselineRecord]{}, err
 	}
 	if found {
 		return current, nil
@@ -68,11 +68,11 @@ func (repository *ComponentRepository) EnsureHostResolverBaseline(
 		SHA256: hex.EncodeToString(digest[:]), CapturedAt: capturedAt.UTC(),
 	}
 	if err := validateHostResolverBaseline(record); err != nil {
-		return Versioned[HostResolverBaselineRecord]{}, err
+		return etcdstore.Versioned[HostResolverBaselineRecord]{}, err
 	}
 	encoded, err := recordcodec.Encode("host_resolver_baseline", record)
 	if err != nil {
-		return Versioned[HostResolverBaselineRecord]{}, err
+		return etcdstore.Versioned[HostResolverBaselineRecord]{}, err
 	}
 	defer clear(encoded)
 	result, err := repository.store.Transact(
@@ -81,19 +81,19 @@ func (repository *ComponentRepository) EnsureHostResolverBaseline(
 		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hostResolverBaselineKey, Value: encoded}},
 	)
 	if err != nil {
-		return Versioned[HostResolverBaselineRecord]{}, err
+		return etcdstore.Versioned[HostResolverBaselineRecord]{}, err
 	}
 	if result.Succeeded {
-		return Versioned[HostResolverBaselineRecord]{
+		return etcdstore.Versioned[HostResolverBaselineRecord]{
 			Record: cloneHostResolverBaseline(record), Revision: result.Revision, ReadRevision: result.Revision,
 		}, nil
 	}
 	current, found, err = repository.GetHostResolverBaseline(ctx)
 	if err != nil {
-		return Versioned[HostResolverBaselineRecord]{}, err
+		return etcdstore.Versioned[HostResolverBaselineRecord]{}, err
 	}
 	if !found {
-		return Versioned[HostResolverBaselineRecord]{}, errs.New(
+		return etcdstore.Versioned[HostResolverBaselineRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"host resolver baseline creation conflicted without a durable winner",
 		)

@@ -3,10 +3,11 @@ package handlers
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"log/slog"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -54,17 +55,17 @@ func (s *Server) listAttaches(
 	return &attachPageOutput{Body: response}, nil
 }
 
-func attachListRequest(environmentID string, limit int, cursor string) (etcd.PageRequest, error) {
+func attachListRequest(environmentID string, limit int, cursor string) (etcdstore.PageRequest, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.PageRequest{}, errs.New(
+		return etcdstore.PageRequest{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach list requires a stable Environment id",
 		)
 	}
 	if limit < 0 {
-		return etcd.PageRequest{}, errs.New(errs.KindValidationFailed, "Attach list limit must be a positive integer")
+		return etcdstore.PageRequest{}, errs.New(errs.KindValidationFailed, "Attach list limit must be a positive integer")
 	}
-	return etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
+	return etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 }
 
 func attachResponse(record attachrecord.Record) apiTypes.Attach {

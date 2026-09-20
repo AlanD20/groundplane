@@ -227,23 +227,23 @@ func newBackupRuntimeRepository(store hierarchyStore) (*BackupRuntimeRepository,
 func (repository *BackupRuntimeRepository) GetBackupRun(
 	ctx context.Context,
 	taskID string,
-) (Versioned[BackupRunRecord], error) {
+) (etcdstore.Versioned[BackupRunRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[BackupRunRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTask, taskID); err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[BackupRunRecord]{}, err
 	}
 	primaryKey := backupRunKey(taskID)
 	result, err := repository.store.Get(ctx, primaryKey)
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[BackupRunRecord]{}, err
 	}
 	if result == nil {
-		return Versioned[BackupRunRecord]{}, errs.New(errs.KindInternal, "backup run read is empty")
+		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(errs.KindInternal, "backup run read is empty")
 	}
 	if result.Entry == nil {
-		return Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 			errs.KindTaskNotFound,
 			"backup run was not found",
 		)
@@ -251,21 +251,21 @@ func (repository *BackupRuntimeRepository) GetBackupRun(
 	defer clear(result.Entry.Value)
 	record, err := decodeBackupRunRecord(result.Entry.Value)
 	if err != nil || record.TaskID != taskID {
-		return Versioned[BackupRunRecord]{}, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[BackupRunRecord]{}, corruptBackupRuntimeRecord()
 	}
 	membershipKey, err := backupRunEnvironmentIndexKey(record.EnvironmentID, taskID)
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[BackupRunRecord]{}, corruptBackupRuntimeRecord()
 	}
 	authority, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{primaryKey, membershipKey}, Revision: result.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[BackupRunRecord]{}, err
 	}
 	if authority == nil || authority.ReadRevision != result.ReadRevision ||
 		len(authority.Values) != 2 || authority.Values[0] == nil || authority.Values[1] == nil {
-		return Versioned[BackupRunRecord]{}, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[BackupRunRecord]{}, corruptBackupRuntimeRecord()
 	}
 	defer clearKeyValues(authority.Values)
 	stored, err := decodeBackupRunRecord(authority.Values[0].Value)
@@ -274,9 +274,9 @@ func (repository *BackupRuntimeRepository) GetBackupRun(
 		authority.Values[1].Key != membershipKey || authority.Values[1].Version != 1 ||
 		authority.Values[1].ModRevision > authority.Values[0].ModRevision ||
 		string(authority.Values[1].Value) != taskID {
-		return Versioned[BackupRunRecord]{}, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[BackupRunRecord]{}, corruptBackupRuntimeRecord()
 	}
-	return Versioned[BackupRunRecord]{
+	return etcdstore.Versioned[BackupRunRecord]{
 		Record:       stored,
 		Revision:     authority.Values[0].ModRevision,
 		ReadRevision: authority.ReadRevision,
@@ -585,11 +585,11 @@ func (repository *BackupRuntimeRepository) exactBackupRunConfigCompanions(
 func (repository *BackupRuntimeRepository) TransitionBackupRun(
 	ctx context.Context,
 	authority BackupAssignmentInput,
-	current Versioned[BackupRunRecord],
+	current etcdstore.Versioned[BackupRunRecord],
 	next BackupRunRecord,
-) (Versioned[BackupRunRecord], error) {
+) (etcdstore.Versioned[BackupRunRecord], error) {
 	if terminalBackupRunState(next.State) {
-		return Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"terminal backup run requires atomic Task completion",
 		)
@@ -599,10 +599,10 @@ func (repository *BackupRuntimeRepository) TransitionBackupRun(
 		next,
 		backupRunTransitionOrdinary,
 	); err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[BackupRunRecord]{}, err
 	}
 	if backupRunTransitionRequiresCheckpoint(current.Record, next) {
-		return Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup source transition requires a checkpoint",
 		)
@@ -613,15 +613,15 @@ func (repository *BackupRuntimeRepository) TransitionBackupRun(
 func (repository *BackupRuntimeRepository) CheckpointBackupRun(
 	ctx context.Context,
 	checkpoint BackupCheckpointInput,
-	current Versioned[BackupRunRecord],
+	current etcdstore.Versioned[BackupRunRecord],
 	next BackupRunRecord,
-) (Versioned[BackupRunRecord], error) {
+) (etcdstore.Versioned[BackupRunRecord], error) {
 	if terminalBackupRunState(next.State) || validateBackupRunTransition(
 		current.Record,
 		next,
 		backupRunTransitionOrdinary,
 	) != nil {
-		return Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"checkpointed backup run transition is invalid",
 		)
@@ -632,7 +632,7 @@ func (repository *BackupRuntimeRepository) CheckpointBackupRun(
 		current.Record.Sources[ordinal],
 		next.Sources[ordinal],
 	) {
-		return Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup run checkpoint does not match its source transition",
 		)
@@ -699,7 +699,7 @@ func backupRunCheckpointMatchesTransition(
 // advance with the caller's terminal Task and idempotency mutations.
 func (repository *BackupRuntimeRepository) prepareBackupRunTerminal(
 	ctx context.Context,
-	current Versioned[BackupRunRecord],
+	current etcdstore.Versioned[BackupRunRecord],
 	next BackupRunRecord,
 ) (backupRunPublicationPlan, error) {
 	return repository.prepareBackupRunTerminalPlan(ctx, current, next, nil, nil)
@@ -707,9 +707,9 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminal(
 
 func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 	ctx context.Context,
-	current Versioned[BackupRunRecord],
+	current etcdstore.Versioned[BackupRunRecord],
 	next BackupRunRecord,
-	absentOrphan *Versioned[BackupOrphanRecord],
+	absentOrphan *etcdstore.Versioned[BackupOrphanRecord],
 	checkpoint *BackupCheckpointInput,
 ) (backupRunPublicationPlan, error) {
 	transitionMode := backupRunTransitionOrdinary
@@ -1046,23 +1046,23 @@ func backupOrphanRecordFromRun(run BackupRunRecord, ordinal uint32) BackupOrphan
 
 func (repository *BackupRuntimeRepository) replaceBackupRun(
 	ctx context.Context,
-	current Versioned[BackupRunRecord],
+	current etcdstore.Versioned[BackupRunRecord],
 	next BackupRunRecord,
 	extraConditions []etcdstore.Condition,
 	extraMutations []etcdstore.Mutation,
 	validateExtra func([]*etcdstore.KeyValue) error,
 	authority *BackupAssignmentInput,
 	checkpoint *BackupCheckpointInput,
-) (Versioned[BackupRunRecord], error) {
+) (etcdstore.Versioned[BackupRunRecord], error) {
 	if current.Revision <= 0 || current.ReadRevision < current.Revision {
-		return Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backup run version is invalid",
 		)
 	}
 	value, err := encodeBackupRunRecord(next)
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[BackupRunRecord]{}, err
 	}
 	defer clear(value)
 	anchorKeys := make([]string, 1, len(extraConditions)+1)
@@ -1072,18 +1072,18 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	}
 	anchor, err := repository.readCurrentKeys(ctx, anchorKeys)
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[BackupRunRecord]{}, err
 	}
 	defer clearKeyValues(anchor.Values)
 	if anchor.Values[0] == nil {
-		return Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 			errs.KindTaskNotFound,
 			"backup run was not found",
 		)
 	}
 	stored, err := decodeBackupRunRecord(anchor.Values[0].Value)
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[BackupRunRecord]{}, corruptBackupRuntimeRecord()
 	}
 	replay := false
 	if anchor.Values[0].ModRevision != current.Revision ||
@@ -1091,7 +1091,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 		if backupRunRecordsEqual(stored, next) {
 			replay = true
 		} else {
-			return Versioned[BackupRunRecord]{}, errs.New(
+			return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"backup run changed",
 			)
@@ -1100,7 +1100,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	if !replay {
 		for index, condition := range extraConditions {
 			if !conditionMatchesRead(condition, anchor.Values[index+1]) {
-				return Versioned[BackupRunRecord]{}, errs.New(
+				return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 					errs.KindStateConflict,
 					"backup runtime companion state changed",
 				)
@@ -1108,7 +1108,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 		}
 		if validateExtra != nil {
 			if err := validateExtra(anchor.Values[1:]); err != nil {
-				return Versioned[BackupRunRecord]{}, err
+				return etcdstore.Versioned[BackupRunRecord]{}, err
 			}
 		}
 	}
@@ -1116,7 +1116,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	var assignmentConditions []etcdstore.Condition
 	if authority != nil {
 		if authority.TaskID != current.Record.TaskID {
-			return Versioned[BackupRunRecord]{}, errs.New(
+			return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 				errs.KindValidationFailed,
 				"backup assignment task does not match its run",
 			)
@@ -1127,19 +1127,19 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 			anchor.ReadRevision,
 		)
 		if err != nil {
-			return Versioned[BackupRunRecord]{}, err
+			return etcdstore.Versioned[BackupRunRecord]{}, err
 		}
 	}
 	if checkpoint != nil {
 		if checkpoint.TaskID != current.Record.TaskID {
-			return Versioned[BackupRunRecord]{}, errs.New(
+			return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 				errs.KindValidationFailed,
 				"backup checkpoint task does not match its run",
 			)
 		}
 		ordinal, changed := changedBackupSourceOrdinal(current.Record, next)
 		if !changed {
-			return Versioned[BackupRunRecord]{}, errs.New(
+			return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 				errs.KindValidationFailed,
 				"backup checkpoint source is invalid",
 			)
@@ -1149,11 +1149,11 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 			backupRunCheckpointBinding(current.Record, ordinal),
 		)
 		if err != nil {
-			return Versioned[BackupRunRecord]{}, err
+			return etcdstore.Versioned[BackupRunRecord]{}, err
 		}
 		defer checkpointPlan.clear()
 		if checkpointPlan.duplicate && !replay {
-			return Versioned[BackupRunRecord]{}, errs.New(
+			return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"backup checkpoint domain state is incomplete",
 			)
@@ -1161,13 +1161,13 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	}
 	if replay {
 		if checkpoint != nil && !checkpointPlan.duplicate {
-			return Versioned[BackupRunRecord]{}, errs.New(
+			return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"backup checkpoint replay evidence is incomplete",
 			)
 		}
 		if checkpoint != nil && anchor.Values[0].ModRevision != checkpointPlan.commitRevision {
-			return Versioned[BackupRunRecord]{}, errs.New(
+			return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"backup checkpoint domain evidence changed",
 			)
@@ -1178,12 +1178,12 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 			extraMutations,
 			anchor.Values[0].ModRevision,
 		) {
-			return Versioned[BackupRunRecord]{}, errs.New(
+			return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"backup runtime replay companion state changed",
 			)
 		}
-		return Versioned[BackupRunRecord]{
+		return etcdstore.Versioned[BackupRunRecord]{
 			Record:       stored,
 			Revision:     anchor.Values[0].ModRevision,
 			ReadRevision: anchor.ReadRevision,
@@ -1191,7 +1191,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	}
 	evidence, err := repository.loadOwnedEvidence(ctx, current.Record, anchor.ReadRevision)
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[BackupRunRecord]{}, err
 	}
 	conditions := []etcdstore.Condition{
 		{Key: backupRunKey(current.Record.TaskID), ModRevision: current.Revision},
@@ -1202,7 +1202,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	mutations = append(mutations, extraMutations...)
 	epoch, err := evidence.fence.epochRewriteMutation()
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[BackupRunRecord]{}, err
 	}
 	defer clear(epoch.Value)
 	mutations = append(mutations, epoch)
@@ -1215,18 +1215,18 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	}
 	result, err := repository.transact(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[BackupRunRecord]{}, err
+		return etcdstore.Versioned[BackupRunRecord]{}, err
 	}
 	if !result.Succeeded {
 		defer clearKeyValues(result.FailureReads)
 		if len(result.FailureReads) != len(conditions) {
-			return Versioned[BackupRunRecord]{}, errs.New(
+			return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 				errs.KindInternal,
 				"backup run transition compare evidence is incomplete",
 			)
 		}
 		if result.FailureReads[0] == nil || result.FailureReads[0].ModRevision != current.Revision {
-			return Versioned[BackupRunRecord]{}, errs.New(
+			return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"backup run changed",
 			)
@@ -1234,14 +1234,14 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 		fenceStart := 1 + len(extraConditions)
 		fenceEnd := fenceStart + len(evidence.fence.conditions)
 		if err := evidence.fence.classifyCAS(result.FailureReads[fenceStart:fenceEnd]); err != nil {
-			return Versioned[BackupRunRecord]{}, err
+			return etcdstore.Versioned[BackupRunRecord]{}, err
 		}
-		return Versioned[BackupRunRecord]{}, errs.New(
+		return etcdstore.Versioned[BackupRunRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"backup runtime state changed",
 		)
 	}
-	return Versioned[BackupRunRecord]{
+	return etcdstore.Versioned[BackupRunRecord]{
 		Record:       next,
 		Revision:     result.Revision,
 		ReadRevision: result.Revision,
@@ -1295,32 +1295,32 @@ func (repository *BackupRuntimeRepository) GetBackupSourceTargetExclusion(
 	ctx context.Context,
 	kind BackupSourceTargetKind,
 	targetID string,
-) (Versioned[BackupSourceTargetExclusionRecord], bool, error) {
+) (etcdstore.Versioned[BackupSourceTargetExclusionRecord], bool, error) {
 	key, err := backupSourceTargetExclusionKey(kind, targetID)
 	if err != nil {
-		return Versioned[BackupSourceTargetExclusionRecord]{}, false, err
+		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, key)
 	if err != nil {
-		return Versioned[BackupSourceTargetExclusionRecord]{}, false, err
+		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, err
 	}
 	if result == nil {
-		return Versioned[BackupSourceTargetExclusionRecord]{}, false, errs.New(
+		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, errs.New(
 			errs.KindInternal,
 			"backup source-target exclusion read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return Versioned[BackupSourceTargetExclusionRecord]{
+		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{
 			ReadRevision: result.ReadRevision,
 		}, false, nil
 	}
 	defer clear(result.Entry.Value)
 	record, err := decodeBackupSourceTargetExclusionRecord(result.Entry.Value)
 	if err != nil || record.TargetKind != kind || record.TargetID != targetID {
-		return Versioned[BackupSourceTargetExclusionRecord]{}, false, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{}, false, corruptBackupRuntimeRecord()
 	}
-	return Versioned[BackupSourceTargetExclusionRecord]{
+	return etcdstore.Versioned[BackupSourceTargetExclusionRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }

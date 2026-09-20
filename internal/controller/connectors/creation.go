@@ -6,6 +6,7 @@ import (
 	"errors"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 	"sort"
@@ -21,13 +22,13 @@ import (
 )
 
 type connectorCreationRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	ResolveSecret(context.Context, string, string) (etcd.Versioned[secretrecord.Record], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	ResolveSecret(context.Context, string, string) (etcdstore.Versioned[secretrecord.Record], error)
 	CreateConnectorIdempotent(
 		context.Context,
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		connectorrecord.Record,
 		connectorrecord.EncryptedCredentials,
 		etcd.IdempotencyMarker,
@@ -374,14 +375,14 @@ func NewCreationRepository(
 func (repository *durableConnectorCreationRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
 func (repository *durableConnectorCreationRepository) GetProject(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
@@ -389,14 +390,14 @@ func (repository *durableConnectorCreationRepository) ResolveSecret(
 	ctx context.Context,
 	projectID string,
 	reference string,
-) (etcd.Versioned[secretrecord.Record], error) {
+) (etcdstore.Versioned[secretrecord.Record], error) {
 	return repository.secrets.ResolveSecret(ctx, projectID, reference)
 }
 
 func (repository *durableConnectorCreationRepository) CreateConnectorIdempotent(
 	ctx context.Context,
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record connectorrecord.Record,
 	credentials connectorrecord.EncryptedCredentials,
 	marker etcd.IdempotencyMarker,

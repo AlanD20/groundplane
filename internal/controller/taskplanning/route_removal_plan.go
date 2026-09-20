@@ -9,6 +9,7 @@ import (
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -21,7 +22,7 @@ import (
 )
 
 type routeRemovalPlanStateReader interface {
-	GetRouteRemovalIntent(context.Context, string) (etcd.Versioned[etcd.RouteRemovalIntent], bool, error)
+	GetRouteRemovalIntent(context.Context, string) (etcdstore.Versioned[etcd.RouteRemovalIntent], bool, error)
 }
 
 type RouteRemovalTaskProcedureIDs struct {

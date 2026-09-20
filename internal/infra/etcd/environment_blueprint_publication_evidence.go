@@ -248,35 +248,35 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 	ctx context.Context,
 	environmentID string,
 	revision int64,
-) (Versioned[EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
 	headResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentBlueprintHeadKey(environmentID)}, Revision: revision,
 	})
 	if err != nil {
-		return Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
 	}
 	if headResult == nil || len(headResult.Values) != 1 {
-		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
 	}
 	if headResult.Values[0] == nil {
-		return Versioned[EnvironmentComposeProjection]{ReadRevision: headResult.ReadRevision}, false, nil
+		return etcdstore.Versioned[EnvironmentComposeProjection]{ReadRevision: headResult.ReadRevision}, false, nil
 	}
 	revisionID, err := decodeTaskReference(headResult.Values[0].Value)
 	if err != nil {
-		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
 	}
 	rootResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentBlueprintRootKey(environmentID, revisionID)}, Revision: headResult.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
 	}
 	if rootResult == nil || len(rootResult.Values) != 1 || rootResult.Values[0] == nil {
-		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(rootResult.Values[0].Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
-		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
 	}
 	keys := make([]string, int(seal.ProjectionChunks))
 	for index := range keys {
@@ -288,14 +288,14 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 		ctx, seal, "projection", keys, headResult.ReadRevision,
 	)
 	if err != nil {
-		return Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
 	}
 	defer clear(stream)
 	projection, err := decodeEnvironmentComposeProjection(stream)
 	if err != nil || projection.EnvironmentID != environmentID || projection.RevisionID != revisionID {
-		return Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
 	}
-	return Versioned[EnvironmentComposeProjection]{
+	return etcdstore.Versioned[EnvironmentComposeProjection]{
 		Record: projection, Revision: headResult.Values[0].ModRevision, ReadRevision: readRevision,
 	}, true, nil
 }

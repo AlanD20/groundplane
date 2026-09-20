@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
@@ -45,34 +46,34 @@ func connectorRemovalIntentKey(taskID string) string {
 func (repository *ConnectorRepository) GetConnectorRemovalIntent(
 	ctx context.Context,
 	taskID string,
-) (Versioned[ConnectorRemovalIntent], bool, error) {
+) (etcdstore.Versioned[ConnectorRemovalIntent], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ConnectorRemovalIntent]{}, false, err
+		return etcdstore.Versioned[ConnectorRemovalIntent]{}, false, err
 	}
 	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {
-		return Versioned[ConnectorRemovalIntent]{}, false, errs.New(
+		return etcdstore.Versioned[ConnectorRemovalIntent]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"connector removal intent task id is invalid",
 		)
 	}
 	result, err := repository.store.Get(ctx, connectorRemovalIntentKey(taskID))
 	if err != nil {
-		return Versioned[ConnectorRemovalIntent]{}, false, err
+		return etcdstore.Versioned[ConnectorRemovalIntent]{}, false, err
 	}
 	if result == nil {
-		return Versioned[ConnectorRemovalIntent]{}, false, errs.New(
+		return etcdstore.Versioned[ConnectorRemovalIntent]{}, false, errs.New(
 			errs.KindInternal,
 			"connector removal intent read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return Versioned[ConnectorRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[ConnectorRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	intent, err := decodeConnectorRemovalIntent(result.Entry.Value)
 	if err != nil || intent.TaskID != taskID {
-		return Versioned[ConnectorRemovalIntent]{}, false, corruptConnectorRemovalIntent()
+		return etcdstore.Versioned[ConnectorRemovalIntent]{}, false, corruptConnectorRemovalIntent()
 	}
-	return Versioned[ConnectorRemovalIntent]{
+	return etcdstore.Versioned[ConnectorRemovalIntent]{
 		Record: intent, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }

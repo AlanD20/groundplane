@@ -1,19 +1,22 @@
 package etcd
 
-import zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
+import (
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
+)
 
 func joinEnvironmentZone(
-	projection Versioned[EnvironmentComposeProjection],
+	projection etcdstore.Versioned[EnvironmentComposeProjection],
 	desired EnvironmentZoneProjection,
-) (Versioned[zonerecord.Record], error) {
+) (etcdstore.Versioned[zonerecord.Record], error) {
 	if desired.EnvironmentID != projection.Record.EnvironmentID {
-		return Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
 	}
 	record, err := zonerecord.NewRecord(desired.EnvironmentID, desired.Desired)
 	if err != nil {
-		return Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
+		return etcdstore.Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
 	}
-	return Versioned[zonerecord.Record]{
+	return etcdstore.Versioned[zonerecord.Record]{
 		Record: record, Revision: projection.Revision, ReadRevision: projection.ReadRevision,
 	}, nil
 }

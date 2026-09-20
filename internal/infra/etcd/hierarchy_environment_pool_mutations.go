@@ -18,7 +18,7 @@ import (
 func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 	ctx context.Context,
 	root netip.Prefix,
-	current Versioned[hierarchyrecord.EnvironmentRecord],
+	current etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	replacement hierarchyrecord.EnvironmentRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {

@@ -114,44 +114,44 @@ func loadEnvironmentDeletionIntent(
 	task TaskRecord,
 	tombstone DeletionTombstoneRecord,
 	revision int64,
-) (Versioned[EnvironmentDeletionIntentRecord], error) {
+) (etcdstore.Versioned[EnvironmentDeletionIntentRecord], error) {
 	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentDeletionIntentKey(task.OperationID)}, Revision: revision,
 	})
 	if err != nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, err
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	if result == nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindInternal,
 			"environment deletion intent evidence is incomplete",
 		)
 	}
 	if result.ReadRevision != revision || len(result.Values) != 1 {
 		clearKeyValues(result.Values)
-		return Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindInternal,
 			"environment deletion intent evidence is incomplete",
 		)
 	}
 	defer clearKeyValues(result.Values)
 	if result.Values[0] == nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"environment deletion intent is missing",
 		)
 	}
 	record, err := decodeEnvironmentDeletionIntent(result.Values[0].Value)
 	if err != nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, err
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	if !environmentDeletionIntentMatches(record, task, tombstone) {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"environment deletion intent ownership changed",
 		)
 	}
-	return Versioned[EnvironmentDeletionIntentRecord]{
+	return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: revision,
 	}, nil
 }
@@ -487,13 +487,13 @@ func environmentDeletionBackupAuthorityPresent(
 func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 	ctx context.Context,
 	task TaskRecord,
-) (Versioned[EnvironmentDeletionIntentRecord], error) {
+) (etcdstore.Versioned[EnvironmentDeletionIntentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, err
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	if task.Executor != TaskExecutorAgent || task.Type != TaskRemove ||
 		recordcodec.ValidateID(ids.KindEnvironment, task.Target) != nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"environment deletion cleanup task is invalid",
 		)
@@ -503,7 +503,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		taskKey(task.ID),
 	}})
 	if err != nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, err
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	if state == nil || state.ReadRevision <= 0 || len(state.Values) != 2 ||
 		state.Values[0] == nil ||
@@ -511,7 +511,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		if state != nil {
 			clearKeyValues(state.Values)
 		}
-		return Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"environment deletion cleanup ownership is missing",
 		)
@@ -521,13 +521,13 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 	if err != nil || persistedTask.ID != task.ID || persistedTask.OperationID != task.OperationID ||
 		persistedTask.Executor != task.Executor || persistedTask.Type != task.Type ||
 		persistedTask.Target != task.Target || persistedTask.Status != task.Status {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"environment deletion cleanup task ownership changed",
 		)
 	}
 	if isTerminalTaskStatus(persistedTask.Status) {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"terminal environment deletion task cannot complete cleanup enumeration",
 		)
@@ -535,7 +535,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 	tombstone, err := decodeDeletionTombstone(state.Values[0].Value)
 	if err != nil || tombstone.TargetKind != DeletionTargetEnvironment ||
 		tombstone.TargetID != task.Target || tombstone.TaskID != task.ID {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"environment deletion cleanup tombstone ownership changed",
 		)
@@ -547,13 +547,13 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		ctx, repository.store, task.Target, state.ReadRevision, owner,
 	)
 	if err != nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, err
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	intent, err := loadEnvironmentDeletionIntent(
 		ctx, repository.store, task, tombstone, state.ReadRevision,
 	)
 	if err != nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, err
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	if intent.Record.CleanupPhase == EnvironmentDeletionCleanupComplete {
 		return intent, nil
@@ -561,18 +561,18 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 	if err := requireEnvironmentDeletionBackupStateEmpty(
 		ctx, repository.store, task.Target, task.OperationID, state.ReadRevision,
 	); err != nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, err
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	next := intent.Record
 	next.CleanupPhase = EnvironmentDeletionCleanupComplete
 	intentValue, err := encodeEnvironmentDeletionIntent(next)
 	if err != nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, err
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	defer clear(intentValue)
 	epochMutation, err := fence.epochRewriteMutation()
 	if err != nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, err
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	defer clear(epochMutation.Value)
 	conditions := fence.transactionConditions()
@@ -591,16 +591,16 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		epochMutation,
 	})
 	if err != nil {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, err
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
+		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"environment deletion cleanup completion changed",
 		)
 	}
-	return Versioned[EnvironmentDeletionIntentRecord]{
+	return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{
 		Record: next, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 	}, nil
 }

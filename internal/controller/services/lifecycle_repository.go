@@ -4,27 +4,28 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 type serviceLifecycleRepository interface {
-	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
+	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
 	GetEnvironmentAppliedComposeProjection(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	ResolveServing(context.Context, string, string, int64) (etcd.ServingRelease, error)
-	GetReleaseRenderInputAt(context.Context, string, int64) (etcd.Versioned[etcd.ReleaseRenderInput], error)
+	GetReleaseRenderInputAt(context.Context, string, int64) (etcdstore.Versioned[etcd.ReleaseRenderInput], error)
 	BeginServiceLifecycleWithTaskHookInputs(
 		context.Context,
-		*etcd.Versioned[hierarchyrecord.TenantRecord],
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcd.Versioned[etcd.ServiceRecord],
+		*etcdstore.Versioned[hierarchyrecord.TenantRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[etcd.ServiceRecord],
 		etcd.ServiceRecord,
-		*etcd.Versioned[etcd.EnvironmentComposeProjection],
+		*etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 		*etcd.ServiceLifecycleRenderInput,
 		*etcd.BackingHookEncryptedInputs,
 		etcd.TaskRecord,
@@ -35,21 +36,21 @@ type serviceLifecycleRepository interface {
 func (repository *durableServiceMutationRepository) GetTenant(
 	ctx context.Context,
 	tenantID string,
-) (etcd.Versioned[hierarchyrecord.TenantRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
 	return repository.hierarchy.GetTenant(ctx, tenantID)
 }
 
 func (repository *durableServiceMutationRepository) GetEnvironmentAppliedComposeProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
 }
 
 func (repository *durableServiceMutationRepository) GetEnvironmentComposeProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
 }
 
@@ -66,18 +67,18 @@ func (repository *durableServiceMutationRepository) GetReleaseRenderInputAt(
 	ctx context.Context,
 	releaseID string,
 	revision int64,
-) (etcd.Versioned[etcd.ReleaseRenderInput], error) {
+) (etcdstore.Versioned[etcd.ReleaseRenderInput], error) {
 	return repository.releases.GetReleaseRenderInputAt(ctx, releaseID, revision)
 }
 
 func (repository *durableServiceMutationRepository) BeginServiceLifecycleWithTaskHookInputs(
 	ctx context.Context,
-	tenant *etcd.Versioned[hierarchyrecord.TenantRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	current etcd.Versioned[etcd.ServiceRecord],
+	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	current etcdstore.Versioned[etcd.ServiceRecord],
 	replacement etcd.ServiceRecord,
-	projection *etcd.Versioned[etcd.EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	renderInput *etcd.ServiceLifecycleRenderInput,
 	hookInputs *etcd.BackingHookEncryptedInputs,
 	task etcd.TaskRecord,

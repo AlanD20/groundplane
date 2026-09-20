@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
@@ -16,7 +17,7 @@ type agentChannelCredentialResolver interface {
 		string,
 		[agentprotocol.RawTokenBytes]byte,
 	) (etcd.LocalAgentChannelAuthorization, error)
-	GetSingleton(context.Context) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	GetSingleton(context.Context) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
 }
 
 type agentChannelAuthenticator struct {

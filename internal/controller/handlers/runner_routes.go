@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"net/http"
 
@@ -13,10 +14,10 @@ import (
 )
 
 type RunnerReader interface {
-	GetRunner(context.Context, string) (etcd.Versioned[runnerrecord.RunnerRecord], error)
-	ListRunners(context.Context, etcd.RunnerFilter, etcd.PageRequest) (etcd.Page[runnerrecord.RunnerRecord], error)
-	GetRunnerObservation(context.Context, string) (etcd.Versioned[runnerrecord.RunnerObservationRecord], bool, error)
-	GetRunnerDeletionTombstone(context.Context, string) (etcd.Versioned[etcd.DeletionTombstoneRecord], bool, error)
+	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
+	ListRunners(context.Context, etcd.RunnerFilter, etcdstore.PageRequest) (etcdstore.Page[runnerrecord.RunnerRecord], error)
+	GetRunnerObservation(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], bool, error)
+	GetRunnerDeletionTombstone(context.Context, string) (etcdstore.Versioned[etcd.DeletionTombstoneRecord], bool, error)
 }
 
 type RunnerMutator interface {
@@ -77,7 +78,7 @@ func (s *Server) listRunners(
 	}
 	page, err := s.runners.ListRunners(ctx, etcd.RunnerFilter{
 		TenantID: request.Tenant, ProjectID: request.Project,
-	}, etcd.PageRequest{Limit: request.Limit, Cursor: request.Cursor})
+	}, etcdstore.PageRequest{Limit: request.Limit, Cursor: request.Cursor})
 	if err != nil {
 		return nil, normalizeProjectError(err)
 	}

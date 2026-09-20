@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"net/netip"
 	"time"
@@ -23,10 +24,10 @@ const (
 )
 
 type environmentChangeRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	MutateEnvironmentIdempotent(context.Context, etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	MutateEnvironmentIdempotent(context.Context, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		hierarchyrecord.EnvironmentRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
-	ReplaceEnvironmentPoolIdempotent(context.Context, netip.Prefix, etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	ReplaceEnvironmentPoolIdempotent(context.Context, netip.Prefix, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		hierarchyrecord.EnvironmentRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
 }
 
@@ -191,7 +192,7 @@ func (service *environmentChangeService) EditEnvironment(
 		},
 		func(
 			ctx context.Context,
-			current etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+			current etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 			replacement hierarchyrecord.EnvironmentRecord,
 			marker etcd.IdempotencyMarker,
 		) (etcd.IdempotencyTransactionResult, error) {
@@ -231,7 +232,7 @@ func (service *environmentChangeService) RenameEnvironment(
 
 type environmentChangeMutation func(
 	context.Context,
-	etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	hierarchyrecord.EnvironmentRecord,
 	etcd.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error)

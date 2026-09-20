@@ -2,6 +2,7 @@ package volume
 
 import (
 	"cmp"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -12,7 +13,7 @@ import (
 // volumeRemovalEvidence materializes only the accepted Volume's mount intent.
 // The desired projection remains the source of truth; these rows authorize no
 // execution until the existing staging, sealing and publication path accepts it.
-func volumeRemovalEvidence(runtime removal.Runtime, source etcd.Versioned[etcd.EnvironmentComposeProjection]) (
+func volumeRemovalEvidence(runtime removal.Runtime, source etcdstore.Versioned[etcd.EnvironmentComposeProjection]) (
 	removal.EvidenceManifest, []removal.EvidenceRow, error,
 ) {
 	if source.Revision <= 0 || source.ReadRevision < source.Revision ||

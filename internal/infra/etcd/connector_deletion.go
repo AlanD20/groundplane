@@ -20,9 +20,9 @@ const (
 // publishes the Controller Task and immutable intent that own finalization.
 func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	current Versioned[connectorrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[connectorrecord.Record],
 	tombstone DeletionTombstoneRecord,
 	intent ConnectorRemovalIntent,
 	task TaskRecord,
@@ -195,7 +195,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 }
 
 func validateConnectorDeletionEnvelope(
-	current Versioned[connectorrecord.Record],
+	current etcdstore.Versioned[connectorrecord.Record],
 	tombstone DeletionTombstoneRecord,
 	intent ConnectorRemovalIntent,
 	task TaskRecord,
@@ -326,13 +326,13 @@ type connectorDeletionEvidence struct {
 	reference        int
 	referenceStart   int
 	fenceStart       int
-	current          Versioned[connectorrecord.Record]
+	current          etcdstore.Versioned[connectorrecord.Record]
 	operationID      string
 	fence            environmentMutationFenceEvidence
 }
 
 func newConnectorDeletionEvidence(
-	current Versioned[connectorrecord.Record],
+	current etcdstore.Versioned[connectorrecord.Record],
 	dependencies *etcdstore.GetManyResult,
 	task TaskRecord,
 	fence environmentMutationFenceEvidence,
@@ -458,9 +458,9 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 func loadConnectorTaskInitiationTenantAtRevision(
 	ctx context.Context,
 	store hierarchyStore,
-	project Versioned[hierarchyrecord.ProjectRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	readRevision int64,
-) (*Versioned[hierarchyrecord.TenantRecord], error) {
+) (*etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
 	if project.Record.Kind == hierarchyrecord.ProjectKindBacking {
 		return nil, nil
 	}
@@ -479,7 +479,7 @@ func loadConnectorTaskInitiationTenantAtRevision(
 	if err != nil || tenant.ID != project.Record.TenantID {
 		return nil, errs.New(errs.KindInternal, "task initiation tenant is corrupt")
 	}
-	return &Versioned[hierarchyrecord.TenantRecord]{
+	return &etcdstore.Versioned[hierarchyrecord.TenantRecord]{
 		Record: tenant, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }

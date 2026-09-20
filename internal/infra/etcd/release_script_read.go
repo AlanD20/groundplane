@@ -16,10 +16,10 @@ func (ledger *ReleaseLedger) GetReleaseRenderInputAt(
 	ctx context.Context,
 	releaseID string,
 	revision int64,
-) (Versioned[ReleaseRenderInput], error) {
+) (etcdstore.Versioned[ReleaseRenderInput], error) {
 	if ctx == nil || ledger == nil || ledger.store == nil ||
 		ids.Validate(ids.KindDeployment, releaseID) != nil || revision <= 0 {
-		return Versioned[ReleaseRenderInput]{}, errs.New(
+		return etcdstore.Versioned[ReleaseRenderInput]{}, errs.New(
 			errs.KindValidationFailed,
 			"Script Release render input request is invalid",
 		)
@@ -28,23 +28,23 @@ func (ledger *ReleaseLedger) GetReleaseRenderInputAt(
 		Keys: []string{releaseRenderInputStagingKey("", releaseID)}, Revision: revision,
 	})
 	if err != nil {
-		return Versioned[ReleaseRenderInput]{}, err
+		return etcdstore.Versioned[ReleaseRenderInput]{}, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return Versioned[ReleaseRenderInput]{}, errs.New(
+		return etcdstore.Versioned[ReleaseRenderInput]{}, errs.New(
 			errs.KindReleaseNotFound,
 			"successful Release render input was not found",
 		)
 	}
 	raw, err := decodeReleaseRecord[json.RawMessage](read.Values[0].Value, "release-render-input")
 	if err != nil {
-		return Versioned[ReleaseRenderInput]{}, corruptReleaseRecord()
+		return etcdstore.Versioned[ReleaseRenderInput]{}, corruptReleaseRecord()
 	}
 	input, err := decodeReleaseRenderInput(raw)
 	if err != nil || input.ReleaseID != releaseID {
-		return Versioned[ReleaseRenderInput]{}, corruptReleaseRecord()
+		return etcdstore.Versioned[ReleaseRenderInput]{}, corruptReleaseRecord()
 	}
-	return Versioned[ReleaseRenderInput]{
+	return etcdstore.Versioned[ReleaseRenderInput]{
 		Record: input, Revision: read.Values[0].ModRevision, ReadRevision: revision,
 	}, nil
 }

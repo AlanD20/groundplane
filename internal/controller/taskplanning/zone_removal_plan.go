@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -15,7 +16,7 @@ import (
 )
 
 type zoneRemovalPlanReader interface {
-	GetZoneRemovalIntent(context.Context, string) (etcd.Versioned[etcd.ZoneRemovalIntent], bool, error)
+	GetZoneRemovalIntent(context.Context, string) (etcdstore.Versioned[etcd.ZoneRemovalIntent], bool, error)
 }
 
 type ZoneRemovalTaskProcedureIDs struct {

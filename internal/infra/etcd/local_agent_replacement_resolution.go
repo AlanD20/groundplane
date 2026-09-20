@@ -15,12 +15,12 @@ import (
 // unchanged so the lifecycle owner can recover the committed generation.
 func (repository *LocalAgentRepository) FenceReplacementAttempt(
 	ctx context.Context, agentID string, generation uint64, revision int64,
-) (Versioned[LocalAgentRecord], error) {
+) (etcdstore.Versioned[LocalAgentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	if ids.Validate(ids.KindAgent, agentID) != nil || generation == 0 || revision <= 0 {
-		return Versioned[LocalAgentRecord]{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"local Agent replacement barrier is invalid",
 		)
@@ -28,24 +28,24 @@ func (repository *LocalAgentRepository) FenceReplacementAttempt(
 	for range 3 {
 		evidence, err := repository.readSingleton(ctx)
 		if err != nil {
-			return Versioned[LocalAgentRecord]{}, err
+			return etcdstore.Versioned[LocalAgentRecord]{}, err
 		}
 		if evidence.record.ID != agentID || evidence.record.Generation < generation ||
 			evidence.primaryRevision < revision {
-			return Versioned[LocalAgentRecord]{}, errs.New(
+			return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"local Agent replacement authority changed",
 			)
 		}
 		if evidence.primaryRevision > revision {
-			return Versioned[LocalAgentRecord]{
+			return etcdstore.Versioned[LocalAgentRecord]{
 				Record:       evidence.record,
 				Revision:     evidence.primaryRevision,
 				ReadRevision: evidence.readRevision,
 			}, nil
 		}
 		if evidence.record.Generation != generation {
-			return Versioned[LocalAgentRecord]{}, errs.New(
+			return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"local Agent replacement generation changed",
 			)
@@ -55,18 +55,18 @@ func (repository *LocalAgentRepository) FenceReplacementAttempt(
 			{Key: localAgentPrimaryKey(agentID), ModRevision: revision},
 		}, []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: localAgentPrimaryKey(agentID), Value: evidence.primary.Value}})
 		if err != nil {
-			return Versioned[LocalAgentRecord]{}, err
+			return etcdstore.Versioned[LocalAgentRecord]{}, err
 		}
 		clearKeyValues(result.FailureReads)
 		if result.Succeeded {
-			return Versioned[LocalAgentRecord]{
+			return etcdstore.Versioned[LocalAgentRecord]{
 				Record:       evidence.record,
 				Revision:     result.Revision,
 				ReadRevision: result.Revision,
 			}, nil
 		}
 	}
-	return Versioned[LocalAgentRecord]{}, errs.New(
+	return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 		errs.KindStateConflict,
 		"local Agent replacement barrier raced another transition",
 	)

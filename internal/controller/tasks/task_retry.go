@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 const taskRetryRoute = "/tasks/{id}/retry"
 
 type taskRetryRepository interface {
-	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	GetTaskRetryScope(context.Context, string) (etcd.TaskRetryScope, error)
 	RetryTask(
 		context.Context,

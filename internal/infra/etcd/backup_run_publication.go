@@ -47,7 +47,7 @@ type BackupPostgresIdentity struct {
 // supplied by the repository.
 type BackupPostgresIdentityResolver func(
 	context.Context,
-	Versioned[attachrecord.Record],
+	etcdstore.Versioned[attachrecord.Record],
 	attachrecord.EncryptedFacts,
 	func(BackupPostgresIdentity) error,
 ) error
@@ -505,7 +505,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	identity := BackupPostgresIdentity{}
 	err = resolvePostgres(
 		ctx,
-		Versioned[attachrecord.Record]{
+		etcdstore.Versioned[attachrecord.Record]{
 			Record:       attach,
 			Revision:     read.Values[0].ModRevision,
 			ReadRevision: fixedRevision,
@@ -889,7 +889,7 @@ func (repository *BackupRuntimeRepository) validateTerminalBackupRunPublication(
 	if err != nil {
 		return err
 	}
-	versioned := Versioned[TaskRecord]{
+	versioned := etcdstore.Versioned[TaskRecord]{
 		Record: task, Revision: terminalRevision, ReadRevision: readRevision,
 	}
 	if err := tasks.validateTaskRetentionReplay(ctx, task, readRevision); err != nil {

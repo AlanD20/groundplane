@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 
@@ -15,11 +16,11 @@ import (
 )
 
 type credentialHierarchy interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 }
 
 type credentialSecrets interface {
-	GetSecret(context.Context, string) (etcd.Versioned[secretrecord.Record], error)
+	GetSecret(context.Context, string) (etcdstore.Versioned[secretrecord.Record], error)
 }
 
 type credentialCreator interface {

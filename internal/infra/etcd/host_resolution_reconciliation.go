@@ -86,7 +86,7 @@ func isPlatformDNSResolverTaskAttempt(task TaskRecord) bool {
 // typed input and cannot create a public DNS operation.
 func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	ctx context.Context,
-	current Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	projection HostResolutionProjectionRecord,
 	task TaskRecord,
 	renderInput PlatformComponentTaskRenderInput,
@@ -213,7 +213,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 // non-nil active value replaces the terminal Task's fence with its successor.
 func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	ctx context.Context,
-	current Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	projection HostResolutionProjectionRecord,
 	task TaskRecord,
 	active *etcdstore.KeyValue,
@@ -527,7 +527,7 @@ func clearHostResolutionReconciliationChange(change hostResolutionReconciliation
 // input's TaskID remains the originating system attempt as durable provenance.
 func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 	ctx context.Context,
-	source Versioned[TaskRecord],
+	source etcdstore.Versioned[TaskRecord],
 	retry TaskRecord,
 ) (hostResolutionReconciliationChange, error) {
 	if !isPlatformDNSResolverTaskAttempt(source.Record) {
@@ -587,7 +587,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 		if decodeErr != nil {
 			return hostResolutionReconciliationChange{}, decodeErr
 		}
-		origin = Versioned[TaskRecord]{
+		origin = etcdstore.Versioned[TaskRecord]{
 			Record: originRecord, Revision: originRead.Values[0].ModRevision, ReadRevision: source.ReadRevision,
 		}
 	}
@@ -622,19 +622,19 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 func (repository *TaskRepository) platformResolverAtRevision(
 	ctx context.Context,
 	revision int64,
-) (Versioned[componentrecord.Record], error) {
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	componentIDs := make([]string, 0, 1)
 	start := ""
 	for {
 		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: platformComponentOwnerPrefix, StartExclusive: start,
-			Limit: MaximumPageLimit, Revision: revision,
+			Limit: etcdstore.MaximumPageLimit, Revision: revision,
 		})
 		if err != nil {
-			return Versioned[componentrecord.Record]{}, err
+			return etcdstore.Versioned[componentrecord.Record]{}, err
 		}
 		if page == nil || page.ReadRevision != revision {
-			return Versioned[componentrecord.Record]{}, errs.New(
+			return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 				errs.KindInternal,
 				"platform Component scan did not preserve its fixed revision",
 			)
@@ -642,7 +642,7 @@ func (repository *TaskRepository) platformResolverAtRevision(
 		for _, value := range page.Values {
 			if !strings.HasPrefix(value.Key, platformComponentOwnerPrefix) {
 				clearRangeKeyValues(page.Values)
-				return Versioned[componentrecord.Record]{}, errs.New(
+				return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 					errs.KindInternal,
 					"platform Component scan contains an invalid key",
 				)
@@ -650,7 +650,7 @@ func (repository *TaskRepository) platformResolverAtRevision(
 			componentID := strings.TrimPrefix(value.Key, platformComponentOwnerPrefix)
 			if ids.Validate(ids.KindComponent, componentID) != nil || string(value.Value) != componentID {
 				clearRangeKeyValues(page.Values)
-				return Versioned[componentrecord.Record]{}, errs.New(
+				return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 					errs.KindInternal,
 					"platform Component owner index is corrupt",
 				)
@@ -662,14 +662,14 @@ func (repository *TaskRepository) platformResolverAtRevision(
 			break
 		}
 		if len(page.Values) == 0 {
-			return Versioned[componentrecord.Record]{}, errs.New(errs.KindInternal, "platform Component scan did not advance")
+			return etcdstore.Versioned[componentrecord.Record]{}, errs.New(errs.KindInternal, "platform Component scan did not advance")
 		}
 		start = page.Values[len(page.Values)-1].Key
 		clearRangeKeyValues(page.Values)
 	}
 	sort.Strings(componentIDs)
 	if len(componentIDs) == 0 {
-		return Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindComponentNotFound,
 			"platform dns-resolver Component is missing",
 		)
@@ -680,38 +680,38 @@ func (repository *TaskRepository) platformResolverAtRevision(
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if state == nil || state.ReadRevision != revision || len(state.Values) != len(keys) {
-		return Versioned[componentrecord.Record]{}, errs.New(errs.KindInternal, "platform Component scan is incomplete")
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(errs.KindInternal, "platform Component scan is incomplete")
 	}
-	candidates := make([]Versioned[componentrecord.Record], 0, len(componentIDs))
+	candidates := make([]etcdstore.Versioned[componentrecord.Record], 0, len(componentIDs))
 	for index, componentValue := range state.Values {
 		if componentValue == nil {
-			return Versioned[componentrecord.Record]{}, errs.New(
+			return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 				errs.KindStateConflict,
 				"platform dns-resolver Component is missing",
 			)
 		}
 		component, decodeErr := componentrecord.DecodeRecord(componentValue.Value)
 		if decodeErr != nil {
-			return Versioned[componentrecord.Record]{}, decodeErr
+			return etcdstore.Versioned[componentrecord.Record]{}, decodeErr
 		}
 		if component.Desired.ID != componentIDs[index] || component.Desired.Owner != core.ComponentOwnerPlatform ||
 			component.Desired.OwnerID != "" {
-			return Versioned[componentrecord.Record]{}, errs.New(
+			return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 				errs.KindInternal,
 				"platform Component owner index is corrupt",
 			)
 		}
-		candidates = append(candidates, Versioned[componentrecord.Record]{
+		candidates = append(candidates, etcdstore.Versioned[componentrecord.Record]{
 			Record: component, Revision: componentValue.ModRevision, ReadRevision: revision,
 		})
 	}
 	if repository.platformResolverSelector != nil {
 		selected, selectErr := repository.platformResolverSelector(ctx, candidates)
 		if selectErr != nil {
-			return Versioned[componentrecord.Record]{}, selectErr
+			return etcdstore.Versioned[componentrecord.Record]{}, selectErr
 		}
 		for _, candidate := range candidates {
 			if candidate.Record.Desired.ID == selected.Record.Desired.ID && candidate.Revision == selected.Revision &&
@@ -719,13 +719,13 @@ func (repository *TaskRepository) platformResolverAtRevision(
 				return selected, nil
 			}
 		}
-		return Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindInternal,
 			"platform dns-resolver selector returned an unscanned Component",
 		)
 	}
 	if len(candidates) != 1 {
-		return Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindStateConflict,
 			"multiple platform dns-resolver Components are registered",
 		)
@@ -1083,7 +1083,7 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 	for {
 		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: environmentComposeProjectionPrefix, StartExclusive: start,
-			Limit: MaximumPageLimit, Revision: revision,
+			Limit: etcdstore.MaximumPageLimit, Revision: revision,
 		})
 		if err != nil {
 			return nil, err
@@ -1106,7 +1106,7 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 				clearRangeKeyValues(page.Values)
 				return nil, corruptEnvironmentComposeProjection()
 			}
-			versioned := Versioned[EnvironmentComposeProjection]{
+			versioned := etcdstore.Versioned[EnvironmentComposeProjection]{
 				Record: projection, Revision: value.ModRevision, ReadRevision: page.ReadRevision,
 			}
 			for _, desired := range projection.DesiredRoutes {

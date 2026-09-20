@@ -6,7 +6,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -17,12 +18,12 @@ import (
 type applyPreflight struct {
 	bundle                core.BlueprintBundle
 	parsed                blueprintparser.Result
-	currentAttaches       []etcd.Versioned[attachrecord.Record]
+	currentAttaches       []etcdstore.Versioned[attachrecord.Record]
 	attachReadRevision    int64
 	requirements          core.BlueprintRequirements
 	submittedServiceNames map[string]struct{}
 	priorProject          *composetypes.Project
-	desiredEnvironment    etcd.Versioned[hierarchyrecord.EnvironmentRecord]
+	desiredEnvironment    etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	workloads             blueprintrelease.WorkloadPreparation
 }
 

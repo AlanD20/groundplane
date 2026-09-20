@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
 
@@ -34,7 +35,7 @@ func EnsurePlatformResolverTask(
 	if found {
 		return nil
 	}
-	page, err := components.ListPlatformComponents(ctx, etcd.PageRequest{Limit: etcd.MaximumPageLimit})
+	page, err := components.ListPlatformComponents(ctx, etcdstore.PageRequest{Limit: etcdstore.MaximumPageLimit})
 	if err != nil {
 		return err
 	}

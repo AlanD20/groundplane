@@ -3,6 +3,7 @@ package blueprint
 import (
 	"context"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -12,11 +13,11 @@ import (
 
 // applyBaseline binds one attempt to its hierarchy and prior desired state.
 type applyBaseline struct {
-	environment          etcd.Versioned[hierarchyrecord.EnvironmentRecord]
-	project              etcd.Versioned[hierarchyrecord.ProjectRecord]
-	tenant               etcd.Versioned[hierarchyrecord.TenantRecord]
+	environment          etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	project              etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	tenant               etcdstore.Versioned[hierarchyrecord.TenantRecord]
 	taskOwner            etcd.TaskOwner
-	previousProjection   etcd.Versioned[etcd.EnvironmentComposeProjection]
+	previousProjection   etcdstore.Versioned[etcd.EnvironmentComposeProjection]
 	hasProjection        bool
 	expectedHeadRevision int64
 	previous             composeidentity.Snapshot

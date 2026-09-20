@@ -3,6 +3,7 @@ package servicelogs
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
@@ -11,7 +12,7 @@ import (
 )
 
 type ServiceReader interface {
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
 }
 
 type Service struct {

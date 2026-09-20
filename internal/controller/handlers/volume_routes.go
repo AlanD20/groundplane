@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"log/slog"
 	"net/http"
@@ -19,11 +20,11 @@ import (
 // projection available; the collection remains independently useful for
 // bootstrap and focused read tests.
 type VolumeReader interface {
-	ListVolumes(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.VolumeRecord], error)
+	ListVolumes(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.VolumeRecord], error)
 }
 
 type volumeViewReader interface {
-	ListVolumeViews(context.Context, string, etcd.PageRequest) (etcd.Page[apiTypes.Volume], error)
+	ListVolumeViews(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[apiTypes.Volume], error)
 }
 
 type volumeDetailReader interface {
@@ -309,12 +310,12 @@ func volumeRecordResponse(record etcd.VolumeRecord) apiTypes.Volume {
 	return apiTypes.Volume{ID: record.ID, EnvironmentID: record.EnvironmentID, Slug: record.Slug, Key: record.Key}
 }
 
-func volumeListRequest(environmentID string, limit int, cursor string) (etcd.PageRequest, error) {
+func volumeListRequest(environmentID string, limit int, cursor string) (etcdstore.PageRequest, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.PageRequest{}, errs.New(errs.KindValidationFailed, "Volume list requires a stable Environment id")
+		return etcdstore.PageRequest{}, errs.New(errs.KindValidationFailed, "Volume list requires a stable Environment id")
 	}
 	if limit < 0 {
-		return etcd.PageRequest{}, errs.New(errs.KindValidationFailed, "Volume list limit must be a positive integer")
+		return etcdstore.PageRequest{}, errs.New(errs.KindValidationFailed, "Volume list limit must be a positive integer")
 	}
-	return etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
+	return etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 }

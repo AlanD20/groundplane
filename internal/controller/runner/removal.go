@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"net/http"
 	"strings"
@@ -23,10 +24,10 @@ const (
 )
 
 type removalRepository interface {
-	GetRunner(context.Context, string) (etcd.Versioned[runnerrecord.RunnerRecord], error)
+	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
 	BeginRunnerRemovalWithTask(
 		context.Context,
-		etcd.Versioned[runnerrecord.RunnerRecord],
+		etcdstore.Versioned[runnerrecord.RunnerRecord],
 		etcd.DeletionTombstoneRecord,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,

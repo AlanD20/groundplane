@@ -6,6 +6,7 @@ import (
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"slices"
 	"sort"
@@ -78,11 +79,11 @@ func (runtime EntryMutationRuntime) PrepareTask(
 func prepareEntryRuntimeUpdates(
 	artifact *agentpb.ComposeArtifact,
 	selected []string,
-	sources []etcd.Versioned[serviceruntimerecord.Record],
+	sources []etcdstore.Versioned[serviceruntimerecord.Record],
 ) ([]etcd.EntryRuntimeUpdate, error) {
 	updates := make([]etcd.EntryRuntimeUpdate, 0, len(selected))
 	for _, serviceID := range selected {
-		var source *etcd.Versioned[serviceruntimerecord.Record]
+		var source *etcdstore.Versioned[serviceruntimerecord.Record]
 		for index := range sources {
 			if sources[index].Record.Runtime.ServiceID != serviceID {
 				continue

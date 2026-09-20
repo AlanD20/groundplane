@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -12,7 +13,7 @@ import (
 )
 
 type serviceRemovalPlanReader interface {
-	GetServiceRemovalIntent(context.Context, string) (etcd.Versioned[etcd.ServiceRemovalIntent], bool, error)
+	GetServiceRemovalIntent(context.Context, string) (etcdstore.Versioned[etcd.ServiceRemovalIntent], bool, error)
 }
 
 func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(

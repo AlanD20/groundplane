@@ -14,17 +14,17 @@ import (
 )
 
 type AttachCreateScope struct {
-	Tenant             Versioned[hierarchyrecord.TenantRecord]
-	Project            Versioned[hierarchyrecord.ProjectRecord]
-	Environment        Versioned[hierarchyrecord.EnvironmentRecord]
-	DesiredHead        Versioned[EnvironmentBlueprintHead]
-	ComposeProjection  Versioned[EnvironmentComposeProjection]
-	Services           []Versioned[ServiceRecord]
-	BackingProject     Versioned[hierarchyrecord.ProjectRecord]
-	BackingEnvironment Versioned[hierarchyrecord.EnvironmentRecord]
-	BackingService     Versioned[ServiceRecord]
-	CredentialOwner    *Versioned[attachrecord.Record]
-	Grants             []Versioned[attachrecord.Record]
+	Tenant             etcdstore.Versioned[hierarchyrecord.TenantRecord]
+	Project            etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	Environment        etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	DesiredHead        etcdstore.Versioned[EnvironmentBlueprintHead]
+	ComposeProjection  etcdstore.Versioned[EnvironmentComposeProjection]
+	Services           []etcdstore.Versioned[ServiceRecord]
+	BackingProject     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	BackingEnvironment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	BackingService     etcdstore.Versioned[ServiceRecord]
+	CredentialOwner    *etcdstore.Versioned[attachrecord.Record]
+	Grants             []etcdstore.Versioned[attachrecord.Record]
 }
 
 type AttachRepository struct {
@@ -311,7 +311,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 func (repository *AttachRepository) BeginAttachDetachWithTask(
 	ctx context.Context,
 	scope AttachCreateScope,
-	current Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -322,7 +322,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTask(
 func (repository *AttachRepository) BeginAttachDetachWithTaskHookInputs(
 	ctx context.Context,
 	scope AttachCreateScope,
-	current Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	hookInputs *BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
@@ -334,7 +334,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskHookInputs(
 func (repository *AttachRepository) BeginAttachDetachWithTaskInitiation(
 	ctx context.Context,
 	scope AttachCreateScope,
-	current Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -348,7 +348,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskInitiation(
 func (repository *AttachRepository) BeginAttachDetachWithTaskInitiationHookInputs(
 	ctx context.Context,
 	scope AttachCreateScope,
-	current Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	hookInputs *BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
@@ -361,7 +361,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskInitiationHookInput
 func (repository *AttachRepository) beginAttachDetachWithTask(
 	ctx context.Context,
 	scope AttachCreateScope,
-	current Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	hookInputs *BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
@@ -619,12 +619,12 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		mutationContext, conditions, mutations, classify)
 }
 
-func (repository *AttachRepository) GetAttach(ctx context.Context, id string) (Versioned[attachrecord.Record], error) {
+func (repository *AttachRepository) GetAttach(ctx context.Context, id string) (etcdstore.Versioned[attachrecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindAttach, id); err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	return getRecord(
 		ctx,
@@ -641,20 +641,20 @@ func (repository *AttachRepository) ResolveAttach(
 	ctx context.Context,
 	environmentID string,
 	reference string,
-) (Versioned[attachrecord.Record], error) {
+) (etcdstore.Versioned[attachrecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if ids.Validate(ids.KindAttach, reference) == nil {
 		current, err := repository.GetAttach(ctx, reference)
 		if err != nil {
-			return Versioned[attachrecord.Record]{}, err
+			return etcdstore.Versioned[attachrecord.Record]{}, err
 		}
 		if current.Record.EnvironmentID != environmentID {
-			return Versioned[attachrecord.Record]{}, errs.New(
+			return etcdstore.Versioned[attachrecord.Record]{}, errs.New(
 				errs.KindScopeUnauthorized,
 				"Attach is outside the Environment scope",
 			)
@@ -662,33 +662,33 @@ func (repository *AttachRepository) ResolveAttach(
 		return current, nil
 	}
 	if reference == "" {
-		return Versioned[attachrecord.Record]{}, errs.New(errs.KindAttachNotFound, "Attach was not found")
+		return etcdstore.Versioned[attachrecord.Record]{}, errs.New(errs.KindAttachNotFound, "Attach was not found")
 	}
 	index, err := repository.store.Get(ctx, attachrecord.AttachNameKey(environmentID, reference))
 	if err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if index == nil || index.Entry == nil {
-		return Versioned[attachrecord.Record]{}, errs.New(errs.KindAttachNotFound, "Attach was not found")
+		return etcdstore.Versioned[attachrecord.Record]{}, errs.New(errs.KindAttachNotFound, "Attach was not found")
 	}
 	id := string(index.Entry.Value)
 	if ids.Validate(ids.KindAttach, id) != nil {
-		return Versioned[attachrecord.Record]{}, attachrecord.CorruptAttachRecord()
+		return etcdstore.Versioned[attachrecord.Record]{}, attachrecord.CorruptAttachRecord()
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{attachrecord.AttachKey(id)}, Revision: index.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if result == nil || len(result.Values) != 1 || result.Values[0] == nil {
-		return Versioned[attachrecord.Record]{}, attachrecord.CorruptAttachRecord()
+		return etcdstore.Versioned[attachrecord.Record]{}, attachrecord.CorruptAttachRecord()
 	}
 	record, err := attachrecord.DecodeAttachRecord(result.Values[0].Value)
 	if err != nil || record.ID != id || record.EnvironmentID != environmentID || record.Name != reference {
-		return Versioned[attachrecord.Record]{}, attachrecord.CorruptAttachRecord()
+		return etcdstore.Versioned[attachrecord.Record]{}, attachrecord.CorruptAttachRecord()
 	}
-	return Versioned[attachrecord.Record]{
+	return etcdstore.Versioned[attachrecord.Record]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }
@@ -696,10 +696,10 @@ func (repository *AttachRepository) ResolveAttach(
 func (repository *AttachRepository) ListAttaches(
 	ctx context.Context,
 	environmentID string,
-	request PageRequest,
-) (Page[attachrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[attachrecord.Record], error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Page[attachrecord.Record]{}, err
+		return etcdstore.Page[attachrecord.Record]{}, err
 	}
 	return listIndexPage(
 		ctx,
@@ -719,7 +719,7 @@ func (repository *AttachRepository) ListAttaches(
 
 func (repository *AttachRepository) GetAttachFacts(
 	ctx context.Context,
-	current Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 ) (attachrecord.EncryptedFacts, bool, error) {
 	if err := validateAttachVersion(current); err != nil {
 		return attachrecord.EncryptedFacts{}, false, err
@@ -750,17 +750,17 @@ func (repository *AttachRepository) GetAttachFacts(
 
 func (repository *AttachRepository) ReplaceLifecycle(
 	ctx context.Context,
-	current Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	replacement attachrecord.Record,
-) (Versioned[attachrecord.Record], error) {
+) (etcdstore.Versioned[attachrecord.Record], error) {
 	if err := validateAttachVersion(current); err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if err := attachrecord.ValidateAttachRecord(replacement); err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if !validAttachLifecycleReplacement(current.Record, replacement) {
-		return Versioned[attachrecord.Record]{}, errs.New(errs.KindStateConflict, "Attach lifecycle replacement is invalid")
+		return etcdstore.Versioned[attachrecord.Record]{}, errs.New(errs.KindStateConflict, "Attach lifecycle replacement is invalid")
 	}
 	conditions := []etcdstore.Condition{
 		{Key: attachrecord.AttachKey(current.Record.ID), ModRevision: current.Revision},
@@ -775,13 +775,13 @@ func (repository *AttachRepository) ReplaceLifecycle(
 			ctx, repository.store, current.Record.ID, revision,
 		)
 		if err != nil {
-			return Versioned[attachrecord.Record]{}, err
+			return etcdstore.Versioned[attachrecord.Record]{}, err
 		}
 		conditions = append(conditions, exclusionCondition)
 	}
 	value, err := attachrecord.EncodeAttachRecord(replacement)
 	if err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	defer clear(value)
 	result, err := repository.store.Transact(
@@ -790,7 +790,7 @@ func (repository *AttachRepository) ReplaceLifecycle(
 		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(current.Record.ID), Value: value}},
 	)
 	if err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if !result.Succeeded {
 		if replacement.Operation == attachrecord.AttachOperationDetach && replacement.Status != core.AttachFailed {
@@ -801,21 +801,21 @@ func (repository *AttachRepository) ReplaceLifecycle(
 				result.Revision,
 			)
 			if exclusionErr != nil {
-				return Versioned[attachrecord.Record]{}, exclusionErr
+				return etcdstore.Versioned[attachrecord.Record]{}, exclusionErr
 			}
 		}
-		return Versioned[attachrecord.Record]{}, errs.New(errs.KindStateConflict, "Attach changed concurrently")
+		return etcdstore.Versioned[attachrecord.Record]{}, errs.New(errs.KindStateConflict, "Attach changed concurrently")
 	}
-	return Versioned[attachrecord.Record]{
+	return etcdstore.Versioned[attachrecord.Record]{
 		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
 
 func (repository *AttachRepository) RenameAttachIdempotent(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	current Versioned[attachrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[attachrecord.Record],
 	name string,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -965,7 +965,7 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 
 func (repository *AttachRepository) DeleteDetachedAttach(
 	ctx context.Context,
-	current Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 ) (int64, error) {
 	if err := validateAttachVersion(current); err != nil {
 		return 0, err
@@ -999,7 +999,7 @@ func (repository *AttachRepository) DeleteDetachedAttach(
 func prepareAttachRemoval(
 	ctx context.Context,
 	store attachRemovalStore,
-	current Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	revision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, [][]byte, error) {
 	if err := validateAttachVersion(current); err != nil {
@@ -1343,7 +1343,7 @@ func validateAttachCreationTask(record attachrecord.Record, task TaskRecord, mar
 func validateAttachDetachScope(
 	ctx context.Context,
 	scope AttachCreateScope,
-	current Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 ) error {
 	if err := validateContext(ctx); err != nil {
 		return err
@@ -1516,7 +1516,7 @@ func attachImmutableEqual(left attachrecord.Record, right attachrecord.Record) b
 	return true
 }
 
-func validateAttachVersion(current Versioned[attachrecord.Record]) error {
+func validateAttachVersion(current etcdstore.Versioned[attachrecord.Record]) error {
 	if current.Revision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach record revision must be positive")
 	}

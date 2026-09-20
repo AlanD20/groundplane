@@ -9,6 +9,7 @@ import (
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"math"
 
@@ -22,7 +23,7 @@ import (
 )
 
 type routeMutationPlanStateReader interface {
-	GetRouteMutationIntent(context.Context, string) (etcd.Versioned[etcd.RouteMutationIntent], bool, error)
+	GetRouteMutationIntent(context.Context, string) (etcdstore.Versioned[etcd.RouteMutationIntent], bool, error)
 }
 
 func (resolver *TaskPlanResolver) PrepareRouteMutationTask(

@@ -9,6 +9,7 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"net/netip"
@@ -34,11 +35,11 @@ const backingServiceCreateRoute = "/backing-services"
 
 type backingServiceCreationRepository interface {
 	desiredrevision.Repository
-	GetEnvironmentPoolRegistry(context.Context) (etcd.Versioned[etcd.EnvironmentPoolRegistry], error)
+	GetEnvironmentPoolRegistry(context.Context) (etcdstore.Versioned[etcd.EnvironmentPoolRegistry], error)
 	ClaimBackingServiceCreationStage(
 		context.Context,
 		etcd.BackingServiceCreationStage,
-	) (etcd.Versioned[etcd.BackingServiceCreationStage], error)
+	) (etcdstore.Versioned[etcd.BackingServiceCreationStage], error)
 	PublishBackingServiceWithTask(
 		context.Context,
 		etcd.BackingServiceCreation,
@@ -160,7 +161,7 @@ func (service *CreationService) createBackingServiceFromStage(
 	ctx context.Context,
 	input apiTypes.BackingServiceCreate,
 	requestBytes []byte,
-	stage etcd.Versioned[etcd.BackingServiceCreationStage],
+	stage etcdstore.Versioned[etcd.BackingServiceCreationStage],
 	adapter adapters.Adapter,
 	spec adapters.CreationSpec,
 ) (etcd.IdempotencyResponse, error) {

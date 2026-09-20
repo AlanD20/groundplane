@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"net/http"
 	"time"
@@ -25,16 +26,16 @@ const (
 )
 
 type scriptDeletionRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	GetScript(context.Context, string) (etcd.Versioned[scriptrecord.Record], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	GetScript(context.Context, string) (etcdstore.Versioned[scriptrecord.Record], error)
 	BeginScriptDeletionWithTask(
 		context.Context,
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[etcd.ServiceRecord],
-		etcd.Versioned[scriptrecord.Record],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[etcd.ServiceRecord],
+		etcdstore.Versioned[scriptrecord.Record],
 		etcd.DeletionTombstoneRecord,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
@@ -43,10 +44,10 @@ type scriptDeletionRepository interface {
 
 func (repository *durableScriptMutationRepository) BeginScriptDeletionWithTask(
 	ctx context.Context,
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
-	target etcd.Versioned[etcd.ServiceRecord],
-	current etcd.Versioned[scriptrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[etcd.ServiceRecord],
+	current etcdstore.Versioned[scriptrecord.Record],
 	tombstone etcd.DeletionTombstoneRecord,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,

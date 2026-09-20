@@ -28,7 +28,7 @@ type volumeRemovalInitialPublication struct {
 // authority; evidence, ownership and Task writes remain one transaction.
 func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemovalWithTask(
 	ctx context.Context,
-	project Versioned[hierarchyrecord.ProjectRecord], environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord], environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64, claim EnvironmentBlueprintStageClaim,
 	projection EnvironmentComposeProjection, policy VolumeRemovalBackupPolicyPreparation,
 	initial removalrecord.InitialPublication, task TaskRecord, marker IdempotencyMarker,

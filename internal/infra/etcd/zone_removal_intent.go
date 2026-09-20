@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"slices"
@@ -40,7 +41,7 @@ type ZoneRemovalIntent struct {
 func NewZoneRemovalIntent(
 	operationID string,
 	taskID string,
-	zone Versioned[zonerecord.Record],
+	zone etcdstore.Versioned[zonerecord.Record],
 	authorities EnvironmentZoneRemovalAuthorities,
 	claim EnvironmentBlueprintStageClaim,
 	candidate EnvironmentComposeProjection,
@@ -71,31 +72,31 @@ func zoneRemovalIntentKey(operationID string) string { return zoneRemovalIntentP
 func (repository *HierarchyRepository) GetZoneRemovalIntent(
 	ctx context.Context,
 	operationID string,
-) (Versioned[ZoneRemovalIntent], bool, error) {
+) (etcdstore.Versioned[ZoneRemovalIntent], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ZoneRemovalIntent]{}, false, err
+		return etcdstore.Versioned[ZoneRemovalIntent]{}, false, err
 	}
 	if ids.Validate(ids.KindOperation, operationID) != nil {
-		return Versioned[ZoneRemovalIntent]{}, false, errs.New(
+		return etcdstore.Versioned[ZoneRemovalIntent]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Zone removal operation id is invalid",
 		)
 	}
 	result, err := repository.store.Get(ctx, zoneRemovalIntentKey(operationID))
 	if err != nil {
-		return Versioned[ZoneRemovalIntent]{}, false, err
+		return etcdstore.Versioned[ZoneRemovalIntent]{}, false, err
 	}
 	if result == nil {
-		return Versioned[ZoneRemovalIntent]{}, false, errs.New(errs.KindInternal, "Zone removal intent read is empty")
+		return etcdstore.Versioned[ZoneRemovalIntent]{}, false, errs.New(errs.KindInternal, "Zone removal intent read is empty")
 	}
 	if result.Entry == nil {
-		return Versioned[ZoneRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[ZoneRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	intent, err := decodeZoneRemovalIntent(result.Entry.Value)
 	if err != nil || intent.OperationID != operationID {
-		return Versioned[ZoneRemovalIntent]{}, false, corruptZoneRemovalIntent()
+		return etcdstore.Versioned[ZoneRemovalIntent]{}, false, corruptZoneRemovalIntent()
 	}
-	return Versioned[ZoneRemovalIntent]{
+	return etcdstore.Versioned[ZoneRemovalIntent]{
 		Record:       intent,
 		Revision:     result.Entry.ModRevision,
 		ReadRevision: result.ReadRevision,

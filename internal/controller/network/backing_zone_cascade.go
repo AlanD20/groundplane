@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"slices"
@@ -25,26 +26,26 @@ import (
 const backingZoneCascadePollInterval = 250 * time.Millisecond
 
 type backingZoneCascadeRepository interface {
-	GetZone(context.Context, string) (etcd.Versioned[zonerecord.Record], error)
+	GetZone(context.Context, string) (etcdstore.Versioned[zonerecord.Record], error)
 	GetDeletionTombstone(
 		context.Context,
 		etcd.DeletionTargetKind,
 		string,
-	) (etcd.Versioned[etcd.DeletionTombstoneRecord], bool, error)
+	) (etcdstore.Versioned[etcd.DeletionTombstoneRecord], bool, error)
 	ListAttachesByBackingNetworkAtRevision(
 		context.Context,
 		string,
 		string,
 		int64,
-	) ([]etcd.Versioned[attachrecord.Record], error)
-	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	) ([]etcdstore.Versioned[attachrecord.Record], error)
+	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	GetSystemTaskInitiation(context.Context, string) (etcd.TaskInitiation, error)
-	GetZoneRemovalIntent(context.Context, string) (etcd.Versioned[etcd.ZoneRemovalIntent], bool, error)
+	GetZoneRemovalIntent(context.Context, string) (etcdstore.Versioned[etcd.ZoneRemovalIntent], bool, error)
 	HandoffBackingZoneDeletion(
 		context.Context,
-		etcd.Versioned[zonerecord.Record],
+		etcdstore.Versioned[zonerecord.Record],
 		string,
-		etcd.Versioned[etcd.DeletionTombstoneRecord],
+		etcdstore.Versioned[etcd.DeletionTombstoneRecord],
 		etcd.ZoneRemovalIntent,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
@@ -215,7 +216,7 @@ func (service *backingZoneCascadeService) advanceAttach(
 func (service *backingZoneCascadeService) finish(
 	ctx context.Context,
 	parent etcd.TaskRecord,
-	zone etcd.Versioned[zonerecord.Record],
+	zone etcdstore.Versioned[zonerecord.Record],
 ) error {
 	tombstone, found, err := service.repository.GetDeletionTombstone(
 		ctx,
@@ -262,8 +263,8 @@ func (service *backingZoneCascadeService) finish(
 func (service *backingZoneCascadeService) publishFinalRemoval(
 	ctx context.Context,
 	parent etcd.TaskRecord,
-	zone etcd.Versioned[zonerecord.Record],
-	tombstone etcd.Versioned[etcd.DeletionTombstoneRecord],
+	zone etcdstore.Versioned[zonerecord.Record],
+	tombstone etcdstore.Versioned[etcd.DeletionTombstoneRecord],
 ) (string, error) {
 	now := service.now().UTC()
 	child := etcd.TaskRecord{
@@ -356,21 +357,21 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 func (service *backingZoneCascadeService) waitForTask(
 	ctx context.Context,
 	taskID string,
-) (etcd.Versioned[etcd.TaskRecord], error) {
+) (etcdstore.Versioned[etcd.TaskRecord], error) {
 	for {
 		current, err := service.repository.GetTask(ctx, taskID)
 		if err != nil {
-			return etcd.Versioned[etcd.TaskRecord]{}, err
+			return etcdstore.Versioned[etcd.TaskRecord]{}, err
 		}
 		switch current.Record.Status {
 		case etcd.TaskStatusCompleted, etcd.TaskStatusFailed, etcd.TaskStatusAborted, etcd.TaskStatusTimedOut:
 			return current, nil
 		case etcd.TaskStatusPending, etcd.TaskStatusRunning:
 			if err := service.wait(ctx); err != nil {
-				return etcd.Versioned[etcd.TaskRecord]{}, err
+				return etcdstore.Versioned[etcd.TaskRecord]{}, err
 			}
 		default:
-			return etcd.Versioned[etcd.TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[etcd.TaskRecord]{}, errs.New(
 				errs.KindInternal,
 				"cascade child Task status is invalid",
 			)
@@ -379,9 +380,9 @@ func (service *backingZoneCascadeService) waitForTask(
 }
 
 func orderBackingZoneCascadeAttaches(
-	attaches []etcd.Versioned[attachrecord.Record],
-) ([]etcd.Versioned[attachrecord.Record], error) {
-	byID := make(map[string]etcd.Versioned[attachrecord.Record], len(attaches))
+	attaches []etcdstore.Versioned[attachrecord.Record],
+) ([]etcdstore.Versioned[attachrecord.Record], error) {
+	byID := make(map[string]etcdstore.Versioned[attachrecord.Record], len(attaches))
 	indegree := make(map[string]int, len(attaches))
 	edges := make(map[string][]string, len(attaches))
 	for _, attach := range attaches {
@@ -407,7 +408,7 @@ func orderBackingZoneCascadeAttaches(
 		}
 	}
 	slices.Sort(ready)
-	result := make([]etcd.Versioned[attachrecord.Record], 0, len(attaches))
+	result := make([]etcdstore.Versioned[attachrecord.Record], 0, len(attaches))
 	for len(ready) != 0 {
 		id := ready[0]
 		ready = ready[1:]

@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"log/slog"
 	"time"
@@ -53,7 +54,7 @@ type TaskStore interface {
 	ListAgentAssignments(context.Context, string, uint64, int32) ([]etcd.TaskAssignment, error)
 	ReconnectAgentAssignment(context.Context, etcd.TaskAssignment) (etcd.TaskAssignment, error)
 	ClaimNextTask(context.Context, string, uint64, time.Time) (etcd.TaskAssignment, bool, error)
-	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
 	AppendTaskEvent(context.Context, etcd.TaskEventInput, time.Time) (etcd.TaskEventAppend, error)
 	AcknowledgeTask(
@@ -65,7 +66,7 @@ type TaskStore interface {
 		etcd.TaskStatus,
 		etcd.TaskResultRecord,
 		time.Time,
-	) (etcd.Versioned[etcd.TaskRecord], error)
+	) (etcdstore.Versioned[etcd.TaskRecord], error)
 }
 type environmentCreationTaskStore interface {
 	AcknowledgeEnvironmentCreation(
@@ -78,7 +79,7 @@ type environmentCreationTaskStore interface {
 		etcd.TaskStatus,
 		etcd.TaskResultRecord,
 		time.Time,
-	) (etcd.Versioned[etcd.TaskRecord], error)
+	) (etcdstore.Versioned[etcd.TaskRecord], error)
 }
 
 // PlanResolver deterministically rebuilds one Task's ephemeral execution plan

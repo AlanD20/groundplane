@@ -7,17 +7,18 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
 )
 
 func (service *MutationService) resolveAttachScope(
 	ctx context.Context,
-	consumer etcd.Versioned[etcd.ServiceRecord],
+	consumer etcdstore.Versioned[etcd.ServiceRecord],
 	backingServiceID string,
 	credentialAttachID string,
 	grantIDs []string,
-) (etcd.AttachCreateScope, []etcd.Versioned[attachrecord.Record], adapters.Adapter, error) {
+) (etcd.AttachCreateScope, []etcdstore.Versioned[attachrecord.Record], adapters.Adapter, error) {
 	environment, err := service.repository.GetEnvironment(ctx, consumer.Record.EnvironmentID)
 	if err != nil {
 		return etcd.AttachCreateScope{}, nil, nil, err
@@ -105,7 +106,7 @@ func (service *MutationService) resolveAttachScope(
 			"Attach selected Environment Compose projection is inconsistent",
 		)
 	}
-	grants := make([]etcd.Versioned[attachrecord.Record], 0, len(grantIDs))
+	grants := make([]etcdstore.Versioned[attachrecord.Record], 0, len(grantIDs))
 	for _, grantID := range grantIDs {
 		grant, grantErr := service.repository.GetAttach(ctx, grantID)
 		if grantErr != nil {
@@ -113,7 +114,7 @@ func (service *MutationService) resolveAttachScope(
 		}
 		grants = append(grants, grant)
 	}
-	slices.SortFunc(grants, func(left, right etcd.Versioned[attachrecord.Record]) int {
+	slices.SortFunc(grants, func(left, right etcdstore.Versioned[attachrecord.Record]) int {
 		if left.Record.ID < right.Record.ID {
 			return -1
 		}
@@ -122,7 +123,7 @@ func (service *MutationService) resolveAttachScope(
 		}
 		return 0
 	})
-	var credentialOwner *etcd.Versioned[attachrecord.Record]
+	var credentialOwner *etcdstore.Versioned[attachrecord.Record]
 	if credentialAttachID != "" {
 		owner, ownerErr := service.repository.GetAttach(ctx, credentialAttachID)
 		if ownerErr != nil {
@@ -146,7 +147,7 @@ func (service *MutationService) resolveAttachScope(
 	scope := etcd.AttachCreateScope{
 		Tenant: tenant, Project: project, Environment: environment,
 		DesiredHead: head, ComposeProjection: projection,
-		Services:       []etcd.Versioned[etcd.ServiceRecord]{consumer},
+		Services:       []etcdstore.Versioned[etcd.ServiceRecord]{consumer},
 		BackingProject: backingProject, BackingEnvironment: backingEnvironment,
 		BackingService: backingService, CredentialOwner: credentialOwner, Grants: grants,
 	}
@@ -156,13 +157,13 @@ func (service *MutationService) resolveAttachScope(
 func (service *MutationService) listAllAttaches(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[attachrecord.Record], error) {
-	var records []etcd.Versioned[attachrecord.Record]
+) ([]etcdstore.Versioned[attachrecord.Record], error) {
+	var records []etcdstore.Versioned[attachrecord.Record]
 	cursor := ""
 	revision := int64(0)
 	for {
-		page, err := service.repository.ListAttaches(ctx, environmentID, etcd.PageRequest{
-			Limit: etcd.MaximumPageLimit, Cursor: cursor,
+		page, err := service.repository.ListAttaches(ctx, environmentID, etcdstore.PageRequest{
+			Limit: etcdstore.MaximumPageLimit, Cursor: cursor,
 		})
 		if err != nil {
 			return nil, err

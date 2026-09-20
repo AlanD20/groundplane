@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/netip"
@@ -23,28 +24,28 @@ func getComponentAddressRegistry(
 	ctx context.Context,
 	store hierarchyStore,
 	zone zonerecord.Record,
-) (Versioned[componentAddressRegistry], error) {
+) (etcdstore.Versioned[componentAddressRegistry], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[componentAddressRegistry]{}, err
+		return etcdstore.Versioned[componentAddressRegistry]{}, err
 	}
 	if err := zonerecord.ValidateRecord(zone); err != nil {
-		return Versioned[componentAddressRegistry]{}, err
+		return etcdstore.Versioned[componentAddressRegistry]{}, err
 	}
 	result, err := store.Get(ctx, componentAddressRegistryKey(zone.Desired.ID))
 	if err != nil {
-		return Versioned[componentAddressRegistry]{}, err
+		return etcdstore.Versioned[componentAddressRegistry]{}, err
 	}
 	if result.Entry == nil {
-		return Versioned[componentAddressRegistry]{
+		return etcdstore.Versioned[componentAddressRegistry]{
 			Record:       componentAddressRegistry{Reservations: map[string]string{}},
 			ReadRevision: result.ReadRevision,
 		}, nil
 	}
 	registry, err := recordcodec.Decode[componentAddressRegistry](result.Entry.Value, "component_address_registry")
 	if err != nil || validateComponentAddressRegistry(zone, registry) != nil {
-		return Versioned[componentAddressRegistry]{}, corruptComponentAddressRegistry()
+		return etcdstore.Versioned[componentAddressRegistry]{}, corruptComponentAddressRegistry()
 	}
-	return Versioned[componentAddressRegistry]{
+	return etcdstore.Versioned[componentAddressRegistry]{
 		Record: registry, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }

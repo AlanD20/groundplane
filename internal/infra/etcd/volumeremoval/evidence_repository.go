@@ -24,8 +24,8 @@ type evidenceStore interface {
 type EvidenceRepository struct{ store evidenceStore }
 
 type EvidenceState struct {
-	Manifest etcd.Versioned[removal.EvidenceManifest]
-	Cursor   etcd.Versioned[removal.EvidenceCursor]
+	Manifest etcdstore.Versioned[removal.EvidenceManifest]
+	Cursor   etcdstore.Versioned[removal.EvidenceCursor]
 }
 
 type EvidenceStageResult struct {
@@ -131,12 +131,12 @@ func (repository *EvidenceRepository) Begin(
 		return state, nil
 	}
 	return EvidenceState{
-		Manifest: etcd.Versioned[removal.EvidenceManifest]{
+		Manifest: etcdstore.Versioned[removal.EvidenceManifest]{
 			Record:       manifest,
 			Revision:     result.Revision,
 			ReadRevision: result.Revision,
 		},
-		Cursor: etcd.Versioned[removal.EvidenceCursor]{
+		Cursor: etcdstore.Versioned[removal.EvidenceCursor]{
 			Record:       cursor,
 			Revision:     result.Revision,
 			ReadRevision: result.Revision,
@@ -269,7 +269,7 @@ func (repository *EvidenceRepository) Stage(
 			return EvidenceStageResult{}, evidenceConflict()
 		}
 		state.Manifest.ReadRevision = result.Revision
-		state.Cursor = etcd.Versioned[removal.EvidenceCursor]{
+		state.Cursor = etcdstore.Versioned[removal.EvidenceCursor]{
 			Record:       progress[count-1],
 			Revision:     result.Revision,
 			ReadRevision: result.Revision,
@@ -315,12 +315,12 @@ func (repository *EvidenceRepository) read(
 		return EvidenceState{}, false, err
 	}
 	return EvidenceState{
-		Manifest: etcd.Versioned[removal.EvidenceManifest]{
+		Manifest: etcdstore.Versioned[removal.EvidenceManifest]{
 			Record:       manifest,
 			Revision:     read.Values[0].ModRevision,
 			ReadRevision: read.ReadRevision,
 		},
-		Cursor: etcd.Versioned[removal.EvidenceCursor]{
+		Cursor: etcdstore.Versioned[removal.EvidenceCursor]{
 			Record:       cursor,
 			Revision:     read.Values[1].ModRevision,
 			ReadRevision: read.ReadRevision,

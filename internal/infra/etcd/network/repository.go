@@ -8,6 +8,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
@@ -21,7 +22,7 @@ import (
 // persistence records must not cross the Network capability's public service
 // boundary.
 type RemovalDatabaseResolver interface {
-	ResolveRemovalDatabase(context.Context, etcd.Versioned[attachrecord.Record], func(string) error) error
+	ResolveRemovalDatabase(context.Context, etcdstore.Versioned[attachrecord.Record], func(string) error) error
 }
 
 // Repository owns all durable records used by the Network capability.
@@ -119,52 +120,52 @@ func (repository *Repository) ResolveReplayLocator(
 func (repository *Repository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
 func (repository *Repository) GetProject(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
 func (repository *Repository) GetService(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ServiceRecord], error) {
+) (etcdstore.Versioned[etcd.ServiceRecord], error) {
 	return repository.services.GetService(ctx, id)
 }
 
 func (repository *Repository) ListServices(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.ServiceRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[etcd.ServiceRecord], error) {
 	return repository.services.ListServices(ctx, environmentID, request)
 }
 
 func (repository *Repository) GetZone(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[zonerecord.Record], error) {
+) (etcdstore.Versioned[zonerecord.Record], error) {
 	return repository.zones.GetZone(ctx, id)
 }
 
 func (repository *Repository) ListZones(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[zonerecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[zonerecord.Record], error) {
 	return repository.zones.ListZones(ctx, environmentID, request)
 }
 
 func (repository *Repository) BeginZoneDeletionWithTask(
 	ctx context.Context,
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
-	zone etcd.Versioned[zonerecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	zone etcdstore.Versioned[zonerecord.Record],
 	authorities etcd.EnvironmentZoneRemovalAuthorities,
 	tombstone etcd.DeletionTombstoneRecord,
 	intent etcd.ZoneRemovalIntent,
@@ -187,15 +188,15 @@ func (repository *Repository) BeginZoneDeletionWithTask(
 func (repository *Repository) GetRoute(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[routerecord.Record], error) {
+) (etcdstore.Versioned[routerecord.Record], error) {
 	return repository.routes.GetRoute(ctx, id)
 }
 
 func (repository *Repository) ListRoutes(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[routerecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[routerecord.Record], error) {
 	return repository.routes.ListRoutes(ctx, environmentID, request)
 }
 
@@ -205,10 +206,10 @@ func (repository *Repository) SnapshotRevision(ctx context.Context) (int64, erro
 
 func (repository *Repository) BeginRouteMutationWithTask(
 	ctx context.Context,
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
-	target etcd.Versioned[etcd.ServiceRecord],
-	current *etcd.Versioned[routerecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[etcd.ServiceRecord],
+	current *etcdstore.Versioned[routerecord.Record],
 	record routerecord.Record,
 	intent etcd.RouteMutationIntent,
 	task etcd.TaskRecord,
@@ -222,7 +223,7 @@ func (repository *Repository) BeginRouteMutationWithTask(
 func (repository *Repository) GetEnvironmentComposeProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentComposeProjection(ctx, environmentID)
 }
 
@@ -236,17 +237,17 @@ func (repository *Repository) GetEnvironmentZoneRemovalAuthorities(
 func (repository *Repository) GetEnvironmentAppliedComposeProjection(
 	ctx context.Context,
 	environmentID string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
 	return repository.hierarchy.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
 }
 
 func (repository *Repository) BeginRouteDeletionWithTask(
 	ctx context.Context,
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
-	target etcd.Versioned[etcd.ServiceRecord],
-	route etcd.Versioned[routerecord.Record],
-	projection *etcd.Versioned[etcd.EnvironmentComposeProjection],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[etcd.ServiceRecord],
+	route etcdstore.Versioned[routerecord.Record],
+	projection *etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	tombstone etcd.DeletionTombstoneRecord,
 	intent etcd.RouteRemovalIntent,
 	task etcd.TaskRecord,
@@ -261,7 +262,7 @@ func (repository *Repository) GetDeletionTombstone(
 	ctx context.Context,
 	kind etcd.DeletionTargetKind,
 	id string,
-) (etcd.Versioned[etcd.DeletionTombstoneRecord], bool, error) {
+) (etcdstore.Versioned[etcd.DeletionTombstoneRecord], bool, error) {
 	return repository.hierarchy.GetDeletionTombstone(ctx, kind, id)
 }
 
@@ -270,13 +271,13 @@ func (repository *Repository) ListAttachesByBackingNetworkAtRevision(
 	projectID string,
 	networkID string,
 	revision int64,
-) ([]etcd.Versioned[attachrecord.Record], error) {
+) ([]etcdstore.Versioned[attachrecord.Record], error) {
 	return repository.attaches.ListAttachesByBackingNetworkAtRevision(ctx, projectID, networkID, revision)
 }
 
 func (repository *Repository) ResolveRemovalDatabase(
 	ctx context.Context,
-	attach etcd.Versioned[attachrecord.Record],
+	attach etcdstore.Versioned[attachrecord.Record],
 	yield func(string) error,
 ) error {
 	return repository.facts.ResolveRemovalDatabase(ctx, attach, yield)
@@ -285,7 +286,7 @@ func (repository *Repository) ResolveRemovalDatabase(
 func (repository *Repository) GetTask(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.TaskRecord], error) {
+) (etcdstore.Versioned[etcd.TaskRecord], error) {
 	return repository.tasks.GetTask(ctx, id)
 }
 
@@ -299,15 +300,15 @@ func (repository *Repository) GetSystemTaskInitiation(
 func (repository *Repository) GetZoneRemovalIntent(
 	ctx context.Context,
 	operationID string,
-) (etcd.Versioned[etcd.ZoneRemovalIntent], bool, error) {
+) (etcdstore.Versioned[etcd.ZoneRemovalIntent], bool, error) {
 	return repository.hierarchy.GetZoneRemovalIntent(ctx, operationID)
 }
 
 func (repository *Repository) HandoffBackingZoneDeletion(
 	ctx context.Context,
-	zone etcd.Versioned[zonerecord.Record],
+	zone etcdstore.Versioned[zonerecord.Record],
 	parentTaskID string,
-	tombstone etcd.Versioned[etcd.DeletionTombstoneRecord],
+	tombstone etcdstore.Versioned[etcd.DeletionTombstoneRecord],
 	intent etcd.ZoneRemovalIntent,
 	task etcd.TaskRecord,
 	marker etcd.IdempotencyMarker,

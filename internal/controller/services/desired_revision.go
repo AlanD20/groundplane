@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"strings"
 	"time"
@@ -20,9 +21,9 @@ import (
 
 func (service *serviceMutationService) publishServiceDesiredMutation(
 	ctx context.Context,
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
-	current *etcd.Versioned[etcd.ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current *etcdstore.Versioned[etcd.ServiceRecord],
 	record etcd.ServiceRecord,
 	references etcd.ServiceMutationReferences,
 	request etcd.EnvironmentServiceMutationRequest,

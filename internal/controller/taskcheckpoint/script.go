@@ -3,6 +3,7 @@ package taskcheckpoint
 import (
 	"context"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -15,7 +16,7 @@ type ScriptCheckpointRepository interface {
 	CheckpointScriptExecution(
 		context.Context,
 		etcd.ScriptCheckpointInput,
-	) (etcd.Versioned[etcd.ScriptExecutionRecord], error)
+	) (etcdstore.Versioned[etcd.ScriptExecutionRecord], error)
 }
 
 type ScriptCheckpointService struct {

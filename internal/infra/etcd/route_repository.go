@@ -31,33 +31,33 @@ func newRouteRepository(store hierarchyStore) (*RouteRepository, error) {
 
 func (repository *RouteRepository) CreateRoute(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
 	record routerecord.Record,
-) (Versioned[routerecord.Record], error) {
+) (etcdstore.Versioned[routerecord.Record], error) {
 	conditions, mutations, classify, err := repository.prepareRouteCreation(ctx, environment, project, target, record)
 	if err != nil {
-		return Versioned[routerecord.Record]{}, err
+		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
 	defer clearMutationValues(mutations)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[routerecord.Record]{}, err
+		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[routerecord.Record]{}, classify(result.Revision, result.FailureReads)
+		return etcdstore.Versioned[routerecord.Record]{}, classify(result.Revision, result.FailureReads)
 	}
-	return Versioned[routerecord.Record]{
+	return etcdstore.Versioned[routerecord.Record]{
 		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
 
 func (repository *RouteRepository) prepareRouteCreation(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
 	record routerecord.Record,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	if err := validateRouteHierarchy(ctx, environment, project, target, record); err != nil {
@@ -85,12 +85,12 @@ func (repository *RouteRepository) prepareRouteCreation(
 	return conditions, mutations, classify, nil
 }
 
-func (repository *RouteRepository) GetRoute(ctx context.Context, id string) (Versioned[routerecord.Record], error) {
+func (repository *RouteRepository) GetRoute(ctx context.Context, id string) (etcdstore.Versioned[routerecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[routerecord.Record]{}, err
+		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindRoute, id); err != nil {
-		return Versioned[routerecord.Record]{}, err
+		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
 	return findRouteAtRevision(ctx, repository.store, id, 0)
 }
@@ -98,10 +98,10 @@ func (repository *RouteRepository) GetRoute(ctx context.Context, id string) (Ver
 func (repository *RouteRepository) ListRoutes(
 	ctx context.Context,
 	environmentID string,
-	request PageRequest,
-) (Page[routerecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[routerecord.Record], error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Page[routerecord.Record]{}, err
+		return etcdstore.Page[routerecord.Record]{}, err
 	}
 	return listRoutesFromDesiredHead(ctx, repository.store, environmentID, request)
 }
@@ -125,37 +125,37 @@ func (repository *RouteRepository) SnapshotRevision(ctx context.Context) (int64,
 
 func (repository *RouteRepository) ReplaceDesired(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
-	current Versioned[routerecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
+	current etcdstore.Versioned[routerecord.Record],
 	desired core.Route,
-) (Versioned[routerecord.Record], error) {
+) (etcdstore.Versioned[routerecord.Record], error) {
 	replacement, conditions, mutations, classify, err := repository.prepareRouteReplacement(
 		ctx, environment, project, target, current, desired,
 	)
 	if err != nil {
-		return Versioned[routerecord.Record]{}, err
+		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
 	defer clearMutationValues(mutations)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[routerecord.Record]{}, err
+		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[routerecord.Record]{}, classify(result.Revision, result.FailureReads)
+		return etcdstore.Versioned[routerecord.Record]{}, classify(result.Revision, result.FailureReads)
 	}
-	return Versioned[routerecord.Record]{
+	return etcdstore.Versioned[routerecord.Record]{
 		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
 
 func (repository *RouteRepository) prepareRouteReplacement(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
-	current Versioned[routerecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
+	current etcdstore.Versioned[routerecord.Record],
 	desired core.Route,
 ) (routerecord.Record, []etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	replacement, err := routerecord.ReplaceDesired(current.Record, desired)
@@ -199,11 +199,11 @@ func (repository *RouteRepository) prepareRouteReplacement(
 }
 
 func routeWriteConditions(
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
 	record routerecord.Record,
-	current *Versioned[routerecord.Record],
+	current *etcdstore.Versioned[routerecord.Record],
 	ownerRevision int64,
 	matchRevision int64,
 ) []etcdstore.Condition {
@@ -235,9 +235,9 @@ func routeWriteConditions(
 
 func validateRouteHierarchy(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
 	record routerecord.Record,
 ) error {
 	if err := validateContext(ctx); err != nil {
@@ -264,7 +264,7 @@ func validateRouteHierarchy(
 	return nil
 }
 
-func validateRouteVersion(current Versioned[routerecord.Record]) error {
+func validateRouteVersion(current etcdstore.Versioned[routerecord.Record]) error {
 	if err := routerecord.ValidateRecord(current.Record); err != nil {
 		return err
 	}
@@ -276,9 +276,9 @@ func validateRouteVersion(current Versioned[routerecord.Record]) error {
 
 func classifyRouteWriteConflict(
 	values []*etcdstore.KeyValue,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
 	record routerecord.Record,
 	expectedRouteRevision int64,
 ) error {

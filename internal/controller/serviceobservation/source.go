@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -20,19 +21,19 @@ import (
 
 // Services is the fixed-revision storage read seam, not a desired-state writer.
 type Services interface {
-	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
 }
 
 // Releases exposes only the immutable serving-source and runtime-receipt reads.
 type Releases interface {
 	ResolveServing(context.Context, string, string, int64) (etcd.ServingRelease, error)
-	GetReleaseRenderInputAt(context.Context, string, int64) (etcd.Versioned[etcd.ReleaseRenderInput], error)
+	GetReleaseRenderInputAt(context.Context, string, int64) (etcdstore.Versioned[etcd.ReleaseRenderInput], error)
 	LoadAcknowledgedServiceRuntimesAtRevision(
 		context.Context,
 		string,
 		[]string,
 		int64,
-	) ([]etcd.Versioned[serviceruntimerecord.Record], error)
+	) ([]etcdstore.Versioned[serviceruntimerecord.Record], error)
 }
 
 type source struct {
@@ -42,7 +43,7 @@ type source struct {
 	acknowledgedRuntimeRevision                                         int64
 }
 
-func capture(ctx context.Context, releases Releases, service etcd.Versioned[etcd.ServiceRecord]) (source, bool) {
+func capture(ctx context.Context, releases Releases, service etcdstore.Versioned[etcd.ServiceRecord]) (source, bool) {
 	environmentID, serviceID, revision := service.Record.EnvironmentID, service.Record.Desired.ID, service.ReadRevision
 	serving, err := releases.ResolveServing(ctx, environmentID, serviceID, revision)
 	if err != nil || serving.Revision != revision || serving.ProjectionRevision <= 0 || serving.IntentRevision <= 0 {

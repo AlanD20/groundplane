@@ -13,7 +13,7 @@ import (
 // description, kind, descendants, and materialized state cannot move here.
 func (repository *HierarchyRepository) MutateProjectIdempotent(
 	ctx context.Context,
-	current Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	replacement hierarchyrecord.ProjectRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -120,7 +120,7 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 }
 
 func classifyProjectMutationConflict(
-	current Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	replacement hierarchyrecord.ProjectRecord,
 	renaming bool,
 ) idempotencyPlanClassifier {

@@ -8,6 +8,7 @@ import (
 	"errors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"sort"
 	"time"
@@ -29,13 +30,13 @@ const (
 )
 
 type entryCreationRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
 	CreateEntryIdempotent(
 		context.Context,
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		entryrecord.Record,
 		etcd.EntryValueGeneration,
 		etcd.IdempotencyMarker,
@@ -322,7 +323,7 @@ func (service *entryCreationService) validateExposure(
 	}
 	cursor := ""
 	for {
-		page, err := service.repository.ListServices(ctx, environmentID, etcd.PageRequest{Limit: 200, Cursor: cursor})
+		page, err := service.repository.ListServices(ctx, environmentID, etcdstore.PageRequest{Limit: 200, Cursor: cursor})
 		if err != nil {
 			return err
 		}
@@ -557,29 +558,29 @@ func newDurableEntryCreationRepository(
 func (repository *durableEntryCreationRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
 func (repository *durableEntryCreationRepository) GetProject(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
 func (repository *durableEntryCreationRepository) ListServices(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.ServiceRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[etcd.ServiceRecord], error) {
 	return repository.services.ListServices(ctx, environmentID, request)
 }
 
 func (repository *durableEntryCreationRepository) CreateEntryIdempotent(
 	ctx context.Context,
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
 	generation etcd.EntryValueGeneration,
 	marker etcd.IdempotencyMarker,

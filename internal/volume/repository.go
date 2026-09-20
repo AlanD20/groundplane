@@ -3,6 +3,7 @@ package volume
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"time"
 
@@ -12,27 +13,27 @@ import (
 )
 
 type ReadRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	GetEnvironmentComposeProjectionRevision(
 		context.Context,
 		string,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	FindEnvironmentVolume(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
 	ResolveEnvironmentVolumeAtRevision(
 		context.Context,
 		string,
 		string,
 		string,
 		int64,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
 	ResolveVolumeRemovalImpactAtRevision(
 		context.Context,
 		string,
@@ -46,8 +47,8 @@ type MutationRepository interface {
 	ReadRepository
 	PublishEnvironmentVolumeRemovalWithTask(
 		context.Context,
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentComposeProjection,
@@ -56,12 +57,12 @@ type MutationRepository interface {
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironmentBlueprintHead(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		etcd.EnvironmentBlueprintStageClaimRequest,
@@ -72,8 +73,8 @@ type MutationRepository interface {
 	) (etcd.EnvironmentBlueprintSeal, error)
 	PublishEnvironmentDesiredRevisionWithTask(
 		context.Context,
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
@@ -91,9 +92,9 @@ type MutationRepository interface {
 
 func desiredState(
 	environmentID string,
-	head etcd.Versioned[etcd.EnvironmentBlueprintHead],
+	head etcdstore.Versioned[etcd.EnvironmentBlueprintHead],
 	hasHead bool,
-	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	hasProjection bool,
 ) (int64, uint64, error) {
 	if hasHead != hasProjection {

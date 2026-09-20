@@ -30,20 +30,20 @@ type BackingServiceCreationStage struct {
 func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 	ctx context.Context,
 	candidate BackingServiceCreationStage,
-) (Versioned[BackingServiceCreationStage], error) {
+) (etcdstore.Versioned[BackingServiceCreationStage], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[BackingServiceCreationStage]{}, err
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
 	if err := validateBackingServiceCreationStage(candidate); err != nil {
-		return Versioned[BackingServiceCreationStage]{}, err
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
 	key, err := backingServiceCreationStageKey(candidate.Locator)
 	if err != nil {
-		return Versioned[BackingServiceCreationStage]{}, err
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
 	value, err := recordcodec.Encode("backing_service_creation_stage", candidate)
 	if err != nil {
-		return Versioned[BackingServiceCreationStage]{}, err
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
 	defer clear(value)
 	result, err := repository.store.Transact(ctx,
@@ -51,10 +51,10 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: value}},
 	)
 	if err != nil {
-		return Versioned[BackingServiceCreationStage]{}, err
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
 	if result.Succeeded {
-		return Versioned[BackingServiceCreationStage]{
+		return etcdstore.Versioned[BackingServiceCreationStage]{
 			Record:       candidate,
 			Revision:     result.Revision,
 			ReadRevision: result.Revision,
@@ -62,26 +62,26 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 	}
 	existing, err := repository.store.Get(ctx, key)
 	if err != nil {
-		return Versioned[BackingServiceCreationStage]{}, err
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
 	if existing == nil || existing.Entry == nil {
-		return Versioned[BackingServiceCreationStage]{}, stateConflict(
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, stateConflict(
 			"backing-service creation stage",
 			candidate.TaskID,
 		)
 	}
 	record, err := decodeBackingServiceCreationStage(existing.Entry.Value)
 	if err != nil {
-		return Versioned[BackingServiceCreationStage]{}, err
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
 	if record.Locator != candidate.Locator || record.RequestSHA256 != candidate.RequestSHA256 {
-		return Versioned[BackingServiceCreationStage]{}, errs.New(
+		return etcdstore.Versioned[BackingServiceCreationStage]{}, errs.New(
 			errs.KindIdempotencyMismatch,
 			"Idempotency-Key was already used with a different backing-service request",
 		)
 	}
 	record.Existing = true
-	return Versioned[BackingServiceCreationStage]{
+	return etcdstore.Versioned[BackingServiceCreationStage]{
 		Record:       record,
 		Revision:     existing.Entry.ModRevision,
 		ReadRevision: existing.ReadRevision,

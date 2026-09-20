@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"time"
 
@@ -17,24 +18,24 @@ import (
 const controllerRunnerExecutor = "controller"
 
 type executionRepository interface {
-	GetRunner(context.Context, string) (etcd.Versioned[runnerrecord.RunnerRecord], error)
+	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
 	GetRunnerRuntimeOwnership(
 		context.Context,
 		string,
-	) (etcd.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord], bool, error)
+	) (etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord], bool, error)
 	AttestRunnerRuntimeOwnership(
 		context.Context,
-		etcd.Versioned[runnerrecord.RunnerRecord],
+		etcdstore.Versioned[runnerrecord.RunnerRecord],
 		string,
 		runnerrecord.RunnerRuntimeOwnershipRecord,
-	) (etcd.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord], error)
+	) (etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord], error)
 	RecordRunnerReadinessProof(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.RunnerReadinessProofRecord], error)
+	) (etcdstore.Versioned[etcd.RunnerReadinessProofRecord], error)
 	DeleteRunnerRuntimeOwnershipAfterCleanup(
 		context.Context,
-		etcd.Versioned[runnerrecord.RunnerRecord],
+		etcdstore.Versioned[runnerrecord.RunnerRecord],
 		runnerrecord.RunnerRuntimeOwnershipRecord,
 	) (int64, error)
 }

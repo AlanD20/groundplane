@@ -148,32 +148,32 @@ func (repository *HierarchyRepository) GetBlueprintRequirementGateAtRevision(
 	ctx context.Context,
 	taskID string,
 	revision int64,
-) (Versioned[BlueprintRequirementGate], bool, error) {
+) (etcdstore.Versioned[BlueprintRequirementGate], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[BlueprintRequirementGate]{}, false, err
+		return etcdstore.Versioned[BlueprintRequirementGate]{}, false, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil || revision <= 0 {
-		return Versioned[BlueprintRequirementGate]{}, false,
+		return etcdstore.Versioned[BlueprintRequirementGate]{}, false,
 			errs.New(errs.KindValidationFailed, "Blueprint requirement gate read is invalid")
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{blueprintRequirementGateKey(taskID)}, Revision: revision,
 	})
 	if err != nil {
-		return Versioned[BlueprintRequirementGate]{}, false, err
+		return etcdstore.Versioned[BlueprintRequirementGate]{}, false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 {
-		return Versioned[BlueprintRequirementGate]{}, false,
+		return etcdstore.Versioned[BlueprintRequirementGate]{}, false,
 			errs.New(errs.KindInternal, "Blueprint requirement gate read is incomplete")
 	}
 	if read.Values[0] == nil {
-		return Versioned[BlueprintRequirementGate]{ReadRevision: revision}, false, nil
+		return etcdstore.Versioned[BlueprintRequirementGate]{ReadRevision: revision}, false, nil
 	}
 	gate, err := decodeBlueprintRequirementGate(read.Values[0].Value)
 	if err != nil {
-		return Versioned[BlueprintRequirementGate]{}, false, err
+		return etcdstore.Versioned[BlueprintRequirementGate]{}, false, err
 	}
-	return Versioned[BlueprintRequirementGate]{
+	return etcdstore.Versioned[BlueprintRequirementGate]{
 		Record: gate, Revision: read.Values[0].ModRevision, ReadRevision: revision,
 	}, true, nil
 }

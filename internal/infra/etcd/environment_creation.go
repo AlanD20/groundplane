@@ -20,8 +20,8 @@ import (
 func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	ctx context.Context,
 	volumeRoot string,
-	project Versioned[hierarchyrecord.ProjectRecord],
-	poolRegistry Versioned[EnvironmentPoolRegistry],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	poolRegistry etcdstore.Versioned[EnvironmentPoolRegistry],
 	record hierarchyrecord.EnvironmentRecord,
 	components []componentrecord.Record,
 	task TaskRecord,
@@ -254,8 +254,8 @@ func validateInitialEnvironmentComponents(environmentID string, components []com
 }
 
 func classifyEnvironmentCreateConflict(
-	project Versioned[hierarchyrecord.ProjectRecord],
-	poolRegistry Versioned[EnvironmentPoolRegistry],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	poolRegistry etcdstore.Versioned[EnvironmentPoolRegistry],
 	components []componentrecord.Record,
 	operationID string,
 ) idempotencyPlanClassifier {

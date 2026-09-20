@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -174,7 +175,7 @@ func (service *Service) validateEnvironmentBlueprintBackup(
 	readRevision int64,
 	authored *core.BackupSpec,
 	projection etcd.EnvironmentComposeProjection,
-	attaches []etcd.Versioned[attachrecord.Record],
+	attaches []etcdstore.Versioned[attachrecord.Record],
 ) error {
 	if authored == nil {
 		return nil
@@ -204,7 +205,7 @@ func resolveEnvironmentBlueprintBackupTarget(
 	environmentID string,
 	source core.BackupSourceSpec,
 	projection etcd.EnvironmentComposeProjection,
-	attaches []etcd.Versioned[attachrecord.Record],
+	attaches []etcdstore.Versioned[attachrecord.Record],
 ) (string, error) {
 	switch source.Kind {
 	case core.BackupSourceConfig:
@@ -236,7 +237,7 @@ func resolveEnvironmentBlueprintBackupTarget(
 func (service *Service) environmentBlueprintAuthoringBackup(
 	ctx context.Context,
 	snapshot environmentBlueprintSnapshot,
-	attaches []etcd.Versioned[attachrecord.Record],
+	attaches []etcdstore.Versioned[attachrecord.Record],
 ) (*core.BackupSpec, error) {
 	if service.backups == nil {
 		return nil, nil

@@ -5,8 +5,8 @@ package environment
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
-	etcdinfra "github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -37,12 +37,12 @@ type Page struct {
 }
 
 type hierarchyRecords interface {
-	GetEnvironment(context.Context, string) (etcdinfra.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	ListEnvironments(
 		context.Context,
 		string,
-		etcdinfra.PageRequest,
-	) (etcdinfra.Page[hierarchyrecord.EnvironmentRecord], error)
+		etcdstore.PageRequest,
+	) (etcdstore.Page[hierarchyrecord.EnvironmentRecord], error)
 }
 type zoneReservations interface {
 	ListZoneSubnetReservationsAtRevision(context.Context, string, int64) ([]string, error)
@@ -76,7 +76,7 @@ func (repository *Repository) List(ctx context.Context, projectID string, reques
 	stored, err := repository.hierarchy.ListEnvironments(
 		ctx,
 		projectID,
-		etcdinfra.PageRequest{Limit: request.Limit, Cursor: request.Cursor},
+		etcdstore.PageRequest{Limit: request.Limit, Cursor: request.Cursor},
 	)
 	if err != nil {
 		return Page{}, err

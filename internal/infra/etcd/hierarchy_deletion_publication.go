@@ -98,7 +98,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		clear(root.targetValue)
 		return hierarchyDeletionRoot{}, 0, corruptHierarchyDeletion()
 	}
-	root.coordination = make([]Versioned[HierarchyCoordinationRecord], len(root.coordinationKeys))
+	root.coordination = make([]etcdstore.Versioned[HierarchyCoordinationRecord], len(root.coordinationKeys))
 	for index, value := range coordination.Values {
 		if value == nil || value.Key != root.coordinationKeys[index] || value.ModRevision <= 0 {
 			clear(root.targetValue)
@@ -109,7 +109,7 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 			clear(root.targetValue)
 			return hierarchyDeletionRoot{}, 0, decodeErr
 		}
-		root.coordination[index] = Versioned[HierarchyCoordinationRecord]{
+		root.coordination[index] = etcdstore.Versioned[HierarchyCoordinationRecord]{
 			Record: record, Revision: value.ModRevision, ReadRevision: result.ReadRevision,
 		}
 	}

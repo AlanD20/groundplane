@@ -3,6 +3,7 @@ package controllertask
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"log/slog"
 	"sync"
 	"time"
@@ -20,7 +21,7 @@ type Store interface {
 		string,
 		etcd.TaskStatus,
 		time.Time,
-	) (etcd.Versioned[etcd.TaskRecord], error)
+	) (etcdstore.Versioned[etcd.TaskRecord], error)
 }
 
 type Handler interface {

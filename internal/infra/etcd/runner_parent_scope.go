@@ -3,13 +3,14 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type runnerParents struct {
-	tenant  Versioned[hierarchyrecord.TenantRecord]
-	project Versioned[hierarchyrecord.ProjectRecord]
+	tenant  etcdstore.Versioned[hierarchyrecord.TenantRecord]
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 }
 
 func (repository *RunnerRepository) resolveRunnerParents(

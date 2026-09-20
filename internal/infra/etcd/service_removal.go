@@ -14,8 +14,8 @@ import (
 // close races with new references during task publication.
 func (repository *ServiceRepository) ValidateServiceRemovalReferences(
 	ctx context.Context,
-	current Versioned[ServiceRecord],
-	projection Versioned[EnvironmentComposeProjection],
+	current etcdstore.Versioned[ServiceRecord],
+	projection etcdstore.Versioned[EnvironmentComposeProjection],
 ) error {
 	if err := validateServiceVersion(current); err != nil {
 		return err
@@ -92,11 +92,11 @@ func (repository *ServiceRepository) scanServiceRemovalRecords(
 // without changing the active desired head or deleting the visible Service.
 func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	ctx context.Context,
-	tenant Versioned[hierarchyrecord.TenantRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	current Versioned[ServiceRecord],
-	projection Versioned[EnvironmentComposeProjection],
+	tenant etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	current etcdstore.Versioned[ServiceRecord],
+	projection etcdstore.Versioned[EnvironmentComposeProjection],
 	tombstone DeletionTombstoneRecord,
 	intent ServiceRemovalIntent,
 	task TaskRecord,

@@ -6,15 +6,16 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 )
 
 func environmentBlueprintState(
 	environmentID string,
-	head etcd.Versioned[etcd.EnvironmentBlueprintHead],
+	head etcdstore.Versioned[etcd.EnvironmentBlueprintHead],
 	hasHead bool,
-	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	hasProjection bool,
 ) (int64, composeidentity.Snapshot, uint64, error) {
 	if hasHead != hasProjection {

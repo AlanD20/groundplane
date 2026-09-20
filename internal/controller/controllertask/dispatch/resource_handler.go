@@ -3,6 +3,7 @@ package dispatch
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -31,7 +32,7 @@ type backingZoneCascadeExecutor interface {
 }
 
 type controllerTaskRunners interface {
-	GetRunner(context.Context, string) (etcd.Versioned[runnerrecord.RunnerRecord], error)
+	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
 }
 
 type controllerTaskRunnerLifecycle interface {

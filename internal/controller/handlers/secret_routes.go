@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"io"
 	"log/slog"
@@ -23,8 +24,8 @@ import (
 )
 
 type SecretReader interface {
-	GetSecret(context.Context, string) (etcd.Versioned[secretrecord.Record], error)
-	ListSecrets(context.Context, core.SecretScope, string, etcd.PageRequest) (etcd.Page[secretrecord.Record], error)
+	GetSecret(context.Context, string) (etcdstore.Versioned[secretrecord.Record], error)
+	ListSecrets(context.Context, core.SecretScope, string, etcdstore.PageRequest) (etcdstore.Page[secretrecord.Record], error)
 	RevealSecret(context.Context, string) (string, error)
 }
 
@@ -374,29 +375,29 @@ func secretListRequest(
 	platform bool,
 	limit int,
 	cursor string,
-) (core.SecretScope, string, etcd.PageRequest, error) {
+) (core.SecretScope, string, etcdstore.PageRequest, error) {
 	if projectID != "" && platform || projectID == "" && !platform {
-		return "", "", etcd.PageRequest{}, errs.New(
+		return "", "", etcdstore.PageRequest{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret list requires exactly one owner selector",
 		)
 	}
 	if projectID != "" && ids.Validate(ids.KindProject, projectID) != nil {
-		return "", "", etcd.PageRequest{}, errs.New(
+		return "", "", etcdstore.PageRequest{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret list requires a stable Project id",
 		)
 	}
 	if limit < 0 {
-		return "", "", etcd.PageRequest{}, errs.New(
+		return "", "", etcdstore.PageRequest{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret list limit must be a positive integer",
 		)
 	}
 	if platform {
-		return core.SecretScopePlatform, "", etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
+		return core.SecretScopePlatform, "", etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 	}
-	return core.SecretScopeProject, projectID, etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
+	return core.SecretScopeProject, projectID, etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 }
 
 func secretResponse(record secretrecord.Record) apiTypes.Secret {

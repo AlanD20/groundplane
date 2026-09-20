@@ -49,8 +49,8 @@ func DefaultPlatformComponents(tailnetDelegation bool) ([]componentrecord.Record
 func (repository *ComponentRepository) EnsurePlatformComponents(
 	ctx context.Context,
 	records []componentrecord.Record,
-) ([]Versioned[componentrecord.Record], error) {
-	result := make([]Versioned[componentrecord.Record], 0, len(records))
+) ([]etcdstore.Versioned[componentrecord.Record], error) {
+	result := make([]etcdstore.Versioned[componentrecord.Record], 0, len(records))
 	for _, record := range records {
 		if err := validatePlatformComponentRecord(record); err != nil {
 			return nil, err
@@ -80,7 +80,7 @@ func (repository *ComponentRepository) EnsurePlatformComponents(
 // still the exact singleton created by the bootstrap repository transaction.
 func (repository *ComponentRepository) HasPlatformComponentBootstrapProvenance(
 	ctx context.Context,
-	current Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 ) (bool, error) {
 	if err := validateContext(ctx); err != nil {
 		return false, err

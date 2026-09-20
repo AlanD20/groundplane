@@ -230,7 +230,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 }
 
 func projectedZoneRemovalTarget(intent ZoneRemovalIntent, readRevision int64) (zonerecord.Record, error) {
-	projection := Versioned[EnvironmentComposeProjection]{
+	projection := etcdstore.Versioned[EnvironmentComposeProjection]{
 		Record: intent.DesiredProjection, Revision: intent.DesiredHeadRevision, ReadRevision: readRevision,
 	}
 	var matched *zonerecord.Record

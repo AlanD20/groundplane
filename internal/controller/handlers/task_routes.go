@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"log/slog"
 	"net/http"
@@ -169,7 +170,7 @@ func (s *Server) listTasks(ctx context.Context, request *taskListInput) (*taskPa
 	page, err := s.tasks.ListTasksByScope(
 		ctx,
 		scope,
-		etcd.PageRequest{Limit: request.Limit, Cursor: request.Cursor},
+		etcdstore.PageRequest{Limit: request.Limit, Cursor: request.Cursor},
 	)
 	if err != nil {
 		return nil, normalizeTaskRouteError(err)

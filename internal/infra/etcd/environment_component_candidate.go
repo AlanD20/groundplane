@@ -20,7 +20,7 @@ import (
 // deliberately rejected on Candidate because preparation owns address
 // allocation and health remains observed state.
 type EnvironmentComponentCandidateInput struct {
-	Current   Versioned[componentrecord.Record]
+	Current   etcdstore.Versioned[componentrecord.Record]
 	Candidate core.Component
 }
 
@@ -38,8 +38,8 @@ type ComponentTaskPreparation struct {
 }
 
 type componentTaskAddressPreparation struct {
-	Zone    Versioned[zonerecord.Record]
-	Current Versioned[componentAddressRegistry]
+	Zone    etcdstore.Versioned[zonerecord.Record]
+	Current etcdstore.Versioned[componentAddressRegistry]
 	Next    componentAddressRegistry
 	Mutates bool
 }
@@ -154,7 +154,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	}
 	appliedValue := appliedState.Values[0]
 	found := appliedValue != nil
-	selected := Versioned[EnvironmentComposeProjection]{ReadRevision: fixedRevision}
+	selected := etcdstore.Versioned[EnvironmentComposeProjection]{ReadRevision: fixedRevision}
 	if found {
 		projection, decodeErr := decodeEnvironmentComposeProjection(appliedValue.Value)
 		if decodeErr != nil {
@@ -169,9 +169,9 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		selected.Record = projection
 		selected.Revision = appliedValue.ModRevision
 	}
-	selectedZones := make(map[string]Versioned[zonerecord.Record])
+	selectedZones := make(map[string]etcdstore.Versioned[zonerecord.Record])
 	if found {
-		selectedZones = make(map[string]Versioned[zonerecord.Record], len(selected.Record.DesiredZones))
+		selectedZones = make(map[string]etcdstore.Versioned[zonerecord.Record], len(selected.Record.DesiredZones))
 		for _, desired := range selected.Record.DesiredZones {
 			zone, joinErr := joinEnvironmentZone(selected, desired)
 			if joinErr != nil {
@@ -188,7 +188,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}
-	desiredZones := make(map[string]Versioned[zonerecord.Record], len(desired.Record.DesiredZones))
+	desiredZones := make(map[string]etcdstore.Versioned[zonerecord.Record], len(desired.Record.DesiredZones))
 	for _, item := range desired.Record.DesiredZones {
 		zone, joinErr := joinEnvironmentZone(desired, item)
 		if joinErr != nil {
@@ -302,10 +302,10 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 		}
 		registries[zoneID] = cloneComponentAddressRegistry(currentRegistry)
 		addresses[index] = componentTaskAddressPreparation{
-			Zone: Versioned[zonerecord.Record]{
+			Zone: etcdstore.Versioned[zonerecord.Record]{
 				Record: zoneChange.Record, Revision: zoneRevision, ReadRevision: fixedRevision,
 			},
-			Current: Versioned[componentAddressRegistry]{
+			Current: etcdstore.Versioned[componentAddressRegistry]{
 				Record:       cloneComponentAddressRegistry(currentRegistry),
 				Revision:     registryRevision,
 				ReadRevision: state.ReadRevision,

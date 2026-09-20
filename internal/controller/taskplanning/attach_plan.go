@@ -5,6 +5,7 @@ import (
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"slices"
 
@@ -44,12 +45,12 @@ type AttachPlanIdentityConsumer func(AttachPlanIdentity) error
 type BackingHookInputConsumer func(backinghook.Input) error
 
 type attachPlanRecordReader interface {
-	GetAttach(context.Context, string) (etcd.Versioned[attachrecord.Record], error)
-	GetAttachTaskRenderInput(context.Context, string) (etcd.Versioned[etcd.AttachTaskRenderInput], error)
+	GetAttach(context.Context, string) (etcdstore.Versioned[attachrecord.Record], error)
+	GetAttachTaskRenderInput(context.Context, string) (etcdstore.Versioned[etcd.AttachTaskRenderInput], error)
 	GetBlueprintAttachTaskIntent(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.BlueprintAttachTaskIntent], bool, error)
+	) (etcdstore.Versioned[etcd.BlueprintAttachTaskIntent], bool, error)
 }
 
 // BuildAttachProvisionSteps compiles one already-resolved credential owner's
@@ -68,19 +69,19 @@ func BuildAttachProvisionSteps(
 }
 
 type attachPlanServiceReader interface {
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
 }
 
 type attachPlanIdentityResolver interface {
 	ResolveTaskIdentity(
 		context.Context,
-		etcd.Versioned[attachrecord.Record],
+		etcdstore.Versioned[attachrecord.Record],
 		string,
 		AttachPlanIdentityConsumer,
 	) error
 	ResolveHookInput(
 		context.Context,
-		etcd.Versioned[attachrecord.Record],
+		etcdstore.Versioned[attachrecord.Record],
 		etcd.TaskRecord,
 		backinghook.Context,
 		BackingHookInputConsumer,

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"strings"
 
@@ -22,11 +23,11 @@ type EntryMutationRuntime struct {
 	Projection        etcd.EnvironmentComposeProjection
 	EpochRevision     int64
 	RunningServiceIDs []string
-	Sources           []etcd.Versioned[serviceruntimerecord.Record]
+	Sources           []etcdstore.Versioned[serviceruntimerecord.Record]
 }
 
 func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
-	ctx context.Context, current etcd.Versioned[etcd.EnvironmentComposeProjection],
+	ctx context.Context, current etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 ) (EntryMutationRuntime, error) {
 	if resolver == nil || resolver.releases == nil {
 		return EntryMutationRuntime{}, errs.New(errs.KindInternal, "Entry runtime capture is not configured")

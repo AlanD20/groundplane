@@ -21,7 +21,7 @@ type hierarchyDeletionZoneEvidence struct {
 }
 
 func newHierarchyDeletionZoneEvidence(
-	projection Versioned[EnvironmentComposeProjection],
+	projection etcdstore.Versioned[EnvironmentComposeProjection],
 	desired EnvironmentZoneProjection,
 ) (hierarchyDeletionZoneEvidence, error) {
 	evidence := hierarchyDeletionZoneEvidence{

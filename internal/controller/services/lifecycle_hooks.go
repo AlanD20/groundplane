@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -23,11 +24,11 @@ type serviceLifecycleHookInputs interface {
 func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	ctx context.Context,
 	taskType etcd.TaskType,
-	current etcd.Versioned[etcd.ServiceRecord],
-	tenant *etcd.Versioned[hierarchyrecord.TenantRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+	current etcdstore.Versioned[etcd.ServiceRecord],
+	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	task etcd.TaskRecord,
 ) (etcd.TaskRecord, etcd.ServiceLifecycleRenderInput, *etcd.BackingHookEncryptedInputs, error) {
 	releaseAuthority, err := controllerlifecycle.CaptureRelease(

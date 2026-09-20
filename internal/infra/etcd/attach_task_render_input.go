@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"strings"
@@ -71,12 +72,12 @@ type AttachTaskRenderInput struct {
 func (repository *AttachRepository) GetAttachTaskRenderInput(
 	ctx context.Context,
 	planID string,
-) (Versioned[AttachTaskRenderInput], error) {
+) (etcdstore.Versioned[AttachTaskRenderInput], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[AttachTaskRenderInput]{}, err
+		return etcdstore.Versioned[AttachTaskRenderInput]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindPlan, planID); err != nil {
-		return Versioned[AttachTaskRenderInput]{}, err
+		return etcdstore.Versioned[AttachTaskRenderInput]{}, err
 	}
 	return getRecord(
 		ctx,

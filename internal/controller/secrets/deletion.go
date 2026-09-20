@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 	"time"
@@ -26,12 +27,12 @@ const (
 )
 
 type secretDeletionRepository interface {
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetSecret(context.Context, string) (etcd.Versioned[secretrecord.Record], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetSecret(context.Context, string) (etcdstore.Versioned[secretrecord.Record], error)
 	BeginSecretDeletionWithTask(
 		context.Context,
 		etcd.SecretOwner,
-		etcd.Versioned[secretrecord.Record],
+		etcdstore.Versioned[secretrecord.Record],
 		etcd.DeletionTombstoneRecord,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,

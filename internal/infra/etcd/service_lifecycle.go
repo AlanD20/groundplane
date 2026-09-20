@@ -21,12 +21,12 @@ func serviceLifecycleActiveKey(serviceID string) string {
 // also persist the immutable render snapshot used after restart and on retry.
 func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	ctx context.Context,
-	tenant Versioned[hierarchyrecord.TenantRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	current Versioned[ServiceRecord],
+	tenant etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	current etcdstore.Versioned[ServiceRecord],
 	replacement ServiceRecord,
-	projection *Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	renderInput *ServiceLifecycleRenderInput,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -38,12 +38,12 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 
 func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	ctx context.Context,
-	tenant *Versioned[hierarchyrecord.TenantRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	current Versioned[ServiceRecord],
+	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	current etcdstore.Versioned[ServiceRecord],
 	replacement ServiceRecord,
-	projection *Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	renderInput *ServiceLifecycleRenderInput,
 	hookInputs *BackingHookEncryptedInputs,
 	task TaskRecord,
@@ -256,7 +256,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 
 func validateBoundServiceConditions(
 	binding *ordinaryEnvironmentMutationBinding,
-	service Versioned[ServiceRecord],
+	service etcdstore.Versioned[ServiceRecord],
 	desiredIndex int,
 	runtimeIndex int,
 ) error {
@@ -278,10 +278,10 @@ func serviceLifecycleProjectionFenceKey(environmentID string) string {
 }
 
 func validateServiceLifecycleHierarchy(
-	tenant *Versioned[hierarchyrecord.TenantRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	service Versioned[ServiceRecord],
+	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	service etcdstore.Versioned[ServiceRecord],
 ) error {
 	if project.Revision <= 0 || environment.Revision <= 0 || service.Revision <= 0 ||
 		project.ReadRevision < project.Revision ||
@@ -333,7 +333,7 @@ func validateServiceLifecycleReplacement(current ServiceRecord, replacement Serv
 }
 
 func validateServiceLifecycleProjection(
-	projection *Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	input *ServiceLifecycleRenderInput,
 	task TaskRecord,
 ) error {
@@ -386,10 +386,10 @@ func serviceLifecycleHookConfigured(input ServiceLifecycleRenderInput, taskType 
 }
 
 func classifyServiceLifecycleStartConflict(
-	tenant *Versioned[hierarchyrecord.TenantRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	service Versioned[ServiceRecord],
+	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	service etcdstore.Versioned[ServiceRecord],
 	input *ServiceLifecycleRenderInput,
 	operationID string,
 ) idempotencyPlanClassifier {

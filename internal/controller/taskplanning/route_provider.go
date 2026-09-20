@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
@@ -18,9 +19,9 @@ import (
 
 type routeProviderStateReader interface {
 	SnapshotRevision(context.Context) (int64, error)
-	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[routerecord.Record], error)
-	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
-	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[zonerecord.Record], error)
+	ListRoutes(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[routerecord.Record], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
+	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
 }
 
 // ResolveComponentTaskRouteProvider pins the registered HTTP router input for

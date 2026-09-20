@@ -3,6 +3,7 @@ package blueprint
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -15,7 +16,7 @@ type environmentBlueprintRequirementGateReader interface {
 		context.Context,
 		string,
 		int64,
-	) (etcd.Versioned[etcd.BlueprintRequirementGate], bool, error)
+	) (etcdstore.Versioned[etcd.BlueprintRequirementGate], bool, error)
 }
 
 func environmentBlueprintRequirementTaskEdges(
@@ -69,7 +70,7 @@ func environmentBlueprintRequirementTaskEdges(
 func environmentBlueprintRequirements(
 	authored []core.Requirement,
 	candidates map[string]core.AttachmentSpec,
-	current []etcd.Versioned[attachrecord.Record],
+	current []etcdstore.Versioned[attachrecord.Record],
 	readRevision int64,
 ) (core.BlueprintRequirements, error) {
 	available := make([]core.RequirementResolutionTarget, len(current))

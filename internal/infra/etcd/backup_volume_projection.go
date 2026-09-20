@@ -32,8 +32,8 @@ type BackupVolumeRemovalImpact struct {
 }
 
 type backupVolumeProjectionEvidence struct {
-	Environment      Versioned[hierarchyrecord.EnvironmentRecord]
-	Projection       Versioned[EnvironmentComposeProjection]
+	Environment      etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	Projection       etcdstore.Versioned[EnvironmentComposeProjection]
 	ProjectionRoot   int64
 	DependencyDigest string
 	Volume           EnvironmentVolumeIdentity
@@ -45,15 +45,15 @@ func (repository *HierarchyRepository) ResolveEnvironmentVolumeAtRevision(
 	volumeID string,
 	revisionID string,
 	fixedRevision int64,
-) (Versioned[EnvironmentComposeProjection], EnvironmentVolumeIdentity, error) {
+) (etcdstore.Versioned[EnvironmentComposeProjection], EnvironmentVolumeIdentity, error) {
 	evidence, err := loadBackupVolumeProjectionEvidence(
 		ctx, repository.store, environmentID, volumeID, fixedRevision,
 	)
 	if err != nil {
-		return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
 	}
 	if evidence.Projection.Record.RevisionID != revisionID {
-		return Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, errs.New(
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, errs.New(
 			errs.KindStateConflict, "Volume desired revision changed",
 		)
 	}
@@ -341,7 +341,7 @@ func loadBackupVolumeProjectionEvidence(
 	projection.Revision = headRead.Values[1].ModRevision
 	projection.ReadRevision = fixedRevision
 	return backupVolumeProjectionEvidence{
-		Environment: Versioned[hierarchyrecord.EnvironmentRecord]{
+		Environment: etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{
 			Record: environment, Revision: headRead.Values[0].ModRevision, ReadRevision: fixedRevision,
 		},
 		Projection: projection, ProjectionRoot: rootRead.Values[0].ModRevision,

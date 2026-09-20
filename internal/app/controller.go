@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"log/slog"
 	"os"
 	"time"
@@ -540,7 +541,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	if err := tasks.SetPlatformResolverTaskPreparer(func(
 		ctx context.Context,
-		current etcd.Versioned[componentrecord.Record],
+		current etcdstore.Versioned[componentrecord.Record],
 		projection etcd.HostResolutionProjectionRecord,
 		task etcd.TaskRecord,
 		priorObservation *etcd.ComponentObservationRecord,

@@ -249,7 +249,7 @@ func sortSearchRunnerID(values []string, id string) int {
 // successful terminal acknowledgement.
 func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	ctx context.Context,
-	current Versioned[runnerrecord.RunnerRecord],
+	current etcdstore.Versioned[runnerrecord.RunnerRecord],
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -446,7 +446,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 }
 
 func validateRunnerDeletionTask(
-	current Versioned[runnerrecord.RunnerRecord],
+	current etcdstore.Versioned[runnerrecord.RunnerRecord],
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
 ) error {

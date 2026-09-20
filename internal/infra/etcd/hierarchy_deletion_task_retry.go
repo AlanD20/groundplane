@@ -10,7 +10,7 @@ import (
 
 func (repository *TaskRepository) retryHierarchyDeletionTask(
 	ctx context.Context,
-	source Versioned[TaskRecord],
+	source etcdstore.Versioned[TaskRecord],
 	retryTaskID string,
 	actor TaskActor,
 	provided *TaskInitiation,
@@ -122,7 +122,7 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 
 func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 	ctx context.Context,
-	source Versioned[TaskRecord],
+	source etcdstore.Versioned[TaskRecord],
 	retry TaskRecord,
 ) (hierarchyDeletionRootAckChange, error) {
 	journal, err := newHierarchyDeletionRepository(repository.store)

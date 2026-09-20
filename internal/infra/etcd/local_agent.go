@@ -130,12 +130,12 @@ func newLocalAgentRepository(store localAgentRepositoryStore) (*LocalAgentReposi
 func (repository *LocalAgentRepository) CreateSingleton(
 	ctx context.Context,
 	record LocalAgentRecord,
-) (Versioned[LocalAgentRecord], error) {
+) (etcdstore.Versioned[LocalAgentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	if record.Phase != LocalAgentPhaseProvisioning {
-		return Versioned[LocalAgentRecord]{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"local Agent must be created in provisioning phase",
 		)
@@ -144,11 +144,11 @@ func (repository *LocalAgentRepository) CreateSingleton(
 		record.TokenUpdatedAt = record.CreatedAt
 	}
 	if err := validateLocalAgentRecord(record); err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	primaryValue, configValue, tokenValue, reference, err := encodeLocalAgentValues(record)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	defer clear(primaryValue)
 	defer clear(configValue)
@@ -164,34 +164,34 @@ func (repository *LocalAgentRepository) CreateSingleton(
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	clearKeyValues(result.FailureReads)
 	if !result.Succeeded {
 		if len(result.FailureReads) == len(conditions) && result.FailureReads[0] != nil {
-			return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "the local Agent already exists")
+			return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "the local Agent already exists")
 		}
-		return Versioned[LocalAgentRecord]{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 			errs.KindInternal,
 			"local Agent creation collided with durable state",
 		)
 	}
-	return Versioned[LocalAgentRecord]{
+	return etcdstore.Versioned[LocalAgentRecord]{
 		Record: cloneLocalAgentRecord(record), Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
 
 func (repository *LocalAgentRepository) GetSingleton(
 	ctx context.Context,
-) (Versioned[LocalAgentRecord], error) {
+) (etcdstore.Versioned[LocalAgentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
-	return Versioned[LocalAgentRecord]{
+	return etcdstore.Versioned[LocalAgentRecord]{
 		Record: evidence.record, Revision: evidence.primaryRevision,
 		ReadRevision: evidence.readRevision,
 	}, nil
@@ -203,9 +203,9 @@ func (repository *LocalAgentRepository) MarkReady(
 	generation uint64,
 	revision int64,
 	readyAt time.Time,
-) (Versioned[LocalAgentRecord], error) {
+) (etcdstore.Versioned[LocalAgentRecord], error) {
 	if err := recordcodec.ValidateTimestamp("local Agent ready_at", readyAt); err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	return repository.transitionPhase(
 		ctx,
@@ -223,51 +223,51 @@ func (repository *LocalAgentRepository) MarkReady(
 // identity while retaining the stable Agent aggregate and first Ready time.
 func (repository *LocalAgentRepository) ReplaceGeneration(
 	ctx context.Context,
-	current Versioned[LocalAgentRecord],
+	current etcdstore.Versioned[LocalAgentRecord],
 	image string,
 	encryptedToken []byte,
 	tokenDigest string,
 	updatedAt time.Time,
-) (Versioned[LocalAgentRecord], error) {
+) (etcdstore.Versioned[LocalAgentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision ||
 		current.Record.ID == "" || !imageref.IsDigestPinned(image) ||
 		len(encryptedToken) == 0 || !validLocalAgentDigest(tokenDigest) ||
 		current.Record.Generation == ^uint64(0) {
-		return Versioned[LocalAgentRecord]{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"local Agent replacement identity is invalid",
 		)
 	}
 	if err := recordcodec.ValidateTimestamp("local Agent token updated_at", updatedAt); err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	if evidence.record.ID != current.Record.ID ||
 		evidence.record.Generation != current.Record.Generation ||
 		evidence.record.Image != current.Record.Image ||
 		evidence.record.Phase != current.Record.Phase ||
 		evidence.primaryRevision != current.Revision {
-		return Versioned[LocalAgentRecord]{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"local Agent generation or revision changed",
 		)
 	}
 	if evidence.record.Phase != LocalAgentPhaseReady &&
 		evidence.record.Phase != LocalAgentPhaseUpdating {
-		return Versioned[LocalAgentRecord]{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"local Agent is not replaceable",
 		)
 	}
 	if evidence.digest == nil || tokenDigest == evidence.record.TokenDigest ||
 		updatedAt.Before(evidence.record.TokenUpdatedAt) {
-		return Versioned[LocalAgentRecord]{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"local Agent replacement token is not a new generation",
 		)
@@ -282,7 +282,7 @@ func (repository *LocalAgentRepository) ReplaceGeneration(
 	replacement.TokenUpdatedAt = updatedAt
 	primaryValue, configValue, tokenValue, reference, err := encodeLocalAgentValues(replacement)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	defer clear(primaryValue)
 	defer clear(configValue)
@@ -304,16 +304,16 @@ func (repository *LocalAgentRepository) ReplaceGeneration(
 		{Type: etcdstore.MutationPut, Key: newDigestKey, Value: reference},
 	})
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	clearKeyValues(result.FailureReads)
 	if !result.Succeeded {
-		return Versioned[LocalAgentRecord]{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"local Agent replacement state changed",
 		)
 	}
-	return Versioned[LocalAgentRecord]{
+	return etcdstore.Versioned[LocalAgentRecord]{
 		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
@@ -323,7 +323,7 @@ func (repository *LocalAgentRepository) MarkReplacementReady(
 	agentID string,
 	generation uint64,
 	revision int64,
-) (Versioned[LocalAgentRecord], error) {
+) (etcdstore.Versioned[LocalAgentRecord], error) {
 	return repository.transitionPhase(
 		ctx,
 		agentID,
@@ -341,42 +341,42 @@ func (repository *LocalAgentRepository) MarkReplacementReady(
 // primary and singleton pointer fence deletion or replacement of the Agent.
 func (repository *LocalAgentRepository) UpdateConfigIdempotent(
 	ctx context.Context,
-	current Versioned[LocalAgentRecord],
+	current etcdstore.Versioned[LocalAgentRecord],
 	config LocalAgentConfig,
 	marker IdempotencyMarker,
-) (Versioned[LocalAgentRecord], IdempotencyTransactionResult, error) {
+) (etcdstore.Versioned[LocalAgentRecord], IdempotencyTransactionResult, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
 	}
 	if err := validateLocalAgentConfig(config); err != nil {
-		return Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision ||
 		current.Record.ID == "" || marker.Kind != IdempotencyMarkerDirect ||
 		marker.State != IdempotencyMarkerCompleted || marker.Locator.ScopeKind != IdempotencyScopePlatform ||
 		marker.Locator.ScopeID != "-" || marker.Locator.Method != "PUT" ||
 		marker.Locator.Route != "/agents/{id}/config" {
-		return Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"local Agent config mutation identity is invalid",
 		)
 	}
 	if err := validateIdempotencyMarker(marker); err != nil {
-		return Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
 	}
 	if evidence.record.ID != current.Record.ID || evidence.record.Generation != current.Record.Generation ||
 		evidence.primaryRevision != current.Revision {
-		return Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,
 			"local Agent generation or revision changed",
 		)
 	}
 	if evidence.record.Phase == LocalAgentPhaseDeleting {
-		return Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,
 			"deleting local Agent config cannot be changed",
 		)
@@ -385,7 +385,7 @@ func (repository *LocalAgentRepository) UpdateConfigIdempotent(
 	replacement.Config = cloneLocalAgentConfig(config)
 	configValue, err := encodeLocalAgentConfig(replacement)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
 	}
 	defer clear(configValue)
 	plan, err := newIdempotencyMutationPlan(
@@ -400,14 +400,14 @@ func (repository *LocalAgentRepository) UpdateConfigIdempotent(
 		classifyLocalAgentConfigConflict(current.Record.ID),
 	)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
 	}
 	idempotency, err := newIdempotencyRepository(repository.store)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
 	}
 	result, err := idempotency.Apply(ctx, marker, plan)
-	return Versioned[LocalAgentRecord]{
+	return etcdstore.Versioned[LocalAgentRecord]{
 		Record: replacement, Revision: evidence.primaryRevision, ReadRevision: result.revision,
 	}, result, err
 }
@@ -439,29 +439,29 @@ func (repository *LocalAgentRepository) BeginDelete(
 	agentID string,
 	generation uint64,
 	revision int64,
-) (Versioned[LocalAgentRecord], error) {
+) (etcdstore.Versioned[LocalAgentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	if evidence.record.ID != agentID || evidence.record.Generation != generation ||
 		evidence.primaryRevision != revision {
-		return Versioned[LocalAgentRecord]{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"local Agent generation or revision changed",
 		)
 	}
 	if evidence.record.Phase == LocalAgentPhaseDeleting {
-		return Versioned[LocalAgentRecord]{
+		return etcdstore.Versioned[LocalAgentRecord]{
 			Record: evidence.record, Revision: evidence.primaryRevision,
 			ReadRevision: evidence.readRevision,
 		}, nil
 	}
 	if evidence.digest == nil {
-		return Versioned[LocalAgentRecord]{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 			errs.KindInternal,
 			"active local Agent is missing its credential index",
 		)
@@ -471,7 +471,7 @@ func (repository *LocalAgentRepository) BeginDelete(
 	replacement.TokenDigest = ""
 	primaryValue, err := encodeLocalAgentPrimary(replacement)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	defer clear(primaryValue)
 	result, err := repository.store.Transact(ctx, []etcdstore.Condition{
@@ -482,13 +482,13 @@ func (repository *LocalAgentRepository) BeginDelete(
 		{Type: etcdstore.MutationDelete, Key: evidence.digest.Key},
 	})
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	clearKeyValues(result.FailureReads)
 	if !result.Succeeded {
-		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent deletion state changed")
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent deletion state changed")
 	}
-	return Versioned[LocalAgentRecord]{
+	return etcdstore.Versioned[LocalAgentRecord]{
 		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
@@ -611,29 +611,29 @@ func (repository *LocalAgentRepository) transitionPhase(
 	next LocalAgentPhase,
 	idempotent bool,
 	readyAt time.Time,
-) (Versioned[LocalAgentRecord], error) {
+) (etcdstore.Versioned[LocalAgentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	if evidence.record.ID != agentID || evidence.record.Generation != generation ||
 		evidence.primaryRevision != revision {
-		return Versioned[LocalAgentRecord]{}, errs.New(
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"local Agent generation or revision changed",
 		)
 	}
 	if idempotent && evidence.record.Phase == next {
-		return Versioned[LocalAgentRecord]{
+		return etcdstore.Versioned[LocalAgentRecord]{
 			Record: evidence.record, Revision: evidence.primaryRevision,
 			ReadRevision: evidence.readRevision,
 		}, nil
 	}
 	if evidence.record.Phase != expected {
-		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent phase changed")
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent phase changed")
 	}
 	replacement := cloneLocalAgentRecord(evidence.record)
 	replacement.Phase = next
@@ -642,20 +642,20 @@ func (repository *LocalAgentRepository) transitionPhase(
 	}
 	primaryValue, err := encodeLocalAgentPrimary(replacement)
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	defer clear(primaryValue)
 	result, err := repository.store.Transact(ctx, []etcdstore.Condition{{
 		Key: localAgentPrimaryKey(agentID), ModRevision: evidence.primary.ModRevision,
 	}}, []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: localAgentPrimaryKey(agentID), Value: primaryValue}})
 	if err != nil {
-		return Versioned[LocalAgentRecord]{}, err
+		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	clearKeyValues(result.FailureReads)
 	if !result.Succeeded {
-		return Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent phase changed")
+		return etcdstore.Versioned[LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent phase changed")
 	}
-	return Versioned[LocalAgentRecord]{
+	return etcdstore.Versioned[LocalAgentRecord]{
 		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }

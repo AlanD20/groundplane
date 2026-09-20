@@ -138,7 +138,7 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 		)
 	}
 
-	resolved := make([]Versioned[backuppolicy.BackupSourceRecord], len(input.Sources))
+	resolved := make([]etcdstore.Versioned[backuppolicy.BackupSourceRecord], len(input.Sources))
 	for index, source := range input.Sources {
 		if err := repository.validateBackupPolicySelectionTarget(ctx, input.EnvironmentID, source); err != nil {
 			return PreparedBackupPolicyReplacement{}, err
@@ -300,13 +300,13 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 		)
 	}
 	candidate := backupPolicyReplacementCandidate{
-		Environment: Versioned[hierarchyrecord.EnvironmentRecord]{
+		Environment: etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{
 			Record: environment, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 		},
-		Project: Versioned[hierarchyrecord.ProjectRecord]{
+		Project: etcdstore.Versioned[hierarchyrecord.ProjectRecord]{
 			Record: project, Revision: result.Values[1].ModRevision, ReadRevision: result.ReadRevision,
 		},
-		MutationEpoch: Versioned[EnvironmentMutationEpochRecord]{
+		MutationEpoch: etcdstore.Versioned[EnvironmentMutationEpochRecord]{
 			Record: epoch, Revision: result.Values[3].ModRevision, ReadRevision: result.ReadRevision,
 		},
 		Replacement: backuppolicy.BackupPolicyRecord{
@@ -326,7 +326,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 		if decodeErr != nil || current.EnvironmentID != input.EnvironmentID {
 			return backupPolicyReplacementCandidate{}, false, recordcodec.CorruptRecord()
 		}
-		candidate.Current = &Versioned[backuppolicy.BackupPolicyRecord]{
+		candidate.Current = &etcdstore.Versioned[backuppolicy.BackupPolicyRecord]{
 			Record: current, Revision: result.Values[2].ModRevision, ReadRevision: result.ReadRevision,
 		}
 	}
@@ -344,7 +344,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 	} else if candidate.Current != nil {
 		return backupPolicyReplacementCandidate{}, false, corruptEnvironmentCoordination()
 	}
-	candidate.Coordination = Versioned[EnvironmentCoordinationRecord]{
+	candidate.Coordination = etcdstore.Versioned[EnvironmentCoordinationRecord]{
 		Record: coordination, Revision: coordinationRevision, ReadRevision: result.ReadRevision,
 	}
 	if candidate.Current == nil {
@@ -574,7 +574,7 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 
 func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 	ctx context.Context,
-	expected Versioned[backuppolicy.BackupSourceRecord],
+	expected etcdstore.Versioned[backuppolicy.BackupSourceRecord],
 	revision int64,
 ) (backupPolicySourceEvidence, error) {
 	record := expected.Record
@@ -601,7 +601,7 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 		return backupPolicySourceEvidence{}, recordcodec.CorruptRecord()
 	}
 	evidence := backupPolicySourceEvidence{
-		Source: Versioned[backuppolicy.BackupSourceRecord]{
+		Source: etcdstore.Versioned[backuppolicy.BackupSourceRecord]{
 			Record: current, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 		},
 		EnvironmentIndex: cloneBackupPolicyEvidenceKeyValue(result.Values[1]),
@@ -630,7 +630,7 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 		if decodeErr != nil || attach.ID != record.TargetID || attach.EnvironmentID != record.EnvironmentID {
 			return backupPolicySourceEvidence{}, recordcodec.CorruptRecord()
 		}
-		evidence.Attach = &Versioned[attachrecord.Record]{
+		evidence.Attach = &etcdstore.Versioned[attachrecord.Record]{
 			Record: attach, Revision: result.Values[3].ModRevision, ReadRevision: result.ReadRevision,
 		}
 	}
@@ -642,7 +642,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorEvidence(
 	environmentID string,
 	connectorID string,
 	revision int64,
-) (*Versioned[connectorrecord.Record], *etcdstore.KeyValue, error) {
+) (*etcdstore.Versioned[connectorrecord.Record], *etcdstore.KeyValue, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		connectorrecord.RecordKey(connectorID),
 		connectorEnvironmentKey(environmentID, connectorID),
@@ -666,7 +666,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorEvidence(
 	if result.Values[1] == nil || string(result.Values[1].Value) != connectorID {
 		return nil, nil, connectorrecord.CorruptRecord()
 	}
-	return &Versioned[connectorrecord.Record]{
+	return &etcdstore.Versioned[connectorrecord.Record]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, cloneBackupPolicyEvidenceKeyValue(result.Values[1]), nil
 }

@@ -21,8 +21,8 @@ const maximumBackingServiceTransactionRequestOperations = 128
 // revision in one transaction so readers can never observe a partial facade.
 type BackingServiceCreation struct {
 	VolumeRoot   string
-	Stage        Versioned[BackingServiceCreationStage]
-	PoolRegistry Versioned[EnvironmentPoolRegistry]
+	Stage        etcdstore.Versioned[BackingServiceCreationStage]
+	PoolRegistry etcdstore.Versioned[EnvironmentPoolRegistry]
 	Project      hierarchyrecord.ProjectRecord
 	Environment  hierarchyrecord.EnvironmentRecord
 	Components   []componentrecord.Record

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
 
@@ -30,15 +31,15 @@ type entryEditInput struct {
 }
 
 type entryEditRepository interface {
-	GetEntry(context.Context, string) (etcd.Versioned[entryrecord.Record], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
+	GetEntry(context.Context, string) (etcdstore.Versioned[entryrecord.Record], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
 	ReplaceEntryIdempotent(
 		context.Context,
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[entryrecord.Record],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[entryrecord.Record],
 		core.EnvEntry,
 		string,
 		etcd.EntryValueGeneration,
@@ -413,7 +414,7 @@ func (service *entryEditService) validateExposure(
 		page, err := service.repository.ListServices(
 			ctx,
 			environmentID,
-			etcd.PageRequest{Limit: 200, Cursor: cursor},
+			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
 		)
 		if err != nil {
 			return err
@@ -456,15 +457,15 @@ func newDurableEntryEditRepository(
 func (repository *durableEntryEditRepository) GetEntry(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[entryrecord.Record], error) {
+) (etcdstore.Versioned[entryrecord.Record], error) {
 	return repository.entries.GetEntry(ctx, id)
 }
 
 func (repository *durableEntryEditRepository) ReplaceEntryIdempotent(
 	ctx context.Context,
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
-	current etcd.Versioned[entryrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[entryrecord.Record],
 	desired core.EnvEntry,
 	generationID string,
 	generation etcd.EntryValueGeneration,

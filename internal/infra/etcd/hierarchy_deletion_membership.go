@@ -436,7 +436,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMembership(
 	ctx context.Context,
 	operation HierarchyDeletionOperation,
-	projection Versioned[EnvironmentComposeProjection],
+	projection etcdstore.Versioned[EnvironmentComposeProjection],
 ) ([]HierarchyDeletionMembershipNode, error) {
 	if projection.Revision == 0 {
 		return nil, nil

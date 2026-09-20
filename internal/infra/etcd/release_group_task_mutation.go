@@ -112,8 +112,8 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 
 func (repository *TaskRepository) PublishReleaseGroupMutation(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	prepared ReleaseGroupPreparedMutation,
 	task TaskRecord,
 	marker IdempotencyMarker,

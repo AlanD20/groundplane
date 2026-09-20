@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"path"
@@ -14,9 +15,9 @@ import (
 )
 
 type managedConfigTopology interface {
-	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
-	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[zonerecord.Record], error)
-	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[routerecord.Record], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
+	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
+	ListRoutes(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[routerecord.Record], error)
 }
 
 // ManagedConfigRegistration projects a compiled plan's one activated file.
@@ -140,10 +141,10 @@ func readPreviewCollection[T any](
 	ctx context.Context,
 	id string,
 	revision int64,
-	list func(context.Context, string, etcd.PageRequest) (etcd.Page[T], error),
+	list func(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[T], error),
 ) ([]T, error) {
 	var result []T
-	request := etcd.PageRequest{Limit: etcd.MaximumPageLimit, Revision: revision}
+	request := etcdstore.PageRequest{Limit: etcdstore.MaximumPageLimit, Revision: revision}
 	seen := map[string]bool{"": true}
 	for {
 		page, err := list(ctx, id, request)

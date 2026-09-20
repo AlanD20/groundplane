@@ -31,7 +31,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTask(
 	taskID string,
 	terminalStatus TaskStatus,
 	terminalAt time.Time,
-) (Versioned[TaskRecord], error) {
+) (etcdstore.Versioned[TaskRecord], error) {
 	var lastErr error
 	for attempt := 0; attempt < 8; attempt++ {
 		terminal, err := repository.acknowledgeHierarchyDeletionControllerTaskOnce(
@@ -42,7 +42,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTask(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		lastErr = err
 		if attempt < 7 {
@@ -51,11 +51,11 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTask(
 				delay = maximumTaskCASDelay
 			}
 			if waitErr := repository.retryPolicy.wait(ctx, repository.retryPolicy.jitter(delay)); waitErr != nil {
-				return Versioned[TaskRecord]{}, waitErr
+				return etcdstore.Versioned[TaskRecord]{}, waitErr
 			}
 		}
 	}
-	return Versioned[TaskRecord]{}, lastErr
+	return etcdstore.Versioned[TaskRecord]{}, lastErr
 }
 
 func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce(
@@ -63,33 +63,33 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	taskID string,
 	terminalStatus TaskStatus,
 	terminalAt time.Time,
-) (Versioned[TaskRecord], error) {
+) (etcdstore.Versioned[TaskRecord], error) {
 	claimKey := taskExecutionClaimKey(TaskExecutorController, "", taskID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
 	}})
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if read == nil || len(read.Values) != 3 || read.Values[0] == nil {
-		return Versioned[TaskRecord]{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
+		return etcdstore.Versioned[TaskRecord]{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
 	}
 	taskValue := read.Values[0]
 	task, err := decodeTaskRecord(taskValue.Value)
 	if err != nil || task.ID != taskID || task.Executor != TaskExecutorController ||
 		task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
-		return Versioned[TaskRecord]{}, errs.New(
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion root Task identity changed",
 		)
 	}
 	journal, err := newHierarchyDeletionRepository(repository.store)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if read.Values[1] == nil {
 		if read.Values[2] != nil || task.Status != terminalStatus {
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"hierarchy deletion root Task has no matching claim",
 			)
@@ -98,15 +98,15 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 		if operationErr != nil || operation.Tombstone.Terminal == nil ||
 			operation.Tombstone.Terminal.TaskID != task.ID ||
 			operation.Tombstone.Terminal.Status != string(terminalStatus) {
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"hierarchy deletion root terminal evidence changed",
 			)
 		}
 		if err := repository.validateTaskRetentionReplay(ctx, task, read.ReadRevision); err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		return Versioned[TaskRecord]{
+		return etcdstore.Versioned[TaskRecord]{
 			Record:       task,
 			Revision:     taskValue.ModRevision,
 			ReadRevision: read.ReadRevision,
@@ -116,41 +116,41 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	assignmentIndexValue := read.Values[2]
 	if assignmentIndexValue == nil || assignmentIndexValue.ModRevision != assignmentValue.ModRevision ||
 		!bytes.Equal(assignmentIndexValue.Value, assignmentValue.Value) {
-		return Versioned[TaskRecord]{}, errs.New(
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(
 			errs.KindInternal,
 			"hierarchy deletion root assignment indexes disagree",
 		)
 	}
 	assignment, err := decodeTaskAssignment(assignmentValue.Value)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if assignment.TaskID != task.ID || assignment.Executor != TaskExecutorController ||
 		assignment.AgentID != "" || assignment.AgentGeneration != 0 || task.Status != TaskStatusRunning ||
 		task.StartedAt == nil || assignment.ClaimedTaskRevision >= assignmentValue.ModRevision ||
 		!assignment.AssignedAt.Equal(*task.StartedAt) {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion root claim changed")
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion root claim changed")
 	}
 	terminalAt, err = nextTaskControllerTimestamp(task.UpdatedAt, terminalAt)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	terminal, err := transitionTaskStatus(task, TaskStatusRunning, terminalStatus, terminalAt)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	terminalValue, err := encodeTaskRecord(terminal)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	defer clear(terminalValue)
 	preparedMarker, markerKey, markerRetentionKey, err := prepareTerminalTaskMarker(task, terminalStatus, terminalAt)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	taskRetentionKey, taskRetentionValue, err := prepareTaskRetentionIndex(terminal)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	defer clear(taskRetentionValue)
 	activeKey := taskActiveOperationKey(task.OperationID)
@@ -163,46 +163,46 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 		Revision: read.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if companions == nil || len(companions.Values) != 6 || companions.Values[0] == nil ||
 		companions.Values[1] == nil || companions.Values[2] != nil || companions.Values[3] != nil ||
 		companions.Values[4] != nil || companions.Values[5] == nil ||
 		companions.Values[5].ModRevision != assignmentValue.ModRevision ||
 		!bytes.Equal(companions.Values[5].Value, assignmentValue.Value) {
-		return Versioned[TaskRecord]{}, errs.New(
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(
 			errs.KindInternal,
 			"hierarchy deletion root lifecycle records disagree",
 		)
 	}
 	if err := validateTaskLifecycleCompanions(task, companions.Values[0], companions.Values[1]); err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	preparedMarker, err = hydrateTerminalTaskMarker(preparedMarker, companions.Values[1].Value)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	markerValue, err := encodeIdempotencyMarker(preparedMarker)
 	clear(preparedMarker.Intent.Ciphertext)
 	clear(preparedMarker.Response.Body)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	defer clear(markerValue)
 	markerRetentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
 	if err != nil {
-		return Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
+		return etcdstore.Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(markerRetentionValue)
 	operation, err := journal.OperationByTaskAtRevision(ctx, task.ID, read.ReadRevision)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	change, err := journal.prepareHierarchyDeletionRootAcknowledgement(
 		ctx, operation, task, terminalStatus, terminalAt, read.ReadRevision,
 	)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	defer change.clear()
 	conditions := []etcdstore.Condition{
@@ -227,20 +227,20 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	}
 	mutations = append(mutations, change.mutations...)
 	if err := enforceHierarchyDeletionTransaction(conditions, mutations); err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[TaskRecord]{}, errs.New(
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"hierarchy deletion root acknowledgement changed",
 		)
 	}
-	return Versioned[TaskRecord]{
+	return etcdstore.Versioned[TaskRecord]{
 		Record:       terminal,
 		Revision:     transaction.Revision,
 		ReadRevision: transaction.Revision,

@@ -18,17 +18,17 @@ import (
 // ReleasePlanningScope is one fixed-revision view of every ancestor and
 // render input shared by all candidates in an operation.
 type ReleasePlanningScope struct {
-	Environment              Versioned[hierarchyrecord.EnvironmentRecord]
-	Project                  Versioned[hierarchyrecord.ProjectRecord]
-	Tenant                   Versioned[hierarchyrecord.TenantRecord]
-	Compose                  Versioned[EnvironmentComposeProjection]
+	Environment              etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	Project                  etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	Tenant                   etcdstore.Versioned[hierarchyrecord.TenantRecord]
+	Compose                  etcdstore.Versioned[EnvironmentComposeProjection]
 	EnvironmentEpochRevision int64
 	EnvironmentEpochValue    []byte
 	ReadRevision             int64
 }
 
 type ReleasePlanningService struct {
-	Service            Versioned[ServiceRecord]
+	Service            etcdstore.Versioned[ServiceRecord]
 	Projection         domain.ServiceProjection
 	ProjectionRevision int64
 }
@@ -158,17 +158,17 @@ func (ledger *ReleaseLedger) loadPlanningScope(
 		return ReleasePlanningScope{}, corruptReleaseRecord()
 	}
 	return ReleasePlanningScope{
-		Environment: Versioned[hierarchyrecord.EnvironmentRecord]{
+		Environment: etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{
 			Record:       environment,
 			Revision:     loaded.Values[0].ModRevision,
 			ReadRevision: loaded.ReadRevision,
 		},
-		Project: Versioned[hierarchyrecord.ProjectRecord]{
+		Project: etcdstore.Versioned[hierarchyrecord.ProjectRecord]{
 			Record:       project,
 			Revision:     loaded.Values[1].ModRevision,
 			ReadRevision: loaded.ReadRevision,
 		},
-		Tenant: Versioned[hierarchyrecord.TenantRecord]{
+		Tenant: etcdstore.Versioned[hierarchyrecord.TenantRecord]{
 			Record:       tenant,
 			Revision:     loaded.Values[2].ModRevision,
 			ReadRevision: loaded.ReadRevision,

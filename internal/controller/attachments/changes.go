@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -17,25 +18,25 @@ import (
 func (service *MutationService) ListAttaches(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[attachrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[attachrecord.Record], error) {
 	if ctx == nil {
-		return etcd.Page[attachrecord.Record]{}, errs.New(errs.KindInternal, "Attach list context is required")
+		return etcdstore.Page[attachrecord.Record]{}, errs.New(errs.KindInternal, "Attach list context is required")
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.Page[attachrecord.Record]{}, errs.New(
+		return etcdstore.Page[attachrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach list requires a stable Environment id",
 		)
 	}
 	if request.Limit < 0 {
-		return etcd.Page[attachrecord.Record]{}, errs.New(
+		return etcdstore.Page[attachrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach list limit must be a positive integer",
 		)
 	}
 	if _, err := service.repository.GetEnvironment(ctx, environmentID); err != nil {
-		return etcd.Page[attachrecord.Record]{}, err
+		return etcdstore.Page[attachrecord.Record]{}, err
 	}
 	return service.repository.ListAttaches(ctx, environmentID, request)
 }

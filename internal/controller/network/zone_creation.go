@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"time"
@@ -26,12 +27,12 @@ const (
 )
 
 type zoneCreationRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		etcd.EnvironmentBlueprintStageClaimRequest,

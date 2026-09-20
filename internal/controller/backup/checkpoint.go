@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"time"
 
@@ -13,13 +14,13 @@ import (
 )
 
 type BackupCheckpointRepository interface {
-	GetBackupRun(context.Context, string) (etcd.Versioned[etcd.BackupRunRecord], error)
+	GetBackupRun(context.Context, string) (etcdstore.Versioned[etcd.BackupRunRecord], error)
 	CheckpointBackupRun(
 		context.Context,
 		etcd.BackupCheckpointInput,
-		etcd.Versioned[etcd.BackupRunRecord],
+		etcdstore.Versioned[etcd.BackupRunRecord],
 		etcd.BackupRunRecord,
-	) (etcd.Versioned[etcd.BackupRunRecord], error)
+	) (etcdstore.Versioned[etcd.BackupRunRecord], error)
 }
 
 type BackupCheckpointService struct {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 
@@ -142,25 +143,25 @@ func validateEnvironmentPoolRegistry(registry EnvironmentPoolRegistry) error {
 
 func (repository *HierarchyRepository) GetEnvironmentPoolRegistry(
 	ctx context.Context,
-) (Versioned[EnvironmentPoolRegistry], error) {
+) (etcdstore.Versioned[EnvironmentPoolRegistry], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[EnvironmentPoolRegistry]{}, err
+		return etcdstore.Versioned[EnvironmentPoolRegistry]{}, err
 	}
 	result, err := repository.store.Get(ctx, environmentPoolRegistryKey)
 	if err != nil {
-		return Versioned[EnvironmentPoolRegistry]{}, err
+		return etcdstore.Versioned[EnvironmentPoolRegistry]{}, err
 	}
 	if result.Entry == nil {
-		return Versioned[EnvironmentPoolRegistry]{
+		return etcdstore.Versioned[EnvironmentPoolRegistry]{
 			Record:       EnvironmentPoolRegistry{Reservations: map[string]string{}},
 			ReadRevision: result.ReadRevision,
 		}, nil
 	}
 	registry, err := recordcodec.Decode[EnvironmentPoolRegistry](result.Entry.Value, "environment_pool_registry")
 	if err != nil || validateEnvironmentPoolRegistry(registry) != nil {
-		return Versioned[EnvironmentPoolRegistry]{}, corruptEnvironmentPoolRegistry()
+		return etcdstore.Versioned[EnvironmentPoolRegistry]{}, corruptEnvironmentPoolRegistry()
 	}
-	return Versioned[EnvironmentPoolRegistry]{
+	return etcdstore.Versioned[EnvironmentPoolRegistry]{
 		Record: registry, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }

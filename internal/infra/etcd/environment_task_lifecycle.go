@@ -17,7 +17,7 @@ type environmentTaskChange struct {
 }
 
 type taskEnvironmentMutationState struct {
-	Environment   Versioned[hierarchyrecord.EnvironmentRecord]
+	Environment   etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	EpochRevision int64
 	EpochValue    []byte
 }
@@ -164,7 +164,7 @@ func (repository *TaskRepository) readTaskEnvironmentMutationState(
 		return taskEnvironmentMutationState{}, err
 	}
 	return taskEnvironmentMutationState{
-		Environment: Versioned[hierarchyrecord.EnvironmentRecord]{
+		Environment: etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{
 			Record:       record,
 			Revision:     environmentValue.ModRevision,
 			ReadRevision: result.ReadRevision,

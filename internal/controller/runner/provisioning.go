@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"net/http"
 	"slices"
@@ -27,7 +28,7 @@ const (
 )
 
 type provisioningRepository interface {
-	GetRunner(context.Context, string) (etcd.Versioned[runnerrecord.RunnerRecord], error)
+	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
 	CreateRunnerWithTask(
 		context.Context,
 		runnerallocation.RunnerAllocationConfig,
@@ -44,11 +45,11 @@ type provisioningRepository interface {
 }
 
 type runnerTaskReader interface {
-	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 }
 
 type runnerProjectReader interface {
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 }
 
 // ProvisioningService turns Runner create and failed-create retry requests

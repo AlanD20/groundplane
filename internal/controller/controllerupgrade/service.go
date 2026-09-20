@@ -3,6 +3,7 @@ package controllerupgrade
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"net/http"
 	"time"
@@ -32,7 +33,7 @@ type AgentInventory interface {
 }
 type UpdateTaskStore interface {
 	CreateTask(context.Context, etcd.TaskRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
-	LatestControllerUpdate(context.Context) (etcd.Versioned[etcd.TaskRecord], bool, error)
+	LatestControllerUpdate(context.Context) (etcdstore.Versioned[etcd.TaskRecord], bool, error)
 }
 
 type ServiceDependencies struct {

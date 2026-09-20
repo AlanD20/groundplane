@@ -4,15 +4,16 @@ import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type connectorReadRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetConnector(context.Context, string) (etcd.Versioned[connectorrecord.Record], error)
-	ListConnectors(context.Context, string, etcd.PageRequest) (etcd.Page[connectorrecord.Record], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetConnector(context.Context, string) (etcdstore.Versioned[connectorrecord.Record], error)
+	ListConnectors(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[connectorrecord.Record], error)
 }
 
 type connectorReadService struct {
@@ -29,10 +30,10 @@ func NewReadService(repository connectorReadRepository) (*connectorReadService, 
 func (service *connectorReadService) ListConnectors(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[connectorrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[connectorrecord.Record], error) {
 	if _, err := service.repository.GetEnvironment(ctx, environmentID); err != nil {
-		return etcd.Page[connectorrecord.Record]{}, err
+		return etcdstore.Page[connectorrecord.Record]{}, err
 	}
 	return service.repository.ListConnectors(ctx, environmentID, request)
 }
@@ -40,7 +41,7 @@ func (service *connectorReadService) ListConnectors(
 func (service *connectorReadService) GetConnector(
 	ctx context.Context,
 	connectorID string,
-) (etcd.Versioned[connectorrecord.Record], error) {
+) (etcdstore.Versioned[connectorrecord.Record], error) {
 	return service.repository.GetConnector(ctx, connectorID)
 }
 
@@ -62,21 +63,21 @@ func NewReadRepository(
 func (repository *durableConnectorReadRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
 func (repository *durableConnectorReadRepository) GetConnector(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[connectorrecord.Record], error) {
+) (etcdstore.Versioned[connectorrecord.Record], error) {
 	return repository.connectors.GetConnector(ctx, id)
 }
 
 func (repository *durableConnectorReadRepository) ListConnectors(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[connectorrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[connectorrecord.Record], error) {
 	return repository.connectors.ListConnectors(ctx, environmentID, request)
 }

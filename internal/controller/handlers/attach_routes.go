@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,7 +21,7 @@ import (
 )
 
 type AttachMutator interface {
-	ListAttaches(context.Context, string, etcd.PageRequest) (etcd.Page[attachrecord.Record], error)
+	ListAttaches(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[attachrecord.Record], error)
 	CreateAttach(context.Context, apiTypes.AttachRequest, string) (etcd.IdempotencyResponse, error)
 	DetachAttach(context.Context, string, string) (etcd.IdempotencyResponse, error)
 	RenameAttach(context.Context, string, apiTypes.AttachRenameRequest, string) (etcd.IdempotencyResponse, error)

@@ -16,85 +16,85 @@ func (repository *RunnerRepository) ResolveRunner(
 	ctx context.Context,
 	tenantID string,
 	reference string,
-) (Versioned[runnerrecord.RunnerRecord], error) {
+) (etcdstore.Versioned[runnerrecord.RunnerRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
 	if ids.Validate(ids.KindRunner, reference) == nil {
 		current, err := repository.GetRunner(ctx, reference)
 		if err != nil {
-			return Versioned[runnerrecord.RunnerRecord]{}, err
+			return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 		}
 		if current.Record.Desired.TenantID != tenantID {
-			return Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindScopeUnauthorized, "Runner is outside the Tenant scope")
+			return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindScopeUnauthorized, "Runner is outside the Tenant scope")
 		}
 		return current, nil
 	}
 	if reference == "" {
-		return Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
 	}
 	index, err := repository.store.Get(ctx, runnerTenantSlugKey(tenantID, reference))
 	if err != nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
 	if index == nil || index.Entry == nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
 	}
 	id := string(index.Entry.Value)
 	if ids.Validate(ids.KindRunner, id) != nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner slug index is corrupt")
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner slug index is corrupt")
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{runnerKey(id), runnerLifecycleKey(id)}, Revision: index.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
 	if result == nil || len(result.Values) != 2 || result.Values[0] == nil || result.Values[1] == nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner slug index is corrupt")
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner slug index is corrupt")
 	}
 	record, err := decodeRunnerAggregate(result.Values[0], result.Values[1])
 	if err != nil || record.Desired.ID != id || record.Desired.TenantID != tenantID ||
 		record.Desired.Slug != reference {
-		return Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner slug index is corrupt")
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner slug index is corrupt")
 	}
-	return Versioned[runnerrecord.RunnerRecord]{
+	return etcdstore.Versioned[runnerrecord.RunnerRecord]{
 		Record:       record,
 		Revision:     result.Values[0].ModRevision,
 		ReadRevision: result.ReadRevision,
 	}, nil
 }
 
-func (repository *RunnerRepository) GetRunner(ctx context.Context, id string) (Versioned[runnerrecord.RunnerRecord], error) {
+func (repository *RunnerRepository) GetRunner(ctx context.Context, id string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindRunner, id); err != nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{runnerKey(id), runnerLifecycleKey(id)},
 	})
 	if err != nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
 	if result == nil || len(result.Values) != 2 {
-		return Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner read is incomplete")
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner read is incomplete")
 	}
 	if result.Values[0] == nil && result.Values[1] == nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
 	}
 	if result.Values[0] == nil || result.Values[1] == nil {
-		return Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner desired/lifecycle pair is incomplete")
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner desired/lifecycle pair is incomplete")
 	}
 	record, err := decodeRunnerAggregate(result.Values[0], result.Values[1])
 	if err != nil || record.Desired.ID != id {
-		return Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner desired/lifecycle pair is corrupt")
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner desired/lifecycle pair is corrupt")
 	}
-	return Versioned[runnerrecord.RunnerRecord]{
+	return etcdstore.Versioned[runnerrecord.RunnerRecord]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }
@@ -120,20 +120,20 @@ func decodeRunnerAggregate(desiredValue *etcdstore.KeyValue, lifecycleValue *etc
 func (repository *RunnerRepository) ListRunners(
 	ctx context.Context,
 	filter RunnerFilter,
-	request PageRequest,
-) (Page[runnerrecord.RunnerRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[runnerrecord.RunnerRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Page[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 	}
 	if (filter.TenantID == "") == (filter.ProjectID == "") {
-		return Page[runnerrecord.RunnerRecord]{}, errs.New(
+		return etcdstore.Page[runnerrecord.RunnerRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"runner list requires exactly one tenant or project filter",
 		)
 	}
 	if filter.ProjectID != "" {
 		if err := recordcodec.ValidateID(ids.KindProject, filter.ProjectID); err != nil {
-			return Page[runnerrecord.RunnerRecord]{}, err
+			return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 		}
 		page, err := listIndexPage(
 			ctx, repository.store, "runners", "project", filter.ProjectID,
@@ -145,7 +145,7 @@ func (repository *RunnerRepository) ListRunners(
 			},
 		)
 		if err != nil {
-			return Page[runnerrecord.RunnerRecord]{}, err
+			return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 		}
 		return repository.hydrateRunnerPage(ctx, page)
 	}
@@ -155,32 +155,32 @@ func (repository *RunnerRepository) ListRunners(
 func (repository *RunnerRepository) listTenantRunners(
 	ctx context.Context,
 	tenantID string,
-	request PageRequest,
-) (Page[runnerrecord.RunnerRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[runnerrecord.RunnerRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
-		return Page[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 	}
 	prefix := runnerTenantCursorPrefix(tenantID)
 	limit, revision, startKey, query, err := normalizePageRequest(
 		request, "runners", "tenant", tenantID, prefix, ids.KindRunner,
 	)
 	if err != nil {
-		return Page[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{runnerTenantQuotaKey(tenantID)}, Revision: revision,
 	})
 	if err != nil {
-		return Page[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 	}
 	if read == nil || len(read.Values) != 1 {
-		return Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant quota read is incomplete")
+		return etcdstore.Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant quota read is incomplete")
 	}
 	quota := runnerallocation.RunnerTenantQuota{RunnerIDs: []string{}}
 	if read.Values[0] != nil {
 		quota, err = decodeRunnerTenantQuota(read.Values[0].Value)
 		if err != nil || quota.Validate() != nil {
-			return Page[runnerrecord.RunnerRecord]{}, corruptRunnerTenantQuota()
+			return etcdstore.Page[runnerrecord.RunnerRecord]{}, corruptRunnerTenantQuota()
 		}
 	}
 	startID := strings.TrimPrefix(startKey, prefix)
@@ -200,24 +200,24 @@ func (repository *RunnerRepository) listTenantRunners(
 	for index, runnerID := range idsPage {
 		keys[index] = runnerKey(runnerID)
 	}
-	page := Page[runnerrecord.RunnerRecord]{Items: []Versioned[runnerrecord.RunnerRecord]{}, Revision: read.ReadRevision}
+	page := etcdstore.Page[runnerrecord.RunnerRecord]{Items: []etcdstore.Versioned[runnerrecord.RunnerRecord]{}, Revision: read.ReadRevision}
 	if len(keys) != 0 {
 		records, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: read.ReadRevision})
 		if err != nil {
-			return Page[runnerrecord.RunnerRecord]{}, err
+			return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 		}
 		if records == nil || len(records.Values) != len(keys) {
-			return Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant membership is corrupt")
+			return etcdstore.Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant membership is corrupt")
 		}
 		for index, value := range records.Values {
 			if value == nil {
-				return Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant membership is corrupt")
+				return etcdstore.Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant membership is corrupt")
 			}
 			record, err := runnerrecord.DecodeRunnerDesiredAggregate(value.Value)
 			if err != nil || record.Desired.ID != idsPage[index] || record.Desired.TenantID != tenantID {
-				return Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant membership is corrupt")
+				return etcdstore.Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant membership is corrupt")
 			}
-			page.Items = append(page.Items, Versioned[runnerrecord.RunnerRecord]{
+			page.Items = append(page.Items, etcdstore.Versioned[runnerrecord.RunnerRecord]{
 				Record: record, Revision: value.ModRevision, ReadRevision: records.ReadRevision,
 			})
 		}
@@ -227,7 +227,7 @@ func (repository *RunnerRepository) listTenantRunners(
 			Version: recordcodec.CursorVersion, Revision: read.ReadRevision, LastID: quota.RunnerIDs[end-1], Query: query,
 		})
 		if err != nil {
-			return Page[runnerrecord.RunnerRecord]{}, err
+			return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 		}
 	}
 	return repository.hydrateRunnerPage(ctx, page)
@@ -235,8 +235,8 @@ func (repository *RunnerRepository) listTenantRunners(
 
 func (repository *RunnerRepository) hydrateRunnerPage(
 	ctx context.Context,
-	page Page[runnerrecord.RunnerRecord],
-) (Page[runnerrecord.RunnerRecord], error) {
+	page etcdstore.Page[runnerrecord.RunnerRecord],
+) (etcdstore.Page[runnerrecord.RunnerRecord], error) {
 	if len(page.Items) == 0 {
 		return page, nil
 	}
@@ -246,18 +246,18 @@ func (repository *RunnerRepository) hydrateRunnerPage(
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: page.Revision})
 	if err != nil {
-		return Page[runnerrecord.RunnerRecord]{}, err
+		return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 	}
 	if result == nil || len(result.Values) != len(keys) {
-		return Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner lifecycle page is incomplete")
+		return etcdstore.Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner lifecycle page is incomplete")
 	}
 	for index, value := range result.Values {
 		if value == nil {
-			return Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner lifecycle page is incomplete")
+			return etcdstore.Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner lifecycle page is incomplete")
 		}
 		lifecycle, err := runnerrecord.DecodeRunnerLifecycleRecord(value.Value)
 		if err != nil || lifecycle.RunnerID != page.Items[index].Record.Desired.ID {
-			return Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner lifecycle page is corrupt")
+			return etcdstore.Page[runnerrecord.RunnerRecord]{}, errs.New(errs.KindInternal, "runner lifecycle page is corrupt")
 		}
 		page.Items[index].Record.RunnerLifecycleRecord = lifecycle
 		page.Items[index].Record.LifecycleRevision = value.ModRevision

@@ -13,7 +13,7 @@ import (
 // provisioning, and create-Task state cannot move through this seam.
 func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	ctx context.Context,
-	current Versioned[hierarchyrecord.EnvironmentRecord],
+	current etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	replacement hierarchyrecord.EnvironmentRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -175,7 +175,7 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 }
 
 func classifyEnvironmentMutationConflict(
-	current Versioned[hierarchyrecord.EnvironmentRecord],
+	current etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	replacement hierarchyrecord.EnvironmentRecord,
 	projectRevision int64,
 	tenantRevision int64,

@@ -3,6 +3,7 @@ package blueprintrelease
 import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -10,9 +11,9 @@ import (
 func PrepareServiceChanges(
 	environmentID string,
 	desired []core.Service,
-	current []etcd.Versioned[etcd.ServiceRecord],
+	current []etcdstore.Versioned[etcd.ServiceRecord],
 ) ([]etcd.EnvironmentBlueprintServiceChange, error) {
-	currentByID := make(map[string]etcd.Versioned[etcd.ServiceRecord], len(current))
+	currentByID := make(map[string]etcdstore.Versioned[etcd.ServiceRecord], len(current))
 	for _, service := range current {
 		if service.Record.EnvironmentID != environmentID || service.Record.Desired.ID == "" {
 			return nil, errs.New(errs.KindInternal, "durable Blueprint Service state is inconsistent")

@@ -26,7 +26,7 @@ func componentObservationKey(id string) string { return componentObservationPref
 func (repository *ComponentRepository) CreatePlatformComponent(
 	ctx context.Context,
 	record componentrecord.Record,
-) (Versioned[componentrecord.Record], error) {
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	return repository.createPlatformComponent(ctx, record, false)
 }
 
@@ -34,21 +34,21 @@ func (repository *ComponentRepository) createPlatformComponent(
 	ctx context.Context,
 	record componentrecord.Record,
 	bootstrap bool,
-) (Versioned[componentrecord.Record], error) {
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	if err := validatePlatformComponentRecord(record); err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if bootstrap && (record.Desired.ID != platformCoreDNSComponentID ||
 		record.Desired.Kind != core.ComponentKindCoreDNS || !record.Desired.Enabled ||
 		len(record.Runtime.GeneratedServices) != 0 || record.Runtime.PinnedIPv4 != "" || record.Runtime.Healthy) {
-		return Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"platform Component bootstrap record is invalid",
 		)
 	}
 	value, err := componentrecord.EncodeRecord(record)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	defer clear(value)
 	conditions := []etcdstore.Condition{
@@ -74,21 +74,21 @@ func (repository *ComponentRepository) createPlatformComponent(
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindStateConflict,
 			"platform Component stable identity is already in use",
 		)
 	}
-	return Versioned[componentrecord.Record]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return etcdstore.Versioned[componentrecord.Record]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
 }
 
 func (repository *ComponentRepository) ListPlatformComponents(
 	ctx context.Context,
-	request PageRequest,
-) (Page[componentrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[componentrecord.Record], error) {
 	return listIndexPage(ctx, repository.store, "components", "platform", "", platformComponentOwnerPrefix,
 		componentrecord.RecordKey, ids.KindComponent, request, componentrecord.DecodeRecord,
 		func(record componentrecord.Record) string { return record.Desired.ID },
@@ -99,47 +99,47 @@ func (repository *ComponentRepository) ListPlatformComponents(
 
 func (repository *ComponentRepository) ReplacePlatformDesired(
 	ctx context.Context,
-	current Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	desired core.Component,
-) (Versioned[componentrecord.Record], error) {
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	replacement, err := componentrecord.ReplaceDesired(current.Record, desired)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	return repository.replacePlatform(ctx, current, replacement)
 }
 
 func (repository *ComponentRepository) ReplacePlatformRuntime(
 	ctx context.Context,
-	current Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	generatedServices []string,
 	pinnedIPv4 string,
 	healthy bool,
-) (Versioned[componentrecord.Record], error) {
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	replacement, err := componentrecord.SetRuntime(current.Record, generatedServices, pinnedIPv4, healthy)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	return repository.replacePlatform(ctx, current, replacement)
 }
 
 func (repository *ComponentRepository) replacePlatform(
 	ctx context.Context,
-	current Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	replacement componentrecord.Record,
-) (Versioned[componentrecord.Record], error) {
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if err := validatePlatformComponentRecord(current.Record); err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if err := validatePlatformComponentRecord(replacement); err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision ||
 		current.Record.Desired.ID != replacement.Desired.ID {
-		return Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"platform Component version metadata is invalid",
 		)
@@ -155,19 +155,19 @@ func (repository *ComponentRepository) replacePlatform(
 		},
 	)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
 		string(indexes.Values[0].Value) != current.Record.Desired.ID ||
 		string(indexes.Values[1].Value) != current.Record.Desired.ID {
-		return Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindInternal,
 			"platform Component indexes are missing or corrupt",
 		)
 	}
 	value, err := componentrecord.EncodeRecord(replacement)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	defer clear(value)
 	result, err := repository.store.Transact(ctx, []etcdstore.Condition{
@@ -180,12 +180,12 @@ func (repository *ComponentRepository) replacePlatform(
 		componentrecord.WriteFenceMutation(replacement.Desired.ID),
 	})
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[componentrecord.Record]{}, stateConflict("platform component", current.Record.Desired.ID)
+		return etcdstore.Versioned[componentrecord.Record]{}, stateConflict("platform component", current.Record.Desired.ID)
 	}
-	return Versioned[componentrecord.Record]{
+	return etcdstore.Versioned[componentrecord.Record]{
 		Record:       replacement,
 		Revision:     result.Revision,
 		ReadRevision: result.Revision,
@@ -288,34 +288,34 @@ func (repository *ComponentRepository) PutPlatformComponentObservation(
 	record ComponentObservationRecord,
 	expectedComponentRevision int64,
 	expectedObservationRevision int64,
-) (Versioned[ComponentObservationRecord], error) {
+) (etcdstore.Versioned[ComponentObservationRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ComponentObservationRecord]{}, err
+		return etcdstore.Versioned[ComponentObservationRecord]{}, err
 	}
 	if err := validateComponentObservation(record); err != nil {
-		return Versioned[ComponentObservationRecord]{}, err
+		return etcdstore.Versioned[ComponentObservationRecord]{}, err
 	}
 	component, err := repository.GetComponent(ctx, record.ComponentID)
 	if err != nil {
-		return Versioned[ComponentObservationRecord]{}, err
+		return etcdstore.Versioned[ComponentObservationRecord]{}, err
 	}
 	if component.Record.Desired.Owner != core.ComponentOwnerPlatform || component.Record.Desired.OwnerID != "" ||
 		component.Revision != expectedComponentRevision {
-		return Versioned[ComponentObservationRecord]{}, stateConflict("platform component", record.ComponentID)
+		return etcdstore.Versioned[ComponentObservationRecord]{}, stateConflict("platform component", record.ComponentID)
 	}
 	current, err := repository.store.Get(ctx, componentObservationKey(record.ComponentID))
 	if err != nil {
-		return Versioned[ComponentObservationRecord]{}, err
+		return etcdstore.Versioned[ComponentObservationRecord]{}, err
 	}
 	if current == nil || revisionChanged(current.Entry, expectedObservationRevision) {
-		return Versioned[ComponentObservationRecord]{}, stateConflict(
+		return etcdstore.Versioned[ComponentObservationRecord]{}, stateConflict(
 			"platform component observation",
 			record.ComponentID,
 		)
 	}
 	value, err := encodeComponentObservation(record)
 	if err != nil {
-		return Versioned[ComponentObservationRecord]{}, err
+		return etcdstore.Versioned[ComponentObservationRecord]{}, err
 	}
 	defer clear(value)
 	result, err := repository.store.Transact(
@@ -328,15 +328,15 @@ func (repository *ComponentRepository) PutPlatformComponentObservation(
 		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: componentObservationKey(record.ComponentID), Value: value}},
 	)
 	if err != nil {
-		return Versioned[ComponentObservationRecord]{}, err
+		return etcdstore.Versioned[ComponentObservationRecord]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[ComponentObservationRecord]{}, stateConflict(
+		return etcdstore.Versioned[ComponentObservationRecord]{}, stateConflict(
 			"platform component observation",
 			record.ComponentID,
 		)
 	}
-	return Versioned[ComponentObservationRecord]{
+	return etcdstore.Versioned[ComponentObservationRecord]{
 		Record:       record,
 		Revision:     result.Revision,
 		ReadRevision: result.Revision,
@@ -346,34 +346,34 @@ func (repository *ComponentRepository) PutPlatformComponentObservation(
 func (repository *ComponentRepository) GetPlatformComponentObservation(
 	ctx context.Context,
 	componentID string,
-) (Versioned[ComponentObservationRecord], bool, error) {
+) (etcdstore.Versioned[ComponentObservationRecord], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ComponentObservationRecord]{}, false, err
+		return etcdstore.Versioned[ComponentObservationRecord]{}, false, err
 	}
 	if err := ids.Validate(ids.KindComponent, componentID); err != nil {
-		return Versioned[ComponentObservationRecord]{}, false, errs.New(errs.KindValidationFailed, err.Error())
+		return etcdstore.Versioned[ComponentObservationRecord]{}, false, errs.New(errs.KindValidationFailed, err.Error())
 	}
 	result, err := repository.store.Get(ctx, componentObservationKey(componentID))
 	if err != nil {
-		return Versioned[ComponentObservationRecord]{}, false, err
+		return etcdstore.Versioned[ComponentObservationRecord]{}, false, err
 	}
 	if result == nil {
-		return Versioned[ComponentObservationRecord]{}, false, errs.New(
+		return etcdstore.Versioned[ComponentObservationRecord]{}, false, errs.New(
 			errs.KindInternal,
 			"Component observation read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return Versioned[ComponentObservationRecord]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[ComponentObservationRecord]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	record, err := decodeComponentObservation(result.Entry.Value)
 	if err != nil || record.ComponentID != componentID {
-		return Versioned[ComponentObservationRecord]{}, false, errs.New(
+		return etcdstore.Versioned[ComponentObservationRecord]{}, false, errs.New(
 			errs.KindInternal,
 			"Component observation is corrupt",
 		)
 	}
-	return Versioned[ComponentObservationRecord]{
+	return etcdstore.Versioned[ComponentObservationRecord]{
 		Record:       record,
 		Revision:     result.Entry.ModRevision,
 		ReadRevision: result.ReadRevision,

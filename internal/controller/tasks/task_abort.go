@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
 
@@ -15,9 +16,9 @@ import (
 const taskAbortReasonOperatorRequested = "operator_requested"
 
 type taskAbortRepository interface {
-	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
+	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	GetTaskAssignment(context.Context, string) (etcd.TaskAssignment, error)
-	AbortPendingTask(context.Context, string, time.Time) (etcd.Versioned[etcd.TaskRecord], error)
+	AbortPendingTask(context.Context, string, time.Time) (etcdstore.Versioned[etcd.TaskRecord], error)
 }
 
 type taskAbortAgentChannel interface {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"math"
 	"net/http"
@@ -28,20 +29,20 @@ const (
 )
 
 type routeRemovalRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	GetRoute(context.Context, string) (etcd.Versioned[routerecord.Record], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	GetRoute(context.Context, string) (etcdstore.Versioned[routerecord.Record], error)
 	GetEnvironmentComposeProjection(context.Context, string) (
-		etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error,
+		etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error,
 	)
 	BeginRouteDeletionWithTask(
 		context.Context,
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[etcd.ServiceRecord],
-		etcd.Versioned[routerecord.Record],
-		*etcd.Versioned[etcd.EnvironmentComposeProjection],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[etcd.ServiceRecord],
+		etcdstore.Versioned[routerecord.Record],
+		*etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 		etcd.DeletionTombstoneRecord,
 		etcd.RouteRemovalIntent,
 		etcd.TaskRecord,
@@ -259,7 +260,7 @@ func (service *routeRemovalService) removeRouteOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	var projectionInput *etcd.Versioned[etcd.EnvironmentComposeProjection]
+	var projectionInput *etcdstore.Versioned[etcd.EnvironmentComposeProjection]
 	if hasProjection {
 		projectionInput = &projection
 	}

@@ -11,29 +11,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-const (
-	DefaultPageLimit = 50
-	MaximumPageLimit = 200
-)
-
-type Versioned[T any] struct {
-	Record       T
-	Revision     int64
-	ReadRevision int64
-}
-
-type PageRequest struct {
-	Limit    int
-	Cursor   string
-	Revision int64
-}
-
-type Page[T any] struct {
-	Items      []Versioned[T]
-	NextCursor string
-	Revision   int64
-}
-
 type ProjectFilter struct {
 	TenantID string
 	Kind     hierarchyrecord.ProjectKind
@@ -97,20 +74,20 @@ func newEnvironmentBlueprintRepository(
 func (repository *HierarchyRepository) CreateTenant(
 	ctx context.Context,
 	record hierarchyrecord.TenantRecord,
-) (Versioned[hierarchyrecord.TenantRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[hierarchyrecord.TenantRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if err := hierarchyrecord.ValidateTenant(record); err != nil {
-		return Versioned[hierarchyrecord.TenantRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	value, err := recordcodec.Encode("tenant", record)
 	if err != nil {
-		return Versioned[hierarchyrecord.TenantRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetTenant, record.ID)
 	if err != nil {
-		return Versioned[hierarchyrecord.TenantRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	primary := hierarchyrecord.TenantKey(record.ID)
 	slug := hierarchyrecord.TenantSlugKey(record.Slug)
@@ -124,12 +101,12 @@ func (repository *HierarchyRepository) CreateTenant(
 		},
 	)
 	if err != nil {
-		return Versioned[hierarchyrecord.TenantRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[hierarchyrecord.TenantRecord]{}, repository.diagnoseCreate(ctx, primary, slug)
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, repository.diagnoseCreate(ctx, primary, slug)
 	}
-	return Versioned[hierarchyrecord.TenantRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return etcdstore.Versioned[hierarchyrecord.TenantRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
 }
 
 // CreateTenantIdempotent atomically claims the direct HTTP marker and creates
@@ -318,7 +295,7 @@ func classifyProjectCreateConflict(record hierarchyrecord.ProjectRecord, ownerRe
 // with its completed direct idempotency marker and exact public response.
 func (repository *HierarchyRepository) MutateTenantIdempotent(
 	ctx context.Context,
-	current Versioned[hierarchyrecord.TenantRecord],
+	current etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	replacement hierarchyrecord.TenantRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -402,7 +379,7 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 }
 
 func classifyTenantMutationConflict(
-	current Versioned[hierarchyrecord.TenantRecord],
+	current etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	replacement hierarchyrecord.TenantRecord,
 	renaming bool,
 ) idempotencyPlanClassifier {
@@ -436,12 +413,12 @@ func classifyTenantMutationConflict(
 func (repository *HierarchyRepository) CreateProject(
 	ctx context.Context,
 	record hierarchyrecord.ProjectRecord,
-) (Versioned[hierarchyrecord.ProjectRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := hierarchyrecord.ValidateProject(record); err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	conditions := []etcdstore.Condition{
 		{Key: hierarchyrecord.ProjectKey(record.ID)},
@@ -451,18 +428,18 @@ func (repository *HierarchyRepository) CreateProject(
 	if record.Kind == hierarchyrecord.ProjectKindTenant {
 		owner, err := repository.GetTenant(ctx, record.TenantID)
 		if err != nil {
-			return Versioned[hierarchyrecord.ProjectRecord]{}, err
+			return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: hierarchyrecord.TenantKey(record.TenantID), ModRevision: owner.Revision})
 	}
 	value, err := recordcodec.Encode("project", record)
 	if err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	coordinationTarget := HierarchyDeletionTargetProject
 	coordinationValue, err := encodeInitialHierarchyCoordination(coordinationTarget, record.ID)
 	if err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	coordinationKey := HierarchyCoordinationKey(string(coordinationTarget), record.ID)
 	conditions = append(conditions, etcdstore.Condition{Key: coordinationKey})
@@ -473,53 +450,53 @@ func (repository *HierarchyRepository) CreateProject(
 		{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
 	})
 	if err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, repository.diagnoseCreate(ctx, hierarchyrecord.ProjectKey(record.ID), hierarchyrecord.ProjectSlugKey(record))
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, repository.diagnoseCreate(ctx, hierarchyrecord.ProjectKey(record.ID), hierarchyrecord.ProjectSlugKey(record))
 	}
-	return Versioned[hierarchyrecord.ProjectRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
 }
 
 func (repository *HierarchyRepository) CreateEnvironment(
 	ctx context.Context,
 	record hierarchyrecord.EnvironmentRecord,
-) (Versioned[hierarchyrecord.EnvironmentRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if err := hierarchyrecord.ValidateEnvironment(record); err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	owner, err := repository.GetProject(ctx, record.ProjectID)
 	if err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if owner.Record.Kind == hierarchyrecord.ProjectKindBacking {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"backing project environments are created by the backing-service workflow",
 		)
 	}
 	value, err := hierarchyrecord.EncodeEnvironment(record)
 	if err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	epochValue, err := encodeEnvironmentMutationEpochRecord(EnvironmentMutationEpochRecord{
 		EnvironmentID: record.ID,
 	})
 	if err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	coordinationValue, err := encodeInitialHierarchyCoordination(HierarchyDeletionTargetEnvironment, record.ID)
 	if err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	scriptSetValue, err := scriptrecord.EncodeScriptSetGeneration(scriptrecord.SetGenerationRecord{
 		EnvironmentID: record.ID, GenerationID: record.ID,
 	})
 	if err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	defer clear(scriptSetValue)
 	primary := hierarchyrecord.EnvironmentKey(record.ID)
@@ -548,41 +525,41 @@ func (repository *HierarchyRepository) CreateEnvironment(
 		},
 	)
 	if err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if !result.Succeeded {
 		if len(result.FailureReads) != 7 {
-			return Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
+			return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 				errs.KindInternal,
 				"environment creation compare evidence is incomplete",
 			)
 		}
 		if result.FailureReads[4] != nil {
-			return Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
+			return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 				errs.KindInternal,
 				"environment creation collided with mutation epoch state",
 			)
 		}
 		if result.FailureReads[5] != nil {
-			return Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
+			return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, errs.New(
 				errs.KindInternal,
 				"environment creation collided with hierarchy coordination state",
 			)
 		}
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, repository.diagnoseCreate(ctx, primary, label)
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, repository.diagnoseCreate(ctx, primary, label)
 	}
-	return Versioned[hierarchyrecord.EnvironmentRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
 }
 
 func (repository *HierarchyRepository) GetTenant(
 	ctx context.Context,
 	id string,
-) (Versioned[hierarchyrecord.TenantRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[hierarchyrecord.TenantRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTenant, id); err != nil {
-		return Versioned[hierarchyrecord.TenantRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	return getRecord(
 		ctx, repository.store, hierarchyrecord.TenantKey(id), id, errs.KindTenantNotFound, hierarchyrecord.DecodeTenant,
@@ -593,12 +570,12 @@ func (repository *HierarchyRepository) GetTenant(
 func (repository *HierarchyRepository) GetProject(
 	ctx context.Context,
 	id string,
-) (Versioned[hierarchyrecord.ProjectRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindProject, id); err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return getRecord(
 		ctx, repository.store, hierarchyrecord.ProjectKey(id), id, errs.KindProjectNotFound, hierarchyrecord.DecodeProject,
@@ -609,12 +586,12 @@ func (repository *HierarchyRepository) GetProject(
 func (repository *HierarchyRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (Versioned[hierarchyrecord.EnvironmentRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, id); err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	return getRecord(
 		ctx, repository.store, hierarchyrecord.EnvironmentKey(id), id, errs.KindEnvironmentNotFound, hierarchyrecord.DecodeEnvironment,
@@ -625,12 +602,12 @@ func (repository *HierarchyRepository) GetEnvironment(
 func (repository *HierarchyRepository) ResolveTenant(
 	ctx context.Context,
 	slug string,
-) (Versioned[hierarchyrecord.TenantRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[hierarchyrecord.TenantRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if err := recordcodec.ValidateLabel("tenant slug", slug); err != nil {
-		return Versioned[hierarchyrecord.TenantRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	return resolveRecord(
 		ctx,
@@ -649,15 +626,15 @@ func (repository *HierarchyRepository) ResolveTenantProject(
 	ctx context.Context,
 	tenantID string,
 	slug string,
-) (Versioned[hierarchyrecord.ProjectRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := recordcodec.ValidateLabel("project slug", slug); err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return resolveRecord(
 		ctx,
@@ -677,12 +654,12 @@ func (repository *HierarchyRepository) ResolveTenantProject(
 func (repository *HierarchyRepository) ResolveBackingProject(
 	ctx context.Context,
 	slug string,
-) (Versioned[hierarchyrecord.ProjectRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := recordcodec.ValidateLabel("project slug", slug); err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return resolveRecord(
 		ctx,
@@ -703,15 +680,15 @@ func (repository *HierarchyRepository) ResolveEnvironment(
 	ctx context.Context,
 	projectID string,
 	name string,
-) (Versioned[hierarchyrecord.EnvironmentRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if err := recordcodec.ValidateLabel("environment name", name); err != nil {
-		return Versioned[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	return resolveRecord(
 		ctx,
@@ -733,18 +710,18 @@ func (repository *HierarchyRepository) RenameTenant(
 	id string,
 	expectedRevision int64,
 	slug string,
-) (Versioned[hierarchyrecord.TenantRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
 	current, err := repository.GetTenant(ctx, id)
 	if err != nil {
-		return Versioned[hierarchyrecord.TenantRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if current.Revision != expectedRevision {
-		return Versioned[hierarchyrecord.TenantRecord]{}, stateConflict("tenant", id)
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, stateConflict("tenant", id)
 	}
 	replacement := current.Record
 	replacement.Slug = slug
 	if err := hierarchyrecord.ValidateTenant(replacement); err != nil {
-		return Versioned[hierarchyrecord.TenantRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	return renameRecord(
 		ctx,
@@ -770,21 +747,21 @@ func (repository *HierarchyRepository) RenameTenantProject(
 	id string,
 	expectedRevision int64,
 	slug string,
-) (Versioned[hierarchyrecord.ProjectRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	current, err := repository.GetProject(ctx, id)
 	if err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if current.Revision != expectedRevision {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, stateConflict("project", id)
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, stateConflict("project", id)
 	}
 	if current.Record.Kind != hierarchyrecord.ProjectKindTenant {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, errs.New(errs.KindProjectNotFound, "project was not found")
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	replacement := current.Record
 	replacement.Slug = slug
 	if err := hierarchyrecord.ValidateProject(replacement); err != nil {
-		return Versioned[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return renameRecord(
 		ctx,
@@ -805,8 +782,8 @@ func (repository *HierarchyRepository) RenameTenantProject(
 
 func (repository *HierarchyRepository) ListTenants(
 	ctx context.Context,
-	request PageRequest,
-) (Page[hierarchyrecord.TenantRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[hierarchyrecord.TenantRecord], error) {
 	return listPrimaryPage(
 		ctx,
 		repository.store,
@@ -825,10 +802,10 @@ func (repository *HierarchyRepository) ListTenants(
 func (repository *HierarchyRepository) ListTenantProjects(
 	ctx context.Context,
 	tenantID string,
-	request PageRequest,
-) (Page[hierarchyrecord.ProjectRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[hierarchyrecord.ProjectRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
-		return Page[hierarchyrecord.ProjectRecord]{}, err
+		return etcdstore.Page[hierarchyrecord.ProjectRecord]{}, err
 	}
 	return listIndexPage(
 		ctx,
@@ -851,17 +828,17 @@ func (repository *HierarchyRepository) ListTenantProjects(
 func (repository *HierarchyRepository) ListProjects(
 	ctx context.Context,
 	filter ProjectFilter,
-	request PageRequest,
-) (Page[hierarchyrecord.ProjectRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[hierarchyrecord.ProjectRecord], error) {
 	if filter.Kind != "" && filter.Kind != hierarchyrecord.ProjectKindTenant && filter.Kind != hierarchyrecord.ProjectKindBacking {
-		return Page[hierarchyrecord.ProjectRecord]{}, errs.New(errs.KindValidationFailed, "project kind must be tenant or backing")
+		return etcdstore.Page[hierarchyrecord.ProjectRecord]{}, errs.New(errs.KindValidationFailed, "project kind must be tenant or backing")
 	}
 	if filter.TenantID != "" {
 		if err := recordcodec.ValidateID(ids.KindTenant, filter.TenantID); err != nil {
-			return Page[hierarchyrecord.ProjectRecord]{}, err
+			return etcdstore.Page[hierarchyrecord.ProjectRecord]{}, err
 		}
 		if filter.Kind == hierarchyrecord.ProjectKindBacking {
-			return Page[hierarchyrecord.ProjectRecord]{}, errs.New(
+			return etcdstore.Page[hierarchyrecord.ProjectRecord]{}, errs.New(
 				errs.KindValidationFailed,
 				"backing projects cannot have a tenant filter",
 			)
@@ -891,8 +868,8 @@ func (repository *HierarchyRepository) ListProjects(
 
 func (repository *HierarchyRepository) ListBackingProjects(
 	ctx context.Context,
-	request PageRequest,
-) (Page[hierarchyrecord.ProjectRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[hierarchyrecord.ProjectRecord], error) {
 	return listIndexPage(
 		ctx,
 		repository.store,
@@ -914,10 +891,10 @@ func (repository *HierarchyRepository) ListBackingProjects(
 func (repository *HierarchyRepository) ListEnvironments(
 	ctx context.Context,
 	projectID string,
-	request PageRequest,
-) (Page[hierarchyrecord.EnvironmentRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[hierarchyrecord.EnvironmentRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {
-		return Page[hierarchyrecord.EnvironmentRecord]{}, err
+		return etcdstore.Page[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	return listIndexPage(
 		ctx,

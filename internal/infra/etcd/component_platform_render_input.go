@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net"
 	"net/netip"
@@ -78,12 +79,12 @@ func platformComponentTaskRenderInputKey(planID string) string {
 func (repository *ComponentRepository) GetPlatformComponentTaskRenderInput(
 	ctx context.Context,
 	planID string,
-) (Versioned[PlatformComponentTaskRenderInput], error) {
+) (etcdstore.Versioned[PlatformComponentTaskRenderInput], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[PlatformComponentTaskRenderInput]{}, err
+		return etcdstore.Versioned[PlatformComponentTaskRenderInput]{}, err
 	}
 	if ids.Validate(ids.KindPlan, planID) != nil {
-		return Versioned[PlatformComponentTaskRenderInput]{}, errs.New(
+		return etcdstore.Versioned[PlatformComponentTaskRenderInput]{}, errs.New(
 			errs.KindValidationFailed,
 			"platform Component render-input Plan id is invalid",
 		)

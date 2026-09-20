@@ -31,7 +31,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 	ctx context.Context,
 	publication BlueprintReleasePublication,
 	task TaskRecord,
-	captured Versioned[EnvironmentComposeProjection],
+	captured etcdstore.Versioned[EnvironmentComposeProjection],
 	sources []BlueprintRetainedRuntimeSource,
 	mixed *agentpb.ComposeArtifact,
 ) (BlueprintReleasePublication, error) {
@@ -45,7 +45,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 	}
 	scope := ReleasePlanningScope{
 		ReadRevision: captured.ReadRevision,
-		Environment:  Versioned[hierarchyrecord.EnvironmentRecord]{Record: hierarchyrecord.EnvironmentRecord{ID: environmentID}},
+		Environment:  etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{Record: hierarchyrecord.EnvironmentRecord{ID: environmentID}},
 	}
 	actual, found, err := ledger.GetPlanningAppliedProjection(ctx, scope)
 	if err != nil {

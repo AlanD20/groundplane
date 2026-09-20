@@ -23,7 +23,7 @@ func IsAutomaticReconcileTask(task TaskRecord) bool {
 // replacement and its Agent Task in the same protected idempotency transaction.
 func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	ctx context.Context,
-	current Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	desired core.Component,
 	task TaskRecord,
 	renderInput PlatformComponentTaskRenderInput,
@@ -210,7 +210,7 @@ func PlatformComponentDesiredDigest(record componentrecord.Record) (string, erro
 }
 
 func classifyPlatformComponentTaskConflict(
-	current Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	indexes *etcdstore.GetManyResult,
 	operationID string,
 ) idempotencyPlanClassifier {

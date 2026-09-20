@@ -3,6 +3,7 @@ package serviceread
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -14,16 +15,16 @@ import (
 )
 
 type Environments interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 }
 
 type Services interface {
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
 }
 
 type Reader struct {
@@ -34,12 +35,12 @@ type Reader struct {
 func (service *Reader) GetService(
 	ctx context.Context,
 	serviceID string,
-) (etcd.Versioned[etcd.ServiceRecord], error) {
+) (etcdstore.Versioned[etcd.ServiceRecord], error) {
 	if ctx == nil {
-		return etcd.Versioned[etcd.ServiceRecord]{}, errs.New(errs.KindInternal, "Service read context is required")
+		return etcdstore.Versioned[etcd.ServiceRecord]{}, errs.New(errs.KindInternal, "Service read context is required")
 	}
 	if ids.Validate(ids.KindService, serviceID) != nil {
-		return etcd.Versioned[etcd.ServiceRecord]{}, errs.New(
+		return etcdstore.Versioned[etcd.ServiceRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"Service read requires a stable Service id",
 		)
@@ -57,25 +58,25 @@ func New(environments Environments, services Services) (*Reader, error) {
 func (service *Reader) ListServices(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.ServiceRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[etcd.ServiceRecord], error) {
 	if ctx == nil {
-		return etcd.Page[etcd.ServiceRecord]{}, errs.New(errs.KindInternal, "Service list context is required")
+		return etcdstore.Page[etcd.ServiceRecord]{}, errs.New(errs.KindInternal, "Service list context is required")
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.Page[etcd.ServiceRecord]{}, errs.New(
+		return etcdstore.Page[etcd.ServiceRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"Service list requires a stable Environment id",
 		)
 	}
 	if request.Limit < 0 {
-		return etcd.Page[etcd.ServiceRecord]{}, errs.New(
+		return etcdstore.Page[etcd.ServiceRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"Service list limit must be a positive integer",
 		)
 	}
 	if _, err := service.environments.GetEnvironment(ctx, environmentID); err != nil {
-		return etcd.Page[etcd.ServiceRecord]{}, err
+		return etcdstore.Page[etcd.ServiceRecord]{}, err
 	}
 	return service.services.ListServices(ctx, environmentID, request)
 }

@@ -81,8 +81,8 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		return scriptTerminalSourceRelease{}, false, err
 	}
 	current := TaskAssignment{
-		Task:       Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: revision},
-		Assignment: Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
+		Task:       etcdstore.Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: revision},
+		Assignment: etcdstore.Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
 	}
 	report, reportCondition, reportMutation, err := repository.prepareScriptClosingReport(ctx,
 		current, status, result, *terminalAt, root.Phase == ScriptOperationSourceActive)

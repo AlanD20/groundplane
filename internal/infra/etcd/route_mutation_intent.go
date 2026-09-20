@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"time"
@@ -26,21 +27,21 @@ const (
 // create/edit Task. Route and target data are copied here so restart/retry
 // never rebases rendering on mutable desired state.
 type RouteMutationIntent struct {
-	TaskID                    string                         `json:"task_id"`
-	OperationID               string                         `json:"operation_id"`
-	EnvironmentID             string                         `json:"environment_id"`
-	RouteID                   string                         `json:"route_id"`
-	Kind                      RouteMutationKind              `json:"kind"`
-	RouteRevision             int64                          `json:"route_revision,omitempty"`
-	Route                     routerecord.Record             `json:"route"`
-	Previous                  *Versioned[routerecord.Record] `json:"previous,omitempty"`
-	CurrentProjectionRevision int64                          `json:"current_projection_revision,omitempty"`
-	CurrentProjection         *EnvironmentComposeProjection  `json:"current_projection,omitempty"`
-	CandidateProjection       *EnvironmentComposeProjection  `json:"candidate_projection,omitempty"`
-	Provider                  *RouteProviderPin              `json:"provider,omitempty"`
-	Status                    TaskStatus                     `json:"status"`
-	CreatedAt                 time.Time                      `json:"created_at"`
-	TerminalAt                *time.Time                     `json:"terminal_at,omitempty"`
+	TaskID                    string                                   `json:"task_id"`
+	OperationID               string                                   `json:"operation_id"`
+	EnvironmentID             string                                   `json:"environment_id"`
+	RouteID                   string                                   `json:"route_id"`
+	Kind                      RouteMutationKind                        `json:"kind"`
+	RouteRevision             int64                                    `json:"route_revision,omitempty"`
+	Route                     routerecord.Record                       `json:"route"`
+	Previous                  *etcdstore.Versioned[routerecord.Record] `json:"previous,omitempty"`
+	CurrentProjectionRevision int64                                    `json:"current_projection_revision,omitempty"`
+	CurrentProjection         *EnvironmentComposeProjection            `json:"current_projection,omitempty"`
+	CandidateProjection       *EnvironmentComposeProjection            `json:"candidate_projection,omitempty"`
+	Provider                  *RouteProviderPin                        `json:"provider,omitempty"`
+	Status                    TaskStatus                               `json:"status"`
+	CreatedAt                 time.Time                                `json:"created_at"`
+	TerminalAt                *time.Time                               `json:"terminal_at,omitempty"`
 }
 
 type RouteProviderPin struct {
@@ -75,8 +76,8 @@ func NewRouteMutationIntent(
 	operationID string,
 	environmentID string,
 	route routerecord.Record,
-	previous *Versioned[routerecord.Record],
-	projection *Versioned[EnvironmentComposeProjection],
+	previous *etcdstore.Versioned[routerecord.Record],
+	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	createdAt time.Time,
 ) (RouteMutationIntent, error) {
 	intent := RouteMutationIntent{
@@ -87,7 +88,7 @@ func NewRouteMutationIntent(
 	if previous != nil {
 		intent.Kind = RouteMutationEdit
 		intent.RouteRevision = previous.Revision
-		prior := Versioned[routerecord.Record]{
+		prior := etcdstore.Versioned[routerecord.Record]{
 			Record: routerecord.CloneRecord(previous.Record), Revision: previous.Revision, ReadRevision: previous.ReadRevision,
 		}
 		intent.Previous = &prior
@@ -116,34 +117,34 @@ func routeMutationIntentKey(taskID string) string { return routeMutationIntentPr
 func (repository *HierarchyRepository) GetRouteMutationIntent(
 	ctx context.Context,
 	taskID string,
-) (Versioned[RouteMutationIntent], bool, error) {
+) (etcdstore.Versioned[RouteMutationIntent], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[RouteMutationIntent]{}, false, err
+		return etcdstore.Versioned[RouteMutationIntent]{}, false, err
 	}
 	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {
-		return Versioned[RouteMutationIntent]{}, false, errs.New(
+		return etcdstore.Versioned[RouteMutationIntent]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Route mutation intent Task id is invalid",
 		)
 	}
 	result, err := repository.store.Get(ctx, routeMutationIntentKey(taskID))
 	if err != nil {
-		return Versioned[RouteMutationIntent]{}, false, err
+		return etcdstore.Versioned[RouteMutationIntent]{}, false, err
 	}
 	if result == nil {
-		return Versioned[RouteMutationIntent]{}, false, errs.New(
+		return etcdstore.Versioned[RouteMutationIntent]{}, false, errs.New(
 			errs.KindInternal,
 			"Route mutation intent read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return Versioned[RouteMutationIntent]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[RouteMutationIntent]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	intent, err := decodeRouteMutationIntent(result.Entry.Value)
 	if err != nil || intent.TaskID != taskID {
-		return Versioned[RouteMutationIntent]{}, false, corruptRouteMutationIntent()
+		return etcdstore.Versioned[RouteMutationIntent]{}, false, corruptRouteMutationIntent()
 	}
-	return Versioned[RouteMutationIntent]{
+	return etcdstore.Versioned[RouteMutationIntent]{
 		Record:       intent,
 		Revision:     result.Entry.ModRevision,
 		ReadRevision: result.ReadRevision,
@@ -277,7 +278,7 @@ func cloneRouteMutationIntent(source RouteMutationIntent) RouteMutationIntent {
 	clone := source
 	clone.Route = routerecord.CloneRecord(source.Route)
 	if source.Previous != nil {
-		previous := Versioned[routerecord.Record]{
+		previous := etcdstore.Versioned[routerecord.Record]{
 			Record:       routerecord.CloneRecord(source.Previous.Record),
 			Revision:     source.Previous.Revision,
 			ReadRevision: source.Previous.ReadRevision,

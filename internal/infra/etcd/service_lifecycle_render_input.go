@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -56,34 +57,34 @@ func serviceLifecycleRenderInputKey(taskID string) string {
 func (repository *ServiceRepository) GetServiceLifecycleRenderInput(
 	ctx context.Context,
 	taskID string,
-) (Versioned[ServiceLifecycleRenderInput], bool, error) {
+) (etcdstore.Versioned[ServiceLifecycleRenderInput], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ServiceLifecycleRenderInput]{}, false, err
+		return etcdstore.Versioned[ServiceLifecycleRenderInput]{}, false, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil {
-		return Versioned[ServiceLifecycleRenderInput]{}, false, errs.New(
+		return etcdstore.Versioned[ServiceLifecycleRenderInput]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Service lifecycle render input Task id is invalid",
 		)
 	}
 	result, err := repository.store.Get(ctx, serviceLifecycleRenderInputKey(taskID))
 	if err != nil {
-		return Versioned[ServiceLifecycleRenderInput]{}, false, err
+		return etcdstore.Versioned[ServiceLifecycleRenderInput]{}, false, err
 	}
 	if result == nil {
-		return Versioned[ServiceLifecycleRenderInput]{}, false, errs.New(
+		return etcdstore.Versioned[ServiceLifecycleRenderInput]{}, false, errs.New(
 			errs.KindInternal,
 			"Service lifecycle render input read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return Versioned[ServiceLifecycleRenderInput]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[ServiceLifecycleRenderInput]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	input, err := decodeServiceLifecycleRenderInput(result.Entry.Value)
 	if err != nil {
-		return Versioned[ServiceLifecycleRenderInput]{}, false, err
+		return etcdstore.Versioned[ServiceLifecycleRenderInput]{}, false, err
 	}
-	return Versioned[ServiceLifecycleRenderInput]{
+	return etcdstore.Versioned[ServiceLifecycleRenderInput]{
 		Record: input, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }

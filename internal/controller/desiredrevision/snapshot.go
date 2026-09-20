@@ -5,15 +5,16 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 )
 
 func NextGeneration(
 	environmentID string,
-	head etcd.Versioned[etcd.EnvironmentBlueprintHead],
+	head etcdstore.Versioned[etcd.EnvironmentBlueprintHead],
 	hasHead bool,
-	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	hasProjection bool,
 ) (int64, uint64, error) {
 	if hasHead != hasProjection {

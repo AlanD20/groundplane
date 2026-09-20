@@ -21,7 +21,7 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 	backingProjectID string,
 	networkID string,
 	revision int64,
-) ([]Versioned[attachrecord.Record], error) {
+) ([]etcdstore.Versioned[attachrecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 		start = page.Values[len(page.Values)-1].Key
 	}
 	if len(indexes) == 0 {
-		return []Versioned[attachrecord.Record]{}, nil
+		return []etcdstore.Versioned[attachrecord.Record]{}, nil
 	}
 	keys := make([]string, len(indexes))
 	idsByIndex := make([]string, len(indexes))
@@ -72,7 +72,7 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 	if stored == nil || stored.ReadRevision != revision || len(stored.Values) != len(keys) {
 		return nil, errs.New(errs.KindInternal, "backing Zone Attach snapshot is incomplete")
 	}
-	result := make([]Versioned[attachrecord.Record], 0, len(keys))
+	result := make([]etcdstore.Versioned[attachrecord.Record], 0, len(keys))
 	for index, value := range stored.Values {
 		if value == nil {
 			return nil, errs.New(errs.KindInternal, "backing Zone Attach record is missing")
@@ -84,11 +84,11 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 		if record.BackingNetworkID != networkID {
 			continue
 		}
-		result = append(result, Versioned[attachrecord.Record]{
+		result = append(result, etcdstore.Versioned[attachrecord.Record]{
 			Record: record, Revision: value.ModRevision, ReadRevision: revision,
 		})
 	}
-	slices.SortFunc(result, func(left, right Versioned[attachrecord.Record]) int {
+	slices.SortFunc(result, func(left, right etcdstore.Versioned[attachrecord.Record]) int {
 		return strings.Compare(left.Record.ID, right.Record.ID)
 	})
 	return result, nil

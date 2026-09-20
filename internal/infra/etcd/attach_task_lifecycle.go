@@ -202,25 +202,25 @@ func (repository *TaskRepository) readTaskAttach(
 	ctx context.Context,
 	task TaskRecord,
 	revision int64,
-) (Versioned[attachrecord.Record], error) {
+) (etcdstore.Versioned[attachrecord.Record], error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{attachrecord.AttachKey(task.Target)}, Revision: revision,
 	})
 	if err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if result == nil || result.ReadRevision != revision || len(result.Values) != 1 || result.Values[0] == nil {
-		return Versioned[attachrecord.Record]{}, errs.New(errs.KindInternal, "Attach Task target is missing")
+		return etcdstore.Versioned[attachrecord.Record]{}, errs.New(errs.KindInternal, "Attach Task target is missing")
 	}
 	value := result.Values[0]
 	record, err := attachrecord.DecodeAttachRecord(value.Value)
 	if err != nil {
-		return Versioned[attachrecord.Record]{}, err
+		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if record.ID != task.Target {
-		return Versioned[attachrecord.Record]{}, attachrecord.CorruptAttachRecord()
+		return etcdstore.Versioned[attachrecord.Record]{}, attachrecord.CorruptAttachRecord()
 	}
-	return Versioned[attachrecord.Record]{
+	return etcdstore.Versioned[attachrecord.Record]{
 		Record: record, Revision: value.ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }

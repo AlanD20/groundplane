@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"math"
 	"net/http"
@@ -31,9 +32,9 @@ const (
 )
 
 type zoneDeletionRepository interface {
-	GetZone(context.Context, string) (etcd.Versioned[zonerecord.Record], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetZone(context.Context, string) (etcdstore.Versioned[zonerecord.Record], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironmentZoneRemovalAuthorities(context.Context, string) (etcd.EnvironmentZoneRemovalAuthorities, bool, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
@@ -45,9 +46,9 @@ type zoneDeletionRepository interface {
 	) (etcd.EnvironmentBlueprintSeal, error)
 	BeginZoneDeletionWithTask(
 		context.Context,
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[zonerecord.Record],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[zonerecord.Record],
 		etcd.EnvironmentZoneRemovalAuthorities,
 		etcd.DeletionTombstoneRecord,
 		etcd.ZoneRemovalIntent,

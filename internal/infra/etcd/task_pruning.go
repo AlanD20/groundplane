@@ -107,24 +107,24 @@ func (repository *TaskRepository) PruneExpiredTasks(
 
 func (repository *TaskRepository) nextTaskPruneIntent(
 	ctx context.Context,
-) (Versioned[taskPruneIntent], bool, error) {
+) (etcdstore.Versioned[taskPruneIntent], bool, error) {
 	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskPruneIntentPrefix, Limit: 1})
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskPruneIntent]{}, false, err
 	}
 	if page == nil || page.ReadRevision <= 0 || len(page.Values) > 1 {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	if len(page.Values) == 0 {
-		return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
 	entry := page.Values[0]
 	defer clear(entry.Value)
 	intent, err := decodeTaskPruneIntent(entry.Value)
 	if err != nil || entry.Key != taskPruneIntentKey(intent.TaskID) || entry.ModRevision <= 0 {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
-	return Versioned[taskPruneIntent]{
+	return etcdstore.Versioned[taskPruneIntent]{
 		Record: intent, Revision: entry.ModRevision, ReadRevision: page.ReadRevision,
 	}, true, nil
 }
@@ -132,40 +132,40 @@ func (repository *TaskRepository) nextTaskPruneIntent(
 func (repository *TaskRepository) beginTaskPrune(
 	ctx context.Context,
 	now time.Time,
-) (Versioned[taskPruneIntent], bool, error) {
+) (etcdstore.Versioned[taskPruneIntent], bool, error) {
 	page, err := repository.nextTaskRetentionPruneCandidate(ctx, now)
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskPruneIntent]{}, false, err
 	}
 	if page == nil || page.ReadRevision <= 0 || len(page.Values) > 1 {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	if len(page.Values) == 0 {
-		return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
 	retentionEntry := page.Values[0]
 	defer clear(retentionEntry.Value)
 	taskID, retainUntil, err := parseTaskRetentionIndexKey(retentionEntry.Key)
 	if err != nil || retentionEntry.ModRevision <= 0 {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	if retainUntil.After(now) {
-		return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
 	indexedTaskID, err := decodeTaskReference(retentionEntry.Value)
 	if err != nil || indexedTaskID != taskID {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskKey(taskID)}, Revision: page.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskPruneIntent]{}, false, err
 	}
 	if taskResult == nil || taskResult.ReadRevision != page.ReadRevision ||
 		len(taskResult.Values) != 1 ||
 		taskResult.Values[0] == nil {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	defer clearKeyValues(taskResult.Values)
 	taskValue := taskResult.Values[0]
@@ -173,20 +173,20 @@ func (repository *TaskRepository) beginTaskPrune(
 	if err != nil || task.ID != taskID || !isTerminalTaskStatus(task.Status) ||
 		task.RetainUntil == nil ||
 		!task.RetainUntil.Equal(retainUntil) {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	stop, err := repository.prepareTaskPruneBoundary(
 		ctx, task, taskValue.ModRevision, retentionEntry, page.ReadRevision, now,
 	)
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskPruneIntent]{}, false, err
 	}
 	if stop {
-		return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
 	markerKey, err := idempotencyMarkerKey(*task.idempotencyMarker)
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	companionKeys := []string{
 		markerKey,
@@ -214,7 +214,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	ownerIndexStart := len(companionKeys)
 	ownerIndexKeys, err := taskJournalIndexKeys(task)
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	companionKeys = append(companionKeys, ownerIndexKeys...)
 	planReferenceIndex := -1
@@ -236,15 +236,15 @@ func (repository *TaskRepository) beginTaskPrune(
 		Keys: companionKeys, Revision: page.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskPruneIntent]{}, false, err
 	}
 	if companions == nil || companions.ReadRevision != page.ReadRevision ||
 		len(companions.Values) != len(companionKeys) {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	defer clearKeyValues(companions.Values)
 	if companions.Values[0] != nil {
-		return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
 	environmentDeletionBlocked := false
 	environmentDeletionOwnerTaskID := ""
@@ -255,34 +255,34 @@ func (repository *TaskRepository) beginTaskPrune(
 				companions.Values[environmentDeletionFenceStart:ownerIndexStart],
 			)
 		if err != nil {
-			return Versioned[taskPruneIntent]{}, false, err
+			return etcdstore.Versioned[taskPruneIntent]{}, false, err
 		}
 	}
 	activeOperationCondition := etcdstore.Condition{Key: taskActiveOperationKey(task.OperationID)}
 	if companions.Values[1] != nil {
 		activeTaskID, decodeErr := decodeTaskReference(companions.Values[1].Value)
 		if decodeErr != nil {
-			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 		if environmentDeletionBlocked || environmentDeletionOwnerTaskID == "" ||
 			activeTaskID != environmentDeletionOwnerTaskID {
-			return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+			return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 		}
 		activeOperationCondition.ModRevision = companions.Values[1].ModRevision
 	}
 	if companions.Values[2] == nil || companions.Values[3] != nil {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	historyTaskID, err := decodeTaskReference(companions.Values[2].Value)
 	if err != nil || historyTaskID != task.ID {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	if companions.Values[4] != nil {
 		componentIntent, decodeErr := decodeComponentTaskIntent(companions.Values[4].Value)
 		if decodeErr != nil || validateComponentTaskOwner(task, componentIntent) != nil ||
 			componentIntent.Status != task.Status || componentIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!componentIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
 	if companions.Values[5] != nil {
@@ -290,7 +290,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		if decodeErr != nil || validateRouteRemovalTaskOwner(task, routeIntent) != nil ||
 			routeIntent.Status != task.Status || routeIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!routeIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
 	if companions.Values[6] != nil {
@@ -298,7 +298,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		if decodeErr != nil || validateRouteMutationTaskOwner(task, mutationIntent) != nil ||
 			mutationIntent.Status != task.Status || mutationIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!mutationIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
 	if companions.Values[7] != nil {
@@ -306,7 +306,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		if decodeErr != nil || validateEntryRemovalTaskOwner(task, entryIntent) != nil ||
 			entryIntent.Status != task.Status || entryIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!entryIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
 	if companions.Values[8] != nil {
@@ -314,11 +314,11 @@ func (repository *TaskRepository) beginTaskPrune(
 		if decodeErr != nil || validateBlueprintAttachTaskOwner(task, attachIntent) != nil ||
 			attachIntent.Status != task.Status || attachIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!attachIntent.TerminalAt.Equal(*task.FinishedAt) {
-			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
 	if backupPruneDispatchIndex >= 0 && companions.Values[backupPruneDispatchIndex] != nil {
-		return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	var backupReceiptCompanion backupTerminalReceiptPruneCompanion
 	if backupTerminalReceiptIndex >= 0 {
@@ -328,7 +328,7 @@ func (repository *TaskRepository) beginTaskPrune(
 			companions.Values[backupTerminalReceiptIndex],
 		)
 		if err != nil {
-			return Versioned[taskPruneIntent]{}, false, err
+			return etcdstore.Versioned[taskPruneIntent]{}, false, err
 		}
 	}
 	if environmentDeletionFenceStart >= 0 {
@@ -349,23 +349,23 @@ func (repository *TaskRepository) beginTaskPrune(
 				[]etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: retentionEntry.Key}},
 			)
 			if transactErr != nil {
-				return Versioned[taskPruneIntent]{}, false, transactErr
+				return etcdstore.Versioned[taskPruneIntent]{}, false, transactErr
 			}
 			clearKeyValues(transaction.FailureReads)
 			if !transaction.Succeeded {
-				return Versioned[taskPruneIntent]{}, false, errs.New(
+				return etcdstore.Versioned[taskPruneIntent]{}, false, errs.New(
 					errs.KindStateConflict,
 					"task prune retained ownership changed",
 				)
 			}
-			return Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
+			return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 		}
 	}
 	for index, key := range ownerIndexKeys {
 		value := companions.Values[ownerIndexStart+index]
 		if value == nil || value.Key != key || value.ModRevision <= 0 ||
 			string(value.Value) != task.ID {
-			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 	}
 	intent := taskPruneIntent{
@@ -376,20 +376,20 @@ func (repository *TaskRepository) beginTaskPrune(
 	if planReferenceIndex >= 0 {
 		planReferenceValue := companions.Values[planReferenceIndex]
 		if planReferenceValue == nil {
-			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 		if _, decodeErr := decodeAttachTaskPlanReference(
 			planReferenceValue.Key,
 			planReferenceValue.Value,
 			task.PlanID,
 		); decodeErr != nil {
-			return Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
 		intent.AttachPlanID = task.PlanID
 	}
 	intentValue, err := encodeTaskPruneIntent(intent)
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskPruneIntent]{}, false, err
 	}
 	defer clear(intentValue)
 	conditions := []etcdstore.Condition{
@@ -474,23 +474,23 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, false, err
+		return etcdstore.Versioned[taskPruneIntent]{}, false, err
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[taskPruneIntent]{}, false, errs.New(
+		return etcdstore.Versioned[taskPruneIntent]{}, false, errs.New(
 			errs.KindStateConflict,
 			"task prune start changed",
 		)
 	}
-	return Versioned[taskPruneIntent]{
+	return etcdstore.Versioned[taskPruneIntent]{
 		Record: intent, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 	}, true, nil
 }
 
 func (repository *TaskRepository) drainTaskPruneIntent(
 	ctx context.Context,
-	current Versioned[taskPruneIntent],
+	current etcdstore.Versioned[taskPruneIntent],
 ) error {
 	var err error
 	for !current.Record.BackupCheckpointCursorsComplete {
@@ -534,9 +534,9 @@ func (repository *TaskRepository) drainTaskPruneIntent(
 
 func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 	ctx context.Context,
-	current Versioned[taskPruneIntent],
+	current etcdstore.Versioned[taskPruneIntent],
 	cursors bool,
-) (Versioned[taskPruneIntent], error) {
+) (etcdstore.Versioned[taskPruneIntent], error) {
 	prefix := backupCheckpointDedupTaskPrefix(current.Record.TaskID)
 	if cursors {
 		prefix = backupCheckpointCursorTaskPrefix(current.Record.TaskID)
@@ -546,10 +546,10 @@ func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 		Limit:  int64(maximumTaskPruneBatchRecords + 1),
 	})
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, err
+		return etcdstore.Versioned[taskPruneIntent]{}, err
 	}
 	if page == nil || page.ReadRevision <= 0 {
-		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
 	defer clearKeyValueSlice(page.Values)
 	next := current.Record
@@ -580,7 +580,7 @@ func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 			entry,
 			cursors,
 		); err != nil {
-			return Versioned[taskPruneIntent]{}, err
+			return etcdstore.Versioned[taskPruneIntent]{}, err
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: entry.Key, ModRevision: entry.ModRevision})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entry.Key})
@@ -590,13 +590,13 @@ func (repository *TaskRepository) pruneTaskBackupCheckpointBatch(
 
 func (repository *TaskRepository) deleteTaskPrunePrimary(
 	ctx context.Context,
-	current Versioned[taskPruneIntent],
-) (Versioned[taskPruneIntent], error) {
+	current etcdstore.Versioned[taskPruneIntent],
+) (etcdstore.Versioned[taskPruneIntent], error) {
 	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{taskKey(current.Record.TaskID)},
 	})
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, err
+		return etcdstore.Versioned[taskPruneIntent]{}, err
 	}
 	if taskResult == nil || taskResult.ReadRevision <= 0 || len(taskResult.Values) != 1 ||
 		taskResult.Values[0] == nil ||
@@ -604,29 +604,29 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 		if taskResult != nil {
 			clearKeyValues(taskResult.Values)
 		}
-		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
 	defer clearKeyValues(taskResult.Values)
 	task, err := decodeTaskRecord(taskResult.Values[0].Value)
 	if err != nil || task.ID != current.Record.TaskID || !isTerminalTaskStatus(task.Status) {
-		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
 	ownerKeys, err := taskJournalIndexKeys(task)
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
 	ownerResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: ownerKeys, Revision: taskResult.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, err
+		return etcdstore.Versioned[taskPruneIntent]{}, err
 	}
 	if ownerResult == nil || ownerResult.ReadRevision != taskResult.ReadRevision ||
 		len(ownerResult.Values) != len(ownerKeys) {
 		if ownerResult != nil {
 			clearKeyValues(ownerResult.Values)
 		}
-		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
 	defer clearKeyValues(ownerResult.Values)
 	conditions := []etcdstore.Condition{
@@ -638,7 +638,7 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	for index, key := range ownerKeys {
 		value := ownerResult.Values[index]
 		if value == nil || value.Key != key || value.ModRevision <= 0 || string(value.Value) != task.ID {
-			return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+			return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: value.ModRevision})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
@@ -656,14 +656,14 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 
 func (repository *TaskRepository) advanceTaskPruneIntent(
 	ctx context.Context,
-	current Versioned[taskPruneIntent],
+	current etcdstore.Versioned[taskPruneIntent],
 	next taskPruneIntent,
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
-) (Versioned[taskPruneIntent], error) {
+) (etcdstore.Versioned[taskPruneIntent], error) {
 	intentValue, err := encodeTaskPruneIntent(next)
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, err
+		return etcdstore.Versioned[taskPruneIntent]{}, err
 	}
 	defer clear(intentValue)
 	conditions = append([]etcdstore.Condition{{
@@ -673,23 +673,23 @@ func (repository *TaskRepository) advanceTaskPruneIntent(
 		Type: etcdstore.MutationPut, Key: taskPruneIntentKey(current.Record.TaskID), Value: intentValue,
 	})
 	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
-		return Versioned[taskPruneIntent]{}, errs.New(
+		return etcdstore.Versioned[taskPruneIntent]{}, errs.New(
 			errs.KindInternal,
 			"task prune batch exceeds transaction limit",
 		)
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, err
+		return etcdstore.Versioned[taskPruneIntent]{}, err
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[taskPruneIntent]{}, errs.New(
+		return etcdstore.Versioned[taskPruneIntent]{}, errs.New(
 			errs.KindStateConflict,
 			"task prune batch changed",
 		)
 	}
-	return Versioned[taskPruneIntent]{
+	return etcdstore.Versioned[taskPruneIntent]{
 		Record: next, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 	}, nil
 }
@@ -725,7 +725,7 @@ func validateTaskBackupCheckpointPruneEntry(
 
 func (repository *TaskRepository) finishTaskPruneIntent(
 	ctx context.Context,
-	current Versioned[taskPruneIntent],
+	current etcdstore.Versioned[taskPruneIntent],
 ) error {
 	conditions := []etcdstore.Condition{{
 		Key: taskPruneIntentKey(current.Record.TaskID), ModRevision: current.Revision,
@@ -791,9 +791,9 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 
 func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	ctx context.Context,
-	current Versioned[taskPruneIntent],
+	current etcdstore.Versioned[taskPruneIntent],
 	events bool,
-) (Versioned[taskPruneIntent], error) {
+) (etcdstore.Versioned[taskPruneIntent], error) {
 	remaining := current.Record.RemainingDeduplications
 	prefix := taskEventDedupScopePrefix(current.Record.TaskID)
 	if events {
@@ -806,14 +806,14 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	}
 	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: limit})
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, err
+		return etcdstore.Versioned[taskPruneIntent]{}, err
 	}
 	if page == nil || page.ReadRevision <= 0 || len(page.Values) == 0 {
-		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
 	defer clearKeyValueSlice(page.Values)
 	if uint32(len(page.Values)) > remaining && remaining <= maximumTaskPruneBatchRecords {
-		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
 	count := len(page.Values)
 	if count > maximumTaskPruneBatchRecords {
@@ -823,7 +823,7 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 		count = int(remaining)
 	}
 	if !page.More && uint32(len(page.Values)) < remaining {
-		return Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
+		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
 	conditions := make([]etcdstore.Condition, 1, count+1)
 	conditions[0] = etcdstore.Condition{
@@ -834,7 +834,7 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	for index := 0; index < count; index++ {
 		entry := page.Values[index]
 		if err := validateTaskPruneSubordinate(current.Record.TaskID, entry, events); err != nil {
-			return Versioned[taskPruneIntent]{}, err
+			return etcdstore.Versioned[taskPruneIntent]{}, err
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: entry.Key, ModRevision: entry.ModRevision})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entry.Key})
@@ -847,30 +847,30 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	}
 	intentValue, err := encodeTaskPruneIntent(next)
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, err
+		return etcdstore.Versioned[taskPruneIntent]{}, err
 	}
 	defer clear(intentValue)
 	mutations = append(mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationPut, Key: taskPruneIntentKey(next.TaskID), Value: intentValue,
 	})
 	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
-		return Versioned[taskPruneIntent]{}, errs.New(
+		return etcdstore.Versioned[taskPruneIntent]{}, errs.New(
 			errs.KindInternal,
 			"task prune batch exceeds transaction limit",
 		)
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[taskPruneIntent]{}, err
+		return etcdstore.Versioned[taskPruneIntent]{}, err
 	}
 	clearKeyValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return Versioned[taskPruneIntent]{}, errs.New(
+		return etcdstore.Versioned[taskPruneIntent]{}, errs.New(
 			errs.KindStateConflict,
 			"task prune batch changed",
 		)
 	}
-	return Versioned[taskPruneIntent]{
+	return etcdstore.Versioned[taskPruneIntent]{
 		Record: next, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 	}, nil
 }

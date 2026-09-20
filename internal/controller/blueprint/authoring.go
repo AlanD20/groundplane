@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"time"
 
@@ -21,18 +22,18 @@ import (
 )
 
 type environmentBlueprintSnapshot struct {
-	tenant      etcd.Versioned[hierarchyrecord.TenantRecord]
-	project     etcd.Versioned[hierarchyrecord.ProjectRecord]
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord]
-	head        etcd.Versioned[etcd.EnvironmentBlueprintHead]
-	projection  etcd.Versioned[etcd.EnvironmentComposeProjection]
+	tenant      etcdstore.Versioned[hierarchyrecord.TenantRecord]
+	project     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	head        etcdstore.Versioned[etcd.EnvironmentBlueprintHead]
+	projection  etcdstore.Versioned[etcd.EnvironmentComposeProjection]
 	hasHead     bool
 }
 
 func (repository *durableRepository) GetService(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ServiceRecord], error) {
+) (etcdstore.Versioned[etcd.ServiceRecord], error) {
 	return repository.services.GetService(ctx, id)
 }
 
@@ -177,7 +178,7 @@ func (service *Service) loadEnvironmentBlueprintSnapshot(
 }
 
 func environmentBlueprintRevision(
-	head etcd.Versioned[etcd.EnvironmentBlueprintHead],
+	head etcdstore.Versioned[etcd.EnvironmentBlueprintHead],
 	found bool,
 ) string {
 	if !found {
@@ -327,7 +328,7 @@ func environmentBlueprintAuthoringComponents(
 
 func (service *Service) environmentBlueprintAuthoringAttachments(
 	ctx context.Context,
-	records []etcd.Versioned[attachrecord.Record],
+	records []etcdstore.Versioned[attachrecord.Record],
 	serviceNames map[string]string,
 ) (map[string]core.AttachmentSpec, error) {
 	names := make(map[string]string, len(records))
@@ -504,8 +505,8 @@ func addBlueprintResourceKey(values map[string]map[string]struct{}, resource, ke
 func environmentBlueprintBackupValidationTargets(
 	snapshot environmentBlueprintSnapshot,
 	parsed blueprintparser.Result,
-	currentAttaches []etcd.Versioned[attachrecord.Record],
-) (etcd.EnvironmentComposeProjection, []etcd.Versioned[attachrecord.Record], error) {
+	currentAttaches []etcdstore.Versioned[attachrecord.Record],
+) (etcd.EnvironmentComposeProjection, []etcdstore.Versioned[attachrecord.Record], error) {
 	projection := snapshot.projection.Record
 	projection.EnvironmentID = snapshot.environment.Record.ID
 	volumeSlugs, err := environmentBlueprintVolumeSlugs(parsed.Project, projection, snapshot.hasHead)
@@ -535,7 +536,7 @@ func environmentBlueprintBackupValidationTargets(
 	for _, volume := range byKey {
 		projection.Volumes = append(projection.Volumes, volume)
 	}
-	attaches := append([]etcd.Versioned[attachrecord.Record](nil), currentAttaches...)
+	attaches := append([]etcdstore.Versioned[attachrecord.Record](nil), currentAttaches...)
 	attachIDs := make(map[string]string, len(attaches)+len(parsed.Extensions.Attachments))
 	for _, attach := range attaches {
 		attachIDs[attach.Record.Name] = attach.Record.ID
@@ -557,7 +558,7 @@ func environmentBlueprintBackupValidationTargets(
 		if spec.Credential.Mode == "new" {
 			credentialID = attachIDs[name]
 		}
-		attaches = append(attaches, etcd.Versioned[attachrecord.Record]{Record: attachrecord.Record{
+		attaches = append(attaches, etcdstore.Versioned[attachrecord.Record]{Record: attachrecord.Record{
 			ID: attachIDs[name], EnvironmentID: snapshot.environment.Record.ID,
 			Name: name, CredentialAttachID: credentialID,
 		}})

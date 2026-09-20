@@ -19,32 +19,32 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 	environmentID string,
 	revision int64,
 	createdAt time.Time,
-) (*Versioned[backuppolicy.BackupPolicyRecord], Versioned[EnvironmentCoordinationRecord], *VersionedBackupKey, error) {
+) (*etcdstore.Versioned[backuppolicy.BackupPolicyRecord], etcdstore.Versioned[EnvironmentCoordinationRecord], *VersionedBackupKey, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		backuppolicy.BackupPolicyKey(environmentID), environmentCoordinationKey(environmentID),
 		backuppolicy.BackupKeyKey(environmentID), backuppolicy.BackupKeyValueKey(environmentID),
 	}, Revision: revision})
 	if err != nil {
-		return nil, Versioned[EnvironmentCoordinationRecord]{}, nil, err
+		return nil, etcdstore.Versioned[EnvironmentCoordinationRecord]{}, nil, err
 	}
 	if result == nil || result.ReadRevision != revision || len(result.Values) != 4 {
-		return nil, Versioned[EnvironmentCoordinationRecord]{}, nil, errs.New(
+		return nil, etcdstore.Versioned[EnvironmentCoordinationRecord]{}, nil, errs.New(
 			errs.KindInternal, "Blueprint Backup base read is incomplete",
 		)
 	}
 	defer clearKeyValues(result.Values)
-	var current *Versioned[backuppolicy.BackupPolicyRecord]
+	var current *etcdstore.Versioned[backuppolicy.BackupPolicyRecord]
 	if result.Values[0] != nil {
 		record, decodeErr := backuppolicy.DecodeBackupPolicyRecord(result.Values[0].Value)
 		if decodeErr != nil || record.EnvironmentID != environmentID {
-			return nil, Versioned[EnvironmentCoordinationRecord]{}, nil, recordcodec.CorruptRecord()
+			return nil, etcdstore.Versioned[EnvironmentCoordinationRecord]{}, nil, recordcodec.CorruptRecord()
 		}
-		value := Versioned[backuppolicy.BackupPolicyRecord]{
+		value := etcdstore.Versioned[backuppolicy.BackupPolicyRecord]{
 			Record: record, Revision: result.Values[0].ModRevision, ReadRevision: revision,
 		}
 		current = &value
 	}
-	coordination := Versioned[EnvironmentCoordinationRecord]{
+	coordination := etcdstore.Versioned[EnvironmentCoordinationRecord]{
 		Record: EnvironmentCoordinationRecord{
 			EnvironmentID: environmentID, ScheduleClockFloor: createdAt,
 		},
@@ -189,7 +189,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 	connectorID string,
 	enabled bool,
 	revision int64,
-) (*Versioned[connectorrecord.Record], *etcdstore.KeyValue, *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
+) (*etcdstore.Versioned[connectorrecord.Record], *etcdstore.KeyValue, *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
 	keys := []string{
 		connectorrecord.RecordKey(connectorID), connectorEnvironmentKey(environmentID, connectorID),
 		deletionTombstoneKey(string(DeletionTargetConnector), connectorID),
@@ -225,7 +225,7 @@ func (repository *BackupPolicyRepository) loadRetainedBlueprintBackupConnector(
 		return nil, nil, nil, nil, connectorrecord.CorruptRecord()
 	}
 	defer clearKeyValues(name.Values)
-	return &Versioned[connectorrecord.Record]{
+	return &etcdstore.Versioned[connectorrecord.Record]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: revision,
 	}, cloneBackupPolicyEvidenceKeyValue(result.Values[1]), cloneBackupPolicyEvidenceKeyValue(name.Values[0]), tombstone, nil
 }
@@ -305,7 +305,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupSources(
 					!attach.OwnsCredential() || string(attachRead.Values[1].Value) != selection.TargetID {
 					return nil, errs.New(errs.KindValidationFailed, "backup Attach source must own credentials")
 				}
-				versioned := Versioned[attachrecord.Record]{Record: attach, Revision: attachRead.Values[0].ModRevision, ReadRevision: revision}
+				versioned := etcdstore.Versioned[attachrecord.Record]{Record: attach, Revision: attachRead.Values[0].ModRevision, ReadRevision: revision}
 				item.attach = &versioned
 				item.attachOwner = cloneBackupPolicyEvidenceKeyValue(attachRead.Values[1])
 			}

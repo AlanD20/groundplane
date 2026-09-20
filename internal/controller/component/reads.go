@@ -3,19 +3,20 @@ package component
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type readRepository interface {
-	GetComponent(context.Context, string) (etcd.Versioned[componentrecord.Record], error)
-	ListEnvironmentComponents(context.Context, string, etcd.PageRequest) (etcd.Page[componentrecord.Record], error)
-	ListPlatformComponents(context.Context, etcd.PageRequest) (etcd.Page[componentrecord.Record], error)
+	GetComponent(context.Context, string) (etcdstore.Versioned[componentrecord.Record], error)
+	ListEnvironmentComponents(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[componentrecord.Record], error)
+	ListPlatformComponents(context.Context, etcdstore.PageRequest) (etcdstore.Page[componentrecord.Record], error)
 }
 
 // ManagedConfigProjector is the consumer-owned port for deriving generic
@@ -42,10 +43,10 @@ func (service *ReadService) ListComponents(
 	platform bool,
 	kind string,
 ) ([]apiTypes.Component, error) {
-	var records etcd.Page[componentrecord.Record]
+	var records etcdstore.Page[componentrecord.Record]
 	var err error
 	if platform {
-		records, err = service.repository.ListPlatformComponents(ctx, etcd.PageRequest{Limit: etcd.MaximumPageLimit})
+		records, err = service.repository.ListPlatformComponents(ctx, etcdstore.PageRequest{Limit: etcdstore.MaximumPageLimit})
 	} else {
 		if ids.Validate(ids.KindEnvironment, environmentID) != nil {
 			return nil, errs.New(errs.KindValidationFailed, "Component Environment id is invalid")
@@ -53,7 +54,7 @@ func (service *ReadService) ListComponents(
 		records, err = service.repository.ListEnvironmentComponents(
 			ctx,
 			environmentID,
-			etcd.PageRequest{Limit: etcd.MaximumPageLimit},
+			etcdstore.PageRequest{Limit: etcdstore.MaximumPageLimit},
 		)
 	}
 	if err != nil {

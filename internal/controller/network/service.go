@@ -5,6 +5,7 @@ package network
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
@@ -146,7 +147,7 @@ func (service *Service) ListZones(
 	environmentID string,
 	request corenetwork.PageRequest,
 ) (corenetwork.Page[corenetwork.Zone], error) {
-	stored, err := service.zoneReads.ListZones(ctx, environmentID, etcd.PageRequest{
+	stored, err := service.zoneReads.ListZones(ctx, environmentID, etcdstore.PageRequest{
 		Limit: request.Limit, Cursor: request.Cursor,
 	})
 	if err != nil {
@@ -216,7 +217,7 @@ func (service *Service) ListRoutes(
 	environmentID string,
 	request corenetwork.PageRequest,
 ) (corenetwork.Page[corenetwork.Route], error) {
-	stored, err := service.routeReads.ListRoutes(ctx, environmentID, etcd.PageRequest{
+	stored, err := service.routeReads.ListRoutes(ctx, environmentID, etcdstore.PageRequest{
 		Limit: request.Limit, Cursor: request.Cursor,
 	})
 	if err != nil {

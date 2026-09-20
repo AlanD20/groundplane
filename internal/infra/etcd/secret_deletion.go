@@ -15,7 +15,7 @@ import (
 func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	ctx context.Context,
 	owner SecretOwner,
-	current Versioned[secretrecord.Record],
+	current etcdstore.Versioned[secretrecord.Record],
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -205,7 +205,7 @@ func secretIdempotencyScope(owner SecretOwner) (IdempotencyScopeKind, string) {
 
 func classifySecretDeletionStartConflict(
 	owner SecretOwner,
-	current Versioned[secretrecord.Record],
+	current etcdstore.Versioned[secretrecord.Record],
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {

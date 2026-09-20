@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -25,7 +26,7 @@ type serviceLifecyclePlanReader interface {
 	GetServiceLifecycleRenderInput(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.ServiceLifecycleRenderInput], bool, error)
+	) (etcdstore.Versioned[etcd.ServiceLifecycleRenderInput], bool, error)
 }
 
 type serviceLifecycleHookInputResolver interface {

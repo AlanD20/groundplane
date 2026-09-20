@@ -6,6 +6,7 @@ import (
 	"errors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -43,11 +44,11 @@ func NewEtcdRepository(
 }
 
 type etcdRemovalState struct {
-	entry       etcd.Versioned[entryrecord.Record]
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord]
-	project     etcd.Versioned[hierarchyrecord.ProjectRecord]
-	tenant      *etcd.Versioned[hierarchyrecord.TenantRecord]
-	projection  *etcd.Versioned[etcd.EnvironmentComposeProjection]
+	entry       etcdstore.Versioned[entryrecord.Record]
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	project     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	tenant      *etcdstore.Versioned[hierarchyrecord.TenantRecord]
+	projection  *etcdstore.Versioned[etcd.EnvironmentComposeProjection]
 }
 
 type etcdRemovalEvidence struct {
@@ -233,7 +234,7 @@ func (repository *EtcdRepository) loadRemovalState(
 	if err != nil {
 		return etcdRemovalState{}, err
 	}
-	var tenant *etcd.Versioned[hierarchyrecord.TenantRecord]
+	var tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord]
 	switch project.Record.Kind {
 	case hierarchyrecord.ProjectKindTenant:
 		stored, tenantErr := repository.hierarchy.GetTenant(ctx, project.Record.TenantID)
@@ -260,10 +261,10 @@ func (repository *EtcdRepository) loadRemovalState(
 }
 
 func appliedEntryProjection(
-	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	found bool,
 	entryID string,
-) *etcd.Versioned[etcd.EnvironmentComposeProjection] {
+) *etcdstore.Versioned[etcd.EnvironmentComposeProjection] {
 	if !found {
 		return nil
 	}

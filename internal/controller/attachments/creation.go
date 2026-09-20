@@ -7,6 +7,7 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -171,7 +172,7 @@ func (service *MutationService) createAttachOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	prepared, err := service.plans.SealDraft(
-		ctx, etcd.Versioned[attachrecord.Record]{Record: record}, renderInput, task, identity, encryptedFacts, hookInputs,
+		ctx, etcdstore.Versioned[attachrecord.Record]{Record: record}, renderInput, task, identity, encryptedFacts, hookInputs,
 	)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err

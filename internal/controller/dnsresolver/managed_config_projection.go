@@ -2,6 +2,7 @@ package dnsresolver
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -15,7 +16,7 @@ import (
 type ResolverBaselineReader interface {
 	GetHostResolverBaseline(
 		context.Context,
-	) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error)
+	) (etcdstore.Versioned[etcd.HostResolverBaselineRecord], bool, error)
 }
 
 // ManagedConfigProjector derives the CoreDNS managed file from durable desired

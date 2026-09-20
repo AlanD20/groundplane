@@ -16,9 +16,9 @@ import (
 const maximumBackupSourceEnsureAttempts = 3
 
 type backupSourceCreationEvidence struct {
-	environment   Versioned[hierarchyrecord.EnvironmentRecord]
-	project       Versioned[hierarchyrecord.ProjectRecord]
-	mutationEpoch Versioned[EnvironmentMutationEpochRecord]
+	environment   etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	project       etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	mutationEpoch etcdstore.Versioned[EnvironmentMutationEpochRecord]
 }
 
 // BackupPolicyRepository owns the Environment singleton and immutable source
@@ -42,13 +42,13 @@ func newBackupPolicyRepository(store hierarchyStore) (*BackupPolicyRepository, e
 
 func (repository *BackupPolicyRepository) EnsureBackupSource(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	kind core.BackupSourceKind,
 	targetID string,
-) (Versioned[backuppolicy.BackupSourceRecord], error) {
+) (etcdstore.Versioned[backuppolicy.BackupSourceRecord], error) {
 	if err := validateBackupSourceHierarchy(ctx, environment, project, kind, targetID); err != nil {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, err
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 	}
 	for attempt := 0; attempt < maximumBackupSourceEnsureAttempts; attempt++ {
 		existing, found, err := repository.getBackupSourceByIdentity(
@@ -58,7 +58,7 @@ func (repository *BackupPolicyRepository) EnsureBackupSource(
 			targetID,
 		)
 		if err != nil {
-			return Versioned[backuppolicy.BackupSourceRecord]{}, err
+			return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 		}
 		if found {
 			return existing, nil
@@ -72,7 +72,7 @@ func (repository *BackupPolicyRepository) EnsureBackupSource(
 			existing.ReadRevision,
 		)
 		if err != nil {
-			return Versioned[backuppolicy.BackupSourceRecord]{}, err
+			return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 		}
 		record := backuppolicy.BackupSourceRecord{
 			ID: ids.New(ids.KindBackupSource), EnvironmentID: environment.Record.ID,
@@ -84,10 +84,10 @@ func (repository *BackupPolicyRepository) EnsureBackupSource(
 		}
 		errorKind, ok := errs.KindOf(err)
 		if !ok || errorKind != errs.KindStateConflict || attempt == maximumBackupSourceEnsureAttempts-1 {
-			return Versioned[backuppolicy.BackupSourceRecord]{}, err
+			return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 		}
 	}
-	return Versioned[backuppolicy.BackupSourceRecord]{}, errs.New(
+	return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, errs.New(
 		errs.KindInternal,
 		"backup source ensure retry bound was not enforced",
 	)
@@ -96,12 +96,12 @@ func (repository *BackupPolicyRepository) EnsureBackupSource(
 func (repository *BackupPolicyRepository) GetBackupSource(
 	ctx context.Context,
 	sourceID string,
-) (Versioned[backuppolicy.BackupSourceRecord], error) {
+) (etcdstore.Versioned[backuppolicy.BackupSourceRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, err
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, err
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 	}
 	return getRecord(
 		ctx,
@@ -117,10 +117,10 @@ func (repository *BackupPolicyRepository) GetBackupSource(
 func (repository *BackupPolicyRepository) ListBackupSources(
 	ctx context.Context,
 	environmentID string,
-	request PageRequest,
-) (Page[backuppolicy.BackupSourceRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[backuppolicy.BackupSourceRecord], error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Page[backuppolicy.BackupSourceRecord]{}, err
+		return etcdstore.Page[backuppolicy.BackupSourceRecord]{}, err
 	}
 	return listIndexPage(
 		ctx,
@@ -141,31 +141,31 @@ func (repository *BackupPolicyRepository) ListBackupSources(
 func (repository *BackupPolicyRepository) GetBackupPolicy(
 	ctx context.Context,
 	environmentID string,
-) (Versioned[backuppolicy.BackupPolicyRecord], bool, error) {
+) (etcdstore.Versioned[backuppolicy.BackupPolicyRecord], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[backuppolicy.BackupPolicyRecord]{}, false, err
+		return etcdstore.Versioned[backuppolicy.BackupPolicyRecord]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Versioned[backuppolicy.BackupPolicyRecord]{}, false, err
+		return etcdstore.Versioned[backuppolicy.BackupPolicyRecord]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, backuppolicy.BackupPolicyKey(environmentID))
 	if err != nil {
-		return Versioned[backuppolicy.BackupPolicyRecord]{}, false, err
+		return etcdstore.Versioned[backuppolicy.BackupPolicyRecord]{}, false, err
 	}
 	if result == nil {
-		return Versioned[backuppolicy.BackupPolicyRecord]{}, false, errs.New(
+		return etcdstore.Versioned[backuppolicy.BackupPolicyRecord]{}, false, errs.New(
 			errs.KindInternal,
 			"backup policy read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return Versioned[backuppolicy.BackupPolicyRecord]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[backuppolicy.BackupPolicyRecord]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	record, err := backuppolicy.DecodeBackupPolicyRecord(result.Entry.Value)
 	if err != nil || record.EnvironmentID != environmentID {
-		return Versioned[backuppolicy.BackupPolicyRecord]{}, false, recordcodec.CorruptRecord()
+		return etcdstore.Versioned[backuppolicy.BackupPolicyRecord]{}, false, recordcodec.CorruptRecord()
 	}
-	return Versioned[backuppolicy.BackupPolicyRecord]{
+	return etcdstore.Versioned[backuppolicy.BackupPolicyRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }
@@ -174,15 +174,15 @@ func (repository *BackupPolicyRepository) createBackupSource(
 	ctx context.Context,
 	evidence backupSourceCreationEvidence,
 	record backuppolicy.BackupSourceRecord,
-) (Versioned[backuppolicy.BackupSourceRecord], error) {
+) (etcdstore.Versioned[backuppolicy.BackupSourceRecord], error) {
 	value, err := backuppolicy.EncodeBackupSourceRecord(record)
 	if err != nil {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, err
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 	}
 	defer clear(value)
 	epochValue, err := encodeEnvironmentMutationEpochRecord(evidence.mutationEpoch.Record)
 	if err != nil {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, err
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 	}
 	defer clear(epochValue)
 	environment := evidence.environment
@@ -217,23 +217,23 @@ func (repository *BackupPolicyRepository) createBackupSource(
 		},
 	})
 	if err != nil {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, err
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, classifyBackupSourceCreateConflict(
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, classifyBackupSourceCreateConflict(
 			result.FailureReads,
 			evidence,
 		)
 	}
-	return Versioned[backuppolicy.BackupSourceRecord]{
+	return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{
 		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
 
 func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	kind core.BackupSourceKind,
 	targetID string,
 	revision int64,
@@ -311,13 +311,13 @@ func (repository *BackupPolicyRepository) loadBackupSourceCreationEvidence(
 		)
 	}
 	return backupSourceCreationEvidence{
-		environment: Versioned[hierarchyrecord.EnvironmentRecord]{
+		environment: etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{
 			Record: currentEnvironment, Revision: result.Values[1].ModRevision, ReadRevision: result.ReadRevision,
 		},
-		project: Versioned[hierarchyrecord.ProjectRecord]{
+		project: etcdstore.Versioned[hierarchyrecord.ProjectRecord]{
 			Record: currentProject, Revision: result.Values[2].ModRevision, ReadRevision: result.ReadRevision,
 		},
-		mutationEpoch: Versioned[EnvironmentMutationEpochRecord]{
+		mutationEpoch: etcdstore.Versioned[EnvironmentMutationEpochRecord]{
 			Record: epoch, Revision: result.Values[6].ModRevision, ReadRevision: result.ReadRevision,
 		},
 	}, nil
@@ -328,23 +328,23 @@ func (repository *BackupPolicyRepository) getBackupSourceByIdentity(
 	environmentID string,
 	kind core.BackupSourceKind,
 	targetID string,
-) (Versioned[backuppolicy.BackupSourceRecord], bool, error) {
+) (etcdstore.Versioned[backuppolicy.BackupSourceRecord], bool, error) {
 	index, err := repository.store.Get(ctx, backuppolicy.BackupSourceIdentityKey(environmentID, kind, targetID))
 	if err != nil {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, false, err
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, false, err
 	}
 	if index == nil {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, false, errs.New(
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, false, errs.New(
 			errs.KindInternal,
 			"backup source identity read is empty",
 		)
 	}
 	if index.Entry == nil {
-		return Versioned[backuppolicy.BackupSourceRecord]{ReadRevision: index.ReadRevision}, false, nil
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{ReadRevision: index.ReadRevision}, false, nil
 	}
 	sourceID := string(index.Entry.Value)
 	if err := recordcodec.ValidateID(ids.KindBackupSource, sourceID); err != nil {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, false, recordcodec.CorruptRecord()
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, false, recordcodec.CorruptRecord()
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
@@ -354,26 +354,26 @@ func (repository *BackupPolicyRepository) getBackupSourceByIdentity(
 		Revision: index.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, false, err
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, false, err
 	}
 	if stored == nil || len(stored.Values) != 2 || stored.Values[0] == nil || stored.Values[1] == nil ||
 		string(stored.Values[1].Value) != sourceID {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, false, recordcodec.CorruptRecord()
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, false, recordcodec.CorruptRecord()
 	}
 	record, err := backuppolicy.DecodeBackupSourceRecord(stored.Values[0].Value)
 	if err != nil || record.ID != sourceID || record.EnvironmentID != environmentID ||
 		record.Kind != kind || record.TargetID != targetID {
-		return Versioned[backuppolicy.BackupSourceRecord]{}, false, recordcodec.CorruptRecord()
+		return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{}, false, recordcodec.CorruptRecord()
 	}
-	return Versioned[backuppolicy.BackupSourceRecord]{
+	return etcdstore.Versioned[backuppolicy.BackupSourceRecord]{
 		Record: record, Revision: stored.Values[0].ModRevision, ReadRevision: stored.ReadRevision,
 	}, true, nil
 }
 
 func validateBackupSourceHierarchy(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	kind core.BackupSourceKind,
 	targetID string,
 ) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"time"
@@ -16,8 +17,8 @@ import (
 )
 
 type EntrySecretRepository interface {
-	ResolveSecret(context.Context, string, string) (etcd.Versioned[secretrecord.Record], error)
-	GetSecretValue(context.Context, etcd.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
+	ResolveSecret(context.Context, string, string) (etcdstore.Versioned[secretrecord.Record], error)
+	GetSecretValue(context.Context, etcdstore.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
 }
 
 type EntryFactResolver interface {

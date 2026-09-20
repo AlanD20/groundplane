@@ -29,12 +29,12 @@ func newZoneRepository(store hierarchyStore) (*ZoneRepository, error) {
 	return &ZoneRepository{store: store}, nil
 }
 
-func (repository *ZoneRepository) GetZone(ctx context.Context, id string) (Versioned[zonerecord.Record], error) {
+func (repository *ZoneRepository) GetZone(ctx context.Context, id string) (etcdstore.Versioned[zonerecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[zonerecord.Record]{}, err
+		return etcdstore.Versioned[zonerecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindNetwork, id); err != nil {
-		return Versioned[zonerecord.Record]{}, err
+		return etcdstore.Versioned[zonerecord.Record]{}, err
 	}
 	return findZoneAtRevision(ctx, repository.store, id, 0)
 }
@@ -42,28 +42,28 @@ func (repository *ZoneRepository) GetZone(ctx context.Context, id string) (Versi
 func (repository *ZoneRepository) ListZones(
 	ctx context.Context,
 	environmentID string,
-	request PageRequest,
-) (Page[zonerecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[zonerecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
-		return Page[zonerecord.Record]{}, err
+		return etcdstore.Page[zonerecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Page[zonerecord.Record]{}, err
+		return etcdstore.Page[zonerecord.Record]{}, err
 	}
 	limit, revision, lastID, query, err := normalizePageRequest(
 		request, "zones", "environment", environmentID, "", ids.KindNetwork,
 	)
 	if err != nil {
-		return Page[zonerecord.Record]{}, err
+		return etcdstore.Page[zonerecord.Record]{}, err
 	}
 	projection, found, err := currentEnvironmentProjectionAtRevision(
 		ctx, repository.store, environmentID, revision,
 	)
 	if err != nil {
-		return Page[zonerecord.Record]{}, err
+		return etcdstore.Page[zonerecord.Record]{}, err
 	}
 	if !found {
-		return Page[zonerecord.Record]{Items: []Versioned[zonerecord.Record]{}, Revision: projection.ReadRevision}, nil
+		return etcdstore.Page[zonerecord.Record]{Items: []etcdstore.Versioned[zonerecord.Record]{}, Revision: projection.ReadRevision}, nil
 	}
 	desired := append([]EnvironmentZoneProjection(nil), projection.Record.DesiredZones...)
 	sort.Slice(desired, func(left, right int) bool {
@@ -73,11 +73,11 @@ func (repository *ZoneRepository) ListZones(
 		return desired[index].Desired.ID > lastID
 	})
 	end := min(start+limit, len(desired))
-	items := make([]Versioned[zonerecord.Record], 0, end-start)
+	items := make([]etcdstore.Versioned[zonerecord.Record], 0, end-start)
 	for _, value := range desired[start:end] {
 		joined, joinErr := joinEnvironmentZone(projection, value)
 		if joinErr != nil {
-			return Page[zonerecord.Record]{}, joinErr
+			return etcdstore.Page[zonerecord.Record]{}, joinErr
 		}
 		items = append(items, joined)
 	}
@@ -88,10 +88,10 @@ func (repository *ZoneRepository) ListZones(
 			LastID: desired[end-1].Desired.ID, Query: query,
 		})
 		if err != nil {
-			return Page[zonerecord.Record]{}, err
+			return etcdstore.Page[zonerecord.Record]{}, err
 		}
 	}
-	return Page[zonerecord.Record]{Items: items, NextCursor: next, Revision: projection.ReadRevision}, nil
+	return etcdstore.Page[zonerecord.Record]{Items: items, NextCursor: next, Revision: projection.ReadRevision}, nil
 }
 
 func findZoneAtRevision(
@@ -99,19 +99,19 @@ func findZoneAtRevision(
 	store hierarchyStore,
 	zoneID string,
 	revision int64,
-) (Versioned[zonerecord.Record], error) {
+) (etcdstore.Versioned[zonerecord.Record], error) {
 	start := ""
 	fixedRevision := revision
-	var matched *Versioned[zonerecord.Record]
+	var matched *etcdstore.Versioned[zonerecord.Record]
 	for {
 		page, err := store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: environmentDesiredHeadScanPrefix, StartExclusive: start, Limit: 200, Revision: fixedRevision,
 		})
 		if err != nil {
-			return Versioned[zonerecord.Record]{}, err
+			return etcdstore.Versioned[zonerecord.Record]{}, err
 		}
 		if page == nil || page.ReadRevision <= 0 {
-			return Versioned[zonerecord.Record]{}, errs.New(errs.KindInternal, "Environment desired head scan is invalid")
+			return etcdstore.Versioned[zonerecord.Record]{}, errs.New(errs.KindInternal, "Environment desired head scan is invalid")
 		}
 		if fixedRevision == 0 {
 			fixedRevision = page.ReadRevision
@@ -126,13 +126,13 @@ func findZoneAtRevision(
 				strings.TrimPrefix(value.Key, environmentDesiredHeadScanPrefix), "/current",
 			)
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
-				return Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
+				return etcdstore.Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
 			}
 			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
 				ctx, store, environmentID, fixedRevision,
 			)
 			if projectionErr != nil {
-				return Versioned[zonerecord.Record]{}, projectionErr
+				return etcdstore.Versioned[zonerecord.Record]{}, projectionErr
 			}
 			if !found {
 				continue
@@ -142,11 +142,11 @@ func findZoneAtRevision(
 					continue
 				}
 				if matched != nil {
-					return Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
+					return etcdstore.Versioned[zonerecord.Record]{}, corruptEnvironmentComposeProjection()
 				}
 				joined, joinErr := joinEnvironmentZone(projection, desired)
 				if joinErr != nil {
-					return Versioned[zonerecord.Record]{}, joinErr
+					return etcdstore.Versioned[zonerecord.Record]{}, joinErr
 				}
 				matched = &joined
 			}
@@ -155,11 +155,11 @@ func findZoneAtRevision(
 			break
 		}
 		if len(page.Values) == 0 {
-			return Versioned[zonerecord.Record]{}, errs.New(errs.KindInternal, "Environment desired head scan did not advance")
+			return etcdstore.Versioned[zonerecord.Record]{}, errs.New(errs.KindInternal, "Environment desired head scan did not advance")
 		}
 	}
 	if matched == nil {
-		return Versioned[zonerecord.Record]{}, errs.New(errs.KindZoneNotFound, "Zone was not found")
+		return etcdstore.Versioned[zonerecord.Record]{}, errs.New(errs.KindZoneNotFound, "Zone was not found")
 	}
 	return *matched, nil
 }

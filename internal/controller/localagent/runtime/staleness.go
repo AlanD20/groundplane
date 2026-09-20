@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
@@ -12,7 +13,7 @@ import (
 )
 
 type staleAgentReader interface {
-	GetSingleton(context.Context) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	GetSingleton(context.Context) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
 }
 
 type staleAgentTaskTimeout interface {

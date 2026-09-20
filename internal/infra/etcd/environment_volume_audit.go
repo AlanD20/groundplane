@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,7 +24,7 @@ func (repository *HierarchyRepository) ValidateEnvironmentVolumeDirs(
 	}
 	tenantCursor := ""
 	for {
-		tenants, err := repository.ListTenants(ctx, PageRequest{
+		tenants, err := repository.ListTenants(ctx, etcdstore.PageRequest{
 			Limit: environmentVolumeAuditPageSize, Cursor: tenantCursor,
 		})
 		if err != nil {
@@ -42,7 +43,7 @@ func (repository *HierarchyRepository) ValidateEnvironmentVolumeDirs(
 
 	backingCursor := ""
 	for {
-		projects, err := repository.ListBackingProjects(ctx, PageRequest{
+		projects, err := repository.ListBackingProjects(ctx, etcdstore.PageRequest{
 			Limit: environmentVolumeAuditPageSize, Cursor: backingCursor,
 		})
 		if err != nil {
@@ -67,7 +68,7 @@ func (repository *HierarchyRepository) validateTenantEnvironmentVolumeDirs(
 ) error {
 	projectCursor := ""
 	for {
-		projects, err := repository.ListTenantProjects(ctx, tenantID, PageRequest{
+		projects, err := repository.ListTenantProjects(ctx, tenantID, etcdstore.PageRequest{
 			Limit: environmentVolumeAuditPageSize, Cursor: projectCursor,
 		})
 		if err != nil {
@@ -92,7 +93,7 @@ func (repository *HierarchyRepository) validateProjectEnvironmentVolumeDirs(
 ) error {
 	environmentCursor := ""
 	for {
-		environments, err := repository.ListEnvironments(ctx, project.ID, PageRequest{
+		environments, err := repository.ListEnvironments(ctx, project.ID, etcdstore.PageRequest{
 			Limit: environmentVolumeAuditPageSize, Cursor: environmentCursor,
 		})
 		if err != nil {

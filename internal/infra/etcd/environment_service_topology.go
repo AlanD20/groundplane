@@ -18,12 +18,12 @@ const environmentDesiredHeadScanPrefix = "/v1/records/environment-blueprints/"
 func (repository *ServiceRepository) GetService(
 	ctx context.Context,
 	serviceID string,
-) (Versioned[ServiceRecord], error) {
+) (etcdstore.Versioned[ServiceRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ServiceRecord]{}, err
+		return etcdstore.Versioned[ServiceRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindService, serviceID); err != nil {
-		return Versioned[ServiceRecord]{}, err
+		return etcdstore.Versioned[ServiceRecord]{}, err
 	}
 	return findServiceAtRevision(ctx, repository.store, serviceID, 0)
 }
@@ -33,14 +33,14 @@ func (repository *ServiceRepository) GetServiceRevision(
 	environmentID string,
 	revisionID string,
 	serviceID string,
-) (Versioned[ServiceRecord], error) {
+) (etcdstore.Versioned[ServiceRecord], error) {
 	hierarchy := &HierarchyRepository{store: repository.store}
 	projection, found, err := hierarchy.GetEnvironmentComposeProjectionRevision(ctx, environmentID, revisionID)
 	if err != nil {
-		return Versioned[ServiceRecord]{}, err
+		return etcdstore.Versioned[ServiceRecord]{}, err
 	}
 	if !found {
-		return Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
+		return etcdstore.Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
 	}
 	return joinEnvironmentService(ctx, repository.store, projection, serviceID,
 		environmentBlueprintRootKey(environmentID, revisionID))
@@ -50,16 +50,16 @@ func (repository *ServiceRepository) GetServiceByName(
 	ctx context.Context,
 	environmentID string,
 	name string,
-) (Versioned[ServiceRecord], error) {
+) (etcdstore.Versioned[ServiceRecord], error) {
 	if name == "" {
-		return Versioned[ServiceRecord]{}, errs.New(errs.KindValidationFailed, "Service name is required")
+		return etcdstore.Versioned[ServiceRecord]{}, errs.New(errs.KindValidationFailed, "Service name is required")
 	}
 	projection, found, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, environmentID, 0)
 	if err != nil {
-		return Versioned[ServiceRecord]{}, err
+		return etcdstore.Versioned[ServiceRecord]{}, err
 	}
 	if !found {
-		return Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
+		return etcdstore.Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
 	}
 	for _, service := range projection.Record.DesiredServices {
 		if service.Desired.Name == name &&
@@ -68,43 +68,43 @@ func (repository *ServiceRepository) GetServiceByName(
 				environmentBlueprintHeadKey(environmentID))
 		}
 	}
-	return Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
+	return etcdstore.Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
 }
 
 func (repository *ServiceRepository) ListServices(
 	ctx context.Context,
 	environmentID string,
-	request PageRequest,
-) (Page[ServiceRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[ServiceRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Page[ServiceRecord]{}, err
+		return etcdstore.Page[ServiceRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Page[ServiceRecord]{}, err
+		return etcdstore.Page[ServiceRecord]{}, err
 	}
 	limit, revision, lastID, query, err := normalizePageRequest(
 		request, "services", "environment", environmentID, "", ids.KindService,
 	)
 	if err != nil {
-		return Page[ServiceRecord]{}, err
+		return etcdstore.Page[ServiceRecord]{}, err
 	}
 	projection, found, err := currentEnvironmentProjectionAtRevision(ctx, repository.store, environmentID, revision)
 	if err != nil {
-		return Page[ServiceRecord]{}, err
+		return etcdstore.Page[ServiceRecord]{}, err
 	}
 	if !found {
-		return Page[ServiceRecord]{Items: []Versioned[ServiceRecord]{}, Revision: projection.ReadRevision}, nil
+		return etcdstore.Page[ServiceRecord]{Items: []etcdstore.Versioned[ServiceRecord]{}, Revision: projection.ReadRevision}, nil
 	}
 	desired := ordinaryEnvironmentServices(projection.Record)
 	sort.Slice(desired, func(left, right int) bool { return desired[left].Desired.ID < desired[right].Desired.ID })
 	start := sort.Search(len(desired), func(index int) bool { return desired[index].Desired.ID > lastID })
 	end := min(start+limit, len(desired))
-	items := make([]Versioned[ServiceRecord], 0, end-start)
+	items := make([]etcdstore.Versioned[ServiceRecord], 0, end-start)
 	for _, service := range desired[start:end] {
 		joined, joinErr := joinEnvironmentService(ctx, repository.store, projection, service.Desired.ID,
 			environmentBlueprintHeadKey(environmentID))
 		if joinErr != nil {
-			return Page[ServiceRecord]{}, joinErr
+			return etcdstore.Page[ServiceRecord]{}, joinErr
 		}
 		items = append(items, joined)
 	}
@@ -115,10 +115,10 @@ func (repository *ServiceRepository) ListServices(
 			LastID: desired[end-1].Desired.ID, Query: query,
 		})
 		if err != nil {
-			return Page[ServiceRecord]{}, err
+			return etcdstore.Page[ServiceRecord]{}, err
 		}
 	}
-	return Page[ServiceRecord]{Items: items, NextCursor: next, Revision: projection.ReadRevision}, nil
+	return etcdstore.Page[ServiceRecord]{Items: items, NextCursor: next, Revision: projection.ReadRevision}, nil
 }
 
 func currentEnvironmentProjectionAtRevision(
@@ -126,9 +126,9 @@ func currentEnvironmentProjectionAtRevision(
 	store hierarchyStore,
 	environmentID string,
 	revision int64,
-) (Versioned[EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Versioned[EnvironmentComposeProjection]{}, false, err
+		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
 	}
 	hierarchy := &HierarchyRepository{store: store}
 	return hierarchy.getEnvironmentComposeProjectionAtRevision(ctx, environmentID, revision)
@@ -139,19 +139,19 @@ func findServiceAtRevision(
 	store hierarchyStore,
 	serviceID string,
 	revision int64,
-) (Versioned[ServiceRecord], error) {
+) (etcdstore.Versioned[ServiceRecord], error) {
 	start := ""
 	fixedRevision := revision
-	var matched *Versioned[ServiceRecord]
+	var matched *etcdstore.Versioned[ServiceRecord]
 	for {
 		page, err := store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: environmentDesiredHeadScanPrefix, StartExclusive: start, Limit: 200, Revision: fixedRevision,
 		})
 		if err != nil {
-			return Versioned[ServiceRecord]{}, err
+			return etcdstore.Versioned[ServiceRecord]{}, err
 		}
 		if page == nil || page.ReadRevision <= 0 {
-			return Versioned[ServiceRecord]{}, errs.New(errs.KindInternal, "Environment desired head scan is invalid")
+			return etcdstore.Versioned[ServiceRecord]{}, errs.New(errs.KindInternal, "Environment desired head scan is invalid")
 		}
 		if fixedRevision == 0 {
 			fixedRevision = page.ReadRevision
@@ -167,7 +167,7 @@ func findServiceAtRevision(
 				"/current",
 			)
 			if strings.Contains(environmentID, "/") || ids.Validate(ids.KindEnvironment, environmentID) != nil {
-				return Versioned[ServiceRecord]{}, corruptEnvironmentComposeProjection()
+				return etcdstore.Versioned[ServiceRecord]{}, corruptEnvironmentComposeProjection()
 			}
 			projection, found, projectionErr := currentEnvironmentProjectionAtRevision(
 				ctx,
@@ -176,7 +176,7 @@ func findServiceAtRevision(
 				fixedRevision,
 			)
 			if projectionErr != nil {
-				return Versioned[ServiceRecord]{}, projectionErr
+				return etcdstore.Versioned[ServiceRecord]{}, projectionErr
 			}
 			if !found {
 				continue
@@ -189,12 +189,12 @@ func findServiceAtRevision(
 					continue
 				}
 				if matched != nil {
-					return Versioned[ServiceRecord]{}, corruptEnvironmentComposeProjection()
+					return etcdstore.Versioned[ServiceRecord]{}, corruptEnvironmentComposeProjection()
 				}
 				joined, joinErr := joinEnvironmentService(ctx, store, projection, serviceID,
 					environmentBlueprintHeadKey(environmentID))
 				if joinErr != nil {
-					return Versioned[ServiceRecord]{}, joinErr
+					return etcdstore.Versioned[ServiceRecord]{}, joinErr
 				}
 				matched = &joined
 			}
@@ -203,14 +203,14 @@ func findServiceAtRevision(
 			break
 		}
 		if len(page.Values) == 0 {
-			return Versioned[ServiceRecord]{}, errs.New(
+			return etcdstore.Versioned[ServiceRecord]{}, errs.New(
 				errs.KindInternal,
 				"Environment desired head scan did not advance",
 			)
 		}
 	}
 	if matched == nil {
-		return Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
+		return etcdstore.Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
 	}
 	return *matched, nil
 }
@@ -240,10 +240,10 @@ func componentGeneratedService(components []componentrecord.Record, serviceID st
 func joinEnvironmentService(
 	ctx context.Context,
 	store hierarchyStore,
-	projection Versioned[EnvironmentComposeProjection],
+	projection etcdstore.Versioned[EnvironmentComposeProjection],
 	serviceID string,
 	desiredFenceKey string,
-) (Versioned[ServiceRecord], error) {
+) (etcdstore.Versioned[ServiceRecord], error) {
 	var desired *EnvironmentServiceProjection
 	for index := range projection.Record.DesiredServices {
 		candidate := &projection.Record.DesiredServices[index]
@@ -253,16 +253,16 @@ func joinEnvironmentService(
 		}
 	}
 	if desired == nil {
-		return Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
+		return etcdstore.Versioned[ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
 	}
 	read, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{serviceRuntimeKey(serviceID)}, Revision: projection.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[ServiceRecord]{}, err
+		return etcdstore.Versioned[ServiceRecord]{}, err
 	}
 	if read == nil || len(read.Values) != 1 || read.ReadRevision != projection.ReadRevision {
-		return Versioned[ServiceRecord]{}, errs.New(errs.KindInternal, "Service runtime read is invalid")
+		return etcdstore.Versioned[ServiceRecord]{}, errs.New(errs.KindInternal, "Service runtime read is invalid")
 	}
 	runtime := core.ServiceRuntime{ServiceID: serviceID, RuntimeIntent: core.ServiceRuntimeIntentRunning}
 	runtimeRevision := int64(0)
@@ -270,7 +270,7 @@ func joinEnvironmentService(
 		sidecar, decodeErr := decodeServiceRuntimeRecord(read.Values[0].Value)
 		if decodeErr != nil || sidecar.EnvironmentID != desired.EnvironmentID || sidecar.ServiceID != serviceID ||
 			sidecar.BackingNetworkID != desired.BackingNetworkID {
-			return Versioned[ServiceRecord]{}, recordcodec.CorruptRecord()
+			return etcdstore.Versioned[ServiceRecord]{}, recordcodec.CorruptRecord()
 		}
 		runtime = sidecar.Runtime
 		runtimeRevision = read.Values[0].ModRevision
@@ -281,9 +281,9 @@ func joinEnvironmentService(
 		desiredFenceKey: desiredFenceKey, runtimeRevision: runtimeRevision,
 	}
 	if err := validateServiceRecord(record); err != nil {
-		return Versioned[ServiceRecord]{}, recordcodec.CorruptRecord()
+		return etcdstore.Versioned[ServiceRecord]{}, recordcodec.CorruptRecord()
 	}
-	return Versioned[ServiceRecord]{
+	return etcdstore.Versioned[ServiceRecord]{
 		Record:       record,
 		Revision:     projection.Revision,
 		ReadRevision: projection.ReadRevision,

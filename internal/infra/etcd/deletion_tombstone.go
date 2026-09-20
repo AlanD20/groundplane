@@ -65,31 +65,31 @@ func (repository *HierarchyRepository) GetDeletionTombstone(
 	ctx context.Context,
 	targetKind DeletionTargetKind,
 	targetID string,
-) (Versioned[DeletionTombstoneRecord], bool, error) {
+) (etcdstore.Versioned[DeletionTombstoneRecord], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[DeletionTombstoneRecord]{}, false, err
+		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, err
 	}
 	if err := validateDeletionTarget(targetKind, targetID); err != nil {
-		return Versioned[DeletionTombstoneRecord]{}, false, err
+		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, deletionTombstoneKey(string(targetKind), targetID))
 	if err != nil {
-		return Versioned[DeletionTombstoneRecord]{}, false, err
+		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, err
 	}
 	if result == nil {
-		return Versioned[DeletionTombstoneRecord]{}, false, errs.New(
+		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, errs.New(
 			errs.KindInternal,
 			"deletion tombstone read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return Versioned[DeletionTombstoneRecord]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[DeletionTombstoneRecord]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	record, err := decodeDeletionTombstone(result.Entry.Value)
 	if err != nil || record.TargetKind != targetKind || record.TargetID != targetID {
-		return Versioned[DeletionTombstoneRecord]{}, false, corruptDeletionTombstone()
+		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, corruptDeletionTombstone()
 	}
-	return Versioned[DeletionTombstoneRecord]{
+	return etcdstore.Versioned[DeletionTombstoneRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }
@@ -99,8 +99,8 @@ func (repository *HierarchyRepository) GetDeletionTombstone(
 // Environment and all indexes remain visible until finalization.
 func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	ctx context.Context,
-	project Versioned[hierarchyrecord.ProjectRecord],
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedBlueprintRevision int64,
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
@@ -352,7 +352,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			Value: epochValue,
 		},
 	}
-	fixedTenant := Versioned[hierarchyrecord.TenantRecord]{
+	fixedTenant := etcdstore.Versioned[hierarchyrecord.TenantRecord]{
 		Record: storedTenant, Revision: evidence.Values[2].ModRevision, ReadRevision: readRevision,
 	}
 	fixedProject := project
@@ -438,8 +438,8 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 }
 
 func classifyEnvironmentDeletionStartConflict(
-	project Versioned[hierarchyrecord.ProjectRecord],
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	operationID string,
 	expectedBlueprintRevision int64,
 	expectedEpochRevision int64,

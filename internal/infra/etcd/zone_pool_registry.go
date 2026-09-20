@@ -37,31 +37,31 @@ func zonePoolRegistryKey(environmentID string) string {
 	return "/v1/indexes/zones/by-subnet/environment/" + environmentID
 }
 
-func (r *ZoneRepository) getZonePoolRegistry(ctx context.Context, id string) (Versioned[zonePoolRegistry], error) {
+func (r *ZoneRepository) getZonePoolRegistry(ctx context.Context, id string) (etcdstore.Versioned[zonePoolRegistry], error) {
 	return r.getZonePoolRegistryAtRevision(ctx, id, 0)
 }
 
 func (r *ZoneRepository) getZonePoolRegistryAtRevision(
 	ctx context.Context,
 	id string, revision int64,
-) (Versioned[zonePoolRegistry], error) {
+) (etcdstore.Versioned[zonePoolRegistry], error) {
 	if r == nil || r.store == nil || ids.Validate(ids.KindEnvironment, id) != nil || revision < 0 {
-		return Versioned[zonePoolRegistry]{}, errs.New(errs.KindInternal, "Environment capacity read is invalid")
+		return etcdstore.Versioned[zonePoolRegistry]{}, errs.New(errs.KindInternal, "Environment capacity read is invalid")
 	}
 	result, err := r.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{zonePoolRegistryKey(id)}, Revision: revision})
 	if err != nil {
-		return Versioned[zonePoolRegistry]{}, err
+		return etcdstore.Versioned[zonePoolRegistry]{}, err
 	}
 	if len(result.Values) != 1 || result.Values[0] == nil {
-		return Versioned[zonePoolRegistry]{
+		return etcdstore.Versioned[zonePoolRegistry]{
 			Record: zonePoolRegistry{Reservations: map[string]string{}}, ReadRevision: result.ReadRevision,
 		}, nil
 	}
 	registry, err := recordcodec.Decode[zonePoolRegistry](result.Values[0].Value, "zone_pool_registry")
 	if err != nil || validateZonePoolRegistry(registry) != nil {
-		return Versioned[zonePoolRegistry]{}, corruptZonePoolRegistry()
+		return etcdstore.Versioned[zonePoolRegistry]{}, corruptZonePoolRegistry()
 	}
-	return Versioned[zonePoolRegistry]{
+	return etcdstore.Versioned[zonePoolRegistry]{
 		Record: registry, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }

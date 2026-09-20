@@ -9,7 +9,7 @@ import (
 func renameRecord[T any](
 	ctx context.Context,
 	store hierarchyStore,
-	current Versioned[T],
+	current etcdstore.Versioned[T],
 	replacement T,
 	primaryKey string,
 	oldSlugKey string,
@@ -20,7 +20,7 @@ func renameRecord[T any](
 	id string,
 	notFound errs.Kind,
 	encode func(T) ([]byte, error),
-) (Versioned[T], error) {
+) (etcdstore.Versioned[T], error) {
 	secondaryKeys := append([]string{oldSlugKey}, membershipKeys...)
 	tombstoneOffset := len(secondaryKeys)
 	secondaryKeys = append(secondaryKeys, tombstoneKey)
@@ -31,33 +31,33 @@ func renameRecord[T any](
 	}
 	secondary, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: secondaryKeys, Revision: current.ReadRevision})
 	if err != nil {
-		return Versioned[T]{}, err
+		return etcdstore.Versioned[T]{}, err
 	}
 	if len(secondary.Values) != len(secondaryKeys) || secondary.Values[0] == nil ||
 		string(secondary.Values[0].Value) != id {
-		return Versioned[T]{}, errs.New(errs.KindInternal, "slug index is missing or mismatched")
+		return etcdstore.Versioned[T]{}, errs.New(errs.KindInternal, "slug index is missing or mismatched")
 	}
 	for index := range membershipKeys {
 		value := secondary.Values[index+1]
 		if value == nil || string(value.Value) != id {
-			return Versioned[T]{}, errs.New(errs.KindInternal, "owner index is missing or mismatched")
+			return etcdstore.Versioned[T]{}, errs.New(errs.KindInternal, "owner index is missing or mismatched")
 		}
 	}
 	if secondary.Values[tombstoneOffset] != nil {
-		return Versioned[T]{}, errs.New(errs.KindResourceInUse, "resource deletion is in progress")
+		return etcdstore.Versioned[T]{}, errs.New(errs.KindResourceInUse, "resource deletion is in progress")
 	}
 	if newSlugOffset >= 0 && secondary.Values[newSlugOffset] != nil {
-		return Versioned[T]{}, errs.New(errs.KindSlugConflict, "slug is already in use")
+		return etcdstore.Versioned[T]{}, errs.New(errs.KindSlugConflict, "slug is already in use")
 	}
 	if newSlugOffset < 0 {
 		if err := validateContext(ctx); err != nil {
-			return Versioned[T]{}, err
+			return etcdstore.Versioned[T]{}, err
 		}
 		return current, nil
 	}
 	value, err := encode(replacement)
 	if err != nil {
-		return Versioned[T]{}, err
+		return etcdstore.Versioned[T]{}, err
 	}
 	conditions := []etcdstore.Condition{
 		{Key: primaryKey, ModRevision: current.Revision},
@@ -74,19 +74,19 @@ func renameRecord[T any](
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: newSlugKey, Value: []byte(id)},
 	)
 	if err := validateContext(ctx); err != nil {
-		return Versioned[T]{}, err
+		return etcdstore.Versioned[T]{}, err
 	}
 	result, err := store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[T]{}, err
+		return etcdstore.Versioned[T]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[T]{}, diagnoseRename(
+		return etcdstore.Versioned[T]{}, diagnoseRename(
 			ctx, store, primaryKey, current.Revision, oldSlugKey, newSlugKey,
 			membershipKeys, tombstoneKey, kind, id, notFound,
 		)
 	}
-	return Versioned[T]{Record: replacement, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return etcdstore.Versioned[T]{Record: replacement, Revision: result.Revision, ReadRevision: result.Revision}, nil
 }
 
 func diagnoseRename(

@@ -183,8 +183,8 @@ func newPlatformTaskInitiation(actor TaskActor) (TaskInitiation, error) {
 }
 
 func newProjectTaskInitiation(
-	tenant *Versioned[hierarchyrecord.TenantRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	actor TaskActor,
 ) (TaskInitiation, error) {
 	owner, err := ProjectTaskOwner(project.Record)
@@ -203,9 +203,9 @@ func newProjectTaskInitiation(
 }
 
 func newEnvironmentTaskInitiation(
-	tenant *Versioned[hierarchyrecord.TenantRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	actor TaskActor,
 ) (TaskInitiation, error) {
 	owner, err := EnvironmentTaskOwner(project.Record, environment.Record)
@@ -228,8 +228,8 @@ func newEnvironmentTaskInitiation(
 }
 
 func newEnvironmentCreationTaskInitiation(
-	tenant *Versioned[hierarchyrecord.TenantRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment hierarchyrecord.EnvironmentRecord,
 	actor TaskActor,
 ) (TaskInitiation, error) {
@@ -253,8 +253,8 @@ func loadTaskInitiationTenant(
 	store interface {
 		Get(context.Context, string) (*etcdstore.GetResult, error)
 	},
-	project Versioned[hierarchyrecord.ProjectRecord],
-) (*Versioned[hierarchyrecord.TenantRecord], error) {
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+) (*etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
 	if project.Record.Kind == hierarchyrecord.ProjectKindBacking {
 		return nil, nil
 	}
@@ -278,14 +278,14 @@ func loadTaskInitiationTenant(
 	if result.Entry.Key != hierarchyrecord.TenantKey(project.Record.TenantID) || tenant.ID != project.Record.TenantID {
 		return nil, errs.New(errs.KindInternal, "task initiation tenant is corrupt")
 	}
-	return &Versioned[hierarchyrecord.TenantRecord]{
+	return &etcdstore.Versioned[hierarchyrecord.TenantRecord]{
 		Record: tenant, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }
 
 func taskInitiationTenantFence(
-	tenant *Versioned[hierarchyrecord.TenantRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 ) ([]etcdstore.Condition, error) {
 	switch project.Record.Kind {
 	case hierarchyrecord.ProjectKindTenant:
@@ -304,7 +304,7 @@ func taskInitiationTenantFence(
 }
 
 func newInheritedTaskInitiation(
-	parent Versioned[TaskRecord],
+	parent etcdstore.Versioned[TaskRecord],
 	actor TaskActor,
 ) (TaskInitiation, error) {
 	if err := validateTaskRecord(parent.Record); err != nil {

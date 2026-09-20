@@ -11,7 +11,7 @@ import (
 )
 
 func normalizePageRequest(
-	request PageRequest,
+	request etcdstore.PageRequest,
 	collection string,
 	ownerKind string,
 	ownerID string,
@@ -20,9 +20,9 @@ func normalizePageRequest(
 ) (int, int64, string, string, error) {
 	limit := request.Limit
 	if limit == 0 {
-		limit = DefaultPageLimit
+		limit = etcdstore.DefaultPageLimit
 	}
-	if limit < 1 || limit > MaximumPageLimit {
+	if limit < 1 || limit > etcdstore.MaximumPageLimit {
 		return 0, 0, "", "", errs.New(
 			errs.KindValidationFailed,
 			"page limit must be between 1 and 200",
@@ -76,52 +76,52 @@ func listPrimaryPage[T any](
 	ownerID string,
 	prefix string,
 	idKind ids.Kind,
-	request PageRequest,
+	request etcdstore.PageRequest,
 	decode func([]byte) (T, error),
 	identity func(T) string,
 	matches func(T) bool,
-) (Page[T], error) {
+) (etcdstore.Page[T], error) {
 	if err := validateContext(ctx); err != nil {
-		return Page[T]{}, err
+		return etcdstore.Page[T]{}, err
 	}
 	limit, revision, start, query, err := normalizePageRequest(
 		request, collection, ownerKind, ownerID, prefix, idKind,
 	)
 	if err != nil {
-		return Page[T]{}, err
+		return etcdstore.Page[T]{}, err
 	}
 	rangeResult, err := store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: start, Limit: int64(limit), Revision: revision,
 	})
 	if err != nil {
-		return Page[T]{}, err
+		return etcdstore.Page[T]{}, err
 	}
 	defer clearRangeKeyValues(rangeResult.Values)
-	items := make([]Versioned[T], 0, len(rangeResult.Values))
+	items := make([]etcdstore.Versioned[T], 0, len(rangeResult.Values))
 	for _, value := range rangeResult.Values {
 		if err := validateListKey(prefix, value.Key, idKind); err != nil {
-			return Page[T]{}, errs.New(errs.KindInternal, "primary list contains an invalid key")
+			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "primary list contains an invalid key")
 		}
 		record, err := decode(value.Value)
 		if err != nil {
-			return Page[T]{}, err
+			return etcdstore.Page[T]{}, err
 		}
 		expectedID := strings.TrimPrefix(value.Key, prefix)
 		if identity(record) != expectedID {
-			return Page[T]{}, errs.New(errs.KindInternal, "primary list key does not match its record id")
+			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "primary list key does not match its record id")
 		}
 		if !matches(record) {
-			return Page[T]{}, errs.New(errs.KindInternal, "primary list contains a record outside its scope")
+			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "primary list contains a record outside its scope")
 		}
-		items = append(items, Versioned[T]{
+		items = append(items, etcdstore.Versioned[T]{
 			Record: record, Revision: value.ModRevision, ReadRevision: rangeResult.ReadRevision,
 		})
 	}
 	next, err := nextPageCursor(rangeResult, query, idKind, prefix)
 	if err != nil {
-		return Page[T]{}, err
+		return etcdstore.Page[T]{}, err
 	}
-	return Page[T]{Items: items, NextCursor: next, Revision: rangeResult.ReadRevision}, nil
+	return etcdstore.Page[T]{Items: items, NextCursor: next, Revision: rangeResult.ReadRevision}, nil
 }
 
 func listFilteredPrimaryPage[T any](
@@ -132,45 +132,45 @@ func listFilteredPrimaryPage[T any](
 	filterID string,
 	prefix string,
 	idKind ids.Kind,
-	request PageRequest,
+	request etcdstore.PageRequest,
 	decode func([]byte) (T, error),
 	identity func(T) string,
 	matches func(T) bool,
-) (Page[T], error) {
+) (etcdstore.Page[T], error) {
 	if err := validateContext(ctx); err != nil {
-		return Page[T]{}, err
+		return etcdstore.Page[T]{}, err
 	}
 	limit, revision, start, query, err := normalizePageRequest(
 		request, collection, filterKind, filterID, prefix, idKind,
 	)
 	if err != nil {
-		return Page[T]{}, err
+		return etcdstore.Page[T]{}, err
 	}
-	items := make([]Versioned[T], 0, limit)
+	items := make([]etcdstore.Versioned[T], 0, limit)
 	continuations := make([]etcdstore.KeyValue, 0, limit)
 	readRevision := revision
 	for {
 		rangeResult, err := store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: prefix, StartExclusive: start, Limit: int64(MaximumPageLimit), Revision: readRevision,
+			Prefix: prefix, StartExclusive: start, Limit: int64(etcdstore.MaximumPageLimit), Revision: readRevision,
 		})
 		if err != nil {
-			return Page[T]{}, err
+			return etcdstore.Page[T]{}, err
 		}
 		if rangeResult.ReadRevision <= 0 || (readRevision > 0 && rangeResult.ReadRevision != readRevision) {
-			return Page[T]{}, errs.New(errs.KindInternal, "filtered primary list changed revision")
+			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "filtered primary list changed revision")
 		}
 		readRevision = rangeResult.ReadRevision
 		for _, value := range rangeResult.Values {
 			if err := validateListKey(prefix, value.Key, idKind); err != nil {
-				return Page[T]{}, errs.New(errs.KindInternal, "filtered primary list contains an invalid key")
+				return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "filtered primary list contains an invalid key")
 			}
 			record, err := decode(value.Value)
 			if err != nil {
-				return Page[T]{}, err
+				return etcdstore.Page[T]{}, err
 			}
 			expectedID := strings.TrimPrefix(value.Key, prefix)
 			if identity(record) != expectedID {
-				return Page[T]{}, errs.New(errs.KindInternal, "filtered primary list key does not match its record id")
+				return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "filtered primary list key does not match its record id")
 			}
 			if !matches(record) {
 				continue
@@ -180,20 +180,20 @@ func listFilteredPrimaryPage[T any](
 					Values: continuations, More: true, ReadRevision: readRevision,
 				}, query, idKind, prefix)
 				if err != nil {
-					return Page[T]{}, err
+					return etcdstore.Page[T]{}, err
 				}
-				return Page[T]{Items: items, NextCursor: next, Revision: readRevision}, nil
+				return etcdstore.Page[T]{Items: items, NextCursor: next, Revision: readRevision}, nil
 			}
-			items = append(items, Versioned[T]{
+			items = append(items, etcdstore.Versioned[T]{
 				Record: record, Revision: value.ModRevision, ReadRevision: readRevision,
 			})
 			continuations = append(continuations, value)
 		}
 		if !rangeResult.More {
-			return Page[T]{Items: items, Revision: readRevision}, nil
+			return etcdstore.Page[T]{Items: items, Revision: readRevision}, nil
 		}
 		if len(rangeResult.Values) == 0 {
-			return Page[T]{}, errs.New(errs.KindInternal, "filtered primary list returned an empty continuation")
+			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "filtered primary list returned an empty continuation")
 		}
 		start = rangeResult.Values[len(rangeResult.Values)-1].Key
 	}
@@ -208,11 +208,11 @@ func listIndexPage[T any](
 	prefix string,
 	primaryKey func(string) string,
 	idKind ids.Kind,
-	request PageRequest,
+	request etcdstore.PageRequest,
 	decode func([]byte) (T, error),
 	identity func(T) string,
 	matches func(T) bool,
-) (Page[T], error) {
+) (etcdstore.Page[T], error) {
 	return listIndexPageAtRevision(
 		ctx, store, collection, ownerKind, ownerID, prefix, primaryKey, idKind,
 		request, decode, identity, matches, 0,
@@ -228,81 +228,81 @@ func listIndexPageAtRevision[T any](
 	prefix string,
 	primaryKey func(string) string,
 	idKind ids.Kind,
-	request PageRequest,
+	request etcdstore.PageRequest,
 	decode func([]byte) (T, error),
 	identity func(T) string,
 	matches func(T) bool,
 	anchorRevision int64,
-) (Page[T], error) {
+) (etcdstore.Page[T], error) {
 	if err := validateContext(ctx); err != nil {
-		return Page[T]{}, err
+		return etcdstore.Page[T]{}, err
 	}
 	limit, revision, start, query, err := normalizePageRequest(
 		request, collection, ownerKind, ownerID, prefix, idKind,
 	)
 	if err != nil {
-		return Page[T]{}, err
+		return etcdstore.Page[T]{}, err
 	}
 	if revision == 0 {
 		revision = anchorRevision
 	} else if anchorRevision > 0 && revision != anchorRevision {
-		return Page[T]{}, errs.New(errs.KindStateConflict, "list cursor Script-set generation changed")
+		return etcdstore.Page[T]{}, errs.New(errs.KindStateConflict, "list cursor Script-set generation changed")
 	}
 	rangeResult, err := store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, StartExclusive: start, Limit: int64(limit), Revision: revision,
 	})
 	if err != nil {
-		return Page[T]{}, err
+		return etcdstore.Page[T]{}, err
 	}
 	defer clearRangeKeyValues(rangeResult.Values)
 	if len(rangeResult.Values) == 0 {
-		return Page[T]{Items: []Versioned[T]{}, Revision: rangeResult.ReadRevision}, nil
+		return etcdstore.Page[T]{Items: []etcdstore.Versioned[T]{}, Revision: rangeResult.ReadRevision}, nil
 	}
 	primaryKeys := make([]string, len(rangeResult.Values))
 	expectedIDs := make([]string, len(rangeResult.Values))
 	for index, value := range rangeResult.Values {
 		if err := validateListKey(prefix, value.Key, idKind); err != nil {
-			return Page[T]{}, errs.New(errs.KindInternal, "owner index contains an invalid key")
+			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "owner index contains an invalid key")
 		}
 		id := strings.TrimPrefix(value.Key, prefix)
 		if string(value.Value) != id {
-			return Page[T]{}, errs.New(errs.KindInternal, "owner index value does not match its key")
+			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "owner index value does not match its key")
 		}
 		primaryKeys[index] = primaryKey(id)
 		expectedIDs[index] = id
 	}
 	primaries, err := getManyBatchedAtRevision(ctx, store, primaryKeys, rangeResult.ReadRevision)
 	if err != nil {
-		return Page[T]{}, err
+		return etcdstore.Page[T]{}, err
 	}
 	defer clearKeyValues(primaries.Values)
 	if len(primaries.Values) != len(primaryKeys) {
-		return Page[T]{}, errs.New(errs.KindInternal, "owner index read returned an invalid primary count")
+		return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "owner index read returned an invalid primary count")
 	}
-	items := make([]Versioned[T], 0, len(primaryKeys))
+	items := make([]etcdstore.Versioned[T], 0, len(primaryKeys))
 	for index, value := range primaries.Values {
 		if value == nil {
-			return Page[T]{}, errs.New(errs.KindInternal, "owner index references a missing primary record")
+			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "owner index references a missing primary record")
 		}
 		record, err := decode(value.Value)
 		if err != nil {
-			return Page[T]{}, err
+			return etcdstore.Page[T]{}, err
 		}
 		if identity(record) != expectedIDs[index] {
-			return Page[T]{}, errs.New(errs.KindInternal, "owner index id does not match its primary record")
+			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "owner index id does not match its primary record")
 		}
 		if !matches(record) {
-			return Page[T]{}, errs.New(errs.KindInternal, "owner index does not match its primary record")
+			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "owner index does not match its primary record")
 		}
-		items = append(items, Versioned[T]{
+		items = append(items, etcdstore.Versioned[T]{
 			Record: record, Revision: value.ModRevision, ReadRevision: rangeResult.ReadRevision,
 		})
 	}
 	next, err := nextPageCursor(rangeResult, query, idKind, prefix)
 	if err != nil {
-		return Page[T]{}, err
+		return etcdstore.Page[T]{}, err
 	}
-	return Page[T]{Items: items, NextCursor: next, Revision: rangeResult.ReadRevision}, nil
+	return etcdstore.Page[T]{Items: items, NextCursor: next, Revision: rangeResult.ReadRevision}, nil
 }
 
 func getManyBatchedAtRevision(

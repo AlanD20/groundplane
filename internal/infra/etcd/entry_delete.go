@@ -9,9 +9,9 @@ import (
 
 func (repository *EntryRepository) DeleteEntry(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	current Versioned[entryrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[entryrecord.Record],
 ) (int64, error) {
 	if err := validateEntryHierarchy(ctx, environment, project, current.Record); err != nil {
 		return 0, err

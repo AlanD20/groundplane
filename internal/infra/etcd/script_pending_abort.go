@@ -99,7 +99,7 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 
 func (repository *TaskRepository) preparePendingScriptAbort(
 	ctx context.Context,
-	task Versioned[TaskRecord],
+	task etcdstore.Versioned[TaskRecord],
 	requestedTerminalAt time.Time,
 ) (pendingScriptAbortChange, error) {
 	if task.Record.Type != TaskScript && !blueprintScriptTaskShape(task.Record) {
@@ -193,7 +193,7 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 
 func (repository *TaskRepository) beginPendingScriptAbort(
 	ctx context.Context,
-	task Versioned[TaskRecord],
+	task etcdstore.Versioned[TaskRecord],
 	requestedTerminalAt time.Time,
 	steps []releaseHookExecutionStep,
 	executions []ScriptExecutionRecord,
@@ -377,7 +377,7 @@ func scriptControllerCleanupSHA256(
 
 func (repository *TaskRepository) validatePendingScriptAbortReplay(
 	ctx context.Context,
-	task Versioned[TaskRecord],
+	task etcdstore.Versioned[TaskRecord],
 ) error {
 	if task.Record.Type != TaskScript && !blueprintScriptTaskShape(task.Record) {
 		return nil

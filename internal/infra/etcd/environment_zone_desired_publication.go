@@ -19,8 +19,8 @@ import (
 // Zone create. The immutable Environment revision remains the only desired
 // record; the pool registry is an operational reservation committed beside it.
 type EnvironmentZoneDesiredPublication struct {
-	Project              Versioned[hierarchyrecord.ProjectRecord]
-	Environment          Versioned[hierarchyrecord.EnvironmentRecord]
+	Project              etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	Environment          etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	ExpectedHeadRevision int64
 	Claim                EnvironmentBlueprintStageClaim
 	Revision             EnvironmentDesiredRevisionIdentity

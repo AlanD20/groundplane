@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"net/http"
 	"time"
@@ -26,16 +27,16 @@ const (
 )
 
 type routeMutationRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	GetRoute(context.Context, string) (etcd.Versioned[routerecord.Record], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	GetRoute(context.Context, string) (etcdstore.Versioned[routerecord.Record], error)
 	BeginRouteMutationWithTask(
 		context.Context,
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[etcd.ServiceRecord],
-		*etcd.Versioned[routerecord.Record],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[etcd.ServiceRecord],
+		*etcdstore.Versioned[routerecord.Record],
 		routerecord.Record,
 		etcd.RouteMutationIntent,
 		etcd.TaskRecord,
@@ -46,13 +47,13 @@ type routeMutationRepository interface {
 type routeMutationProjectionRepository interface {
 	GetEnvironmentAppliedComposeProjection(
 		context.Context, string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 }
 
 type routeMutationDesiredProjectionRepository interface {
 	GetEnvironmentComposeProjection(
 		context.Context, string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 }
 
 type routeMutationTaskPlanner interface {
@@ -391,15 +392,15 @@ func (service *routeMutationService) editRouteOnce(
 
 func (service *routeMutationService) prepareRouteMutationTask(
 	ctx context.Context,
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record routerecord.Record,
-	previous *etcd.Versioned[routerecord.Record],
+	previous *etcdstore.Versioned[routerecord.Record],
 	idempotencyKey string,
 ) (etcd.RouteMutationTaskPreparation, error) {
-	var applied *etcd.Versioned[etcd.EnvironmentComposeProjection]
+	var applied *etcdstore.Versioned[etcd.EnvironmentComposeProjection]
 	{
-		var projection etcd.Versioned[etcd.EnvironmentComposeProjection]
+		var projection etcdstore.Versioned[etcd.EnvironmentComposeProjection]
 		var found bool
 		var err error
 		if projectionRepository, ok := service.repository.(routeMutationDesiredProjectionRepository); ok {
@@ -502,25 +503,25 @@ func (service *routeMutationService) routeHierarchy(
 	environmentID string,
 	targetServiceID string,
 ) (
-	etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	etcd.Versioned[hierarchyrecord.ProjectRecord],
-	etcd.Versioned[etcd.ServiceRecord],
+	etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	etcdstore.Versioned[etcd.ServiceRecord],
 	error,
 ) {
 	environment, err := service.repository.GetEnvironment(ctx, environmentID)
 	if err != nil {
-		return etcd.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcd.Versioned[hierarchyrecord.ProjectRecord]{},
-			etcd.Versioned[etcd.ServiceRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcdstore.Versioned[hierarchyrecord.ProjectRecord]{},
+			etcdstore.Versioned[etcd.ServiceRecord]{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return etcd.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcd.Versioned[hierarchyrecord.ProjectRecord]{},
-			etcd.Versioned[etcd.ServiceRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcdstore.Versioned[hierarchyrecord.ProjectRecord]{},
+			etcdstore.Versioned[etcd.ServiceRecord]{}, err
 	}
 	target, err := service.repository.GetService(ctx, targetServiceID)
 	if err != nil {
-		return etcd.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcd.Versioned[hierarchyrecord.ProjectRecord]{},
-			etcd.Versioned[etcd.ServiceRecord]{}, err
+		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcdstore.Versioned[hierarchyrecord.ProjectRecord]{},
+			etcdstore.Versioned[etcd.ServiceRecord]{}, err
 	}
 	return environment, project, target, nil
 }

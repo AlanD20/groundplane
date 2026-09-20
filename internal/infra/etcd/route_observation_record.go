@@ -45,27 +45,27 @@ func routeObservationAtRevision(
 func routeRecordFromDesiredProjection(
 	ctx context.Context,
 	store hierarchyStore,
-	projection Versioned[EnvironmentComposeProjection],
+	projection etcdstore.Versioned[EnvironmentComposeProjection],
 	desired EnvironmentRouteProjection,
-) (Versioned[routerecord.Record], error) {
+) (etcdstore.Versioned[routerecord.Record], error) {
 	if desired.EnvironmentID != projection.Record.EnvironmentID {
-		return Versioned[routerecord.Record]{}, recordcodec.CorruptRecord()
+		return etcdstore.Versioned[routerecord.Record]{}, recordcodec.CorruptRecord()
 	}
 	observation, err := routeObservationAtRevision(
 		ctx, store, desired.EnvironmentID, desired.Desired.ID,
 		desired.DesiredGeneration, projection.ReadRevision,
 	)
 	if err != nil {
-		return Versioned[routerecord.Record]{}, err
+		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
 	record := routerecord.Record{
 		EnvironmentID: desired.EnvironmentID, Desired: desired.Desired,
 		DesiredGeneration: desired.DesiredGeneration, Observed: observation,
 	}
 	if err := routerecord.ValidateRecord(record); err != nil {
-		return Versioned[routerecord.Record]{}, recordcodec.CorruptRecord()
+		return etcdstore.Versioned[routerecord.Record]{}, recordcodec.CorruptRecord()
 	}
-	return Versioned[routerecord.Record]{
+	return etcdstore.Versioned[routerecord.Record]{
 		Record: record, Revision: projection.Revision, ReadRevision: projection.ReadRevision,
 	}, nil
 }

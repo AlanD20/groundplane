@@ -6,6 +6,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -16,14 +17,14 @@ import (
 func (service *Service) listBlueprintZones(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[zonerecord.Record], error) {
-	zones := []etcd.Versioned[zonerecord.Record](nil)
+) ([]etcdstore.Versioned[zonerecord.Record], error) {
+	zones := []etcdstore.Versioned[zonerecord.Record](nil)
 	cursor := ""
 	for {
 		page, err := service.repository.ListZones(
 			ctx,
 			environmentID,
-			etcd.PageRequest{Limit: 200, Cursor: cursor},
+			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
 		)
 		if err != nil {
 			return nil, err
@@ -39,14 +40,14 @@ func (service *Service) listBlueprintZones(
 func (service *Service) listBlueprintServices(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[etcd.ServiceRecord], error) {
-	services := []etcd.Versioned[etcd.ServiceRecord](nil)
+) ([]etcdstore.Versioned[etcd.ServiceRecord], error) {
+	services := []etcdstore.Versioned[etcd.ServiceRecord](nil)
 	cursor := ""
 	for {
 		page, err := service.repository.ListServices(
 			ctx,
 			environmentID,
-			etcd.PageRequest{Limit: 200, Cursor: cursor},
+			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
 		)
 		if err != nil {
 			return nil, err
@@ -63,15 +64,15 @@ func (service *Service) listBlueprintScripts(
 	ctx context.Context,
 	environmentID string,
 	repository environmentBlueprintRepository,
-) ([]etcd.Versioned[scriptrecord.Record], int64, error) {
-	scripts := []etcd.Versioned[scriptrecord.Record](nil)
+) ([]etcdstore.Versioned[scriptrecord.Record], int64, error) {
+	scripts := []etcdstore.Versioned[scriptrecord.Record](nil)
 	cursor := ""
 	readRevision := int64(0)
 	for {
 		page, err := repository.ListScripts(
 			ctx,
 			environmentID,
-			etcd.PageRequest{Limit: 200, Cursor: cursor},
+			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
 		)
 		if err != nil {
 			return nil, 0, err
@@ -92,14 +93,14 @@ func (service *Service) listBlueprintScripts(
 func (service *Service) listBlueprintRoutes(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[routerecord.Record], error) {
-	routes := []etcd.Versioned[routerecord.Record](nil)
+) ([]etcdstore.Versioned[routerecord.Record], error) {
+	routes := []etcdstore.Versioned[routerecord.Record](nil)
 	cursor := ""
 	for {
 		page, err := service.repository.ListRoutes(
 			ctx,
 			environmentID,
-			etcd.PageRequest{Limit: 200, Cursor: cursor},
+			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
 		)
 		if err != nil {
 			return nil, err
@@ -115,14 +116,14 @@ func (service *Service) listBlueprintRoutes(
 func (service *Service) listBlueprintComponents(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[componentrecord.Record], error) {
-	componentRecords := []etcd.Versioned[componentrecord.Record](nil)
+) ([]etcdstore.Versioned[componentrecord.Record], error) {
+	componentRecords := []etcdstore.Versioned[componentrecord.Record](nil)
 	cursor := ""
 	for {
 		page, err := service.repository.ListEnvironmentComponents(
 			ctx,
 			environmentID,
-			etcd.PageRequest{Limit: 200, Cursor: cursor},
+			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
 		)
 		if err != nil {
 			return nil, err
@@ -138,15 +139,15 @@ func (service *Service) listBlueprintComponents(
 func (service *Service) listBlueprintEntries(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[entryrecord.Record], error) {
-	entriesByID := make(map[string]etcd.Versioned[entryrecord.Record])
+) ([]etcdstore.Versioned[entryrecord.Record], error) {
+	entriesByID := make(map[string]etcdstore.Versioned[entryrecord.Record])
 	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
 	if err != nil {
 		return nil, err
 	}
 	if found {
 		for _, record := range projection.Record.Entries {
-			entriesByID[record.Entry.ID] = etcd.Versioned[entryrecord.Record]{
+			entriesByID[record.Entry.ID] = etcdstore.Versioned[entryrecord.Record]{
 				Record: record, Revision: projection.Revision, ReadRevision: projection.ReadRevision,
 			}
 		}
@@ -156,7 +157,7 @@ func (service *Service) listBlueprintEntries(
 		page, err := service.repository.ListEntries(
 			ctx,
 			environmentID,
-			etcd.PageRequest{Limit: 200, Cursor: cursor},
+			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
 		)
 		if err != nil {
 			return nil, err
@@ -167,7 +168,7 @@ func (service *Service) listBlueprintEntries(
 			}
 		}
 		if page.NextCursor == "" {
-			entries := make([]etcd.Versioned[entryrecord.Record], 0, len(entriesByID))
+			entries := make([]etcdstore.Versioned[entryrecord.Record], 0, len(entriesByID))
 			for _, item := range entriesByID {
 				entries = append(entries, item)
 			}
@@ -183,15 +184,15 @@ func (service *Service) listBlueprintEntries(
 func (service *Service) listBlueprintAttaches(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[attachrecord.Record], int64, error) {
-	attaches := []etcd.Versioned[attachrecord.Record](nil)
+) ([]etcdstore.Versioned[attachrecord.Record], int64, error) {
+	attaches := []etcdstore.Versioned[attachrecord.Record](nil)
 	cursor := ""
 	revision := int64(0)
 	for {
 		page, err := service.repository.ListAttaches(
 			ctx,
 			environmentID,
-			etcd.PageRequest{Limit: etcd.MaximumPageLimit, Cursor: cursor},
+			etcdstore.PageRequest{Limit: etcdstore.MaximumPageLimit, Cursor: cursor},
 		)
 		if err != nil {
 			return nil, 0, err

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"time"
@@ -37,7 +38,7 @@ type RouteRemovalTaskPreparation struct {
 func NewRouteRemovalIntent(
 	taskID, environmentID, routeID string,
 	routeRevision int64,
-	projection *Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	createdAt time.Time,
 ) (RouteRemovalIntent, error) {
 	intent := RouteRemovalIntent{
@@ -72,31 +73,31 @@ func routeRemovalIntentKey(taskID string) string { return routeRemovalIntentPref
 func (repository *HierarchyRepository) GetRouteRemovalIntent(
 	ctx context.Context,
 	taskID string,
-) (Versioned[RouteRemovalIntent], bool, error) {
+) (etcdstore.Versioned[RouteRemovalIntent], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[RouteRemovalIntent]{}, false, err
+		return etcdstore.Versioned[RouteRemovalIntent]{}, false, err
 	}
 	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {
-		return Versioned[RouteRemovalIntent]{}, false, errs.New(
+		return etcdstore.Versioned[RouteRemovalIntent]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Route removal intent Task id is invalid",
 		)
 	}
 	result, err := repository.store.Get(ctx, routeRemovalIntentKey(taskID))
 	if err != nil {
-		return Versioned[RouteRemovalIntent]{}, false, err
+		return etcdstore.Versioned[RouteRemovalIntent]{}, false, err
 	}
 	if result == nil {
-		return Versioned[RouteRemovalIntent]{}, false, errs.New(errs.KindInternal, "Route removal intent read is empty")
+		return etcdstore.Versioned[RouteRemovalIntent]{}, false, errs.New(errs.KindInternal, "Route removal intent read is empty")
 	}
 	if result.Entry == nil {
-		return Versioned[RouteRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[RouteRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	intent, err := decodeRouteRemovalIntent(result.Entry.Value)
 	if err != nil || intent.TaskID != taskID {
-		return Versioned[RouteRemovalIntent]{}, false, corruptRouteRemovalIntent()
+		return etcdstore.Versioned[RouteRemovalIntent]{}, false, corruptRouteRemovalIntent()
 	}
-	return Versioned[RouteRemovalIntent]{
+	return etcdstore.Versioned[RouteRemovalIntent]{
 		Record:       intent,
 		Revision:     result.Entry.ModRevision,
 		ReadRevision: result.ReadRevision,

@@ -5,22 +5,23 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type serviceMutationRepository interface {
-	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironmentBlueprintHead(context.Context, string) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
-	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[zonerecord.Record], error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
+	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		etcd.EnvironmentBlueprintStageClaimRequest,
@@ -35,16 +36,16 @@ type serviceMutationRepository interface {
 	) (etcd.IdempotencyTransactionResult, error)
 	ValidateServiceRemovalReferences(
 		context.Context,
-		etcd.Versioned[etcd.ServiceRecord],
-		etcd.Versioned[etcd.EnvironmentComposeProjection],
+		etcdstore.Versioned[etcd.ServiceRecord],
+		etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	) error
 	BeginServiceRemovalWithTask(
 		context.Context,
-		etcd.Versioned[hierarchyrecord.TenantRecord],
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcd.Versioned[etcd.ServiceRecord],
-		etcd.Versioned[etcd.EnvironmentComposeProjection],
+		etcdstore.Versioned[hierarchyrecord.TenantRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[etcd.ServiceRecord],
+		etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 		etcd.DeletionTombstoneRecord,
 		etcd.ServiceRemovalIntent,
 		etcd.TaskRecord,
@@ -82,44 +83,44 @@ func NewMutationRepository(
 func (repository *durableServiceMutationRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
 	return repository.hierarchy.GetEnvironment(ctx, id)
 }
 
 func (repository *durableServiceMutationRepository) GetProject(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[hierarchyrecord.ProjectRecord], error) {
+) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
 	return repository.hierarchy.GetProject(ctx, id)
 }
 
 func (repository *durableServiceMutationRepository) GetEnvironmentBlueprintHead(
 	ctx context.Context,
 	environmentID string,
-) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error) {
+) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error) {
 	return repository.hierarchy.GetEnvironmentBlueprintHead(ctx, environmentID)
 }
 
 func (repository *durableServiceMutationRepository) GetService(
 	ctx context.Context,
 	id string,
-) (etcd.Versioned[etcd.ServiceRecord], error) {
+) (etcdstore.Versioned[etcd.ServiceRecord], error) {
 	return repository.services.GetService(ctx, id)
 }
 
 func (repository *durableServiceMutationRepository) ListServices(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.ServiceRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[etcd.ServiceRecord], error) {
 	return repository.services.ListServices(ctx, environmentID, request)
 }
 
 func (repository *durableServiceMutationRepository) ListZones(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[zonerecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[zonerecord.Record], error) {
 	return repository.zones.ListZones(ctx, environmentID, request)
 }
 
@@ -146,19 +147,19 @@ func (repository *durableServiceMutationRepository) PublishEnvironmentServiceDes
 
 func (repository *durableServiceMutationRepository) ValidateServiceRemovalReferences(
 	ctx context.Context,
-	current etcd.Versioned[etcd.ServiceRecord],
-	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+	current etcdstore.Versioned[etcd.ServiceRecord],
+	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 ) error {
 	return repository.services.ValidateServiceRemovalReferences(ctx, current, projection)
 }
 
 func (repository *durableServiceMutationRepository) BeginServiceRemovalWithTask(
 	ctx context.Context,
-	tenant etcd.Versioned[hierarchyrecord.TenantRecord],
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
-	current etcd.Versioned[etcd.ServiceRecord],
-	projection etcd.Versioned[etcd.EnvironmentComposeProjection],
+	tenant etcdstore.Versioned[hierarchyrecord.TenantRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	current etcdstore.Versioned[etcd.ServiceRecord],
+	projection etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	tombstone etcd.DeletionTombstoneRecord,
 	intent etcd.ServiceRemovalIntent,
 	task etcd.TaskRecord,

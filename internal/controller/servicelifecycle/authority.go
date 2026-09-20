@@ -4,6 +4,7 @@ package servicelifecycle
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -12,13 +13,13 @@ import (
 
 type ReleaseReader interface {
 	ResolveServing(context.Context, string, string, int64) (etcd.ServingRelease, error)
-	GetReleaseRenderInputAt(context.Context, string, int64) (etcd.Versioned[etcd.ReleaseRenderInput], error)
+	GetReleaseRenderInputAt(context.Context, string, int64) (etcdstore.Versioned[etcd.ReleaseRenderInput], error)
 }
 
 func CaptureRelease(
 	ctx context.Context,
 	reader ReleaseReader,
-	applied etcd.Versioned[etcd.EnvironmentComposeProjection],
+	applied etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	environmentID string,
 	serviceID string,
 ) (etcd.ServiceLifecycleRelease, error) {

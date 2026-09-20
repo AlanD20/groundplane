@@ -113,11 +113,11 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) Create(
 		return existing, nil
 	}
 	return EnvironmentVolumeRemovalResumeState{
-		Runtime: etcd.Versioned[removalrecord.Runtime]{
+		Runtime: etcdstore.Versioned[removalrecord.Runtime]{
 			Record: runtime, Revision: result.Revision, ReadRevision: result.Revision,
 		},
 		Attempt: attempt,
-		Progress: etcd.Versioned[removalrecord.Progress]{
+		Progress: etcdstore.Versioned[removalrecord.Progress]{
 			Record: progress, Revision: result.Revision, ReadRevision: result.Revision,
 		},
 	}, nil
@@ -180,11 +180,11 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) Resume(
 		return EnvironmentVolumeRemovalResumeState{}, removalrecord.Corrupt()
 	}
 	result := EnvironmentVolumeRemovalResumeState{
-		Runtime: etcd.Versioned[removalrecord.Runtime]{
+		Runtime: etcdstore.Versioned[removalrecord.Runtime]{
 			Record: runtime, Revision: state.Values[0].ModRevision, ReadRevision: state.ReadRevision,
 		},
 		Attempt: attempt,
-		Progress: etcd.Versioned[removalrecord.Progress]{
+		Progress: etcdstore.Versioned[removalrecord.Progress]{
 			Record: progress, Revision: state.Values[1].ModRevision, ReadRevision: state.ReadRevision,
 		},
 	}
@@ -194,7 +194,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) Resume(
 			pending.RequestOrdinal != progress.NextRequestOrdinal || progress.DirectoryAbsent {
 			return EnvironmentVolumeRemovalResumeState{}, removalrecord.Corrupt()
 		}
-		result.Pending = &etcd.Versioned[removalrecord.PendingPath]{
+		result.Pending = &etcdstore.Versioned[removalrecord.PendingPath]{
 			Record: pending, Revision: state.Values[2].ModRevision, ReadRevision: state.ReadRevision,
 		}
 	}
@@ -206,14 +206,14 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) AdvanceCheckpoint(
 	operationID string,
 	next removalrecord.Checkpoint,
 	at time.Time,
-) (etcd.Versioned[removalrecord.Runtime], error) {
+) (etcdstore.Versioned[removalrecord.Runtime], error) {
 	state, err := repository.Resume(ctx, operationID)
 	if err != nil {
-		return etcd.Versioned[removalrecord.Runtime]{}, err
+		return etcdstore.Versioned[removalrecord.Runtime]{}, err
 	}
 	if next != state.Runtime.Record.Checkpoint+1 ||
 		next > removalrecord.DesiredPublished {
-		return etcd.Versioned[removalrecord.Runtime]{}, errs.New(
+		return etcdstore.Versioned[removalrecord.Runtime]{}, errs.New(
 			errs.KindStateConflict,
 			"Environment Volume removal checkpoint transition is invalid",
 		)
@@ -225,13 +225,13 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) MarkConsumersDetach
 	ctx context.Context,
 	assignment EnvironmentVolumeRemovalAssignment,
 	at time.Time,
-) (etcd.Versioned[removalrecord.Runtime], error) {
+) (etcdstore.Versioned[removalrecord.Runtime], error) {
 	state, err := repository.Resume(ctx, assignment.OperationID)
 	if err != nil {
-		return etcd.Versioned[removalrecord.Runtime]{}, err
+		return etcdstore.Versioned[removalrecord.Runtime]{}, err
 	}
 	if state.Runtime.Record.Checkpoint != removalrecord.DesiredPublished {
-		return etcd.Versioned[removalrecord.Runtime]{}, errs.New(
+		return etcdstore.Versioned[removalrecord.Runtime]{}, errs.New(
 			errs.KindStateConflict,
 			"Environment Volume removal consumers cannot be detached yet",
 		)
@@ -247,13 +247,13 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) advanceCheckpoint(
 	next removalrecord.Checkpoint,
 	at time.Time,
 	assignment *EnvironmentVolumeRemovalAssignment,
-) (etcd.Versioned[removalrecord.Runtime], error) {
+) (etcdstore.Versioned[removalrecord.Runtime], error) {
 	updated := state.Runtime.Record
 	updated.Checkpoint = next
 	updated.UpdatedAt = at
 	value, err := removalrecord.EncodeRuntime(updated)
 	if err != nil {
-		return etcd.Versioned[removalrecord.Runtime]{}, err
+		return etcdstore.Versioned[removalrecord.Runtime]{}, err
 	}
 	defer clear(value)
 	conditions := []etcdstore.Condition{{
@@ -265,7 +265,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) advanceCheckpoint(
 			ctx, *assignment, state.Runtime.ReadRevision, state.Runtime.Record, state.Attempt,
 		)
 		if fenceErr != nil {
-			return etcd.Versioned[removalrecord.Runtime]{}, fenceErr
+			return etcdstore.Versioned[removalrecord.Runtime]{}, fenceErr
 		}
 		conditions = append(conditions, fence...)
 	}
@@ -273,19 +273,19 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) advanceCheckpoint(
 		Type: etcdstore.MutationPut, Key: removalrecord.RuntimeKey(updated.OperationID), Value: value,
 	}}
 	if err := validateEnvironmentVolumeRemovalTransaction(repository.store, conditions, mutations, 32); err != nil {
-		return etcd.Versioned[removalrecord.Runtime]{}, err
+		return etcdstore.Versioned[removalrecord.Runtime]{}, err
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return etcd.Versioned[removalrecord.Runtime]{}, err
+		return etcdstore.Versioned[removalrecord.Runtime]{}, err
 	}
 	if !result.Succeeded {
-		return etcd.Versioned[removalrecord.Runtime]{}, errs.New(
+		return etcdstore.Versioned[removalrecord.Runtime]{}, errs.New(
 			errs.KindStateConflict,
 			"Environment Volume removal checkpoint raced",
 		)
 	}
-	return etcd.Versioned[removalrecord.Runtime]{
+	return etcdstore.Versioned[removalrecord.Runtime]{
 		Record: updated, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
@@ -294,14 +294,14 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 	ctx context.Context,
 	assignment EnvironmentVolumeRemovalAssignment,
 	at time.Time,
-) (etcd.Versioned[removalrecord.PendingPath], bool, error) {
+) (etcdstore.Versioned[removalrecord.PendingPath], bool, error) {
 	state, err := repository.Resume(ctx, assignment.OperationID)
 	if err != nil {
-		return etcd.Versioned[removalrecord.PendingPath]{}, false, err
+		return etcdstore.Versioned[removalrecord.PendingPath]{}, false, err
 	}
 	if state.Runtime.Record.Checkpoint != removalrecord.ConsumersDetached ||
 		state.Progress.Record.DirectoryAbsent {
-		return etcd.Versioned[removalrecord.PendingPath]{}, false, errs.New(
+		return etcdstore.Versioned[removalrecord.PendingPath]{}, false, errs.New(
 			errs.KindStateConflict,
 			"Environment Volume removal path is not mutable",
 		)
@@ -310,11 +310,11 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 		ctx, assignment, state.Runtime.ReadRevision, state.Runtime.Record, state.Attempt,
 	)
 	if err != nil {
-		return etcd.Versioned[removalrecord.PendingPath]{}, false, err
+		return etcdstore.Versioned[removalrecord.PendingPath]{}, false, err
 	}
 	if state.Pending != nil {
 		if _, err := repository.pendingRecoveryFence(ctx, state, assignment); err != nil {
-			return etcd.Versioned[removalrecord.PendingPath]{}, false, err
+			return etcdstore.Versioned[removalrecord.PendingPath]{}, false, err
 		}
 		return *state.Pending, true, nil
 	}
@@ -336,7 +336,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 	pending.RequestSHA256 = removalrecord.PathRequestDigest(pending)
 	value, err := removalrecord.EncodePendingPath(pending)
 	if err != nil {
-		return etcd.Versioned[removalrecord.PendingPath]{}, false, err
+		return etcdstore.Versioned[removalrecord.PendingPath]{}, false, err
 	}
 	defer clear(value)
 	conditions := []etcdstore.Condition{
@@ -349,17 +349,17 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 		Type: etcdstore.MutationPut, Key: removalrecord.PendingPathKey(assignment.OperationID), Value: value,
 	}}
 	if err := validateEnvironmentVolumeRemovalTransaction(repository.store, conditions, mutations, 32); err != nil {
-		return etcd.Versioned[removalrecord.PendingPath]{}, false, err
+		return etcdstore.Versioned[removalrecord.PendingPath]{}, false, err
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return etcd.Versioned[removalrecord.PendingPath]{}, false, err
+		return etcdstore.Versioned[removalrecord.PendingPath]{}, false, err
 	}
 	if !result.Succeeded {
 		reloaded, reloadErr := repository.Resume(ctx, assignment.OperationID)
 		if reloadErr != nil || reloaded.Pending == nil ||
 			!sameEnvironmentVolumeRemovalPendingPath(reloaded.Pending.Record, pending) {
-			return etcd.Versioned[removalrecord.PendingPath]{}, false, errs.New(
+			return etcdstore.Versioned[removalrecord.PendingPath]{}, false, errs.New(
 				errs.KindStateConflict,
 				"Environment Volume removal path request raced",
 			)
@@ -367,11 +367,11 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 		if _, err := repository.loadAssignmentFence(
 			ctx, assignment, reloaded.Runtime.ReadRevision, reloaded.Runtime.Record, reloaded.Attempt,
 		); err != nil {
-			return etcd.Versioned[removalrecord.PendingPath]{}, false, err
+			return etcdstore.Versioned[removalrecord.PendingPath]{}, false, err
 		}
 		return *reloaded.Pending, true, nil
 	}
-	return etcd.Versioned[removalrecord.PendingPath]{
+	return etcdstore.Versioned[removalrecord.PendingPath]{
 		Record: pending, Revision: result.Revision, ReadRevision: result.Revision,
 	}, false, nil
 }
@@ -379,13 +379,13 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) BeginPathCall(
 func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 	ctx context.Context,
 	input EnvironmentVolumeRemovalPathResult,
-) (etcd.Versioned[removalrecord.Progress], bool, error) {
+) (etcdstore.Versioned[removalrecord.Progress], bool, error) {
 	if err := etcd.ValidateCapabilityContext(ctx); err != nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, err
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	state, err := repository.Resume(ctx, input.Assignment.OperationID)
 	if err != nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, err
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	completion := removalrecord.Completion{
 		OperationID:        input.Assignment.OperationID,
@@ -400,7 +400,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 		CompletedAt:        input.CompletedAt,
 	}
 	if err := removalrecord.ValidateCompletion(completion); err != nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, err
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	if state.Pending == nil || state.Pending.Record.RequestOrdinal == completion.RequestOrdinal+1 {
 		return repository.replayPathCompletion(ctx, state, completion)
@@ -408,7 +408,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 	pending := state.Pending.Record
 	if pending.OperationID != completion.OperationID || pending.RequestOrdinal != completion.RequestOrdinal ||
 		pending.RequestSHA256 != completion.RequestSHA256 {
-		return etcd.Versioned[removalrecord.Progress]{}, false, errs.New(
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, errs.New(
 			errs.KindStateConflict,
 			"Environment Volume removal completion does not match its pending call",
 		)
@@ -416,7 +416,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 	if _, err := repository.loadAssignmentFence(
 		ctx, input.Assignment, state.Runtime.ReadRevision, state.Runtime.Record, state.Attempt,
 	); err != nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, err
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	progress := removalrecord.Progress{
 		OperationID:        completion.OperationID,
@@ -427,19 +427,19 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 		UpdatedAt:          completion.CompletedAt,
 	}
 	if completion.RequestOrdinal == ^uint64(0) || removalrecord.ValidateProgress(progress) != nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, errs.New(
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Environment Volume removal progress is invalid",
 		)
 	}
 	progressValue, err := removalrecord.EncodeProgress(progress)
 	if err != nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, err
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	completionValue, err := removalrecord.EncodeCompletion(completion)
 	if err != nil {
 		clear(progressValue)
-		return etcd.Versioned[removalrecord.Progress]{}, false, err
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	defer clear(progressValue)
 	defer clear(completionValue)
@@ -453,12 +453,12 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 		ctx, input.Assignment, state.Runtime.ReadRevision, state.Runtime.Record, state.Attempt,
 	)
 	if err != nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, err
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	conditions = append(conditions, fence...)
 	recovery, err := repository.pendingRecoveryFence(ctx, state, input.Assignment)
 	if err != nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, err
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	conditions = append(conditions, recovery...)
 	mutations := []etcdstore.Mutation{
@@ -476,7 +476,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 	}
 	if completion.DirectoryAbsent {
 		if state.Runtime.Record.Checkpoint != removalrecord.ConsumersDetached {
-			return etcd.Versioned[removalrecord.Progress]{}, false, errs.New(
+			return etcdstore.Versioned[removalrecord.Progress]{}, false, errs.New(
 				errs.KindStateConflict,
 				"Environment Volume removal directory checkpoint is invalid",
 			)
@@ -486,7 +486,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 		updatedRuntime.UpdatedAt = completion.CompletedAt
 		runtimeValue, encodeErr := removalrecord.EncodeRuntime(updatedRuntime)
 		if encodeErr != nil {
-			return etcd.Versioned[removalrecord.Progress]{}, false, encodeErr
+			return etcdstore.Versioned[removalrecord.Progress]{}, false, encodeErr
 		}
 		defer clear(runtimeValue)
 		mutations = append(mutations, etcdstore.Mutation{
@@ -494,16 +494,16 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 		})
 	}
 	if err := validateEnvironmentVolumeRemovalTransaction(repository.store, conditions, mutations, 32); err != nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, err
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, err
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	if !result.Succeeded {
 		return repository.replayPathCompletion(ctx, state, completion)
 	}
-	return etcd.Versioned[removalrecord.Progress]{
+	return etcdstore.Versioned[removalrecord.Progress]{
 		Record: progress, Revision: result.Revision, ReadRevision: result.Revision,
 	}, false, nil
 }
@@ -542,16 +542,16 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) replayPathCompletio
 	ctx context.Context,
 	state EnvironmentVolumeRemovalResumeState,
 	completion removalrecord.Completion,
-) (etcd.Versioned[removalrecord.Progress], bool, error) {
+) (etcdstore.Versioned[removalrecord.Progress], bool, error) {
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		removalrecord.CompletionKey(completion.OperationID, completion.RequestOrdinal),
 		removalrecord.ProgressKey(completion.OperationID),
 	}})
 	if err != nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, err
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	if read == nil || len(read.Values) != 2 || read.Values[0] == nil || read.Values[1] == nil {
-		return etcd.Versioned[removalrecord.Progress]{}, false, errs.New(
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, errs.New(
 			errs.KindStateConflict,
 			"Environment Volume removal completion evidence changed",
 		)
@@ -559,7 +559,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) replayPathCompletio
 	defer clearKeyValues(read.Values)
 	existing, err := removalrecord.DecodeCompletion(read.Values[0].Value)
 	if err != nil || !sameEnvironmentVolumeRemovalCompletion(existing, completion) {
-		return etcd.Versioned[removalrecord.Progress]{}, false, errs.New(
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, errs.New(
 			errs.KindStateConflict,
 			"Environment Volume removal completion digest changed",
 		)
@@ -567,9 +567,9 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) replayPathCompletio
 	progress, err := removalrecord.DecodeProgress(read.Values[1].Value)
 	if err != nil || progress.NextRequestOrdinal != completion.RequestOrdinal+1 ||
 		progress.DirectoryAbsent != completion.DirectoryAbsent {
-		return etcd.Versioned[removalrecord.Progress]{}, false, removalrecord.Corrupt()
+		return etcdstore.Versioned[removalrecord.Progress]{}, false, removalrecord.Corrupt()
 	}
-	return etcd.Versioned[removalrecord.Progress]{
+	return etcdstore.Versioned[removalrecord.Progress]{
 		Record: progress, Revision: read.Values[1].ModRevision, ReadRevision: read.ReadRevision,
 	}, true, nil
 }

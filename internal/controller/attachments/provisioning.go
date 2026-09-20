@@ -8,11 +8,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 func (service *MutationService) prepareAttachFacts(
 	ctx context.Context, attachID string, operationID string,
-	consumer etcd.Versioned[etcd.ServiceRecord],
+	consumer etcdstore.Versioned[etcd.ServiceRecord],
 	scope etcd.AttachCreateScope,
 	adapter adapters.Adapter,
 ) (*taskplanning.AttachPlanIdentity, []attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts,
@@ -92,7 +93,7 @@ func (service *MutationService) prepareAttachFacts(
 	return planIdentity, metadata, encrypted, nil, nil
 }
 
-func attachGrantIDs(grants []etcd.Versioned[attachrecord.Record]) []string {
+func attachGrantIDs(grants []etcdstore.Versioned[attachrecord.Record]) []string {
 	values := make([]string, len(grants))
 	for index, grant := range grants {
 		values[index] = grant.Record.ID

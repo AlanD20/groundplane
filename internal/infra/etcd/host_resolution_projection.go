@@ -56,26 +56,26 @@ func NewHostResolutionProjectionRecord(
 
 func (repository *ComponentRepository) GetHostResolutionProjection(
 	ctx context.Context,
-) (Versioned[HostResolutionProjectionRecord], bool, error) {
+) (etcdstore.Versioned[HostResolutionProjectionRecord], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[HostResolutionProjectionRecord]{}, false, err
+		return etcdstore.Versioned[HostResolutionProjectionRecord]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, hostResolutionProjectionKey)
 	if err != nil {
-		return Versioned[HostResolutionProjectionRecord]{}, false, err
+		return etcdstore.Versioned[HostResolutionProjectionRecord]{}, false, err
 	}
 	if result == nil || result.Entry == nil {
 		readRevision := int64(0)
 		if result != nil {
 			readRevision = result.ReadRevision
 		}
-		return Versioned[HostResolutionProjectionRecord]{ReadRevision: readRevision}, false, nil
+		return etcdstore.Versioned[HostResolutionProjectionRecord]{ReadRevision: readRevision}, false, nil
 	}
 	record, err := decodeHostResolutionProjectionRecord(result.Entry.Value)
 	if err != nil {
-		return Versioned[HostResolutionProjectionRecord]{}, false, err
+		return etcdstore.Versioned[HostResolutionProjectionRecord]{}, false, err
 	}
-	return Versioned[HostResolutionProjectionRecord]{
+	return etcdstore.Versioned[HostResolutionProjectionRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }

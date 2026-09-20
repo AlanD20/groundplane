@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -13,8 +14,8 @@ import (
 )
 
 type BackingServiceReader interface {
-	GetBackingService(context.Context, string) (etcd.Versioned[etcd.BackingServiceRecord], error)
-	ListBackingServices(context.Context, etcd.PageRequest) (etcd.Page[etcd.BackingServiceRecord], error)
+	GetBackingService(context.Context, string) (etcdstore.Versioned[etcd.BackingServiceRecord], error)
+	ListBackingServices(context.Context, etcdstore.PageRequest) (etcdstore.Page[etcd.BackingServiceRecord], error)
 }
 
 type BackingServiceMutator interface {
@@ -215,14 +216,14 @@ func (s *Server) showBackingService(
 	return &backingServiceOutput{Body: backingServiceResponse(stored.Record)}, nil
 }
 
-func backingServiceListRequest(limit int, cursor string) (etcd.PageRequest, error) {
+func backingServiceListRequest(limit int, cursor string) (etcdstore.PageRequest, error) {
 	if limit < 0 {
-		return etcd.PageRequest{}, errs.New(
+		return etcdstore.PageRequest{}, errs.New(
 			errs.KindValidationFailed,
 			"Backing-service list limit must be a positive integer",
 		)
 	}
-	return etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
+	return etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 }
 
 func backingServiceResponse(record etcd.BackingServiceRecord) apiTypes.BackingService {

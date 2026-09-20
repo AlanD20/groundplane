@@ -70,14 +70,14 @@ func decodeServiceRuntimeRecord(value []byte) (ServiceRuntimeRecord, error) {
 	return record, nil
 }
 
-func serviceDesiredCondition(service Versioned[ServiceRecord]) etcdstore.Condition {
+func serviceDesiredCondition(service etcdstore.Versioned[ServiceRecord]) etcdstore.Condition {
 	return etcdstore.Condition{Key: service.Record.desiredFenceKey, ModRevision: service.Revision}
 }
 
-func serviceRuntimeCondition(service Versioned[ServiceRecord]) etcdstore.Condition {
+func serviceRuntimeCondition(service etcdstore.Versioned[ServiceRecord]) etcdstore.Condition {
 	return etcdstore.Condition{Key: serviceRuntimeKey(service.Record.Desired.ID), ModRevision: service.Record.runtimeRevision}
 }
 
-func ServiceRuntimeRevision(service Versioned[ServiceRecord]) int64 {
+func ServiceRuntimeRevision(service etcdstore.Versioned[ServiceRecord]) int64 {
 	return service.Record.runtimeRevision
 }

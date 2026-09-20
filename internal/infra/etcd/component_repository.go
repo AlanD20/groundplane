@@ -31,24 +31,24 @@ func newComponentRepository(store hierarchyStore) (*ComponentRepository, error) 
 
 func (repository *ComponentRepository) CreateEnvironmentComponent(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record componentrecord.Record,
-) (Versioned[componentrecord.Record], error) {
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	if err := validateEnvironmentComponentHierarchy(ctx, environment, project, record); err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if references, err := componentrecord.SecretReferences(record); err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	} else if len(references) > 0 {
-		return Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindStateConflict,
 			"configured Components with Secret references must be published through reconciliation",
 		)
 	}
 	value, err := componentrecord.EncodeRecord(record)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	defer clear(value)
 	result, err := repository.store.Transact(
@@ -70,14 +70,14 @@ func (repository *ComponentRepository) CreateEnvironmentComponent(
 		},
 	)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[componentrecord.Record]{}, classifyComponentWriteConflict(
+		return etcdstore.Versioned[componentrecord.Record]{}, classifyComponentWriteConflict(
 			result.FailureReads, environment, project, record, 0,
 		)
 	}
-	return Versioned[componentrecord.Record]{
+	return etcdstore.Versioned[componentrecord.Record]{
 		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
@@ -85,12 +85,12 @@ func (repository *ComponentRepository) CreateEnvironmentComponent(
 func (repository *ComponentRepository) GetComponent(
 	ctx context.Context,
 	id string,
-) (Versioned[componentrecord.Record], error) {
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindComponent, id); err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	return getRecord(
 		ctx,
@@ -106,10 +106,10 @@ func (repository *ComponentRepository) GetComponent(
 func (repository *ComponentRepository) ListEnvironmentComponents(
 	ctx context.Context,
 	environmentID string,
-	request PageRequest,
-) (Page[componentrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[componentrecord.Record], error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Page[componentrecord.Record]{}, err
+		return etcdstore.Page[componentrecord.Record]{}, err
 	}
 	return listIndexPage(
 		ctx,
@@ -131,60 +131,60 @@ func (repository *ComponentRepository) ListEnvironmentComponents(
 
 func (repository *ComponentRepository) ReplaceDesired(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	current Versioned[componentrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[componentrecord.Record],
 	desired core.Component,
-) (Versioned[componentrecord.Record], error) {
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	replacement, err := componentrecord.ReplaceDesired(current.Record, desired)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	return repository.replace(ctx, environment, project, current, replacement)
 }
 
 func (repository *ComponentRepository) ReplaceRuntime(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	current Versioned[componentrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[componentrecord.Record],
 	generatedServices []string,
 	pinnedIPv4 string,
 	healthy bool,
-) (Versioned[componentrecord.Record], error) {
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	replacement, err := componentrecord.SetRuntime(current.Record, generatedServices, pinnedIPv4, healthy)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	return repository.replace(ctx, environment, project, current, replacement)
 }
 
 func (repository *ComponentRepository) replace(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	current Versioned[componentrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[componentrecord.Record],
 	replacement componentrecord.Record,
-) (Versioned[componentrecord.Record], error) {
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	if err := validateEnvironmentComponentHierarchy(ctx, environment, project, replacement); err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if err := validateComponentVersion(current); err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if current.Record.Desired.ID != replacement.Desired.ID {
-		return Versioned[componentrecord.Record]{}, errs.New(errs.KindValidationFailed, "Component replacement changed id")
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(errs.KindValidationFailed, "Component replacement changed id")
 	}
 	currentSecretIDs, err := componentrecord.SecretReferences(current.Record)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	nextSecretIDs, err := componentrecord.SecretReferences(replacement)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if !equalSecretReferences(currentSecretIDs, nextSecretIDs) {
-		return Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindStateConflict,
 			"Component Secret reference changes require Component reconciliation",
 		)
@@ -197,16 +197,16 @@ func (repository *ComponentRepository) replace(
 		Revision: current.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if indexes == nil || len(indexes.Values) != 2 || indexes.Values[0] == nil || indexes.Values[1] == nil ||
 		string(indexes.Values[0].Value) != current.Record.Desired.ID ||
 		string(indexes.Values[1].Value) != current.Record.Desired.ID {
-		return Versioned[componentrecord.Record]{}, errs.New(errs.KindInternal, "Component indexes are missing or corrupt")
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(errs.KindInternal, "Component indexes are missing or corrupt")
 	}
 	value, err := componentrecord.EncodeRecord(replacement)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	defer clear(value)
 	result, err := repository.store.Transact(
@@ -225,23 +225,23 @@ func (repository *ComponentRepository) replace(
 		},
 	)
 	if err != nil {
-		return Versioned[componentrecord.Record]{}, err
+		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[componentrecord.Record]{}, classifyComponentWriteConflict(
+		return etcdstore.Versioned[componentrecord.Record]{}, classifyComponentWriteConflict(
 			result.FailureReads, environment, project, current.Record, current.Revision,
 		)
 	}
-	return Versioned[componentrecord.Record]{
+	return etcdstore.Versioned[componentrecord.Record]{
 		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
 
 func componentWriteConditions(
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record componentrecord.Record,
-	current *Versioned[componentrecord.Record],
+	current *etcdstore.Versioned[componentrecord.Record],
 	ownerRevision int64,
 	kindRevision int64,
 ) []etcdstore.Condition {
@@ -268,8 +268,8 @@ func componentWriteConditions(
 
 func validateEnvironmentComponentHierarchy(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record componentrecord.Record,
 ) error {
 	if err := validateContext(ctx); err != nil {
@@ -292,7 +292,7 @@ func validateEnvironmentComponentHierarchy(
 	return nil
 }
 
-func validateComponentVersion(current Versioned[componentrecord.Record]) error {
+func validateComponentVersion(current etcdstore.Versioned[componentrecord.Record]) error {
 	if err := componentrecord.ValidateRecord(current.Record); err != nil {
 		return err
 	}
@@ -304,8 +304,8 @@ func validateComponentVersion(current Versioned[componentrecord.Record]) error {
 
 func classifyComponentWriteConflict(
 	values []*etcdstore.KeyValue,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record componentrecord.Record,
 	expectedRevision int64,
 ) error {

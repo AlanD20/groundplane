@@ -58,37 +58,37 @@ type BackingHookCheckpointRecord struct {
 func (repository *AttachRepository) CheckpointBackingHook(
 	ctx context.Context,
 	input BackingHookCheckpointInput,
-) (Versioned[BackingHookCheckpointRecord], bool, error) {
+) (etcdstore.Versioned[BackingHookCheckpointRecord], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[BackingHookCheckpointRecord]{}, false, err
+		return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false, err
 	}
 	if repository == nil || repository.store == nil || validateBackingHookCheckpointInput(input) != nil {
-		return Versioned[BackingHookCheckpointRecord]{}, false,
+		return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false,
 			errs.New(errs.KindValidationFailed, "Backing hook checkpoint input is invalid")
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		anchor, err := repository.loadBackingHookCheckpointAnchor(ctx, input)
 		if err != nil {
-			return Versioned[BackingHookCheckpointRecord]{}, false, err
+			return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false, err
 		}
 		if anchor.current != nil {
 			if sameBackingHookCheckpoint(*anchor.current, input) {
-				return Versioned[BackingHookCheckpointRecord]{
+				return etcdstore.Versioned[BackingHookCheckpointRecord]{
 					Record: *anchor.current, Revision: anchor.checkpointRevision, ReadRevision: anchor.readRevision,
 				}, true, nil
 			}
 			if input.State != BackingHookCheckpointResult || anchor.current.State != BackingHookCheckpointStarted {
-				return Versioned[BackingHookCheckpointRecord]{}, false,
+				return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false,
 					errs.New(errs.KindStateConflict, "Backing hook checkpoint already exists with different evidence")
 			}
 		}
 		next, err := advanceBackingHookCheckpoint(anchor.current, input)
 		if err != nil {
-			return Versioned[BackingHookCheckpointRecord]{}, false, err
+			return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false, err
 		}
 		value, err := recordcodec.Encode("backing-hook-checkpoint", next)
 		if err != nil {
-			return Versioned[BackingHookCheckpointRecord]{}, false, err
+			return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false, err
 		}
 		transaction, err := repository.store.Transact(ctx, anchor.conditions, []etcdstore.Mutation{{
 			Type: etcdstore.MutationPut, Key: backingHookCheckpointKey(input.TaskID, input.StepID), Value: value,
@@ -96,15 +96,15 @@ func (repository *AttachRepository) CheckpointBackingHook(
 		clear(value)
 		clearKeyValues(transaction.FailureReads)
 		if err != nil {
-			return Versioned[BackingHookCheckpointRecord]{}, false, err
+			return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false, err
 		}
 		if transaction.Succeeded {
-			return Versioned[BackingHookCheckpointRecord]{
+			return etcdstore.Versioned[BackingHookCheckpointRecord]{
 				Record: next, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 			}, false, nil
 		}
 	}
-	return Versioned[BackingHookCheckpointRecord]{}, false,
+	return etcdstore.Versioned[BackingHookCheckpointRecord]{}, false,
 		errs.New(errs.KindStateConflict, "Backing hook checkpoint changed concurrently")
 }
 

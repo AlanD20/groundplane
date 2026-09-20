@@ -47,24 +47,24 @@ func newBackingServiceRepository(store hierarchyStore) (*BackingServiceRepositor
 func (repository *BackingServiceRepository) GetBackingService(
 	ctx context.Context,
 	projectID string,
-) (Versioned[BackingServiceRecord], error) {
+) (etcdstore.Versioned[BackingServiceRecord], error) {
 	project, err := repository.hierarchy.GetProject(ctx, projectID)
 	if err != nil {
 		if kind, ok := errs.KindOf(err); ok && kind == errs.KindProjectNotFound {
-			return Versioned[BackingServiceRecord]{}, backingServiceNotFound()
+			return etcdstore.Versioned[BackingServiceRecord]{}, backingServiceNotFound()
 		}
-		return Versioned[BackingServiceRecord]{}, err
+		return etcdstore.Versioned[BackingServiceRecord]{}, err
 	}
 	if project.Record.Kind != hierarchyrecord.ProjectKindBacking || project.Record.TenantID != "" {
-		return Versioned[BackingServiceRecord]{}, backingServiceNotFound()
+		return etcdstore.Versioned[BackingServiceRecord]{}, backingServiceNotFound()
 	}
 	return repository.composeBackingService(ctx, project)
 }
 
 func (repository *BackingServiceRepository) ListBackingServices(
 	ctx context.Context,
-	request PageRequest,
-) (Page[BackingServiceRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[BackingServiceRecord], error) {
 	projects, err := listIndexPage(
 		ctx,
 		repository.store,
@@ -82,17 +82,17 @@ func (repository *BackingServiceRepository) ListBackingServices(
 		},
 	)
 	if err != nil {
-		return Page[BackingServiceRecord]{}, err
+		return etcdstore.Page[BackingServiceRecord]{}, err
 	}
-	page := Page[BackingServiceRecord]{
-		Items:      make([]Versioned[BackingServiceRecord], len(projects.Items)),
+	page := etcdstore.Page[BackingServiceRecord]{
+		Items:      make([]etcdstore.Versioned[BackingServiceRecord], len(projects.Items)),
 		NextCursor: projects.NextCursor,
 		Revision:   projects.Revision,
 	}
 	for index, project := range projects.Items {
 		item, err := repository.composeBackingService(ctx, project)
 		if err != nil {
-			return Page[BackingServiceRecord]{}, err
+			return etcdstore.Page[BackingServiceRecord]{}, err
 		}
 		page.Items[index] = item
 	}
@@ -101,10 +101,10 @@ func (repository *BackingServiceRepository) ListBackingServices(
 
 func (repository *BackingServiceRepository) composeBackingService(
 	ctx context.Context,
-	project Versioned[hierarchyrecord.ProjectRecord],
-) (Versioned[BackingServiceRecord], error) {
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+) (etcdstore.Versioned[BackingServiceRecord], error) {
 	if project.ReadRevision <= 0 || project.Record.Kind != hierarchyrecord.ProjectKindBacking || project.Record.TenantID != "" {
-		return Versioned[BackingServiceRecord]{}, errs.New(
+		return etcdstore.Versioned[BackingServiceRecord]{}, errs.New(
 			errs.KindInternal,
 			"Backing-service Project projection is inconsistent",
 		)
@@ -113,20 +113,20 @@ func (repository *BackingServiceRepository) composeBackingService(
 		ctx, hierarchyrecord.EnvironmentOwnerPrefix(project.Record.ID), ids.KindEnvironment, project.ReadRevision,
 	)
 	if err != nil {
-		return Versioned[BackingServiceRecord]{}, err
+		return etcdstore.Versioned[BackingServiceRecord]{}, err
 	}
 	environmentValue, err := repository.primaryAtRevision(
 		ctx, hierarchyrecord.EnvironmentKey(environmentID), project.ReadRevision,
 	)
 	if err != nil {
-		return Versioned[BackingServiceRecord]{}, err
+		return etcdstore.Versioned[BackingServiceRecord]{}, err
 	}
 	environment, err := hierarchyrecord.DecodeEnvironment(environmentValue.Value)
 	if err != nil {
-		return Versioned[BackingServiceRecord]{}, err
+		return etcdstore.Versioned[BackingServiceRecord]{}, err
 	}
 	if environment.ID != environmentID || environment.ProjectID != project.Record.ID || environment.Name != "main" {
-		return Versioned[BackingServiceRecord]{}, errs.New(
+		return etcdstore.Versioned[BackingServiceRecord]{}, errs.New(
 			errs.KindInternal,
 			"Backing-service Environment projection is inconsistent",
 		)
@@ -138,10 +138,10 @@ func (repository *BackingServiceRepository) composeBackingService(
 		project.ReadRevision,
 	)
 	if err != nil {
-		return Versioned[BackingServiceRecord]{}, err
+		return etcdstore.Versioned[BackingServiceRecord]{}, err
 	}
 	if !found || len(projection.Record.DesiredServices) != 1 {
-		return Versioned[BackingServiceRecord]{}, errs.New(
+		return etcdstore.Versioned[BackingServiceRecord]{}, errs.New(
 			errs.KindInternal, "Backing-service desired projection is inconsistent",
 		)
 	}
@@ -150,15 +150,15 @@ func (repository *BackingServiceRepository) composeBackingService(
 		ctx, repository.store, projection, serviceID, environmentBlueprintHeadKey(environmentID),
 	)
 	if err != nil {
-		return Versioned[BackingServiceRecord]{}, err
+		return etcdstore.Versioned[BackingServiceRecord]{}, err
 	}
 	if service.Record.EnvironmentID != environmentID || service.Record.Desired.Adapter == "" {
-		return Versioned[BackingServiceRecord]{}, errs.New(
+		return etcdstore.Versioned[BackingServiceRecord]{}, errs.New(
 			errs.KindInternal,
 			"Backing-service Service projection is inconsistent",
 		)
 	}
-	return Versioned[BackingServiceRecord]{
+	return etcdstore.Versioned[BackingServiceRecord]{
 		Record: BackingServiceRecord{
 			Authentication: service.Record.Desired.Authentication,
 			ProjectID:      project.Record.ID, EnvironmentID: environmentID, ServiceID: serviceID,

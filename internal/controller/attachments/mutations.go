@@ -10,6 +10,7 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"io"
@@ -47,12 +48,12 @@ type attachMutationFacts interface {
 	) ([]attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts, error)
 	ResolveReadyDatabase(
 		context.Context,
-		etcd.Versioned[attachrecord.Record],
+		etcdstore.Versioned[attachrecord.Record],
 		func(string) error,
 	) error
 	ResolveTaskIdentity(
 		context.Context,
-		etcd.Versioned[attachrecord.Record],
+		etcdstore.Versioned[attachrecord.Record],
 		string,
 		taskplanning.AttachPlanIdentityConsumer,
 	) error
@@ -61,7 +62,7 @@ type attachMutationFacts interface {
 type attachDraftPlanSealer interface {
 	SealDraft(
 		context.Context,
-		etcd.Versioned[attachrecord.Record],
+		etcdstore.Versioned[attachrecord.Record],
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
 		*taskplanning.AttachPlanIdentity,

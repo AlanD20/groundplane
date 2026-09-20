@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"slices"
 	"strings"
@@ -24,8 +25,8 @@ type backingHookTaskInputRepository interface {
 }
 
 type backingHookSecretRepository interface {
-	ResolveSecret(context.Context, string, string) (etcd.Versioned[secretrecord.Record], error)
-	GetSecretValue(context.Context, etcd.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
+	ResolveSecret(context.Context, string, string) (etcdstore.Versioned[secretrecord.Record], error)
+	GetSecretValue(context.Context, etcdstore.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
 }
 
 func (service *FactService) EnableBackingHookInputs(repository backingHookSecretRepository) error {
@@ -202,7 +203,7 @@ func (service *FactService) resolveBackingHookTaskInput(
 
 func (service *FactService) ResolveHookInput(
 	ctx context.Context,
-	current etcd.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	task etcd.TaskRecord,
 	hookContext backinghook.Context,
 	consume taskplanning.BackingHookInputConsumer,
@@ -228,7 +229,7 @@ func (service *FactService) ResolveHookInput(
 
 func (service *FactService) ResolveDraftHookInput(
 	ctx context.Context,
-	current etcd.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	stored *attachrecord.EncryptedFacts,
 	task etcd.TaskRecord,
 	hookInputs *etcd.BackingHookEncryptedInputs,
@@ -365,7 +366,7 @@ func (service *FactService) appendBackingHookTaskInputs(
 
 func (service *FactService) SealHookResult(
 	ctx context.Context,
-	current etcd.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	schema []backinghook.FactDefinition,
 	output backinghook.Output,
 ) (attachrecord.EncryptedFacts, error) {

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"net/netip"
 
@@ -33,9 +34,9 @@ type ComponentExecutionRepository interface {
 	GetPlatformComponentTaskRenderInput(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.PlatformComponentTaskRenderInput], error)
-	GetComponent(context.Context, string) (etcd.Versioned[componentrecord.Record], error)
-	GetHostResolverBaseline(context.Context) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error)
+	) (etcdstore.Versioned[etcd.PlatformComponentTaskRenderInput], error)
+	GetComponent(context.Context, string) (etcdstore.Versioned[componentrecord.Record], error)
+	GetHostResolverBaseline(context.Context) (etcdstore.Versioned[etcd.HostResolverBaselineRecord], bool, error)
 }
 
 type PlatformExecutionPlanner struct {

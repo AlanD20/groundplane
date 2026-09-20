@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
@@ -13,7 +14,7 @@ import (
 )
 
 type blueprintAttachPlanCandidate struct {
-	current        etcd.Versioned[attachrecord.Record]
+	current        etcdstore.Versioned[attachrecord.Record]
 	adapterKey     string
 	authentication core.BackingAuthentication
 	stepCount      int

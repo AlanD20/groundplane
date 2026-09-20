@@ -36,8 +36,8 @@ type TaskAssignmentRecord struct {
 
 // TaskAssignment contains both records created by one successful claim.
 type TaskAssignment struct {
-	Assignment      Versioned[TaskAssignmentRecord]
-	Task            Versioned[TaskRecord]
+	Assignment      etcdstore.Versioned[TaskAssignmentRecord]
+	Task            etcdstore.Versioned[TaskRecord]
 	ReleaseRecovery *ReleaseRecoveryDirective
 	// RecoveryProofRequired is private lifecycle state. It is true only after
 	// the immutable recovery deadline expired without exact restoration proof.
@@ -978,10 +978,10 @@ func (repository *TaskRepository) claimNextTask(
 			continue
 		}
 		return TaskAssignment{
-			Assignment: Versioned[TaskAssignmentRecord]{
+			Assignment: etcdstore.Versioned[TaskAssignmentRecord]{
 				Record: assignment, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 			},
-			Task: Versioned[TaskRecord]{
+			Task: etcdstore.Versioned[TaskRecord]{
 				Record: running, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 			},
 		}, true, nil
@@ -1238,11 +1238,11 @@ func (repository *TaskRepository) ListAgentAssignments(
 			}
 		}
 		result[index] = TaskAssignment{
-			Assignment: Versioned[TaskAssignmentRecord]{
+			Assignment: etcdstore.Versioned[TaskAssignmentRecord]{
 				Record: record, Revision: assignmentValue.ModRevision,
 				ReadRevision: assignments.ReadRevision,
 			},
-			Task: Versioned[TaskRecord]{
+			Task: etcdstore.Versioned[TaskRecord]{
 				Record: task, Revision: taskValue.ModRevision,
 				ReadRevision: assignments.ReadRevision,
 			},
@@ -1323,10 +1323,10 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 		return nil, errs.New(errs.KindInternal, "controller Task claim and Task are inconsistent")
 	}
 	return []TaskAssignment{{
-		Assignment: Versioned[TaskAssignmentRecord]{
+		Assignment: etcdstore.Versioned[TaskAssignmentRecord]{
 			Record: claim, Revision: claimValue.ModRevision, ReadRevision: claims.ReadRevision,
 		},
-		Task: Versioned[TaskRecord]{
+		Task: etcdstore.Versioned[TaskRecord]{
 			Record: task, Revision: taskValue.ModRevision, ReadRevision: claims.ReadRevision,
 		},
 	}}, nil
@@ -1426,7 +1426,7 @@ func (repository *TaskRepository) AcknowledgeTask(
 	terminalStatus TaskStatus,
 	result TaskResultRecord,
 	terminalAt time.Time,
-) (Versioned[TaskRecord], error) {
+) (etcdstore.Versioned[TaskRecord], error) {
 	return repository.acknowledgeTask(
 		ctx, TaskExecutorAgent, agentID, agentGeneration, taskID, assignmentID,
 		terminalStatus, &result, terminalAt, "",
@@ -1445,7 +1445,7 @@ func (repository *TaskRepository) AcknowledgeEnvironmentCreation(
 	terminalStatus TaskStatus,
 	result TaskResultRecord,
 	terminalAt time.Time,
-) (Versioned[TaskRecord], error) {
+) (etcdstore.Versioned[TaskRecord], error) {
 	return repository.acknowledgeTask(
 		ctx,
 		TaskExecutorAgent,
@@ -1467,7 +1467,7 @@ func (repository *TaskRepository) AcknowledgeControllerTask(
 	taskID string,
 	terminalStatus TaskStatus,
 	terminalAt time.Time,
-) (Versioned[TaskRecord], error) {
+) (etcdstore.Versioned[TaskRecord], error) {
 	return repository.acknowledgeTask(
 		ctx, TaskExecutorController, "", 0, taskID, "", terminalStatus, nil, terminalAt, "",
 	)
@@ -1484,9 +1484,9 @@ func (repository *TaskRepository) acknowledgeTask(
 	result *TaskResultRecord,
 	terminalAt time.Time,
 	environmentID string,
-) (Versioned[TaskRecord], error) {
+) (etcdstore.Versioned[TaskRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if !validTaskExecutor(executor) || recordcodec.ValidateID(ids.KindTask, taskID) != nil ||
 		!isTerminalTaskStatus(terminalStatus) ||
@@ -1494,13 +1494,13 @@ func (repository *TaskRepository) acknowledgeTask(
 			recordcodec.ValidateID(ids.KindAssignment, assignmentID) != nil || result == nil)) ||
 		(executor == TaskExecutorController &&
 			(agentID != "" || agentGeneration != 0 || assignmentID != "" || result != nil)) {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task acknowledgement is invalid")
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task acknowledgement is invalid")
 	}
 	if err := recordcodec.ValidateTimestamp("task terminal_at", terminalAt); err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if environmentID != "" && recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
-		return Versioned[TaskRecord]{}, errs.New(
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"environment creation acknowledgement is invalid",
 		)
@@ -1517,18 +1517,18 @@ func (repository *TaskRepository) acknowledgeTask(
 			taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
 		}})
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if len(primaryAndAssignment.Values) != 3 || primaryAndAssignment.Values[0] == nil {
-			return Versioned[TaskRecord]{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
+			return etcdstore.Versioned[TaskRecord]{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
 		}
 		taskValue := primaryAndAssignment.Values[0]
 		task, err := decodeTaskRecord(taskValue.Value)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if task.Executor != executor {
-			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "task execution authority changed")
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "task execution authority changed")
 		}
 		if task.Params[TaskResourceKindParam] == TaskResourceHierarchyDeletion {
 			if executor == TaskExecutorController {
@@ -1537,7 +1537,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				)
 			}
 			if result == nil {
-				return Versioned[TaskRecord]{}, errs.New(
+				return etcdstore.Versioned[TaskRecord]{}, errs.New(
 					errs.KindStateConflict,
 					"hierarchy deletion Agent Task requires a result",
 				)
@@ -1549,7 +1549,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		if task.Type == TaskBackup || task.Type == TaskBackupPrune {
 			if executor != TaskExecutorAgent || result == nil {
-				return Versioned[TaskRecord]{}, errs.New(
+				return etcdstore.Versioned[TaskRecord]{}, errs.New(
 					errs.KindStateConflict,
 					"backup Task requires an Agent acknowledgement",
 				)
@@ -1574,19 +1574,19 @@ func (repository *TaskRepository) acknowledgeTask(
 		zoneRemoval := executor == TaskExecutorAgent && task.Type == TaskRemove &&
 			recordcodec.ValidateID(ids.KindNetwork, task.Target) == nil && task.Params[TaskZoneRemovalOperationParam] != ""
 		if environmentCreation != (environmentID != "") || (environmentCreation && task.Target != environmentID) {
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"environment creation Task requires its atomic provisioning acknowledgement",
 			)
 		}
 		if result != nil {
 			if err := validateTaskResult(*result, task.Steps, terminalStatus); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 		}
 		if assignmentValue == nil {
 			if assignmentIndexValue != nil {
-				return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task assignment index is orphaned")
+				return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task assignment index is orphaned")
 			}
 			if executor == TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" {
 				normalizedStatus, normalizedResult, handled, normalizeErr := repository.normalizeReleaseRecoveryTerminalReplay(
@@ -1600,7 +1600,7 @@ func (repository *TaskRepository) acknowledgeTask(
 					primaryAndAssignment.ReadRevision,
 				)
 				if normalizeErr != nil {
-					return Versioned[TaskRecord]{}, normalizeErr
+					return etcdstore.Versioned[TaskRecord]{}, normalizeErr
 				}
 				if handled {
 					terminalStatus, result = normalizedStatus, normalizedResult
@@ -1614,7 +1614,7 @@ func (repository *TaskRepository) acknowledgeTask(
 						AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
 					}
 					if task.TerminalAssignment == nil || *task.TerminalAssignment != expected {
-						return Versioned[TaskRecord]{}, errs.New(
+						return etcdstore.Versioned[TaskRecord]{}, errs.New(
 							errs.KindStateConflict,
 							"task terminal assignment identity does not match",
 						)
@@ -1624,63 +1624,63 @@ func (repository *TaskRepository) acknowledgeTask(
 					if err := repository.validateEnvironmentCreationReplay(
 						ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 					); err != nil {
-						return Versioned[TaskRecord]{}, err
+						return etcdstore.Versioned[TaskRecord]{}, err
 					}
 				}
 				if environmentRemoval {
 					if err := repository.validateEnvironmentRemovalReplay(
 						ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 					); err != nil {
-						return Versioned[TaskRecord]{}, err
+						return etcdstore.Versioned[TaskRecord]{}, err
 					}
 				}
 				if zoneRemoval {
 					if err := repository.validateZoneRemovalReplay(
 						ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 					); err != nil {
-						return Versioned[TaskRecord]{}, err
+						return etcdstore.Versioned[TaskRecord]{}, err
 					}
 				}
 				if err := repository.validateAttachTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if err := repository.validateBlueprintAttachTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if err := repository.validateSecretTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if err := repository.validateConnectorTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if err := repository.validateRunnerTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if err := repository.validateScriptTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if err := repository.validateReleaseGroupTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if task.Params[TaskReleasePublicationParam] != "" && task.Type == TaskUpdate {
 					if err := repository.validateBlueprintCandidateTerminalReplay(
 						ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 					); err != nil {
-						return Versioned[TaskRecord]{}, err
+						return etcdstore.Versioned[TaskRecord]{}, err
 					}
 				} else if task.Params[TaskReleasePublicationParam] != "" {
 					headRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -1690,7 +1690,7 @@ func (repository *TaskRepository) acknowledgeTask(
 						Revision: primaryAndAssignment.ReadRevision,
 					})
 					if err != nil || headRead == nil || len(headRead.Values) != 1 || headRead.Values[0] == nil {
-						return Versioned[TaskRecord]{}, corruptReleaseRecord()
+						return etcdstore.Versioned[TaskRecord]{}, corruptReleaseRecord()
 					}
 					head, err := decodeReleaseRecord[ReleaseOperationHead](
 						headRead.Values[0].Value,
@@ -1699,53 +1699,53 @@ func (repository *TaskRepository) acknowledgeTask(
 					if err != nil || repository.validateReleaseTerminalMembers(
 						ctx, task, head, terminalStatus, primaryAndAssignment.ReadRevision,
 					) != nil {
-						return Versioned[TaskRecord]{}, corruptReleaseRecord()
+						return etcdstore.Versioned[TaskRecord]{}, corruptReleaseRecord()
 					}
 				}
 				if err := repository.validateRemovalTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if err := repository.validateBackingZoneTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if err := repository.validateComponentTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if err := repository.validatePlatformComponentTaskAcknowledgementReplay(
 					ctx, task, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if err := repository.validateBackupKeyRotationTaskAcknowledgementReplay(
 					ctx, task, terminalStatus, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 				if err := repository.validateTaskRetentionReplay(
 					ctx, task, primaryAndAssignment.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
-				return Versioned[TaskRecord]{
+				return etcdstore.Versioned[TaskRecord]{
 					Record: task, Revision: taskValue.ModRevision,
 					ReadRevision: primaryAndAssignment.ReadRevision,
 				}, nil
 			}
-			return Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "task has no matching active assignment")
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "task has no matching active assignment")
 		}
 		assignment, err := decodeTaskAssignment(assignmentValue.Value)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if assignmentIndexValue == nil || assignmentIndexValue.ModRevision != assignmentValue.ModRevision ||
 			!bytes.Equal(assignmentIndexValue.Value, assignmentValue.Value) {
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindInternal,
 				"task assignment index does not match assignment",
 			)
@@ -1756,25 +1756,25 @@ func (repository *TaskRepository) acknowledgeTask(
 			assignment.AgentGeneration != agentGeneration ||
 			assignment.ClaimedTaskRevision >= assignmentValue.ModRevision || task.StartedAt == nil ||
 			!assignment.AssignedAt.Equal(*task.StartedAt) {
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"task assignment does not match the Agent generation",
 			)
 		}
 		terminalAt, err = nextTaskControllerTimestamp(task.UpdatedAt, terminalAt)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		timeoutEvidenceConditions, err := repository.prepareReleaseTerminalReport(ctx, TaskAssignment{
-			Task: Versioned[TaskRecord]{
+			Task: etcdstore.Versioned[TaskRecord]{
 				Record:       task,
 				Revision:     taskValue.ModRevision,
 				ReadRevision: primaryAndAssignment.ReadRevision,
 			},
-			Assignment: Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
+			Assignment: etcdstore.Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
 		}, terminalStatus, result)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		var recoveryAcknowledgement releaseRecoveryAcknowledgement
 		var terminalScriptSourceRelease scriptTerminalSourceRelease
@@ -1784,10 +1784,10 @@ func (repository *TaskRepository) acknowledgeTask(
 				ctx, task, assignment, terminalStatus, *result, primaryAndAssignment.ReadRevision,
 			)
 			if err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if !recoveryAcknowledgement.final {
-				return Versioned[TaskRecord]{
+				return etcdstore.Versioned[TaskRecord]{
 					Record:       task,
 					Revision:     taskValue.ModRevision,
 					ReadRevision: primaryAndAssignment.ReadRevision,
@@ -1806,7 +1806,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				submittedTerminalStatus, *submittedResult, false,
 			)
 			if err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if processed {
 				continue
@@ -1820,7 +1820,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				terminalStatus, *result, primaryAndAssignment.ReadRevision, timeoutEvidenceConditions...,
 			)
 			if transitionErr != nil {
-				return Versioned[TaskRecord]{}, transitionErr
+				return etcdstore.Versioned[TaskRecord]{}, transitionErr
 			}
 			if processed {
 				return transitioned, nil
@@ -1834,7 +1834,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				primaryAndAssignment.ReadRevision, recoveryAcknowledgement.conditions...,
 			)
 			if err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if processed {
 				continue
@@ -1843,7 +1843,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		if environmentRemoval && terminalStatus == TaskStatusCompleted {
 			processed, err := repository.finalizeEnvironmentBlueprintRevisionBatch(ctx, task, terminalAt)
 			if err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if processed {
 				continue
@@ -1851,7 +1851,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		terminal, err := transitionTaskStatus(task, TaskStatusRunning, terminalStatus, terminalAt)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		terminal.Result = cloneTaskResult(result)
 		if executor == TaskExecutorAgent {
@@ -1860,7 +1860,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			}
 		}
 		if err := validateTaskRecord(terminal); err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		transitionedMarker, markerKey, retentionKey, err := prepareTerminalTaskMarker(
 			terminal,
@@ -1868,17 +1868,17 @@ func (repository *TaskRepository) acknowledgeTask(
 			terminalAt,
 		)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		materializationEnvironmentID, materializes, err := taskEnvironmentWriter(task)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		lifecycleKey, _, _, err := repository.assignmentLifecycleIndexAtRevision(
 			ctx, assignment, assignmentValue, primaryAndAssignment.ReadRevision,
 		)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		companionKeys := []string{
 			taskActiveOperationKey(task.OperationID), markerKey, taskQueueKey(task.Executor, task.ID), retentionKey,
@@ -1895,58 +1895,58 @@ func (repository *TaskRepository) acknowledgeTask(
 			Revision: primaryAndAssignment.ReadRevision,
 		})
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if len(companions.Values) != len(companionKeys) || companions.Values[0] == nil || companions.Values[1] == nil ||
 			companions.Values[2] != nil || companions.Values[3] != nil || companions.Values[4] == nil ||
 			companions.Values[4].ModRevision != assignmentValue.ModRevision ||
 			!bytes.Equal(companions.Values[4].Value, assignmentValue.Value) {
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindInternal,
 				"running Task lifecycle records are inconsistent",
 			)
 		}
 		if err := validateTaskLifecycleCompanions(task, companions.Values[0], companions.Values[1]); err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if materializes {
 			if companions.Values[5] == nil {
-				return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task materialization writer is missing")
+				return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task materialization writer is missing")
 			}
 			materializationWriter, err = decodeTaskMaterializationWriter(companions.Values[5].Value)
 			if err != nil || validateTaskMaterializationWriterForTask(
 				materializationWriter, task, materializationEnvironmentID,
 			) != nil {
-				return Versioned[TaskRecord]{}, corruptTaskMaterializationWriter()
+				return etcdstore.Versioned[TaskRecord]{}, corruptTaskMaterializationWriter()
 			}
 		}
 		transitionedMarker, err = hydrateTerminalTaskMarker(transitionedMarker, companions.Values[1].Value)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		terminalValue, err := encodeTaskRecord(terminal)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		markerValue, err := encodeIdempotencyMarker(transitionedMarker)
 		clear(transitionedMarker.Intent.Ciphertext)
 		clear(transitionedMarker.Response.Body)
 		if err != nil {
 			clear(terminalValue)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
 		if err != nil {
 			clear(terminalValue)
 			clear(markerValue)
-			return Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
+			return etcdstore.Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
 		}
 		taskRetentionKey, taskRetentionValue, err := prepareTaskRetentionIndex(terminal)
 		if err != nil {
 			clear(terminalValue)
 			clear(markerValue)
 			clear(retentionValue)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		conditions := []etcdstore.Condition{
 			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
@@ -1991,7 +1991,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				clear(markerValue)
 				clear(retentionValue)
 				clear(taskRetentionValue)
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 		}
 		defer blueprintCandidateChange.clear()
@@ -2006,7 +2006,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clear(taskRetentionValue)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		defer clearTaskMaterializationProjectionChange(materializationProjectionChange)
 		if materializationProjectionChange.applies {
@@ -2025,7 +2025,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				clear(terminalValue)
 				clear(markerValue)
 				clear(retentionValue)
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			environmentValue = value
 			conditions = append(conditions, environmentConditions...)
@@ -2040,7 +2040,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				clear(markerValue)
 				clear(retentionValue)
 				clear(environmentValue)
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			conditions = append(conditions, environmentConditions...)
 			mutations = append(mutations, environmentMutations...)
@@ -2054,7 +2054,7 @@ func (repository *TaskRepository) acknowledgeTask(
 				clear(markerValue)
 				clear(retentionValue)
 				clear(environmentValue)
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			defer clearMutationValues(zoneMutations)
 			conditions = append(conditions, zoneConditions...)
@@ -2068,7 +2068,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clear(markerValue)
 			clear(retentionValue)
 			clear(environmentValue)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if attachChange.applies {
 			conditions = append(conditions, attachChange.conditions...)
@@ -2083,7 +2083,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clear(retentionValue)
 			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		defer clearBlueprintAttachTaskChange(blueprintAttachChange)
 		if blueprintAttachChange.applies {
@@ -2099,7 +2099,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clear(retentionValue)
 			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if secretChange.applies {
 			conditions = append(conditions, secretChange.conditions...)
@@ -2115,7 +2115,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
 			clearSecretTaskChange(secretChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if scriptChange.applies {
 			conditions = append(conditions, scriptChange.conditions...)
@@ -2132,7 +2132,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearAttachTaskChange(attachChange)
 			clearSecretTaskChange(secretChange)
 			clearScriptTaskChange(scriptChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		defer clearReleaseGroupTaskChange(releaseGroupChange)
 		if releaseGroupChange.applies {
@@ -2149,7 +2149,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clear(environmentValue)
 			clearAttachTaskChange(attachChange)
 			clearSecretTaskChange(secretChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if routeChange.applies {
 			conditions = append(conditions, routeChange.conditions...)
@@ -2166,7 +2166,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearAttachTaskChange(attachChange)
 			clearSecretTaskChange(secretChange)
 			clearRouteTaskChange(routeChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if serviceChange.applies {
 			conditions = append(conditions, serviceChange.conditions...)
@@ -2184,7 +2184,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearSecretTaskChange(secretChange)
 			clearRouteTaskChange(routeChange)
 			clearServiceTaskChange(serviceChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if backingZoneChange.applies {
 			conditions = append(conditions, backingZoneChange.conditions...)
@@ -2207,7 +2207,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearRouteTaskChange(routeChange)
 			clearServiceTaskChange(serviceChange)
 			clearBackingZoneTaskChange(backingZoneChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if componentChange.applies {
 			conditions = append(conditions, componentChange.conditions...)
@@ -2231,7 +2231,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearServiceTaskChange(serviceChange)
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if platformComponentChange.applies {
 			conditions = append(conditions, platformComponentChange.conditions...)
@@ -2254,7 +2254,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		defer clearHostResolutionReconciliationChange(hostResolutionChange)
 		if hostResolutionChange.applies {
@@ -2276,7 +2276,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if connectorChange.applies {
 			conditions = append(conditions, connectorChange.conditions...)
@@ -2298,7 +2298,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearComponentTaskChange(componentChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
 			clearConnectorTaskChange(connectorChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if runnerChange.applies {
 			conditions = append(conditions, runnerChange.conditions...)
@@ -2308,7 +2308,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			ctx, task, terminalStatus, terminalAt, primaryAndAssignment.ReadRevision,
 		)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		defer rotationChange.clear()
 		conditions = append(conditions, rotationChange.conditions...)
@@ -2331,7 +2331,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearPlatformComponentTaskChange(platformComponentChange)
 			clearConnectorTaskChange(connectorChange)
 			clearRunnerTaskChange(runnerChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		environmentBinding, err := repository.bindOrdinaryTaskEnvironmentMutation(
 			ctx,
@@ -2360,7 +2360,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			clearPlatformComponentTaskChange(platformComponentChange)
 			clearConnectorTaskChange(connectorChange)
 			clearRunnerTaskChange(runnerChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		var environmentEpochValue []byte
 		if environmentBinding != nil {
@@ -2397,17 +2397,17 @@ func (repository *TaskRepository) acknowledgeTask(
 		clear(environmentEpochValue)
 		environmentBinding.clear()
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		clearKeyValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			conflicts++
 			if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			continue
 		}
-		return Versioned[TaskRecord]{
+		return etcdstore.Versioned[TaskRecord]{
 			Record: terminal, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 		}, nil
 	}
@@ -2426,10 +2426,10 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 	terminalStatus TaskStatus,
 	result TaskResultRecord,
 	terminalAt time.Time,
-) (Versioned[TaskRecord], error) {
+) (etcdstore.Versioned[TaskRecord], error) {
 	runtime, err := newBackupRuntimeRepository(repository.store)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	conflicts := 0
 	for {
@@ -2437,7 +2437,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 			ctx, agentID, agentGeneration, taskID, assignmentID,
 		)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if !assigned {
 			expectedAssignment := TaskTerminalAssignmentRecord{
@@ -2446,14 +2446,14 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 			if err := repository.validateBackupTaskTerminalReplay(
 				ctx, current.Task, terminalStatus, &result, &expectedAssignment,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			return current.Task, nil
 		}
 
 		effectiveAt, err := nextTaskControllerTimestamp(current.Task.Record.UpdatedAt, terminalAt)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		var conditions []etcdstore.Condition
 		var mutations []etcdstore.Mutation
@@ -2462,26 +2462,26 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 		case TaskBackup:
 			run, getErr := runtime.GetBackupRun(ctx, taskID)
 			if getErr != nil {
-				return Versioned[TaskRecord]{}, getErr
+				return etcdstore.Versioned[TaskRecord]{}, getErr
 			}
 			if err := validateBackupRunTaskBinding(current.Task.Record, run.Record); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			effectiveAt = backupTerminalTimestamp(effectiveAt, run.Record.UpdatedAt)
 			next, transitionErr := backupRunForTaskTerminal(run.Record, terminalStatus, effectiveAt)
 			if transitionErr != nil {
-				return Versioned[TaskRecord]{}, transitionErr
+				return etcdstore.Versioned[TaskRecord]{}, transitionErr
 			}
 			taskPlan, prepareErr := repository.prepareBackupTaskTerminal(
 				ctx, current, terminalStatus, result, effectiveAt,
 			)
 			if prepareErr != nil {
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			runPlan, prepareErr := runtime.prepareBackupRunTerminal(ctx, run, next)
 			if prepareErr != nil {
 				taskPlan.clear()
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			receiptPlan, prepareErr := prepareBackupRunTerminalReceipt(
 				current.Task, taskPlan.record, runPlan.record,
@@ -2489,7 +2489,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 			if prepareErr != nil {
 				taskPlan.clear()
 				runPlan.clear()
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			terminal = taskPlan.record
 			conditions, mutations, err = composeBackupRunTerminalTransaction(
@@ -2503,7 +2503,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 				ctx, current.Task.Record,
 			)
 			if loadErr != nil {
-				return Versioned[TaskRecord]{}, loadErr
+				return etcdstore.Versioned[TaskRecord]{}, loadErr
 			}
 			effectiveAt = backupTerminalTimestamp(effectiveAt, dispatch.Record.CreatedAt)
 			for _, prune := range prunes {
@@ -2513,7 +2513,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 				ctx, current, terminalStatus, result, effectiveAt,
 			)
 			if prepareErr != nil {
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			var prunePlan backupPruneTransactionPlan
 			if terminalStatus == TaskStatusCompleted {
@@ -2525,7 +2525,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 			}
 			if prepareErr != nil {
 				taskPlan.clear()
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			receiptPlan, prepareErr := prepareBackupPruneTerminalReceipt(
 				current.Task, taskPlan.record, dispatch.Record, prunes,
@@ -2533,7 +2533,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 			if prepareErr != nil {
 				taskPlan.clear()
 				prunePlan.clear()
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			terminal = taskPlan.record
 			conditions, mutations, err = composeBackupPruneTerminalTransaction(
@@ -2543,28 +2543,28 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 			prunePlan.clear()
 			receiptPlan.clear()
 		default:
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindInternal,
 				"backup Task terminal dispatch received an ordinary Task",
 			)
 		}
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		transaction, err := runtime.transact(ctx, conditions, mutations)
 		clearBackupRuntimeMutations(mutations)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		clearKeyValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			conflicts++
 			if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			continue
 		}
-		return Versioned[TaskRecord]{
+		return etcdstore.Versioned[TaskRecord]{
 			Record: terminal, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 		}, nil
 	}
@@ -2593,7 +2593,7 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 		(task.Type != TaskBackup && task.Type != TaskBackupPrune) {
 		return TaskAssignment{}, false, errs.New(errs.KindInternal, "backup Task assignment is corrupt")
 	}
-	current := TaskAssignment{Task: Versioned[TaskRecord]{
+	current := TaskAssignment{Task: etcdstore.Versioned[TaskRecord]{
 		Record: task, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision,
 	}}
 	if read.Values[1] == nil {
@@ -2622,7 +2622,7 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 			"backup Task assignment identity changed",
 		)
 	}
-	current.Assignment = Versioned[TaskAssignmentRecord]{
+	current.Assignment = etcdstore.Versioned[TaskAssignmentRecord]{
 		Record: assignment, Revision: read.Values[1].ModRevision, ReadRevision: read.ReadRevision,
 	}
 	return current, true, nil
@@ -2632,17 +2632,17 @@ func (repository *TaskRepository) loadBackupPruneTerminalAuthority(
 	ctx context.Context,
 	task TaskRecord,
 ) (
-	Versioned[BackupRecoveryPointPruneDispatchRecord],
-	[]Versioned[BackupRecoveryPointPruneRecord],
+	etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord],
+	[]etcdstore.Versioned[BackupRecoveryPointPruneRecord],
 	error,
 ) {
 	taskID := task.ID
 	dispatchRead, err := repository.store.Get(ctx, backupRecoveryPointPruneDispatchKey(taskID))
 	if err != nil {
-		return Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, err
+		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, err
 	}
 	if dispatchRead == nil || dispatchRead.Entry == nil || dispatchRead.ReadRevision <= 0 {
-		return Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
+		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
 			errs.KindInternal,
 			"backup prune dispatch is missing for its active Task",
 		)
@@ -2650,12 +2650,12 @@ func (repository *TaskRepository) loadBackupPruneTerminalAuthority(
 	defer clear(dispatchRead.Entry.Value)
 	dispatchRecord, err := decodeBackupRecoveryPointPruneDispatchRecord(dispatchRead.Entry.Value)
 	if err != nil || dispatchRecord.TaskID != taskID {
-		return Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, corruptBackupRuntimeRecord()
+		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, corruptBackupRuntimeRecord()
 	}
 	if err := validateBackupPruneTaskBinding(task, dispatchRecord); err != nil {
-		return Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, err
+		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, err
 	}
-	dispatch := Versioned[BackupRecoveryPointPruneDispatchRecord]{
+	dispatch := etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{
 		Record: dispatchRecord, Revision: dispatchRead.Entry.ModRevision,
 		ReadRevision: dispatchRead.ReadRevision,
 	}
@@ -2665,19 +2665,19 @@ func (repository *TaskRepository) loadBackupPruneTerminalAuthority(
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
-		return Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, err
+		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, err
 	}
 	if read == nil || read.ReadRevision <= 0 || len(read.Values) != len(keys) {
-		return Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
+		return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
 			errs.KindInternal,
 			"backup prune authority read is incomplete",
 		)
 	}
 	defer clearKeyValues(read.Values)
-	prunes := make([]Versioned[BackupRecoveryPointPruneRecord], len(keys))
+	prunes := make([]etcdstore.Versioned[BackupRecoveryPointPruneRecord], len(keys))
 	for index, value := range read.Values {
 		if value == nil {
-			return Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
+			return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, errs.New(
 				errs.KindInternal,
 				"backup prune authority is missing for its active Task",
 			)
@@ -2687,9 +2687,9 @@ func (repository *TaskRepository) loadBackupPruneTerminalAuthority(
 			record.Point.EnvironmentID != dispatchRecord.EnvironmentID ||
 			record.OperationID != dispatchRecord.OperationID || record.TaskID != taskID ||
 			(record.State != BackupPruneAssigned && record.State != BackupPruneVerifiedAbsent) {
-			return Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, corruptBackupRuntimeRecord()
+			return etcdstore.Versioned[BackupRecoveryPointPruneDispatchRecord]{}, nil, corruptBackupRuntimeRecord()
 		}
-		prunes[index] = Versioned[BackupRecoveryPointPruneRecord]{
+		prunes[index] = etcdstore.Versioned[BackupRecoveryPointPruneRecord]{
 			Record: record, Revision: value.ModRevision, ReadRevision: read.ReadRevision,
 		}
 	}
@@ -2817,7 +2817,7 @@ func backupTerminalTimestamp(supplied time.Time, previous time.Time) time.Time {
 
 func (repository *TaskRepository) validateBackupTaskTerminalReplay(
 	ctx context.Context,
-	task Versioned[TaskRecord],
+	task etcdstore.Versioned[TaskRecord],
 	terminalStatus TaskStatus,
 	result *TaskResultRecord,
 	assignment *TaskTerminalAssignmentRecord,
@@ -2940,22 +2940,22 @@ func (repository *TaskRepository) AbortPendingTask(
 	ctx context.Context,
 	taskID string,
 	terminalAt time.Time,
-) (Versioned[TaskRecord], error) {
+) (etcdstore.Versioned[TaskRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task id is invalid")
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task id is invalid")
 	}
 	if err := recordcodec.ValidateTimestamp("task terminal_at", terminalAt); err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 
 	conflicts := 0
 	for {
 		current, err := repository.GetTask(ctx, taskID)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if current.Record.Type == TaskBackup || current.Record.Type == TaskBackupPrune {
 			return repository.abortPendingBackupTask(ctx, taskID, terminalAt)
@@ -2969,105 +2969,105 @@ func (repository *TaskRepository) AbortPendingTask(
 			current.Record.Params[TaskZoneRemovalOperationParam] != ""
 		if current.Record.Status == TaskStatusAborted {
 			if err := repository.validatePendingScriptAbortReplay(ctx, current); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if environmentCreation {
 				if err := repository.validateEnvironmentCreationReplay(
 					ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 			}
 			if environmentRemoval {
 				if err := repository.validateEnvironmentRemovalReplay(
 					ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 			}
 			if zoneRemoval {
 				if err := repository.validateZoneRemovalReplay(
 					ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 				); err != nil {
-					return Versioned[TaskRecord]{}, err
+					return etcdstore.Versioned[TaskRecord]{}, err
 				}
 			}
 			if err := repository.validateAttachTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateBlueprintAttachTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateSecretTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateConnectorTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateRunnerTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateScriptTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateReleaseGroupTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateRemovalTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateBackingZoneTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateComponentTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validatePlatformComponentTaskAcknowledgementReplay(
 				ctx, current.Record, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateBackupKeyRotationTaskAcknowledgementReplay(
 				ctx, current.Record, TaskStatusAborted, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			if err := repository.validateTaskRetentionReplay(
 				ctx, current.Record, current.ReadRevision,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			return repository.finishUnassignedReleaseAbort(ctx, current)
 		}
 		if current.Record.Status != TaskStatusPending {
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"only a pending Task can be aborted before assignment",
 			)
 		}
 		blueprintAbortChange, err := repository.preparePendingScriptAbort(ctx, current, terminalAt)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if blueprintAbortChange.advanced {
 			continue
@@ -3077,7 +3077,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		}
 		terminal, err := transitionTaskStatus(current.Record, TaskStatusPending, TaskStatusAborted, terminalAt)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		terminalAt = *terminal.FinishedAt
 		transitionedMarker, markerKey, retentionKey, err := prepareTerminalTaskMarker(
@@ -3086,7 +3086,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			terminalAt,
 		)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
@@ -3096,18 +3096,18 @@ func (repository *TaskRepository) AbortPendingTask(
 			Revision: current.ReadRevision,
 		})
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if len(companions.Values) != 4 || companions.Values[0] == nil || companions.Values[1] == nil ||
 			companions.Values[2] == nil || companions.Values[3] != nil {
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindInternal,
 				"pending Task lifecycle records are inconsistent",
 			)
 		}
 		queuedTaskID, queueErr := decodeTaskReference(companions.Values[2].Value)
 		if queueErr != nil || queuedTaskID != taskID {
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindInternal,
 				"pending Task queue record does not match its Task",
 			)
@@ -3117,35 +3117,35 @@ func (repository *TaskRepository) AbortPendingTask(
 			companions.Values[0],
 			companions.Values[1],
 		); err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		transitionedMarker, err = hydrateTerminalTaskMarker(transitionedMarker, companions.Values[1].Value)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		terminalValue, err := encodeTaskRecord(terminal)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		markerValue, err := encodeIdempotencyMarker(transitionedMarker)
 		clear(transitionedMarker.Intent.Ciphertext)
 		clear(transitionedMarker.Response.Body)
 		if err != nil {
 			clear(terminalValue)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
 		if err != nil {
 			clear(terminalValue)
 			clear(markerValue)
-			return Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
+			return etcdstore.Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
 		}
 		taskRetentionKey, taskRetentionValue, err := prepareTaskRetentionIndex(terminal)
 		if err != nil {
 			clear(terminalValue)
 			clear(markerValue)
 			clear(retentionValue)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		conditions := []etcdstore.Condition{
 			{Key: taskKey(taskID), ModRevision: current.Revision},
@@ -3177,7 +3177,7 @@ func (repository *TaskRepository) AbortPendingTask(
 				clear(markerValue)
 				clear(retentionValue)
 				clear(taskRetentionValue)
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			environmentValue = value
 			conditions = append(conditions, environmentConditions...)
@@ -3194,7 +3194,7 @@ func (repository *TaskRepository) AbortPendingTask(
 				clear(retentionValue)
 				clear(taskRetentionValue)
 				clear(environmentValue)
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			conditions = append(conditions, environmentConditions...)
 			mutations = append(mutations, environmentMutations...)
@@ -3210,7 +3210,7 @@ func (repository *TaskRepository) AbortPendingTask(
 				clear(retentionValue)
 				clear(taskRetentionValue)
 				clear(environmentValue)
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			zoneMutations = preparedZoneMutations
 			conditions = append(conditions, zoneConditions...)
@@ -3226,7 +3226,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(taskRetentionValue)
 			clear(environmentValue)
 			clearMutationValues(zoneMutations)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if attachChange.applies {
 			conditions = append(conditions, attachChange.conditions...)
@@ -3243,7 +3243,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(environmentValue)
 			clearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		defer clearBlueprintAttachTaskChange(blueprintAttachChange)
 		if blueprintAttachChange.applies {
@@ -3261,7 +3261,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clear(environmentValue)
 			clearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		scriptChange, err := repository.prepareScriptTaskAcknowledgement(
 			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
@@ -3275,7 +3275,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
 			clearSecretTaskChange(secretChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		releaseGroupChange, err := repository.prepareReleaseGroupTaskAcknowledgement(
 			ctx, current.Record, TaskStatusAborted, current.ReadRevision,
@@ -3290,7 +3290,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearAttachTaskChange(attachChange)
 			clearSecretTaskChange(secretChange)
 			clearScriptTaskChange(scriptChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		defer clearReleaseGroupTaskChange(releaseGroupChange)
 		if releaseGroupChange.applies {
@@ -3309,7 +3309,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearMutationValues(zoneMutations)
 			clearAttachTaskChange(attachChange)
 			clearSecretTaskChange(secretChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		serviceChange, err := repository.prepareServiceTaskAcknowledgement(
 			ctx, current.Record, current.ReadRevision,
@@ -3324,7 +3324,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearAttachTaskChange(attachChange)
 			clearSecretTaskChange(secretChange)
 			clearRouteTaskChange(routeChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		backingZoneChange, err := repository.prepareBackingZoneTaskAcknowledgement(
 			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
@@ -3340,7 +3340,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearSecretTaskChange(secretChange)
 			clearRouteTaskChange(routeChange)
 			clearServiceTaskChange(serviceChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		componentChange, err := repository.prepareComponentTaskAcknowledgement(
 			ctx, current.Record, TaskStatusAborted, terminalAt, current.ReadRevision,
@@ -3357,7 +3357,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearRouteTaskChange(routeChange)
 			clearServiceTaskChange(serviceChange)
 			clearBackingZoneTaskChange(backingZoneChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if secretChange.applies {
 			conditions = append(conditions, secretChange.conditions...)
@@ -3399,7 +3399,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearServiceTaskChange(serviceChange)
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if platformComponentChange.applies {
 			conditions = append(conditions, platformComponentChange.conditions...)
@@ -3423,7 +3423,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		defer clearHostResolutionReconciliationChange(hostResolutionChange)
 		if hostResolutionChange.applies {
@@ -3447,7 +3447,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearBackingZoneTaskChange(backingZoneChange)
 			clearComponentTaskChange(componentChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if connectorChange.applies {
 			conditions = append(conditions, connectorChange.conditions...)
@@ -3471,7 +3471,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearComponentTaskChange(componentChange)
 			clearConnectorTaskChange(connectorChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if runnerChange.applies {
 			conditions = append(conditions, runnerChange.conditions...)
@@ -3482,7 +3482,7 @@ func (repository *TaskRepository) AbortPendingTask(
 		)
 		if err != nil {
 			clearPlatformComponentTaskChange(platformComponentChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		defer rotationChange.clear()
 		conditions = append(conditions, rotationChange.conditions...)
@@ -3519,7 +3519,7 @@ func (repository *TaskRepository) AbortPendingTask(
 			clearConnectorTaskChange(connectorChange)
 			clearRunnerTaskChange(runnerChange)
 			clearPlatformComponentTaskChange(platformComponentChange)
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		var environmentEpochValue []byte
 		if environmentBinding != nil {
@@ -3549,17 +3549,17 @@ func (repository *TaskRepository) AbortPendingTask(
 		clear(environmentEpochValue)
 		environmentBinding.clear()
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		clearKeyValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			conflicts++
 			if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			continue
 		}
-		return repository.finishUnassignedReleaseAbort(ctx, Versioned[TaskRecord]{
+		return repository.finishUnassignedReleaseAbort(ctx, etcdstore.Versioned[TaskRecord]{
 			Record: terminal, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 		})
 	}
@@ -3569,35 +3569,35 @@ func (repository *TaskRepository) abortPendingBackupTask(
 	ctx context.Context,
 	taskID string,
 	terminalAt time.Time,
-) (Versioned[TaskRecord], error) {
+) (etcdstore.Versioned[TaskRecord], error) {
 	runtime, err := newBackupRuntimeRepository(repository.store)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	conflicts := 0
 	for {
 		current, err := repository.GetTask(ctx, taskID)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if current.Record.Status == TaskStatusAborted {
 			if err := repository.validateBackupTaskTerminalReplay(
 				ctx, current, TaskStatusAborted, nil, nil,
 			); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			return current, nil
 		}
 		if current.Record.Status != TaskStatusPending ||
 			(current.Record.Type != TaskBackup && current.Record.Type != TaskBackupPrune) {
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"only a pending Backup Task can be aborted before assignment",
 			)
 		}
 		effectiveAt, err := nextTaskControllerTimestamp(current.Record.UpdatedAt, terminalAt)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		var conditions []etcdstore.Condition
 		var mutations []etcdstore.Mutation
@@ -3606,28 +3606,28 @@ func (repository *TaskRepository) abortPendingBackupTask(
 		case TaskBackup:
 			run, getErr := runtime.GetBackupRun(ctx, taskID)
 			if getErr != nil {
-				return Versioned[TaskRecord]{}, getErr
+				return etcdstore.Versioned[TaskRecord]{}, getErr
 			}
 			if err := validateBackupRunTaskBinding(current.Record, run.Record); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			effectiveAt = backupTerminalTimestamp(effectiveAt, run.Record.UpdatedAt)
 			next, transitionErr := backupRunForTaskTerminal(
 				run.Record, TaskStatusAborted, effectiveAt,
 			)
 			if transitionErr != nil {
-				return Versioned[TaskRecord]{}, transitionErr
+				return etcdstore.Versioned[TaskRecord]{}, transitionErr
 			}
 			taskPlan, prepareErr := repository.preparePendingBackupTaskTerminal(
 				ctx, current, effectiveAt,
 			)
 			if prepareErr != nil {
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			runPlan, prepareErr := runtime.prepareBackupRunTerminal(ctx, run, next)
 			if prepareErr != nil {
 				taskPlan.clear()
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			receiptPlan, prepareErr := prepareBackupRunTerminalReceipt(
 				current, taskPlan.record, runPlan.record,
@@ -3635,7 +3635,7 @@ func (repository *TaskRepository) abortPendingBackupTask(
 			if prepareErr != nil {
 				taskPlan.clear()
 				runPlan.clear()
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			terminal = taskPlan.record
 			conditions, mutations, err = composeBackupRunTerminalTransaction(
@@ -3649,7 +3649,7 @@ func (repository *TaskRepository) abortPendingBackupTask(
 				ctx, current.Record,
 			)
 			if loadErr != nil {
-				return Versioned[TaskRecord]{}, loadErr
+				return etcdstore.Versioned[TaskRecord]{}, loadErr
 			}
 			effectiveAt = backupTerminalTimestamp(effectiveAt, dispatch.Record.CreatedAt)
 			for _, prune := range prunes {
@@ -3659,14 +3659,14 @@ func (repository *TaskRepository) abortPendingBackupTask(
 				ctx, current, effectiveAt,
 			)
 			if prepareErr != nil {
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			prunePlan, prepareErr := runtime.prepareBackupPruneFailure(
 				ctx, dispatch, prunes, effectiveAt,
 			)
 			if prepareErr != nil {
 				taskPlan.clear()
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			receiptPlan, prepareErr := prepareBackupPruneTerminalReceipt(
 				current, taskPlan.record, dispatch.Record, prunes,
@@ -3674,7 +3674,7 @@ func (repository *TaskRepository) abortPendingBackupTask(
 			if prepareErr != nil {
 				taskPlan.clear()
 				prunePlan.clear()
-				return Versioned[TaskRecord]{}, prepareErr
+				return etcdstore.Versioned[TaskRecord]{}, prepareErr
 			}
 			terminal = taskPlan.record
 			conditions, mutations, err = composeBackupPruneTerminalTransaction(
@@ -3685,22 +3685,22 @@ func (repository *TaskRepository) abortPendingBackupTask(
 			receiptPlan.clear()
 		}
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		transaction, err := runtime.transact(ctx, conditions, mutations)
 		clearBackupRuntimeMutations(mutations)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		clearKeyValues(transaction.FailureReads)
 		if !transaction.Succeeded {
 			conflicts++
 			if err := repository.retryPolicy.waitAfterConflict(ctx, conflicts); err != nil {
-				return Versioned[TaskRecord]{}, err
+				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			continue
 		}
-		return Versioned[TaskRecord]{
+		return etcdstore.Versioned[TaskRecord]{
 			Record: terminal, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 		}, nil
 	}
@@ -3708,7 +3708,7 @@ func (repository *TaskRepository) abortPendingBackupTask(
 
 func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 	ctx context.Context,
-	current Versioned[TaskRecord],
+	current etcdstore.Versioned[TaskRecord],
 	terminalAt time.Time,
 ) (backupTaskTerminalPlan, error) {
 	task := current.Record

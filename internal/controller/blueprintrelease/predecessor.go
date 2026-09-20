@@ -3,6 +3,7 @@ package blueprintrelease
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -15,8 +16,8 @@ import (
 type predecessorSnapshot struct {
 	planning       etcd.ReleasePlanningService
 	serving        *domain.Intent
-	historical     etcd.Versioned[etcd.ReleaseRenderInput]
-	applied        etcd.Versioned[etcd.EnvironmentComposeProjection]
+	historical     etcdstore.Versioned[etcd.ReleaseRenderInput]
+	applied        etcdstore.Versioned[etcd.EnvironmentComposeProjection]
 	appliedPresent bool
 	native         etcd.BlueprintNativePredecessorCapture
 }
@@ -107,7 +108,7 @@ func (service *Service) capturePredecessor(
 
 func (captured predecessorSnapshot) matches(
 	planning etcd.ReleasePlanningService,
-	applied etcd.Versioned[etcd.EnvironmentComposeProjection],
+	applied etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	present bool,
 ) error {
 	if captured.planning.Service.Record.Desired.ID != planning.Service.Record.Desired.ID ||

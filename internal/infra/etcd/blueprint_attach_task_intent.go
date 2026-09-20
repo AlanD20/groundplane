@@ -26,11 +26,11 @@ const (
 type EnvironmentBlueprintAttachCandidateInput struct {
 	Record                  attachrecord.Record
 	Facts                   *attachrecord.EncryptedFacts
-	BackingProject          Versioned[hierarchyrecord.ProjectRecord]
-	BackingEnvironment      Versioned[hierarchyrecord.EnvironmentRecord]
-	BackingService          Versioned[ServiceRecord]
-	RetainedCredentialOwner *Versioned[attachrecord.Record]
-	RetainedGrantTargets    []Versioned[attachrecord.Record]
+	BackingProject          etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	BackingEnvironment      etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	BackingService          etcdstore.Versioned[ServiceRecord]
+	RetainedCredentialOwner *etcdstore.Versioned[attachrecord.Record]
+	RetainedGrantTargets    []etcdstore.Versioned[attachrecord.Record]
 }
 
 // BlueprintAttachTaskIntent is the non-secret, task-owned lifecycle manifest
@@ -167,34 +167,34 @@ func blueprintAttachTaskIntentKey(taskID string) string {
 func (repository *AttachRepository) GetBlueprintAttachTaskIntent(
 	ctx context.Context,
 	taskID string,
-) (Versioned[BlueprintAttachTaskIntent], bool, error) {
+) (etcdstore.Versioned[BlueprintAttachTaskIntent], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[BlueprintAttachTaskIntent]{}, false, err
+		return etcdstore.Versioned[BlueprintAttachTaskIntent]{}, false, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil {
-		return Versioned[BlueprintAttachTaskIntent]{}, false, errs.New(
+		return etcdstore.Versioned[BlueprintAttachTaskIntent]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Blueprint Attach Task id is invalid",
 		)
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{blueprintAttachTaskIntentKey(taskID)}})
 	if err != nil {
-		return Versioned[BlueprintAttachTaskIntent]{}, false, err
+		return etcdstore.Versioned[BlueprintAttachTaskIntent]{}, false, err
 	}
 	if result == nil || len(result.Values) != 1 {
-		return Versioned[BlueprintAttachTaskIntent]{}, false, errs.New(
+		return etcdstore.Versioned[BlueprintAttachTaskIntent]{}, false, errs.New(
 			errs.KindInternal,
 			"Blueprint Attach Task intent read is incomplete",
 		)
 	}
 	if result.Values[0] == nil {
-		return Versioned[BlueprintAttachTaskIntent]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[BlueprintAttachTaskIntent]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	intent, err := decodeBlueprintAttachTaskIntent(result.Values[0].Value)
 	if err != nil {
-		return Versioned[BlueprintAttachTaskIntent]{}, false, err
+		return etcdstore.Versioned[BlueprintAttachTaskIntent]{}, false, err
 	}
-	return Versioned[BlueprintAttachTaskIntent]{
+	return etcdstore.Versioned[BlueprintAttachTaskIntent]{
 		Record: intent, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }
@@ -277,9 +277,9 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 	if len(byID) != len(preparation.candidates) || len(byName) != len(preparation.candidates) {
 		return errs.New(errs.KindValidationFailed, "Blueprint Attach identities must be unique")
 	}
-	retainedByID := make(map[string]Versioned[attachrecord.Record])
+	retainedByID := make(map[string]etcdstore.Versioned[attachrecord.Record])
 	retainedReadRevision := int64(0)
-	validateRetained := func(retained Versioned[attachrecord.Record], candidate attachrecord.Record) error {
+	validateRetained := func(retained etcdstore.Versioned[attachrecord.Record], candidate attachrecord.Record) error {
 		if retained.Revision <= 0 || retained.ReadRevision <= 0 || retained.Revision > retained.ReadRevision ||
 			attachrecord.ValidateAttachRecord(retained.Record) != nil || retained.Record.Status != core.AttachReady ||
 			retained.Record.Operation != attachrecord.AttachOperationProvision || !retained.Record.OwnsCredential() ||
@@ -327,7 +327,7 @@ func validateBlueprintAttachTaskPreparation(preparation BlueprintAttachTaskPrepa
 				return err
 			}
 		}
-		retainedGrants := make(map[string]Versioned[attachrecord.Record], len(input.RetainedGrantTargets))
+		retainedGrants := make(map[string]etcdstore.Versioned[attachrecord.Record], len(input.RetainedGrantTargets))
 		for _, retained := range input.RetainedGrantTargets {
 			if _, duplicate := retainedGrants[retained.Record.ID]; duplicate {
 				return errs.New(errs.KindValidationFailed, "Blueprint Attach retained grant target is duplicated")
@@ -444,7 +444,7 @@ func cloneEnvironmentBlueprintAttachCandidateInputs(
 			cloned[index].RetainedCredentialOwner = &owner
 		}
 		cloned[index].RetainedGrantTargets = append(
-			[]Versioned[attachrecord.Record](nil), input.RetainedGrantTargets...,
+			[]etcdstore.Versioned[attachrecord.Record](nil), input.RetainedGrantTargets...,
 		)
 		for retainedIndex := range cloned[index].RetainedGrantTargets {
 			cloned[index].RetainedGrantTargets[retainedIndex].Record = cloneAttachRecord(

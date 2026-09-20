@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -13,7 +14,7 @@ import (
 func (ledger *ReleaseLedger) LoadPlanningAttaches(
 	ctx context.Context,
 	scope ReleasePlanningScope,
-) ([]Versioned[attachrecord.Record], error) {
+) ([]etcdstore.Versioned[attachrecord.Record], error) {
 	if ctx == nil || ledger == nil || ledger.store == nil || scope.ReadRevision <= 0 ||
 		scope.EnvironmentEpochRevision <= 0 ||
 		ids.Validate(ids.KindEnvironment, scope.Environment.Record.ID) != nil {

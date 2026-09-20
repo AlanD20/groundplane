@@ -72,7 +72,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 			"Entry removal publication read is incomplete",
 		)
 	}
-	var applied *Versioned[EnvironmentComposeProjection]
+	var applied *etcdstore.Versioned[EnvironmentComposeProjection]
 	conditions := make([]etcdstore.Condition, len(keys)-1)
 	for index, key := range keys[:len(conditions)] {
 		conditions[index] = etcdstore.Condition{Key: key}
@@ -91,7 +91,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 		conditions[0].ModRevision = value.ModRevision
 		for _, entry := range projection.Entries {
 			if entry.Entry.ID == task.Target {
-				applied = &Versioned[EnvironmentComposeProjection]{
+				applied = &etcdstore.Versioned[EnvironmentComposeProjection]{
 					Record:       projection,
 					Revision:     value.ModRevision,
 					ReadRevision: revision,

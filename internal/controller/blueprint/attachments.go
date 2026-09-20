@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 	"sort"
 	"time"
@@ -25,9 +26,9 @@ type resolvedBlueprintAttach struct {
 	name               string
 	spec               core.AttachmentSpec
 	consumer           etcd.ServiceRecord
-	backingProject     etcd.Versioned[hierarchyrecord.ProjectRecord]
-	backingEnvironment etcd.Versioned[hierarchyrecord.EnvironmentRecord]
-	backingService     etcd.Versioned[etcd.ServiceRecord]
+	backingProject     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
+	backingEnvironment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
+	backingService     etcdstore.Versioned[etcd.ServiceRecord]
 	adapter            adapters.Adapter
 	authentication     core.BackingAuthentication
 }
@@ -40,7 +41,7 @@ type blueprintAttachProcedure struct {
 
 type preparedBlueprintAttaches struct {
 	publication etcd.BlueprintAttachTaskPreparation
-	effective   []etcd.Versioned[attachrecord.Record]
+	effective   []etcdstore.Versioned[attachrecord.Record]
 	procedures  []blueprintAttachProcedure
 	facts       *blueprintAttachFactOverlay
 }
@@ -64,13 +65,13 @@ func (service *Service) prepareBlueprintAttaches(
 	taskID string,
 	specs map[string]core.AttachmentSpec,
 	serviceChanges []etcd.EnvironmentBlueprintServiceChange,
-	current []etcd.Versioned[attachrecord.Record],
+	current []etcdstore.Versioned[attachrecord.Record],
 	namedID func(ids.Kind, string) string,
 	ownsEnvironmentFence bool,
 	createdAt time.Time,
 ) (preparedBlueprintAttaches, error) {
 	prepared := preparedBlueprintAttaches{
-		effective: append([]etcd.Versioned[attachrecord.Record](nil), current...),
+		effective: append([]etcdstore.Versioned[attachrecord.Record](nil), current...),
 		facts:     newBlueprintAttachFactOverlay(service.attachFacts),
 	}
 	if len(specs) == 0 {
@@ -80,7 +81,7 @@ func (service *Service) prepareBlueprintAttaches(
 	for _, change := range serviceChanges {
 		serviceByName[change.Record.Desired.Name] = change.Record
 	}
-	currentByName := make(map[string]etcd.Versioned[attachrecord.Record], len(current))
+	currentByName := make(map[string]etcdstore.Versioned[attachrecord.Record], len(current))
 	for _, attach := range current {
 		currentByName[attach.Record.Name] = attach
 	}
@@ -114,7 +115,7 @@ func (service *Service) prepareBlueprintAttaches(
 		if err != nil {
 			return preparedBlueprintAttaches{}, err
 		}
-		var backingService etcd.Versioned[etcd.ServiceRecord]
+		var backingService etcdstore.Versioned[etcd.ServiceRecord]
 		for _, candidate := range backingServices {
 			if candidate.Record.Desired.Name == spec.BackingService {
 				backingService = candidate
@@ -241,7 +242,7 @@ func (service *Service) prepareBlueprintAttaches(
 		})
 		grantIDs := make([]string, 0, len(grantNames))
 		grantFacts := make([]attachments.GrantInput, 0, len(grantNames))
-		retainedGrants := make([]etcd.Versioned[attachrecord.Record], 0, len(grantNames))
+		retainedGrants := make([]etcdstore.Versioned[attachrecord.Record], 0, len(grantNames))
 		identity := identities[name]
 		for _, grantName := range grantNames {
 			grant, exists := resolved[grantName]
@@ -334,7 +335,7 @@ func (service *Service) prepareBlueprintAttaches(
 			continue
 		}
 		owner, exists := records[item.spec.Credential.Attach]
-		var retainedOwner *etcd.Versioned[attachrecord.Record]
+		var retainedOwner *etcdstore.Versioned[attachrecord.Record]
 		if !exists {
 			currentOwner, retained := currentByName[item.spec.Credential.Attach]
 			if retained {
@@ -382,7 +383,7 @@ func (service *Service) prepareBlueprintAttaches(
 	prepared.publication = publication
 	for _, name := range names {
 		if record, created := records[name]; created {
-			prepared.effective = append(prepared.effective, etcd.Versioned[attachrecord.Record]{Record: record})
+			prepared.effective = append(prepared.effective, etcdstore.Versioned[attachrecord.Record]{Record: record})
 		}
 	}
 	sort.Slice(prepared.procedures, func(left, right int) bool {
@@ -395,7 +396,7 @@ func (service *Service) prepareBlueprintAttaches(
 func validateExistingBlueprintAttaches(
 	names []string,
 	resolved map[string]resolvedBlueprintAttach,
-	current map[string]etcd.Versioned[attachrecord.Record],
+	current map[string]etcdstore.Versioned[attachrecord.Record],
 ) error {
 	for _, name := range names {
 		item := resolved[name]

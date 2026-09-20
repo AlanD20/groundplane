@@ -5,14 +5,13 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type EvidenceSealResult struct {
 	State    EvidenceState
-	Seal     etcd.Versioned[removal.EvidenceSeal]
+	Seal     etcdstore.Versioned[removal.EvidenceSeal]
 	Replayed bool
 }
 
@@ -73,7 +72,7 @@ func (repository *EvidenceRepository) Seal(
 	}
 	return EvidenceSealResult{
 		State: state,
-		Seal: etcd.Versioned[removal.EvidenceSeal]{
+		Seal: etcdstore.Versioned[removal.EvidenceSeal]{
 			Record:       record,
 			Revision:     result.Revision,
 			ReadRevision: result.Revision,
@@ -84,23 +83,23 @@ func (repository *EvidenceRepository) Seal(
 func (repository *EvidenceRepository) verifyEvidenceRows(
 	ctx context.Context,
 	state EvidenceState,
-) (etcd.Versioned[removal.EvidenceSeal], error) {
+) (etcdstore.Versioned[removal.EvidenceSeal], error) {
 	manifest := state.Manifest.Record
 	manifestValue, err := removal.EncodeEvidenceManifest(manifest)
 	if err != nil {
-		return etcd.Versioned[removal.EvidenceSeal]{}, err
+		return etcdstore.Versioned[removal.EvidenceSeal]{}, err
 	}
 	defer clear(manifestValue)
 	cursorValue, err := removal.EncodeEvidenceCursor(state.Cursor.Record, manifest)
 	if err != nil {
-		return etcd.Versioned[removal.EvidenceSeal]{}, err
+		return etcdstore.Versioned[removal.EvidenceSeal]{}, err
 	}
 	defer clear(cursorValue)
 	cursor, err := removal.InitialEvidenceCursor(manifest)
 	if err != nil {
-		return etcd.Versioned[removal.EvidenceSeal]{}, err
+		return etcdstore.Versioned[removal.EvidenceSeal]{}, err
 	}
-	var seal etcd.Versioned[removal.EvidenceSeal]
+	var seal etcdstore.Versioned[removal.EvidenceSeal]
 	seenManifest, seenCursor := false, false
 	request := etcdstore.RangeRequest{
 		Prefix:   removal.EvidenceRoot(manifest.OperationID),
@@ -110,10 +109,10 @@ func (repository *EvidenceRepository) verifyEvidenceRows(
 	for {
 		page, err := repository.store.Range(ctx, request)
 		if err != nil {
-			return etcd.Versioned[removal.EvidenceSeal]{}, err
+			return etcdstore.Versioned[removal.EvidenceSeal]{}, err
 		}
 		if page == nil {
-			return etcd.Versioned[removal.EvidenceSeal]{}, evidenceConflict()
+			return etcdstore.Versioned[removal.EvidenceSeal]{}, evidenceConflict()
 		}
 		err = func() error {
 			defer func() {
@@ -158,7 +157,7 @@ func (repository *EvidenceRepository) verifyEvidenceRows(
 						entry.ModRevision <= state.Cursor.Revision {
 						return evidenceConflict()
 					}
-					seal = etcd.Versioned[removal.EvidenceSeal]{
+					seal = etcdstore.Versioned[removal.EvidenceSeal]{
 						Record:       record,
 						Revision:     entry.ModRevision,
 						ReadRevision: request.Revision,
@@ -183,14 +182,14 @@ func (repository *EvidenceRepository) verifyEvidenceRows(
 			return nil
 		}()
 		if err != nil {
-			return etcd.Versioned[removal.EvidenceSeal]{}, err
+			return etcdstore.Versioned[removal.EvidenceSeal]{}, err
 		}
 		if !page.More {
 			break
 		}
 	}
 	if !seenManifest || !seenCursor || cursor != state.Cursor.Record {
-		return etcd.Versioned[removal.EvidenceSeal]{}, evidenceConflict()
+		return etcdstore.Versioned[removal.EvidenceSeal]{}, evidenceConflict()
 	}
 	return seal, nil
 }

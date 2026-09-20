@@ -15,6 +15,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"sort"
@@ -32,11 +33,11 @@ func (service *Service) prepareBlueprintComponents(
 	createdAt time.Time,
 	allocate func(ids.Kind) string,
 	specs map[string]core.ComponentSpec,
-	current []etcd.Versioned[componentrecord.Record],
+	current []etcdstore.Versioned[componentrecord.Record],
 	zoneChanges []etcd.EnvironmentBlueprintZoneChange,
 ) (etcd.ComponentTaskPreparation, []componentrecord.Record, []core.Component, error) {
 	currentComponents := make([]core.Component, len(current))
-	currentByID := make(map[string]etcd.Versioned[componentrecord.Record], len(current))
+	currentByID := make(map[string]etcdstore.Versioned[componentrecord.Record], len(current))
 	for index, versioned := range current {
 		component, err := componentrecord.ProjectRecord(versioned.Record)
 		if err != nil {

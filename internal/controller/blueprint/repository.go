@@ -8,6 +8,7 @@ import (
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -17,35 +18,35 @@ import (
 )
 
 type environmentBlueprintRepository interface {
-	GetTenant(context.Context, string) (etcd.Versioned[hierarchyrecord.TenantRecord], error)
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetEnvironmentBlueprintHead(context.Context, string) (etcd.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetEnvironmentBlueprintHead(context.Context, string) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentBlueprintRevision(
 		context.Context,
 		string,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error)
 	FindEnvironmentVolume(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
-	ListZones(context.Context, string, etcd.PageRequest) (etcd.Page[zonerecord.Record], error)
-	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	ResolveBackingProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	ResolveEnvironment(context.Context, string, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[routerecord.Record], error)
-	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[entryrecord.Record], error)
+	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
+	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	ResolveBackingProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	ResolveEnvironment(context.Context, string, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	ListRoutes(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[routerecord.Record], error)
+	ListEntries(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[entryrecord.Record], error)
 	BlueprintEntryValueGenerationExists(context.Context, entryrecord.Record) (bool, error)
 	CreateBlueprintEntryValueGeneration(context.Context, etcd.EntryValueGeneration) error
 	BindBlueprintEntryEnvironment(context.Context, string, string) error
-	ListAttaches(context.Context, string, etcd.PageRequest) (etcd.Page[attachrecord.Record], error)
-	ListEnvironmentComponents(context.Context, string, etcd.PageRequest) (etcd.Page[componentrecord.Record], error)
+	ListAttaches(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[attachrecord.Record], error)
+	ListEnvironmentComponents(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[componentrecord.Record], error)
 	PrepareEnvironmentComponentTask(
 		context.Context,
 		string,
@@ -67,8 +68,8 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		netip.Prefix,
 		string,
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		int64,
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
@@ -86,13 +87,13 @@ type environmentBlueprintRepository interface {
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	ListScripts(context.Context, string, etcd.PageRequest) (etcd.Page[scriptrecord.Record], error)
+	ListScripts(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[scriptrecord.Record], error)
 	PrepareBlueprintScriptPublication(
 		context.Context,
 		string,
 		int64,
 		string,
-		[]etcd.Versioned[scriptrecord.Record],
+		[]etcdstore.Versioned[scriptrecord.Record],
 		[]scriptrecord.Record,
 		[]scriptrecord.BodyGenerationRecord,
 	) (etcd.BlueprintScriptPublication, error)
@@ -208,53 +209,53 @@ func (repository *durableRepository) AbandonEnvironmentBlueprintStage(
 func (repository *durableRepository) ListEntries(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[entryrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[entryrecord.Record], error) {
 	return repository.entries.ListEntries(ctx, environmentID, request)
 }
 func (repository *durableRepository) ListAttaches(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[attachrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[attachrecord.Record], error) {
 	return repository.attaches.ListAttaches(ctx, environmentID, request)
 }
 func (repository *durableRepository) ListEnvironmentComponents(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[componentrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[componentrecord.Record], error) {
 	return repository.components.ListEnvironmentComponents(ctx, environmentID, request)
 }
 func (repository *durableRepository) ListZones(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[zonerecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[zonerecord.Record], error) {
 	return repository.zones.ListZones(ctx, environmentID, request)
 }
 
 func (repository *durableRepository) ListServices(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.ServiceRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[etcd.ServiceRecord], error) {
 	return repository.services.ListServices(ctx, environmentID, request)
 }
 
 func (repository *durableRepository) ListRoutes(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[routerecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[routerecord.Record], error) {
 	return repository.routes.ListRoutes(ctx, environmentID, request)
 }
 
 func (repository *durableRepository) ListScripts(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[scriptrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[scriptrecord.Record], error) {
 	return repository.scripts.ListScripts(ctx, environmentID, request)
 }
 
@@ -263,7 +264,7 @@ func (repository *durableRepository) PrepareBlueprintScriptPublication(
 	environmentID string,
 	readRevision int64,
 	nextGenerationID string,
-	current []etcd.Versioned[scriptrecord.Record],
+	current []etcdstore.Versioned[scriptrecord.Record],
 	desired []scriptrecord.Record,
 	generations []scriptrecord.BodyGenerationRecord,
 ) (etcd.BlueprintScriptPublication, error) {
@@ -276,8 +277,8 @@ func (repository *durableRepository) PublishEnvironmentBlueprintDesiredRevision(
 	ctx context.Context,
 	environmentPool netip.Prefix,
 	desiredNetworkPool string,
-	project etcd.Versioned[hierarchyrecord.ProjectRecord],
-	environment etcd.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64,
 	claim etcd.EnvironmentBlueprintStageClaim,
 	revision etcd.EnvironmentDesiredRevisionIdentity,

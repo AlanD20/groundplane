@@ -171,8 +171,8 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	var closingMutation etcdstore.Mutation
 	if task.Type == TaskUpdate {
 		current := TaskAssignment{
-			Task:       Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: revision},
-			Assignment: Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
+			Task:       etcdstore.Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: revision},
+			Assignment: etcdstore.Versioned[TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
 		}
 		report, condition, mutation, reportErr := repository.prepareScriptClosingReport(
 			ctx, current, submittedStatus, submittedResult, *terminalAt, root.Phase == ScriptOperationSourceActive,

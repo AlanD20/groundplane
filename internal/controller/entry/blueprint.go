@@ -2,17 +2,18 @@ package entry
 
 import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // BlueprintProjection validates pinned Entry metadata without losing authored
 // keys. Reconciliation and explicit Script grants consume this same projection.
 func BlueprintProjection(
-	current []etcd.Versioned[entryrecord.Record],
+	current []etcdstore.Versioned[entryrecord.Record],
 ) ([]entryrecord.Record, error) {
 	records := make([]entryrecord.Record, len(current))
 	for index, versioned := range current {

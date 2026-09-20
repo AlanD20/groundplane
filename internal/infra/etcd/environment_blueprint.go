@@ -56,7 +56,7 @@ type EnvironmentBlueprintHead struct {
 // EnvironmentBlueprintZoneChange is one immutable existing Zone fence or one
 // new Zone and subnet reservation committed with the Blueprint head.
 type EnvironmentBlueprintZoneChange struct {
-	Current *Versioned[zonerecord.Record]
+	Current *etcdstore.Versioned[zonerecord.Record]
 	Record  zonerecord.Record
 }
 
@@ -64,14 +64,14 @@ type EnvironmentBlueprintZoneChange struct {
 // committed with the Blueprint head. Current is nil only when the Blueprint
 // first introduces the stable Service id.
 type EnvironmentBlueprintServiceChange struct {
-	Current *Versioned[ServiceRecord]
+	Current *etcdstore.Versioned[ServiceRecord]
 	Record  ServiceRecord
 }
 
 // EnvironmentBlueprintRouteChange is one exposure-only Route replacement or
 // one new stable Route committed with its target Service desired state.
 type EnvironmentBlueprintRouteChange struct {
-	Current *Versioned[routerecord.Record]
+	Current *etcdstore.Versioned[routerecord.Record]
 	Record  routerecord.Record
 }
 type environmentBlueprintManifest struct {
@@ -116,25 +116,25 @@ func environmentBlueprintFileKey(environmentID string, revisionID string, index 
 func (repository *HierarchyRepository) GetEnvironmentBlueprintHead(
 	ctx context.Context,
 	environmentID string,
-) (Versioned[EnvironmentBlueprintHead], bool, error) {
+) (etcdstore.Versioned[EnvironmentBlueprintHead], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[EnvironmentBlueprintHead]{}, false, err
+		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Versioned[EnvironmentBlueprintHead]{}, false, err
+		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, environmentBlueprintHeadKey(environmentID))
 	if err != nil {
-		return Versioned[EnvironmentBlueprintHead]{}, false, err
+		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, false, err
 	}
 	if result.Entry == nil {
-		return Versioned[EnvironmentBlueprintHead]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[EnvironmentBlueprintHead]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	revisionID, err := decodeTaskReference(result.Entry.Value)
 	if err != nil {
-		return Versioned[EnvironmentBlueprintHead]{}, false, err
+		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, false, err
 	}
-	return Versioned[EnvironmentBlueprintHead]{
+	return etcdstore.Versioned[EnvironmentBlueprintHead]{
 		Record:   EnvironmentBlueprintHead{EnvironmentID: environmentID, RevisionID: revisionID},
 		Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
@@ -147,49 +147,49 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 	ctx context.Context,
 	environmentID string,
 	revisionID string,
-) (Versioned[EnvironmentBlueprintRevision], bool, error) {
+) (etcdstore.Versioned[EnvironmentBlueprintRevision], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[EnvironmentBlueprintRevision]{}, false, err
+		return etcdstore.Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Versioned[EnvironmentBlueprintRevision]{}, false, err
+		return etcdstore.Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTask, revisionID); err != nil {
-		return Versioned[EnvironmentBlueprintRevision]{}, false, err
+		return etcdstore.Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
 	rootResult, err := repository.store.Get(ctx, environmentBlueprintRootKey(environmentID, revisionID))
 	if err != nil {
-		return Versioned[EnvironmentBlueprintRevision]{}, false, err
+		return etcdstore.Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
 	if rootResult.Entry == nil {
-		return Versioned[EnvironmentBlueprintRevision]{
+		return etcdstore.Versioned[EnvironmentBlueprintRevision]{
 			ReadRevision: rootResult.ReadRevision,
 		}, false, nil
 	}
 	seal, err := decodeEnvironmentBlueprintSeal(rootResult.Entry.Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {
-		return Versioned[EnvironmentBlueprintRevision]{}, false, err
+		return etcdstore.Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
 	if seal.SourceKind == EnvironmentBlueprintSourceMutation {
-		return Versioned[EnvironmentBlueprintRevision]{ReadRevision: rootResult.ReadRevision}, false, nil
+		return etcdstore.Versioned[EnvironmentBlueprintRevision]{ReadRevision: rootResult.ReadRevision}, false, nil
 	}
 	stream, readRevision, err := repository.readEnvironmentBlueprintStream(ctx, seal, "audit")
 	if err != nil {
-		return Versioned[EnvironmentBlueprintRevision]{}, false, err
+		return etcdstore.Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
 	defer clear(stream)
 	revision, err := decodeEnvironmentBlueprintAuditStream(stream)
 	if err != nil || revision.EnvironmentID != environmentID || revision.RevisionID != revisionID {
-		return Versioned[EnvironmentBlueprintRevision]{}, false, corruptEnvironmentBlueprint()
+		return etcdstore.Versioned[EnvironmentBlueprintRevision]{}, false, corruptEnvironmentBlueprint()
 	}
-	return Versioned[EnvironmentBlueprintRevision]{
+	return etcdstore.Versioned[EnvironmentBlueprintRevision]{
 		Record: revision, Revision: rootResult.Entry.ModRevision,
 		ReadRevision: readRevision,
 	}, true, nil
 }
 
 type preparedEnvironmentBlueprintPoolChange struct {
-	environment      Versioned[hierarchyrecord.EnvironmentRecord]
+	environment      etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	registryRevision int64
 	environmentValue []byte
 	registryValue    []byte
@@ -205,7 +205,7 @@ func clearPreparedEnvironmentBlueprintPoolChange(change preparedEnvironmentBluep
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintPoolChangeAtRevision(
 	ctx context.Context,
 	root netip.Prefix,
-	current Versioned[hierarchyrecord.EnvironmentRecord],
+	current etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	desiredNetworkPool string,
 	revision int64,
 ) (preparedEnvironmentBlueprintPoolChange, error) {
@@ -319,8 +319,8 @@ func classifyEnvironmentBlueprintBaseConflict(
 
 func (repository *HierarchyRepository) loadEnvironmentBlueprintMutationFence(
 	ctx context.Context,
-	project Versioned[hierarchyrecord.ProjectRecord],
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 ) (environmentMutationFenceEvidence, error) {
 	keys := []string{hierarchyrecord.EnvironmentKey(environment.Record.ID), hierarchyrecord.ProjectKey(project.Record.ID)}
 	anchor, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
@@ -351,7 +351,7 @@ func (repository *HierarchyRepository) getEnvironmentBlueprintProjectionAtRevisi
 	ctx context.Context,
 	environmentID string,
 	readRevision int64,
-) (Versioned[EnvironmentComposeProjection], bool, error) {
+) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
 	return repository.getEnvironmentComposeProjectionAtRevision(ctx, environmentID, readRevision)
 }
 
@@ -396,30 +396,30 @@ func (repository *HierarchyRepository) getEnvironmentBlueprintZoneRegistryAtRevi
 	ctx context.Context,
 	environmentID string,
 	readRevision int64,
-) (Versioned[zonePoolRegistry], error) {
+) (etcdstore.Versioned[zonePoolRegistry], error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{zonePoolRegistryKey(environmentID)}, Revision: readRevision,
 	})
 	if err != nil {
-		return Versioned[zonePoolRegistry]{}, err
+		return etcdstore.Versioned[zonePoolRegistry]{}, err
 	}
 	if result == nil || result.ReadRevision != readRevision || len(result.Values) != 1 {
-		return Versioned[zonePoolRegistry]{}, errs.New(
+		return etcdstore.Versioned[zonePoolRegistry]{}, errs.New(
 			errs.KindInternal,
 			"Zone pool registry read is incomplete",
 		)
 	}
 	defer clearKeyValues(result.Values)
 	if result.Values[0] == nil {
-		return Versioned[zonePoolRegistry]{
+		return etcdstore.Versioned[zonePoolRegistry]{
 			Record: zonePoolRegistry{Reservations: map[string]string{}}, ReadRevision: readRevision,
 		}, nil
 	}
 	registry, err := recordcodec.Decode[zonePoolRegistry](result.Values[0].Value, "zone_pool_registry")
 	if err != nil || validateZonePoolRegistry(registry) != nil {
-		return Versioned[zonePoolRegistry]{}, corruptZonePoolRegistry()
+		return etcdstore.Versioned[zonePoolRegistry]{}, corruptZonePoolRegistry()
 	}
-	return Versioned[zonePoolRegistry]{
+	return etcdstore.Versioned[zonePoolRegistry]{
 		Record: registry, Revision: result.Values[0].ModRevision, ReadRevision: readRevision,
 	}, nil
 }
@@ -433,7 +433,7 @@ type preparedEnvironmentBlueprintRoute struct {
 
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChanges(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	services []EnvironmentBlueprintServiceChange,
 	changes []EnvironmentBlueprintRouteChange,
 ) ([]preparedEnvironmentBlueprintRoute, error) {
@@ -448,7 +448,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChanges(
 
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChangesAtRevision(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	services []EnvironmentBlueprintServiceChange,
 	changes []EnvironmentBlueprintRouteChange,
 	readRevision int64,

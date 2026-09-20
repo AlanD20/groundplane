@@ -67,7 +67,7 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 	environmentID string,
 	readRevision int64,
 	nextGenerationID string,
-	current []Versioned[scriptrecord.Record],
+	current []etcdstore.Versioned[scriptrecord.Record],
 	desired []scriptrecord.Record,
 	generations []scriptrecord.BodyGenerationRecord,
 ) (BlueprintScriptPublication, error) {
@@ -98,7 +98,7 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 		)
 	}
 
-	currentByID := make(map[string]Versioned[scriptrecord.Record], len(current))
+	currentByID := make(map[string]etcdstore.Versioned[scriptrecord.Record], len(current))
 	for _, versioned := range current {
 		if versioned.ReadRevision != readRevision || versioned.Record.EnvironmentID != environmentID ||
 			versioned.Record.ScriptSetGeneration != active.Record.GenerationID {
@@ -192,7 +192,7 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 }
 
 func validateBlueprintBodyGenerationInputs(
-	current map[string]Versioned[scriptrecord.Record],
+	current map[string]etcdstore.Versioned[scriptrecord.Record],
 	desired []scriptrecord.Record,
 	generations []scriptrecord.BodyGenerationRecord,
 ) error {
@@ -222,9 +222,9 @@ func validateBlueprintBodyGenerationInputs(
 
 func (repository *ScriptRepository) stageBlueprintScriptBatch(
 	ctx context.Context,
-	active Versioned[scriptrecord.SetGenerationRecord],
+	active etcdstore.Versioned[scriptrecord.SetGenerationRecord],
 	records []scriptrecord.Record,
-	current map[string]Versioned[scriptrecord.Record],
+	current map[string]etcdstore.Versioned[scriptrecord.Record],
 ) (bool, error) {
 	lookupKeys := make([]string, 0, len(records)*3)
 	for _, record := range records {
@@ -352,7 +352,7 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 
 func (repository *ScriptRepository) blueprintScriptBatchMatches(
 	ctx context.Context,
-	active Versioned[scriptrecord.SetGenerationRecord],
+	active etcdstore.Versioned[scriptrecord.SetGenerationRecord],
 	mutations []etcdstore.Mutation,
 ) bool {
 	keys := make([]string, 1, len(mutations)+1)

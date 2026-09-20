@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"log/slog"
 	"net/http"
@@ -21,8 +22,8 @@ import (
 )
 
 type EntryReader interface {
-	GetEntry(context.Context, string) (etcd.Versioned[entryrecord.Record], error)
-	ListEntries(context.Context, string, etcd.PageRequest) (etcd.Page[entryrecord.Record], error)
+	GetEntry(context.Context, string) (etcdstore.Versioned[entryrecord.Record], error)
+	ListEntries(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[entryrecord.Record], error)
 	RevealEntry(context.Context, string) (string, error)
 }
 
@@ -596,7 +597,7 @@ func (s *Server) listEntries(ctx context.Context, request *entryListInput) (*ent
 	if s.entries == nil {
 		return nil, errs.New(errs.KindInternal, "entry reader is not configured")
 	}
-	page, err := s.entries.ListEntries(ctx, request.Environment, etcd.PageRequest{
+	page, err := s.entries.ListEntries(ctx, request.Environment, etcdstore.PageRequest{
 		Limit: request.Limit, Cursor: request.Cursor,
 	})
 	if err != nil {

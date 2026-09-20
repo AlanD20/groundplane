@@ -3,17 +3,18 @@ package network
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type routeReadRepository interface {
-	GetEnvironment(context.Context, string) (etcd.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetRoute(context.Context, string) (etcd.Versioned[routerecord.Record], error)
-	ListRoutes(context.Context, string, etcd.PageRequest) (etcd.Page[routerecord.Record], error)
+	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
+	GetRoute(context.Context, string) (etcdstore.Versioned[routerecord.Record], error)
+	ListRoutes(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[routerecord.Record], error)
 }
 
 type routeReadService struct {
@@ -30,25 +31,25 @@ func newRouteReadService(repository routeReadRepository) (*routeReadService, err
 func (service *routeReadService) ListRoutes(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[routerecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[routerecord.Record], error) {
 	if ctx == nil {
-		return etcd.Page[routerecord.Record]{}, errs.New(errs.KindInternal, "Route list context is required")
+		return etcdstore.Page[routerecord.Record]{}, errs.New(errs.KindInternal, "Route list context is required")
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.Page[routerecord.Record]{}, errs.New(
+		return etcdstore.Page[routerecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Route list requires a stable Environment id",
 		)
 	}
 	if request.Limit < 0 {
-		return etcd.Page[routerecord.Record]{}, errs.New(
+		return etcdstore.Page[routerecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Route list limit must be a positive integer",
 		)
 	}
 	if _, err := service.repository.GetEnvironment(ctx, environmentID); err != nil {
-		return etcd.Page[routerecord.Record]{}, err
+		return etcdstore.Page[routerecord.Record]{}, err
 	}
 	return service.repository.ListRoutes(ctx, environmentID, request)
 }
@@ -56,12 +57,12 @@ func (service *routeReadService) ListRoutes(
 func (service *routeReadService) GetRoute(
 	ctx context.Context,
 	routeID string,
-) (etcd.Versioned[routerecord.Record], error) {
+) (etcdstore.Versioned[routerecord.Record], error) {
 	if ctx == nil {
-		return etcd.Versioned[routerecord.Record]{}, errs.New(errs.KindInternal, "Route read context is required")
+		return etcdstore.Versioned[routerecord.Record]{}, errs.New(errs.KindInternal, "Route read context is required")
 	}
 	if ids.Validate(ids.KindRoute, routeID) != nil {
-		return etcd.Versioned[routerecord.Record]{}, errs.New(
+		return etcdstore.Versioned[routerecord.Record]{}, errs.New(
 			errs.KindValidationFailed,
 			"Route read requires a stable Route id",
 		)

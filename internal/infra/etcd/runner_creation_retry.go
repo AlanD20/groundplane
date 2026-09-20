@@ -190,7 +190,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		}
 		return stateConflict("runner creation retry", current.Record.Desired.ID)
 	}
-	initiation, err := newInheritedTaskInitiation(Versioned[TaskRecord]{
+	initiation, err := newInheritedTaskInitiation(etcdstore.Versioned[TaskRecord]{
 		Record: source, Revision: sourceResult.Entry.ModRevision, ReadRevision: sourceResult.ReadRevision,
 	}, retry.Actor)
 	if err != nil {

@@ -9,9 +9,9 @@ import (
 )
 
 type runnerAllocationState struct {
-	quota  Versioned[runnerallocation.RunnerTenantQuota]
+	quota  etcdstore.Versioned[runnerallocation.RunnerTenantQuota]
 	host   runnerHostSlotState
-	system Versioned[runnerallocation.SystemPoolRegistry]
+	system etcdstore.Versioned[runnerallocation.SystemPoolRegistry]
 }
 
 type runnerHostSlotState struct {
@@ -48,7 +48,7 @@ func (repository *RunnerRepository) getRunnerAllocationState(
 		return runnerAllocationState{}, errs.New(errs.KindInternal, "runner allocation read is incomplete")
 	}
 	state := runnerAllocationState{
-		quota: Versioned[runnerallocation.RunnerTenantQuota]{
+		quota: etcdstore.Versioned[runnerallocation.RunnerTenantQuota]{
 			Record: runnerallocation.RunnerTenantQuota{RunnerIDs: []string{}}, ReadRevision: result.ReadRevision,
 		},
 	}

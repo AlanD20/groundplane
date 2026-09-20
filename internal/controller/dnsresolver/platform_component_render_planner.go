@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/netip"
 	"runtime"
 	"time"
@@ -22,16 +23,16 @@ import (
 )
 
 type PlatformProjectionReader interface {
-	GetHostResolutionProjection(context.Context) (etcd.Versioned[etcd.HostResolutionProjectionRecord], bool, error)
+	GetHostResolutionProjection(context.Context) (etcdstore.Versioned[etcd.HostResolutionProjectionRecord], bool, error)
 }
 
 type BaselineRepository interface {
-	GetHostResolverBaseline(context.Context) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error)
+	GetHostResolverBaseline(context.Context) (etcdstore.Versioned[etcd.HostResolverBaselineRecord], bool, error)
 	EnsureHostResolverBaseline(
 		context.Context,
 		[]byte,
 		time.Time,
-	) (etcd.Versioned[etcd.HostResolverBaselineRecord], error)
+	) (etcdstore.Versioned[etcd.HostResolverBaselineRecord], error)
 }
 
 type BaselineCapture func(context.Context) ([]byte, error)
@@ -40,7 +41,7 @@ type ObservationRepository interface {
 	GetPlatformComponentObservation(
 		context.Context,
 		string,
-	) (etcd.Versioned[etcd.ComponentObservationRecord], bool, error)
+	) (etcdstore.Versioned[etcd.ComponentObservationRecord], bool, error)
 }
 
 type ActionCatalog interface {
@@ -78,18 +79,18 @@ type fixedObservationReader struct {
 
 func (reader fixedProjectionReader) GetHostResolutionProjection(
 	context.Context,
-) (etcd.Versioned[etcd.HostResolutionProjectionRecord], bool, error) {
-	return etcd.Versioned[etcd.HostResolutionProjectionRecord]{Record: reader.record}, true, nil
+) (etcdstore.Versioned[etcd.HostResolutionProjectionRecord], bool, error) {
+	return etcdstore.Versioned[etcd.HostResolutionProjectionRecord]{Record: reader.record}, true, nil
 }
 
 func (reader fixedObservationReader) GetPlatformComponentObservation(
 	_ context.Context,
 	componentID string,
-) (etcd.Versioned[etcd.ComponentObservationRecord], bool, error) {
+) (etcdstore.Versioned[etcd.ComponentObservationRecord], bool, error) {
 	if componentID != reader.componentID {
-		return etcd.Versioned[etcd.ComponentObservationRecord]{}, false, nil
+		return etcdstore.Versioned[etcd.ComponentObservationRecord]{}, false, nil
 	}
-	return etcd.Versioned[etcd.ComponentObservationRecord]{Record: reader.record}, true, nil
+	return etcdstore.Versioned[etcd.ComponentObservationRecord]{Record: reader.record}, true, nil
 }
 
 // PrepareConfigTaskAtProjection is the startup/recovery seam. It uses the
@@ -97,7 +98,7 @@ func (reader fixedObservationReader) GetPlatformComponentObservation(
 // caller's exact projection snapshot instead of reading a second view.
 func (planner *PlatformRenderPlanner) PrepareConfigTaskAtProjection(
 	ctx context.Context,
-	current etcd.Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	desired core.Component,
 	task etcd.TaskRecord,
 	projection etcd.HostResolutionProjectionRecord,
@@ -115,7 +116,7 @@ func (planner *PlatformRenderPlanner) PrepareConfigTaskAtProjection(
 // whose repository caller has proved same-revision singleton provenance.
 func (planner *PlatformRenderPlanner) PrepareBootstrapConfigTaskAtProjection(
 	ctx context.Context,
-	current etcd.Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	desired core.Component,
 	task etcd.TaskRecord,
 	projection etcd.HostResolutionProjectionRecord,
@@ -149,7 +150,7 @@ func NewPlatformRenderPlanner(
 
 func (planner *PlatformRenderPlanner) PrepareConfigTask(
 	ctx context.Context,
-	current etcd.Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	desired core.Component,
 	task etcd.TaskRecord,
 ) (etcd.PlatformComponentTaskRenderInput, error) {
@@ -158,7 +159,7 @@ func (planner *PlatformRenderPlanner) PrepareConfigTask(
 
 func (planner *PlatformRenderPlanner) prepareConfigTask(
 	ctx context.Context,
-	current etcd.Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	desired core.Component,
 	task etcd.TaskRecord,
 	disableService bool,
@@ -463,10 +464,10 @@ func componentTaskEnsureService(task etcd.TaskRecord) (bool, error) {
 // the compiled catalog contains a resolver definition with its generic grants.
 func (planner *PlatformRenderPlanner) SelectResolver(
 	ctx context.Context,
-	candidates []etcd.Versioned[componentrecord.Record],
-) (etcd.Versioned[componentrecord.Record], error) {
+	candidates []etcdstore.Versioned[componentrecord.Record],
+) (etcdstore.Versioned[componentrecord.Record], error) {
 	if ctx == nil || planner == nil || planner.catalog == nil {
-		return etcd.Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindInternal,
 			"dns-resolver selector dependencies are required",
 		)
@@ -475,18 +476,18 @@ func (planner *PlatformRenderPlanner) SelectResolver(
 		componentsdk.CapabilityDNSResolver, planner.managedConfigAction,
 	)
 	if !found || !definitionProvidesResolverGrants(definition) {
-		return etcd.Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindInternal,
 			"registered dns-resolver capability is absent from the compiled catalog",
 		)
 	}
-	var selected etcd.Versioned[componentrecord.Record]
+	var selected etcdstore.Versioned[componentrecord.Record]
 	for _, candidate := range candidates {
 		if candidate.Record.Desired.Owner != core.ComponentOwnerPlatform || candidate.Record.Desired.OwnerID != "" {
 			continue
 		}
 		if selected.Revision != 0 {
-			return etcd.Versioned[componentrecord.Record]{}, errs.New(
+			return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 				errs.KindStateConflict,
 				"multiple platform dns-resolver Components are registered",
 			)
@@ -494,7 +495,7 @@ func (planner *PlatformRenderPlanner) SelectResolver(
 		selected = candidate
 	}
 	if selected.Revision <= 0 || selected.ReadRevision <= 0 {
-		return etcd.Versioned[componentrecord.Record]{}, errs.New(
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
 			errs.KindComponentNotFound,
 			"platform dns-resolver Component is not registered",
 		)
@@ -528,7 +529,7 @@ func definitionProvidesResolverGrants(definition componentsdk.Definition) bool {
 
 func (planner *PlatformRenderPlanner) PrepareDisableTask(
 	ctx context.Context,
-	current etcd.Versioned[componentrecord.Record],
+	current etcdstore.Versioned[componentrecord.Record],
 	desired core.Component,
 	task etcd.TaskRecord,
 ) (etcd.PlatformComponentTaskRenderInput, error) {

@@ -13,34 +13,34 @@ func readActiveScriptSet(
 	store hierarchyStore,
 	environmentID string,
 	revision int64,
-) (Versioned[scriptrecord.SetGenerationRecord], error) {
+) (etcdstore.Versioned[scriptrecord.SetGenerationRecord], error) {
 	read, err := store.GetMany(
 		ctx,
 		etcdstore.GetManyRequest{Keys: []string{scriptrecord.ScriptSetActiveKey(environmentID)}, Revision: revision},
 	)
 	if err != nil {
-		return Versioned[scriptrecord.SetGenerationRecord]{}, err
+		return etcdstore.Versioned[scriptrecord.SetGenerationRecord]{}, err
 	}
 	if read == nil || len(read.Values) != 1 || read.Values[0] == nil {
-		return Versioned[scriptrecord.SetGenerationRecord]{}, errs.New(
+		return etcdstore.Versioned[scriptrecord.SetGenerationRecord]{}, errs.New(
 			errs.KindInternal,
 			"Environment active Script-set generation is missing",
 		)
 	}
 	record, err := scriptrecord.DecodeScriptSetGeneration(read.Values[0].Value)
 	if err != nil || record.EnvironmentID != environmentID {
-		return Versioned[scriptrecord.SetGenerationRecord]{}, recordcodec.CorruptRecord()
+		return etcdstore.Versioned[scriptrecord.SetGenerationRecord]{}, recordcodec.CorruptRecord()
 	}
-	return Versioned[scriptrecord.SetGenerationRecord]{
+	return etcdstore.Versioned[scriptrecord.SetGenerationRecord]{
 		Record: record, Revision: read.Values[0].ModRevision, ReadRevision: read.ReadRevision,
 	}, nil
 }
 
 type activeScriptStorage struct {
-	Script             Versioned[scriptrecord.Record]
-	Active             Versioned[scriptrecord.SetGenerationRecord]
-	Locator            Versioned[scriptrecord.LocatorRecord]
-	EnvironmentLocator Versioned[string]
+	Script             etcdstore.Versioned[scriptrecord.Record]
+	Active             etcdstore.Versioned[scriptrecord.SetGenerationRecord]
+	Locator            etcdstore.Versioned[scriptrecord.LocatorRecord]
+	EnvironmentLocator etcdstore.Versioned[string]
 }
 
 func readActiveScriptStorage(
@@ -95,18 +95,18 @@ func readActiveScriptStorage(
 		return activeScriptStorage{}, recordcodec.CorruptRecord()
 	}
 	return activeScriptStorage{
-		Script: Versioned[scriptrecord.Record]{
+		Script: etcdstore.Versioned[scriptrecord.Record]{
 			Record:       record,
 			Revision:     primary.Values[0].ModRevision,
 			ReadRevision: active.ReadRevision,
 		},
 		Active: active,
-		Locator: Versioned[scriptrecord.LocatorRecord]{
+		Locator: etcdstore.Versioned[scriptrecord.LocatorRecord]{
 			Record:       locator,
 			Revision:     locatorRead.Values[0].ModRevision,
 			ReadRevision: active.ReadRevision,
 		},
-		EnvironmentLocator: Versioned[string]{
+		EnvironmentLocator: etcdstore.Versioned[string]{
 			Record:       scriptID,
 			Revision:     environmentLocatorRead.Values[0].ModRevision,
 			ReadRevision: active.ReadRevision,

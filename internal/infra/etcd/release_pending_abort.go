@@ -18,8 +18,8 @@ func unassignedReleaseAbort(task TaskRecord, status TaskStatus) bool {
 // release their fence. Replaying Abort resumes this cleanup after interruption.
 func (repository *TaskRepository) finishUnassignedReleaseAbort(
 	ctx context.Context,
-	current Versioned[TaskRecord],
-) (Versioned[TaskRecord], error) {
+	current etcdstore.Versioned[TaskRecord],
+) (etcdstore.Versioned[TaskRecord], error) {
 	if !unassignedReleaseAbort(current.Record, current.Record.Status) {
 		return current, nil
 	}
@@ -28,18 +28,18 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 		keys := []string{taskAssignmentIndexKey(task.ID), releaseFenceSetKey(task.Owner.EnvironmentID)}
 		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: current.ReadRevision})
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if read == nil || read.ReadRevision != current.ReadRevision || len(read.Values) != len(keys) ||
 			read.Values[0] != nil {
-			return Versioned[TaskRecord]{}, corruptTaskAssignment()
+			return etcdstore.Versioned[TaskRecord]{}, corruptTaskAssignment()
 		}
 		if read.Values[1] == nil {
 			return current, nil
 		}
 		fence, err := decodeReleaseRecord[ReleaseFenceSet](read.Values[1].Value, "release-fence-set")
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if fence.OperationID != task.OperationID || fence.AttemptTaskID != task.ID {
 			// A later operation owns this fence; the old Abort has no authority over it.
@@ -58,23 +58,23 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 			etcdstore.Condition{Key: keys[0]},
 		)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if !processed {
-			return Versioned[TaskRecord]{}, corruptReleaseRecord()
+			return etcdstore.Versioned[TaskRecord]{}, corruptReleaseRecord()
 		}
 		current, err = repository.GetTask(ctx, task.ID)
 		if err != nil {
-			return Versioned[TaskRecord]{}, err
+			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		if !unassignedReleaseAbort(current.Record, current.Record.Status) {
-			return Versioned[TaskRecord]{}, errs.New(
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
 				"unassigned Release abort authority changed",
 			)
 		}
 	}
-	return Versioned[TaskRecord]{}, errs.New(
+	return etcdstore.Versioned[TaskRecord]{}, errs.New(
 		errs.KindStateConflict,
 		"unassigned Release abort cleanup remains incomplete",
 	)

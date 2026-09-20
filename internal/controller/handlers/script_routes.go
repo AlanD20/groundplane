@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"io"
 	"log/slog"
@@ -18,8 +19,8 @@ import (
 )
 
 type ScriptReader interface {
-	GetScript(context.Context, string) (etcd.Versioned[scriptrecord.Record], error)
-	ListScripts(context.Context, string, etcd.PageRequest) (etcd.Page[scriptrecord.Record], error)
+	GetScript(context.Context, string) (etcdstore.Versioned[scriptrecord.Record], error)
+	ListScripts(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[scriptrecord.Record], error)
 }
 
 type ScriptMutator interface {
@@ -236,12 +237,12 @@ func (s *Server) scriptMutationResponse(response etcd.IdempotencyResponse) *scri
 	}
 }
 
-func scriptListRequest(environmentID string, limit int, cursor string) (etcd.PageRequest, error) {
+func scriptListRequest(environmentID string, limit int, cursor string) (etcdstore.PageRequest, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.PageRequest{}, errs.New(errs.KindValidationFailed, "Script list requires a stable Environment id")
+		return etcdstore.PageRequest{}, errs.New(errs.KindValidationFailed, "Script list requires a stable Environment id")
 	}
 	if limit < 0 {
-		return etcd.PageRequest{}, errs.New(errs.KindValidationFailed, "Script list limit must be a positive integer")
+		return etcdstore.PageRequest{}, errs.New(errs.KindValidationFailed, "Script list limit must be a positive integer")
 	}
-	return etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
+	return etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 }

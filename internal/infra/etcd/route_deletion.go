@@ -14,11 +14,11 @@ import (
 // The Route and its indexes remain visible until successful acknowledgement.
 func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
-	route Versioned[routerecord.Record],
-	projection *Versioned[EnvironmentComposeProjection],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
+	route etcdstore.Versioned[routerecord.Record],
+	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	tombstone DeletionTombstoneRecord,
 	intent RouteRemovalIntent,
 	task TaskRecord,
@@ -208,7 +208,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 }
 
 func validateRouteDeletionProjection(
-	projection *Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	intent RouteRemovalIntent,
 ) error {
 	if intent.CurrentProjection == nil {
@@ -226,11 +226,11 @@ func validateRouteDeletionProjection(
 }
 
 func classifyRouteDeletionStartConflict(
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
-	route Versioned[routerecord.Record],
-	projection *Versioned[EnvironmentComposeProjection],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
+	route etcdstore.Versioned[routerecord.Record],
+	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	indexes []*etcdstore.KeyValue,
 	operationID string,
 ) idempotencyPlanClassifier {

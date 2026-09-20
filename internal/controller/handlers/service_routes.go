@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -15,13 +16,13 @@ import (
 )
 
 type ServiceReader interface {
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
 	GetServiceNativeCompose(context.Context, string, string) (string, error)
-	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
 }
 
 type ServiceObserver interface {
-	ObserveServices(context.Context, []etcd.Versioned[etcd.ServiceRecord]) []apiTypes.ServiceObservation
+	ObserveServices(context.Context, []etcdstore.Versioned[etcd.ServiceRecord]) []apiTypes.ServiceObservation
 }
 
 type ServiceMutator interface {
@@ -196,7 +197,7 @@ func (s *Server) showService(ctx context.Context, request *serviceShowInput) (*s
 		return nil, normalizeProjectError(err)
 	}
 	service := serviceResponse(record.Record)
-	observations := s.observeServices(ctx, []etcd.Versioned[etcd.ServiceRecord]{record})
+	observations := s.observeServices(ctx, []etcdstore.Versioned[etcd.ServiceRecord]{record})
 	service.Observation = &observations[0]
 	return &serviceDetailOutput{Body: apiTypes.ServiceDetail{
 		Service:       service,
@@ -206,7 +207,7 @@ func (s *Server) showService(ctx context.Context, request *serviceShowInput) (*s
 }
 
 func (s *Server) observeServices(
-	ctx context.Context, records []etcd.Versioned[etcd.ServiceRecord],
+	ctx context.Context, records []etcdstore.Versioned[etcd.ServiceRecord],
 ) []apiTypes.ServiceObservation {
 	if s.serviceObservations != nil {
 		return s.serviceObservations.ObserveServices(ctx, records)
@@ -272,17 +273,17 @@ func (s *Server) serviceMutationResponse(response etcd.IdempotencyResponse) *ser
 	}
 }
 
-func serviceListRequest(environmentID string, limit int, cursor string) (etcd.PageRequest, error) {
+func serviceListRequest(environmentID string, limit int, cursor string) (etcdstore.PageRequest, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.PageRequest{}, errs.New(
+		return etcdstore.PageRequest{}, errs.New(
 			errs.KindValidationFailed,
 			"Service list requires a stable Environment id",
 		)
 	}
 	if limit < 0 {
-		return etcd.PageRequest{}, errs.New(errs.KindValidationFailed, "Service list limit must be a positive integer")
+		return etcdstore.PageRequest{}, errs.New(errs.KindValidationFailed, "Service list limit must be a positive integer")
 	}
-	return etcd.PageRequest{Limit: limit, Cursor: cursor}, nil
+	return etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 }
 
 func serviceResponse(record etcd.ServiceRecord) apiTypes.Service {

@@ -14,10 +14,10 @@ import (
 // successful acknowledgement.
 func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
-	current Versioned[scriptrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
+	current etcdstore.Versioned[scriptrecord.Record],
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
 	marker IdempotencyMarker,
@@ -181,10 +181,10 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 }
 
 func classifyScriptDeletionStartConflict(
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
-	current Versioned[scriptrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
+	current etcdstore.Versioned[scriptrecord.Record],
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {

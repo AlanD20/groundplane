@@ -90,10 +90,10 @@ func (repository *TaskRepository) GetTaskAssignment(
 		}
 	}
 	return TaskAssignment{
-		Assignment: Versioned[TaskAssignmentRecord]{
+		Assignment: etcdstore.Versioned[TaskAssignmentRecord]{
 			Record: assignment, Revision: claimValue.ModRevision, ReadRevision: indexed.ReadRevision,
 		},
-		Task: Versioned[TaskRecord]{
+		Task: etcdstore.Versioned[TaskRecord]{
 			Record: task, Revision: taskValue.ModRevision, ReadRevision: indexed.ReadRevision,
 		},
 		ReleaseRecovery:       recovery,

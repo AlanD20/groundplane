@@ -15,7 +15,7 @@ import (
 // from immutable Release input.
 func (ledger *ReleaseLedger) LoadAcknowledgedServiceRuntimesAtRevision(
 	ctx context.Context, environmentID string, serviceIDs []string, revision int64,
-) ([]Versioned[serviceruntimerecord.Record], error) {
+) ([]etcdstore.Versioned[serviceruntimerecord.Record], error) {
 	if ledger == nil || ledger.store == nil || ctx == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil ||
 		revision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "acknowledged Service runtime request is invalid")
@@ -28,7 +28,7 @@ func (ledger *ReleaseLedger) LoadAcknowledgedServiceRuntimesAtRevision(
 		keys[index] = serviceruntimerecord.Key(serviceID)
 	}
 	if len(keys) == 0 {
-		return []Versioned[serviceruntimerecord.Record]{}, nil
+		return []etcdstore.Versioned[serviceruntimerecord.Record]{}, nil
 	}
 	read, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -37,7 +37,7 @@ func (ledger *ReleaseLedger) LoadAcknowledgedServiceRuntimesAtRevision(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != len(keys) {
 		return nil, errs.New(errs.KindInternal, "acknowledged Service runtime read is incomplete")
 	}
-	result := make([]Versioned[serviceruntimerecord.Record], len(keys))
+	result := make([]etcdstore.Versioned[serviceruntimerecord.Record], len(keys))
 	defer clearKeyValues(read.Values)
 	for index, value := range read.Values {
 		if value == nil {
@@ -50,7 +50,7 @@ func (ledger *ReleaseLedger) LoadAcknowledgedServiceRuntimesAtRevision(
 		record.Runtime.ProxyConfigSHA256 = slices.Clone(record.Runtime.ProxyConfigSHA256)
 		record.Runtime.CurrentArtifact = slices.Clone(record.Runtime.CurrentArtifact)
 		record.Runtime.RetainedPriorArtifact = slices.Clone(record.Runtime.RetainedPriorArtifact)
-		result[index] = Versioned[serviceruntimerecord.Record]{
+		result[index] = etcdstore.Versioned[serviceruntimerecord.Record]{
 			Record: record, Revision: value.ModRevision, ReadRevision: read.ReadRevision,
 		}
 	}

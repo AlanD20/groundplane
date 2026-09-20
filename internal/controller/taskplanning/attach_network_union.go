@@ -3,6 +3,7 @@ package taskplanning
 import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -20,7 +21,7 @@ func ProjectEnvironmentAttachNetworks(
 	environmentID string,
 	zones []etcd.EnvironmentZoneProjection,
 	services []etcd.EnvironmentServiceProjection,
-	attaches []etcd.Versioned[attachrecord.Record],
+	attaches []etcdstore.Versioned[attachrecord.Record],
 ) ([]composeidentity.Resource, error) {
 	projection := etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, DesiredZones: zones, DesiredServices: services,
@@ -37,7 +38,7 @@ func ProjectEnvironmentAttachNetworks(
 func ResolveAttachNetworkJoins(
 	environmentID string,
 	projection etcd.EnvironmentComposeProjection,
-	attaches []etcd.Versioned[attachrecord.Record],
+	attaches []etcdstore.Versioned[attachrecord.Record],
 	excludedAttachID string,
 ) ([]etcd.AttachTaskNetworkJoin, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || projection.EnvironmentID != environmentID {

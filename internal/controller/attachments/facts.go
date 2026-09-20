@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"slices"
 	"strings"
@@ -25,10 +26,10 @@ type GrantInput struct {
 }
 
 type FactRepository interface {
-	ResolveAttach(context.Context, string, string) (etcd.Versioned[attachrecord.Record], error)
+	ResolveAttach(context.Context, string, string) (etcdstore.Versioned[attachrecord.Record], error)
 	GetAttachFacts(
 		context.Context,
-		etcd.Versioned[attachrecord.Record],
+		etcdstore.Versioned[attachrecord.Record],
 	) (attachrecord.EncryptedFacts, bool, error)
 }
 
@@ -173,7 +174,7 @@ func (service *FactService) SealFactSets(
 // synchronous plan construction. Public fact readiness rules remain unchanged.
 func (service *FactService) ResolveTaskIdentity(
 	ctx context.Context,
-	current etcd.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	taskID string,
 	consume taskplanning.AttachPlanIdentityConsumer,
 ) error {
@@ -210,7 +211,7 @@ func (service *FactService) ResolveTaskIdentity(
 // construct another ready Attach's grant procedure and fact set.
 func (service *FactService) ResolveReadyDatabase(
 	ctx context.Context,
-	current etcd.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	consume func(string) error,
 ) error {
 	if ctx == nil || consume == nil {
@@ -231,7 +232,7 @@ func (service *FactService) ResolveReadyDatabase(
 // and exposes the exact ready Attach database/role pair during consume.
 func (service *FactService) ResolveBackupIdentity(
 	ctx context.Context,
-	current etcd.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	stored attachrecord.EncryptedFacts,
 	consume func(etcd.BackupPostgresIdentity) error,
 ) error {
@@ -256,7 +257,7 @@ func (service *FactService) ResolveBackupIdentity(
 // database side effect, so its sealed identity remains part of the cascade.
 func (service *FactService) ResolveRemovalDatabase(
 	ctx context.Context,
-	current etcd.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	consume func(string) error,
 ) error {
 	if ctx == nil || consume == nil {
@@ -345,7 +346,7 @@ func (service *FactService) ResolveFact(
 
 func (service *FactService) openBundle(
 	ctx context.Context,
-	current etcd.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[attachrecord.Record],
 	consume func(*attachFactBundle) error,
 ) error {
 	stored, ok, err := service.repository.GetAttachFacts(ctx, current)

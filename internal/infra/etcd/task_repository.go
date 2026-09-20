@@ -30,7 +30,7 @@ type taskRepositoryStore interface {
 // fencing; the Controller owns the registered Component renderer.
 type PlatformResolverTaskPreparer func(
 	context.Context,
-	Versioned[componentrecord.Record],
+	etcdstore.Versioned[componentrecord.Record],
 	HostResolutionProjectionRecord,
 	TaskRecord,
 	*ComponentObservationRecord,
@@ -42,8 +42,8 @@ type PlatformResolverTaskPreparer func(
 // kept at the composition root.
 type PlatformResolverComponentSelector func(
 	context.Context,
-	[]Versioned[componentrecord.Record],
-) (Versioned[componentrecord.Record], error)
+	[]etcdstore.Versioned[componentrecord.Record],
+) (etcdstore.Versioned[componentrecord.Record], error)
 
 // TaskEventAppend reports the durable sequence allocated by the Controller.
 // Duplicate is true only when the same Agent event was already committed.
@@ -143,46 +143,46 @@ func newTaskRepositoryWithRetryPolicy(
 func (repository *TaskRepository) GetTask(
 	ctx context.Context,
 	taskID string,
-) (Versioned[TaskRecord], error) {
+) (etcdstore.Versioned[TaskRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTask, taskID); err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	result, err := repository.store.Get(ctx, taskKey(taskID))
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if result.Entry == nil {
-		return Versioned[TaskRecord]{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
+		return etcdstore.Versioned[TaskRecord]{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
 	}
 	record, err := decodeTaskRecord(result.Entry.Value)
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if record.ID != taskID || result.Entry.Key != taskKey(taskID) {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task primary does not match its key")
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task primary does not match its key")
 	}
 	indexKeys, err := taskJournalIndexKeys(record)
 	if err != nil {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner indexes are corrupt")
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner indexes are corrupt")
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: indexKeys, Revision: result.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[TaskRecord]{}, err
+		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if indexes == nil || indexes.ReadRevision != result.ReadRevision || len(indexes.Values) != len(indexKeys) {
-		return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index read is incomplete")
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index read is incomplete")
 	}
 	for index, value := range indexes.Values {
 		if value == nil || value.Key != indexKeys[index] || string(value.Value) != taskID {
-			return Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index membership is corrupt")
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index membership is corrupt")
 		}
 	}
-	return Versioned[TaskRecord]{
+	return etcdstore.Versioned[TaskRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, nil
 }
@@ -270,8 +270,8 @@ func (repository *TaskRepository) GetSystemTaskInitiation(
 
 func (repository *TaskRepository) ListTasks(
 	ctx context.Context,
-	request PageRequest,
-) (Page[TaskRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[TaskRecord], error) {
 	return repository.ListTasksByScope(ctx, TaskListScope{Kind: TaskListScopeGlobal}, request)
 }
 
@@ -282,13 +282,13 @@ func (repository *TaskRepository) ListTasks(
 func (repository *TaskRepository) ListTasksByScope(
 	ctx context.Context,
 	scope TaskListScope,
-	request PageRequest,
-) (Page[TaskRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[TaskRecord], error) {
 	identity := func(record TaskRecord) string { return record.ID }
 	switch scope.Kind {
 	case TaskListScopeGlobal:
 		if scope.ID != "" {
-			return Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "global task scope cannot contain an id")
+			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "global task scope cannot contain an id")
 		}
 		page, err := listPrimaryPage(
 			ctx, repository.store, "tasks", "global", "-", taskPrefix, ids.KindTask,
@@ -297,7 +297,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopePlatformWorkspace:
 		if scope.ID != "" {
-			return Page[TaskRecord]{}, errs.New(
+			return etcdstore.Page[TaskRecord]{}, errs.New(
 				errs.KindValidationFailed,
 				"platform task workspace scope cannot contain an id",
 			)
@@ -310,7 +310,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeTenantWorkspace:
 		if ids.Validate(ids.KindTenant, scope.ID) != nil {
-			return Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "tenant task workspace scope is invalid")
+			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "tenant task workspace scope is invalid")
 		}
 		page, err := listIndexPage(
 			ctx, repository.store, "tasks", "workspace", scope.ID,
@@ -323,7 +323,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeProject:
 		if ids.Validate(ids.KindProject, scope.ID) != nil {
-			return Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "project task scope is invalid")
+			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "project task scope is invalid")
 		}
 		page, err := listFilteredPrimaryPage(
 			ctx,
@@ -341,7 +341,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeEnvironment:
 		if ids.Validate(ids.KindEnvironment, scope.ID) != nil {
-			return Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "environment task scope is invalid")
+			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "environment task scope is invalid")
 		}
 		page, err := listIndexPage(
 			ctx, repository.store, "tasks", "environment", scope.ID,
@@ -351,30 +351,30 @@ func (repository *TaskRepository) ListTasksByScope(
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	default:
-		return Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task list scope kind is invalid")
+		return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "task list scope kind is invalid")
 	}
 }
 
 func (repository *TaskRepository) verifyTaskOwnerPage(
 	ctx context.Context,
-	page Page[TaskRecord],
+	page etcdstore.Page[TaskRecord],
 	listErr error,
-) (Page[TaskRecord], error) {
+) (etcdstore.Page[TaskRecord], error) {
 	if listErr != nil {
-		return Page[TaskRecord]{}, listErr
+		return etcdstore.Page[TaskRecord]{}, listErr
 	}
 	if len(page.Items) == 0 {
 		return page, nil
 	}
 	if page.Revision <= 0 {
-		return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task list revision is invalid")
+		return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindInternal, "task list revision is invalid")
 	}
 	keys := make([]string, 0, len(page.Items)*2)
 	expectedTaskIDs := make([]string, 0, len(page.Items)*2)
 	for _, item := range page.Items {
 		ownerKeys, err := taskJournalIndexKeys(item.Record)
 		if err != nil {
-			return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner indexes are corrupt")
+			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner indexes are corrupt")
 		}
 		keys = append(keys, ownerKeys...)
 		for range ownerKeys {
@@ -383,18 +383,18 @@ func (repository *TaskRepository) verifyTaskOwnerPage(
 	}
 	indexes, err := getManyBatchedAtRevision(ctx, repository.store, keys, page.Revision)
 	if err != nil {
-		return Page[TaskRecord]{}, err
+		return etcdstore.Page[TaskRecord]{}, err
 	}
 	if indexes == nil {
-		return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index page read is incomplete")
+		return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index page read is incomplete")
 	}
 	defer clearKeyValues(indexes.Values)
 	if indexes.ReadRevision != page.Revision || len(indexes.Values) != len(keys) {
-		return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index page read is incomplete")
+		return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index page read is incomplete")
 	}
 	for index, value := range indexes.Values {
 		if value == nil || value.Key != keys[index] || string(value.Value) != expectedTaskIDs[index] {
-			return Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index membership is corrupt")
+			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index membership is corrupt")
 		}
 	}
 	return page, nil

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"path"
 	"sort"
 	"time"
@@ -44,18 +45,18 @@ type volumeListCursor struct {
 func (service *ReadService) ListVolumes(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.VolumeRecord], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[etcd.VolumeRecord], error) {
 	projection, cursor, err := service.volumeListProjection(ctx, environmentID, request.Cursor)
 	if err != nil {
-		return etcd.Page[etcd.VolumeRecord]{}, err
+		return etcdstore.Page[etcd.VolumeRecord]{}, err
 	}
 	limit := request.Limit
 	if limit == 0 {
 		limit = defaultVolumePageLimit
 	}
 	if limit < 1 || limit > maximumVolumePageLimit {
-		return etcd.Page[etcd.VolumeRecord]{}, errs.New(
+		return etcdstore.Page[etcd.VolumeRecord]{}, errs.New(
 			errs.KindValidationFailed, "Volume page limit must be between 1 and 200",
 		)
 	}
@@ -66,23 +67,23 @@ func (service *ReadService) ListVolumes(
 	if end > len(projection.Record.Volumes) {
 		end = len(projection.Record.Volumes)
 	}
-	items := make([]etcd.Versioned[etcd.VolumeRecord], 0, end-start)
+	items := make([]etcdstore.Versioned[etcd.VolumeRecord], 0, end-start)
 	for _, volume := range projection.Record.Volumes[start:end] {
-		items = append(items, etcd.Versioned[etcd.VolumeRecord]{
+		items = append(items, etcdstore.Versioned[etcd.VolumeRecord]{
 			Record: etcd.VolumeRecord{
 				ID: volume.ID, EnvironmentID: environmentID, Slug: volume.Slug, Key: volume.Key,
 			},
 			Revision: projection.Revision, ReadRevision: projection.ReadRevision,
 		})
 	}
-	page := etcd.Page[etcd.VolumeRecord]{Items: items}
+	page := etcdstore.Page[etcd.VolumeRecord]{Items: items}
 	if end < len(projection.Record.Volumes) {
 		page.NextCursor, err = encodeVolumeCursor(volumeListCursor{
 			EnvironmentID: environmentID, RevisionID: projection.Record.RevisionID,
 			AfterKey: projection.Record.Volumes[end-1].Key,
 		})
 		if err != nil {
-			return etcd.Page[etcd.VolumeRecord]{}, err
+			return etcdstore.Page[etcd.VolumeRecord]{}, err
 		}
 	}
 	return page, nil
@@ -91,7 +92,7 @@ func (service *ReadService) ListVolumes(
 func (service *ReadService) ListVolumeViews(
 	ctx context.Context,
 	environmentID string,
-	request etcd.PageRequest,
+	request etcdstore.PageRequest,
 ) (apiTypes.Page[apiTypes.Volume], error) {
 	page, err := service.ListVolumes(ctx, environmentID, request)
 	if err != nil {
@@ -143,26 +144,26 @@ func (service *ReadService) volumeListProjection(
 	ctx context.Context,
 	environmentID string,
 	encodedCursor string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], volumeListCursor, error) {
+) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], volumeListCursor, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
+		return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
 			errs.KindValidationFailed, "Volume list requires a stable Environment id",
 		)
 	}
 	if encodedCursor == "" {
 		projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
 		if err != nil {
-			return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, err
+			return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, err
 		}
 		if !found {
-			return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, nil
+			return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, nil
 		}
 		return projection, volumeListCursor{EnvironmentID: environmentID, RevisionID: projection.Record.RevisionID}, nil
 	}
 	cursor, err := decodeVolumeCursor[volumeListCursor](encodedCursor)
 	if err != nil || cursor.EnvironmentID != environmentID ||
 		ids.Validate(ids.KindTask, cursor.RevisionID) != nil {
-		return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
+		return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
 			errs.KindValidationFailed, "Volume page cursor is invalid",
 		)
 	}
@@ -170,10 +171,10 @@ func (service *ReadService) volumeListProjection(
 		ctx, environmentID, cursor.RevisionID,
 	)
 	if err != nil {
-		return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, err
+		return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, err
 	}
 	if !found {
-		return etcd.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
+		return etcdstore.Versioned[etcd.EnvironmentComposeProjection]{}, volumeListCursor{}, errs.New(
 			errs.KindStateConflict, "Volume page revision is no longer available",
 		)
 	}
@@ -199,7 +200,7 @@ func (service *ReadService) GetVolumeDeletionImpact(
 			errs.KindValidationFailed, "Volume deletion-impact page request is invalid",
 		)
 	}
-	var projection etcd.Versioned[etcd.EnvironmentComposeProjection]
+	var projection etcdstore.Versioned[etcd.EnvironmentComposeProjection]
 	var identity etcd.EnvironmentVolumeIdentity
 	cursor := volumeImpactCursor{VolumeID: volumeID}
 	if encodedCursor == "" {

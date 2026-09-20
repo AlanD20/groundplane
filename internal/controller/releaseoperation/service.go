@@ -2,6 +2,7 @@ package releaseoperation
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"strconv"
 	"strings"
@@ -25,7 +26,7 @@ const (
 )
 
 type localAgentReader interface {
-	GetSingleton(context.Context) (etcd.Versioned[etcd.LocalAgentRecord], error)
+	GetSingleton(context.Context) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
 }
 
 type Service struct {

@@ -18,7 +18,7 @@ type blueprintBackupPolicySourceEvidence struct {
 	primary          *etcdstore.KeyValue
 	environmentIndex *etcdstore.KeyValue
 	identityIndex    *etcdstore.KeyValue
-	attach           *Versioned[attachrecord.Record]
+	attach           *etcdstore.Versioned[attachrecord.Record]
 	attachOwner      *etcdstore.KeyValue
 	candidateAttach  bool
 }
@@ -242,7 +242,7 @@ func (repository *BackupPolicyRepository) resolveBlueprintBackupConnector(
 	environmentID string,
 	name string,
 	revision int64,
-) (string, *Versioned[connectorrecord.Record], *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
+) (string, *etcdstore.Versioned[connectorrecord.Record], *etcdstore.KeyValue, *etcdstore.KeyValue, error) {
 	if name == "" {
 		return "", nil, nil, nil, nil
 	}

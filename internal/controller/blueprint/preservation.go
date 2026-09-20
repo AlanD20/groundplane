@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -148,7 +149,7 @@ func preserveEnvironmentBlueprintResources(
 func preserveEnvironmentBlueprintRoutes(
 	specs []core.RouteSpec,
 	services []core.Service,
-	current []etcd.Versioned[routerecord.Record],
+	current []etcdstore.Versioned[routerecord.Record],
 ) ([]core.RouteSpec, error) {
 	serviceByID := make(map[string]string, len(services))
 	for _, service := range services {

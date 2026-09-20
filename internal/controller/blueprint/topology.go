@@ -3,6 +3,7 @@ package blueprint
 import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -11,9 +12,9 @@ import (
 func prepareEnvironmentBlueprintZoneChanges(
 	environmentID string,
 	desired []core.Zone,
-	current []etcd.Versioned[zonerecord.Record],
+	current []etcdstore.Versioned[zonerecord.Record],
 ) ([]etcd.EnvironmentBlueprintZoneChange, error) {
-	currentByID := make(map[string]etcd.Versioned[zonerecord.Record], len(current))
+	currentByID := make(map[string]etcdstore.Versioned[zonerecord.Record], len(current))
 	for _, zone := range current {
 		if zone.Record.EnvironmentID != environmentID || zone.Record.Desired.ID == "" {
 			return nil, errs.New(errs.KindInternal, "durable Blueprint Zone state is inconsistent")
@@ -88,9 +89,9 @@ func environmentBlueprintTopologyProjection(
 func prepareEnvironmentBlueprintRouteChanges(
 	environmentID string,
 	desired []core.Route,
-	current []etcd.Versioned[routerecord.Record],
+	current []etcdstore.Versioned[routerecord.Record],
 ) ([]etcd.EnvironmentBlueprintRouteChange, error) {
-	currentByID := make(map[string]etcd.Versioned[routerecord.Record], len(current))
+	currentByID := make(map[string]etcdstore.Versioned[routerecord.Record], len(current))
 	for _, route := range current {
 		if route.Record.EnvironmentID != environmentID || route.Record.Desired.ID == "" {
 			return nil, errs.New(errs.KindInternal, "durable Blueprint Route state is inconsistent")

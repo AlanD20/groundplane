@@ -166,8 +166,8 @@ type Options struct {
 }
 
 type taskQueries interface {
-	GetTask(context.Context, string) (etcd.Versioned[etcd.TaskRecord], error)
-	ListTasksByScope(context.Context, etcd.TaskListScope, etcd.PageRequest) (etcd.Page[etcd.TaskRecord], error)
+	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
+	ListTasksByScope(context.Context, etcd.TaskListScope, etcdstore.PageRequest) (etcdstore.Page[etcd.TaskRecord], error)
 	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
 }
 

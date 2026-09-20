@@ -4,13 +4,14 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // Authoring projects Blueprint-owned Scripts using their immutable authored keys.
 func Authoring(
-	records []etcd.Versioned[scriptrecord.Record],
+	records []etcdstore.Versioned[scriptrecord.Record],
 	volumes []etcd.EnvironmentVolumeIdentity,
 	entries []entryrecord.Record,
 ) (map[string]core.ScriptSpec, error) {

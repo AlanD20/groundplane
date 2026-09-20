@@ -216,7 +216,7 @@ type hierarchyDeletionRoot struct {
 	workspace        HierarchyDeletionWorkspace
 	owner            TaskOwner
 	primaryFences    []etcdstore.Condition
-	coordination     []Versioned[HierarchyCoordinationRecord]
+	coordination     []etcdstore.Versioned[HierarchyCoordinationRecord]
 	coordinationKeys []string
 }
 

@@ -15,7 +15,7 @@ type preparedBlueprintAttachTaskPublication struct {
 }
 
 func prepareBlueprintAttachTaskPublication(
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	projection EnvironmentComposeProjection,
 	task TaskRecord,
 	preparation BlueprintAttachTaskPreparation,
@@ -57,7 +57,7 @@ func prepareBlueprintAttachTaskPublication(
 		candidateIDs[input.Record.ID] = struct{}{}
 	}
 	retainedPublished := make(map[string]struct{})
-	appendRetained := func(retained Versioned[attachrecord.Record]) error {
+	appendRetained := func(retained etcdstore.Versioned[attachrecord.Record]) error {
 		if _, exists := retainedPublished[retained.Record.ID]; exists {
 			return nil
 		}

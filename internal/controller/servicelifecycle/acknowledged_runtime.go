@@ -2,6 +2,7 @@ package servicelifecycle
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -19,7 +20,7 @@ type AcknowledgedRuntimeReader interface {
 		string,
 		[]string,
 		int64,
-	) ([]etcd.Versioned[serviceruntimerecord.Record], error)
+	) ([]etcdstore.Versioned[serviceruntimerecord.Record], error)
 }
 
 // AcknowledgedRuntimeCapture is exact per-Service applied runtime evidence at
@@ -35,7 +36,7 @@ type AcknowledgedRuntimeCapture struct {
 func CaptureAcknowledgedRuntime(
 	ctx context.Context,
 	reader AcknowledgedRuntimeReader,
-	applied etcd.Versioned[etcd.EnvironmentComposeProjection],
+	applied etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	environmentID string,
 	serviceID string,
 	currentArtifactID string,

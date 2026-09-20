@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"slices"
 	"strings"
@@ -18,7 +19,7 @@ import (
 )
 
 type zoneRemovalImpactZones interface {
-	GetZone(context.Context, string) (etcd.Versioned[zonerecord.Record], error)
+	GetZone(context.Context, string) (etcdstore.Versioned[zonerecord.Record], error)
 }
 
 type zoneRemovalImpactAttaches interface {
@@ -27,16 +28,16 @@ type zoneRemovalImpactAttaches interface {
 		string,
 		string,
 		int64,
-	) ([]etcd.Versioned[attachrecord.Record], error)
+	) ([]etcdstore.Versioned[attachrecord.Record], error)
 }
 
 type zoneRemovalImpactServices interface {
-	GetService(context.Context, string) (etcd.Versioned[etcd.ServiceRecord], error)
-	ListServices(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
 }
 
 type zoneRemovalImpactFacts interface {
-	ResolveRemovalDatabase(context.Context, etcd.Versioned[attachrecord.Record], func(string) error) error
+	ResolveRemovalDatabase(context.Context, etcdstore.Versioned[attachrecord.Record], func(string) error) error
 }
 
 type zoneRemovalImpactService struct {
@@ -98,7 +99,7 @@ func (service *zoneRemovalImpactService) GetZoneRemovalImpact(
 
 func (service *zoneRemovalImpactService) populateBackingImpact(
 	ctx context.Context,
-	zone etcd.Versioned[zonerecord.Record],
+	zone etcdstore.Versioned[zonerecord.Record],
 	impact *apiTypes.ZoneRemovalImpact,
 	canonical *zoneRemovalImpactCanonical,
 ) error {
@@ -153,13 +154,13 @@ func (service *zoneRemovalImpactService) populateBackingImpact(
 
 func (service *zoneRemovalImpactService) populateOrdinaryImpact(
 	ctx context.Context,
-	zone etcd.Versioned[zonerecord.Record],
+	zone etcdstore.Versioned[zonerecord.Record],
 	impact *apiTypes.ZoneRemovalImpact,
 	canonical *zoneRemovalImpactCanonical,
 ) error {
 	cursor := ""
 	for {
-		page, err := service.services.ListServices(ctx, zone.Record.EnvironmentID, etcd.PageRequest{
+		page, err := service.services.ListServices(ctx, zone.Record.EnvironmentID, etcdstore.PageRequest{
 			Limit: 200, Cursor: cursor,
 		})
 		if err != nil {

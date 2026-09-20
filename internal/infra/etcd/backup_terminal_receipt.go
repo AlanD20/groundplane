@@ -316,7 +316,7 @@ func backupTerminalTaskEvidence(task TaskRecord) (BackupTerminalTaskEvidence, er
 }
 
 func prepareBackupRunTerminalReceipt(
-	current Versioned[TaskRecord],
+	current etcdstore.Versioned[TaskRecord],
 	terminal TaskRecord,
 	run BackupRunRecord,
 ) (backupTerminalReceiptPlan, error) {
@@ -369,10 +369,10 @@ func backupTerminalRunOutcomes(run BackupRunRecord) []BackupTerminalSourceOutcom
 }
 
 func prepareBackupPruneTerminalReceipt(
-	current Versioned[TaskRecord],
+	current etcdstore.Versioned[TaskRecord],
 	terminal TaskRecord,
 	dispatch BackupRecoveryPointPruneDispatchRecord,
-	prunes []Versioned[BackupRecoveryPointPruneRecord],
+	prunes []etcdstore.Versioned[BackupRecoveryPointPruneRecord],
 ) (backupTerminalReceiptPlan, error) {
 	if current.Revision <= 0 || current.Record.Type != TaskBackupPrune ||
 		terminal.Type != TaskBackupPrune || !isTerminalTaskStatus(terminal.Status) ||
@@ -548,7 +548,7 @@ func bindBackupTerminalReceiptEpoch(
 
 func (repository *TaskRepository) validateBackupTerminalReceiptReplay(
 	ctx context.Context,
-	task Versioned[TaskRecord],
+	task etcdstore.Versioned[TaskRecord],
 ) error {
 	if task.Revision <= 0 || (task.Record.Type != TaskBackup && task.Record.Type != TaskBackupPrune) ||
 		!isTerminalTaskStatus(task.Record.Status) {
@@ -779,7 +779,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 			}
 			if err := validatePendingBackupPruneAuthority(
 				values,
-				Versioned[BackupRecoveryPointPruneRecord]{
+				etcdstore.Versioned[BackupRecoveryPointPruneRecord]{
 					Record:   prune,
 					Revision: values[0].ModRevision,
 				},
@@ -796,7 +796,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		}
 		if err := validatePendingBackupPruneAuthority(
 			values,
-			Versioned[BackupRecoveryPointPruneRecord]{
+			etcdstore.Versioned[BackupRecoveryPointPruneRecord]{
 				Record: prune, Revision: values[0].ModRevision,
 			},
 		); err != nil {

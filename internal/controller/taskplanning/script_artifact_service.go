@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"path"
 	"sort"
 	"unicode/utf8"
@@ -25,7 +26,7 @@ type scriptArtifactRepository interface {
 		etcd.TaskRecord,
 		*agentpb.ExecutionPlan,
 	) (*agentpb.ScriptAssignmentArtifacts, error)
-	GetScriptExecution(context.Context, string) (etcd.Versioned[etcd.ScriptExecutionRecord], error)
+	GetScriptExecution(context.Context, string) (etcdstore.Versioned[etcd.ScriptExecutionRecord], error)
 }
 
 type scriptEntryValueResolver interface {

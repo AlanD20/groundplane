@@ -9,8 +9,8 @@ import (
 func attachDesiredHeadConditions(
 	consumerEnvironmentID string,
 	consumerRevision int64,
-	backingService Versioned[ServiceRecord],
-	services []Versioned[ServiceRecord],
+	backingService etcdstore.Versioned[ServiceRecord],
+	services []etcdstore.Versioned[ServiceRecord],
 ) ([]etcdstore.Condition, error) {
 	candidates := []etcdstore.Condition{{
 		Key: environmentBlueprintHeadKey(consumerEnvironmentID), ModRevision: consumerRevision,

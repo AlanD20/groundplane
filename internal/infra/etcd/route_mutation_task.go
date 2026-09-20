@@ -17,10 +17,10 @@ import (
 // a failed or disabled reconciler must never discard desired state.
 func (repository *RouteRepository) BeginRouteMutationWithTask(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
-	current *Versioned[routerecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
+	current *etcdstore.Versioned[routerecord.Record],
 	record routerecord.Record,
 	intent RouteMutationIntent,
 	task TaskRecord,

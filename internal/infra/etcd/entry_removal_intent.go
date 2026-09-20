@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
@@ -40,7 +41,7 @@ type EntryRemovalDesiredRevision struct {
 
 func NewDesiredEntryRemovalIntent(
 	entryID, baseRevisionID string, claim EnvironmentBlueprintStageClaim,
-	projection *Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 ) (EntryRemovalIntent, error) {
 	if err := validateEnvironmentBlueprintStageClaim(claim); err != nil {
 		return EntryRemovalIntent{}, err
@@ -67,7 +68,7 @@ func NewEntryRemovalIntent(
 	environmentID string,
 	entryID string,
 	entryRevision int64,
-	projection *Versioned[EnvironmentComposeProjection],
+	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	createdAt time.Time,
 ) (EntryRemovalIntent, error) {
 	intent := EntryRemovalIntent{
@@ -99,34 +100,34 @@ func entryRemovalIntentKey(taskID string) string {
 func (repository *HierarchyRepository) GetEntryRemovalIntent(
 	ctx context.Context,
 	taskID string,
-) (Versioned[EntryRemovalIntent], bool, error) {
+) (etcdstore.Versioned[EntryRemovalIntent], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[EntryRemovalIntent]{}, false, err
+		return etcdstore.Versioned[EntryRemovalIntent]{}, false, err
 	}
 	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {
-		return Versioned[EntryRemovalIntent]{}, false, errs.New(
+		return etcdstore.Versioned[EntryRemovalIntent]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Entry removal intent Task id is invalid",
 		)
 	}
 	result, err := repository.store.Get(ctx, entryRemovalIntentKey(taskID))
 	if err != nil {
-		return Versioned[EntryRemovalIntent]{}, false, err
+		return etcdstore.Versioned[EntryRemovalIntent]{}, false, err
 	}
 	if result == nil {
-		return Versioned[EntryRemovalIntent]{}, false, errs.New(
+		return etcdstore.Versioned[EntryRemovalIntent]{}, false, errs.New(
 			errs.KindInternal,
 			"Entry removal intent read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return Versioned[EntryRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[EntryRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	intent, err := decodeEntryRemovalIntent(result.Entry.Value)
 	if err != nil || intent.TaskID != taskID {
-		return Versioned[EntryRemovalIntent]{}, false, corruptEntryRemovalIntent()
+		return etcdstore.Versioned[EntryRemovalIntent]{}, false, corruptEntryRemovalIntent()
 	}
-	return Versioned[EntryRemovalIntent]{
+	return etcdstore.Versioned[EntryRemovalIntent]{
 		Record: intent, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }

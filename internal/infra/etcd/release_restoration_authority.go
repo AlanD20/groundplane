@@ -241,13 +241,13 @@ func releaseRecoveryRecordSHA256(record releaseRecoveryRecord) (string, error) {
 func (repository *TaskRepository) createReleaseRecoveryRecord(
 	ctx context.Context,
 	record releaseRecoveryRecord,
-) (Versioned[releaseRecoveryRecord], error) {
+) (etcdstore.Versioned[releaseRecoveryRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[releaseRecoveryRecord]{}, err
+		return etcdstore.Versioned[releaseRecoveryRecord]{}, err
 	}
 	value, err := encodeReleaseRecoveryRecord(record)
 	if err != nil {
-		return Versioned[releaseRecoveryRecord]{}, err
+		return etcdstore.Versioned[releaseRecoveryRecord]{}, err
 	}
 	defer clear(value)
 	key := releaseRecoveryKey(record.TaskID)
@@ -257,10 +257,10 @@ func (repository *TaskRepository) createReleaseRecoveryRecord(
 		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: key, Value: value}},
 	)
 	if err != nil {
-		return Versioned[releaseRecoveryRecord]{}, err
+		return etcdstore.Versioned[releaseRecoveryRecord]{}, err
 	}
 	if result.Succeeded {
-		return Versioned[releaseRecoveryRecord]{
+		return etcdstore.Versioned[releaseRecoveryRecord]{
 			Record:       record,
 			Revision:     result.Revision,
 			ReadRevision: result.Revision,
@@ -268,7 +268,7 @@ func (repository *TaskRepository) createReleaseRecoveryRecord(
 	}
 	read, err := repository.store.Get(ctx, key)
 	if err != nil || read.Entry == nil {
-		return Versioned[releaseRecoveryRecord]{}, errs.New(
+		return etcdstore.Versioned[releaseRecoveryRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"release recovery record creation conflicted",
 		)
@@ -277,13 +277,13 @@ func (repository *TaskRepository) createReleaseRecoveryRecord(
 	storedValue, encodeErr := encodeReleaseRecoveryRecord(stored)
 	if decodeErr != nil || encodeErr != nil || !bytes.Equal(value, storedValue) {
 		clear(storedValue)
-		return Versioned[releaseRecoveryRecord]{}, errs.New(
+		return etcdstore.Versioned[releaseRecoveryRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"release recovery record creation conflicted",
 		)
 	}
 	clear(storedValue)
-	return Versioned[releaseRecoveryRecord]{
+	return etcdstore.Versioned[releaseRecoveryRecord]{
 		Record:       stored,
 		Revision:     read.Entry.ModRevision,
 		ReadRevision: read.ReadRevision,

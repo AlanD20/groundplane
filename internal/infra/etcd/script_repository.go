@@ -28,35 +28,35 @@ func newScriptRepository(store hierarchyStore) (*ScriptRepository, error) {
 
 func (repository *ScriptRepository) CreateScript(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
 	record scriptrecord.Record,
-) (Versioned[scriptrecord.Record], error) {
+) (etcdstore.Versioned[scriptrecord.Record], error) {
 	conditions, mutations, classify, err := repository.prepareScriptCreation(ctx, environment, project, target, record)
 	if err != nil {
-		return Versioned[scriptrecord.Record]{}, err
+		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
 	defer clearMutationValues(mutations)
 	result, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
-		return Versioned[scriptrecord.Record]{}, err
+		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[scriptrecord.Record]{}, classify(result.Revision, result.FailureReads)
+		return etcdstore.Versioned[scriptrecord.Record]{}, classify(result.Revision, result.FailureReads)
 	}
 	created, err := readActiveScriptStorage(ctx, repository.store, record.Desired.ID, result.Revision)
 	if err != nil {
-		return Versioned[scriptrecord.Record]{}, err
+		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
 	return repository.hydrateScriptBody(ctx, created.Script)
 }
 
 func (repository *ScriptRepository) CreateScriptIdempotent(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
 	record scriptrecord.Record,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -81,9 +81,9 @@ func (repository *ScriptRepository) CreateScriptIdempotent(
 
 func (repository *ScriptRepository) prepareScriptCreation(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
 	record scriptrecord.Record,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	if err := validateScriptHierarchy(ctx, environment, project, target, record); err != nil {
@@ -187,27 +187,27 @@ func (repository *ScriptRepository) prepareScriptCreation(
 	return conditions, mutations, classify, nil
 }
 
-func (repository *ScriptRepository) GetScript(ctx context.Context, id string) (Versioned[scriptrecord.Record], error) {
+func (repository *ScriptRepository) GetScript(ctx context.Context, id string) (etcdstore.Versioned[scriptrecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[scriptrecord.Record]{}, err
+		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindScript, id); err != nil {
-		return Versioned[scriptrecord.Record]{}, err
+		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
 	locatorRead, err := repository.store.Get(ctx, scriptrecord.ScriptLocatorKey(id))
 	if err != nil {
-		return Versioned[scriptrecord.Record]{}, err
+		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
 	if locatorRead == nil || locatorRead.Entry == nil {
-		return Versioned[scriptrecord.Record]{}, errs.New(errs.KindScriptNotFound, "Script was not found")
+		return etcdstore.Versioned[scriptrecord.Record]{}, errs.New(errs.KindScriptNotFound, "Script was not found")
 	}
 	locator, err := scriptrecord.DecodeScriptLocator(locatorRead.Entry.Value)
 	if err != nil || locator.ScriptID != id {
-		return Versioned[scriptrecord.Record]{}, recordcodec.CorruptRecord()
+		return etcdstore.Versioned[scriptrecord.Record]{}, recordcodec.CorruptRecord()
 	}
 	active, err := readActiveScriptSet(ctx, repository.store, locator.EnvironmentID, locatorRead.ReadRevision)
 	if err != nil {
-		return Versioned[scriptrecord.Record]{}, err
+		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
 	primary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
@@ -215,17 +215,17 @@ func (repository *ScriptRepository) GetScript(ctx context.Context, id string) (V
 		}, Revision: active.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[scriptrecord.Record]{}, err
+		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
 	if primary == nil || len(primary.Values) != 1 || primary.Values[0] == nil {
-		return Versioned[scriptrecord.Record]{}, errs.New(errs.KindScriptNotFound, "Script was not found")
+		return etcdstore.Versioned[scriptrecord.Record]{}, errs.New(errs.KindScriptNotFound, "Script was not found")
 	}
 	record, err := scriptrecord.DecodeRecord(primary.Values[0].Value)
 	if err != nil || record.Desired.ID != id || record.EnvironmentID != locator.EnvironmentID ||
 		record.ScriptSetGeneration != active.Record.GenerationID {
-		return Versioned[scriptrecord.Record]{}, recordcodec.CorruptRecord()
+		return etcdstore.Versioned[scriptrecord.Record]{}, recordcodec.CorruptRecord()
 	}
-	return repository.hydrateScriptBody(ctx, Versioned[scriptrecord.Record]{
+	return repository.hydrateScriptBody(ctx, etcdstore.Versioned[scriptrecord.Record]{
 		Record: record, Revision: primary.Values[0].ModRevision, ReadRevision: active.ReadRevision,
 	})
 }
@@ -233,22 +233,22 @@ func (repository *ScriptRepository) GetScript(ctx context.Context, id string) (V
 func (repository *ScriptRepository) ListScripts(
 	ctx context.Context,
 	environmentID string,
-	request PageRequest,
-) (Page[scriptrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[scriptrecord.Record], error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Page[scriptrecord.Record]{}, err
+		return etcdstore.Page[scriptrecord.Record]{}, err
 	}
 	revision := int64(0)
 	if request.Cursor != "" {
 		cursor, cursorErr := recordcodec.DecodeCursor(request.Cursor)
 		if cursorErr != nil {
-			return Page[scriptrecord.Record]{}, cursorErr
+			return etcdstore.Page[scriptrecord.Record]{}, cursorErr
 		}
 		revision = cursor.Revision
 	}
 	active, err := readActiveScriptSet(ctx, repository.store, environmentID, revision)
 	if err != nil {
-		return Page[scriptrecord.Record]{}, err
+		return etcdstore.Page[scriptrecord.Record]{}, err
 	}
 	page, err := listIndexPageAtRevision(
 		ctx, repository.store, "scripts", "environment", environmentID,
@@ -261,12 +261,12 @@ func (repository *ScriptRepository) ListScripts(
 		func(record scriptrecord.Record) bool { return record.EnvironmentID == environmentID }, active.ReadRevision,
 	)
 	if err != nil {
-		return Page[scriptrecord.Record]{}, err
+		return etcdstore.Page[scriptrecord.Record]{}, err
 	}
 	for index := range page.Items {
 		hydrated, hydrateErr := repository.hydrateScriptBody(ctx, page.Items[index])
 		if hydrateErr != nil {
-			return Page[scriptrecord.Record]{}, hydrateErr
+			return etcdstore.Page[scriptrecord.Record]{}, hydrateErr
 		}
 		page.Items[index] = hydrated
 	}
@@ -275,10 +275,10 @@ func (repository *ScriptRepository) ListScripts(
 
 func (repository *ScriptRepository) ReplaceDesiredIdempotent(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
-	current Versioned[scriptrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
+	current etcdstore.Versioned[scriptrecord.Record],
 	desired core.Script,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -305,10 +305,10 @@ func (repository *ScriptRepository) ReplaceDesiredIdempotent(
 
 func (repository *ScriptRepository) prepareScriptReplacement(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
-	current Versioned[scriptrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
+	current etcdstore.Versioned[scriptrecord.Record],
 	desired core.Script,
 ) (scriptrecord.Record, []etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	replacement, err := scriptrecord.ReplaceDesired(current.Record, desired)
@@ -447,12 +447,12 @@ func validateScriptMutationMarker(marker IdempotencyMarker, environmentID string
 }
 
 func scriptWriteConditions(
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
 	record scriptrecord.Record,
-	current *Versioned[scriptrecord.Record],
-	active Versioned[scriptrecord.SetGenerationRecord],
+	current *etcdstore.Versioned[scriptrecord.Record],
+	active etcdstore.Versioned[scriptrecord.SetGenerationRecord],
 	ownerRevision int64,
 	slugRevision int64,
 ) []etcdstore.Condition {
@@ -497,9 +497,9 @@ func scriptWriteConditions(
 
 func validateScriptHierarchy(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
 	record scriptrecord.Record,
 ) error {
 	if err := validateContext(ctx); err != nil {
@@ -533,7 +533,7 @@ func validateScriptHierarchy(
 	return nil
 }
 
-func validateScriptVersion(current Versioned[scriptrecord.Record]) error {
+func validateScriptVersion(current etcdstore.Versioned[scriptrecord.Record]) error {
 	if err := scriptrecord.ValidateRecord(current.Record); err != nil {
 		return err
 	}
@@ -545,9 +545,9 @@ func validateScriptVersion(current Versioned[scriptrecord.Record]) error {
 
 func classifyScriptWriteConflict(
 	values []*etcdstore.KeyValue,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	target Versioned[ServiceRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	target etcdstore.Versioned[ServiceRecord],
 	record scriptrecord.Record,
 	expectedScriptRevision int64,
 	extras scriptWriteConflictExtras,
@@ -648,8 +648,8 @@ type scriptWriteConflictExtras struct {
 
 func (repository *ScriptRepository) hydrateScriptBody(
 	ctx context.Context,
-	record Versioned[scriptrecord.Record],
-) (Versioned[scriptrecord.Record], error) {
+	record etcdstore.Versioned[scriptrecord.Record],
+) (etcdstore.Versioned[scriptrecord.Record], error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{scriptrecord.ScriptSetBodyGenerationKey(
 			record.Record.EnvironmentID, record.Record.ScriptSetGeneration,
@@ -658,20 +658,20 @@ func (repository *ScriptRepository) hydrateScriptBody(
 		Revision: record.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[scriptrecord.Record]{}, err
+		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
 	if result == nil || len(result.Values) != 1 || result.Values[0] == nil {
-		return Versioned[scriptrecord.Record]{}, errs.New(errs.KindInternal, "Script body generation is missing")
+		return etcdstore.Versioned[scriptrecord.Record]{}, errs.New(errs.KindInternal, "Script body generation is missing")
 	}
 	defer clear(result.Values[0].Value)
 	generation, err := scriptrecord.DecodeScriptBodyGeneration(result.Values[0].Value)
 	if err != nil || generation.ScriptID != record.Record.Desired.ID ||
 		generation.Generation != record.Record.ActiveGeneration {
-		return Versioned[scriptrecord.Record]{}, errs.New(errs.KindInternal, "Script body generation is corrupt")
+		return etcdstore.Versioned[scriptrecord.Record]{}, errs.New(errs.KindInternal, "Script body generation is corrupt")
 	}
 	record.Record.Desired.Body = generation.Body
 	if err := scriptrecord.ValidateRecord(record.Record); err != nil {
-		return Versioned[scriptrecord.Record]{}, errs.New(errs.KindInternal, "Script aggregate is corrupt")
+		return etcdstore.Versioned[scriptrecord.Record]{}, errs.New(errs.KindInternal, "Script aggregate is corrupt")
 	}
 	return record, nil
 }

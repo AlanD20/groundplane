@@ -104,22 +104,22 @@ func newEntryRepository(store hierarchyStore) (*EntryRepository, error) {
 
 func (repository *EntryRepository) CreateEntry(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
 	generation EntryValueGeneration,
-) (Versioned[entryrecord.Record], error) {
+) (etcdstore.Versioned[entryrecord.Record], error) {
 	if err := validateEntryHierarchy(ctx, environment, project, record); err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	primaryValue, err := entryrecord.EncodeRecord(record)
 	if err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	defer clear(primaryValue)
 	generationKey, generationValue, err := prepareEntryGeneration(record, generation)
 	if err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	defer clear(generationValue)
 	fence, _, err := repository.loadEntryMutationFence(
@@ -136,11 +136,11 @@ func (repository *EntryRepository) CreateEntry(
 		record.Entry.ID,
 	)
 	if err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	epochMutation, err := fence.epochRewriteMutation()
 	if err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	defer clear(epochMutation.Value)
 	conditions := append(
@@ -157,15 +157,15 @@ func (repository *EntryRepository) CreateEntry(
 		epochMutation,
 	})
 	if err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	if !result.Succeeded {
 		defer clearKeyValues(result.FailureReads)
-		return Versioned[entryrecord.Record]{}, classifyEntryWriteConflict(
+		return etcdstore.Versioned[entryrecord.Record]{}, classifyEntryWriteConflict(
 			result.FailureReads, record, 0, 0, fence,
 		)
 	}
-	return Versioned[entryrecord.Record]{
+	return etcdstore.Versioned[entryrecord.Record]{
 		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
@@ -174,8 +174,8 @@ func (repository *EntryRepository) CreateEntry(
 // one immutable value generation, and the exact completed replay marker.
 func (repository *EntryRepository) CreateEntryIdempotent(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
 	generation EntryValueGeneration,
 	marker IdempotencyMarker,
@@ -254,12 +254,12 @@ func (repository *EntryRepository) CreateEntryIdempotent(
 func (repository *EntryRepository) GetEntry(
 	ctx context.Context,
 	id string,
-) (Versioned[entryrecord.Record], error) {
+) (etcdstore.Versioned[entryrecord.Record], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvEntry, id); err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	return getRecord(
 		ctx,
@@ -275,10 +275,10 @@ func (repository *EntryRepository) GetEntry(
 func (repository *EntryRepository) ListEntries(
 	ctx context.Context,
 	environmentID string,
-	request PageRequest,
-) (Page[entryrecord.Record], error) {
+	request etcdstore.PageRequest,
+) (etcdstore.Page[entryrecord.Record], error) {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
-		return Page[entryrecord.Record]{}, err
+		return etcdstore.Page[entryrecord.Record]{}, err
 	}
 	return listIndexPage(
 		ctx,
@@ -298,31 +298,31 @@ func (repository *EntryRepository) ListEntries(
 
 func (repository *EntryRepository) ReplaceEntry(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	current Versioned[entryrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[entryrecord.Record],
 	desired core.EnvEntry,
 	valueGenerationID string,
 	generation EntryValueGeneration,
-) (Versioned[entryrecord.Record], error) {
+) (etcdstore.Versioned[entryrecord.Record], error) {
 	replacement, err := entryrecord.ReplaceDesired(current.Record, desired, valueGenerationID)
 	if err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	if err := validateEntryHierarchy(ctx, environment, project, replacement); err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	if err := validateEntryVersion(current); err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	primaryValue, err := entryrecord.EncodeRecord(replacement)
 	if err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	defer clear(primaryValue)
 	generationKey, generationValue, err := prepareEntryGeneration(replacement, generation)
 	if err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	defer clear(generationValue)
 	fence, ownerRevision, err := repository.loadEntryMutationFence(
@@ -339,12 +339,12 @@ func (repository *EntryRepository) ReplaceEntry(
 		current.Record.Entry.ID,
 	)
 	if err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 
 	epochMutation, err := fence.epochRewriteMutation()
 	if err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	defer clear(epochMutation.Value)
 	conditions := append(
@@ -357,15 +357,15 @@ func (repository *EntryRepository) ReplaceEntry(
 		epochMutation,
 	})
 	if err != nil {
-		return Versioned[entryrecord.Record]{}, err
+		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	if !result.Succeeded {
 		defer clearKeyValues(result.FailureReads)
-		return Versioned[entryrecord.Record]{}, classifyEntryWriteConflict(
+		return etcdstore.Versioned[entryrecord.Record]{}, classifyEntryWriteConflict(
 			result.FailureReads, current.Record, current.Revision, ownerRevision, fence,
 		)
 	}
-	return Versioned[entryrecord.Record]{
+	return etcdstore.Versioned[entryrecord.Record]{
 		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
@@ -374,9 +374,9 @@ func (repository *EntryRepository) ReplaceEntry(
 // immutable value generation, and the exact completed replay marker.
 func (repository *EntryRepository) ReplaceEntryIdempotent(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
-	current Versioned[entryrecord.Record],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	current etcdstore.Versioned[entryrecord.Record],
 	desired core.EnvEntry,
 	valueGenerationID string,
 	generation EntryValueGeneration,
@@ -496,8 +496,8 @@ func prepareEntryGeneration(
 
 func (repository *EntryRepository) loadEntryMutationFence(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	domainKeys []string,
 	ownerIndex int,
 	entryID string,
@@ -582,7 +582,7 @@ func entryWriteConditions(
 }
 
 func entryDeleteConditions(
-	current Versioned[entryrecord.Record],
+	current etcdstore.Versioned[entryrecord.Record],
 	ownerRevision int64,
 ) []etcdstore.Condition {
 	conditions := []etcdstore.Condition{
@@ -595,8 +595,8 @@ func entryDeleteConditions(
 
 func validateEntryHierarchy(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
-	project Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
 ) error {
 	if err := validateContext(ctx); err != nil {
@@ -619,7 +619,7 @@ func validateEntryHierarchy(
 	return nil
 }
 
-func validateEntryVersion(current Versioned[entryrecord.Record]) error {
+func validateEntryVersion(current etcdstore.Versioned[entryrecord.Record]) error {
 	if err := entryrecord.ValidateRecord(current.Record); err != nil {
 		return err
 	}
@@ -672,7 +672,7 @@ func classifyEntryWriteConflict(
 
 func classifyEntryDeleteConflict(
 	values []*etcdstore.KeyValue,
-	current Versioned[entryrecord.Record],
+	current etcdstore.Versioned[entryrecord.Record],
 	expectedOwnerRevision int64,
 	fence environmentMutationFenceEvidence,
 ) error {

@@ -20,7 +20,7 @@ type preparedComponentTaskPublication struct {
 
 func (repository *HierarchyRepository) prepareComponentTaskPublication(
 	ctx context.Context,
-	environment Versioned[hierarchyrecord.EnvironmentRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	task TaskRecord,
 	zoneChanges []EnvironmentBlueprintZoneChange,
 	preparation ComponentTaskPreparation,

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,8 +21,8 @@ import (
 )
 
 type ConnectorReader interface {
-	GetConnector(context.Context, string) (etcd.Versioned[connectorrecord.Record], error)
-	ListConnectors(context.Context, string, etcd.PageRequest) (etcd.Page[connectorrecord.Record], error)
+	GetConnector(context.Context, string) (etcdstore.Versioned[connectorrecord.Record], error)
+	ListConnectors(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[connectorrecord.Record], error)
 }
 
 type ConnectorMutator interface {

@@ -14,34 +14,34 @@ func (repository *RunnerRepository) PutRunnerObservation(
 	ctx context.Context,
 	record runnerrecord.RunnerObservationRecord,
 	expectedRevision int64,
-) (Versioned[runnerrecord.RunnerObservationRecord], error) {
+) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
 	}
 	if err := runnerrecord.ValidateRunnerObservation(record); err != nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
 	}
 	current, err := repository.GetRunner(ctx, record.RunnerID)
 	if err != nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
 	}
 	parents, err := repository.resolveRunnerParents(ctx, current.Record.Desired)
 	if err != nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
 	}
 	observation, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{runnerObservationKey(record.RunnerID)},
 	})
 	if err != nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
 	}
 	if observation == nil || len(observation.Values) != 1 ||
 		revisionChanged(observation.Values[0], expectedRevision) {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, stateConflict("runner observation", record.RunnerID)
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, stateConflict("runner observation", record.RunnerID)
 	}
 	value, err := runnerrecord.EncodeRunnerObservation(record)
 	if err != nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
 	}
 	defer clear(value)
 	conditions := []etcdstore.Condition{
@@ -62,12 +62,12 @@ func (repository *RunnerRepository) PutRunnerObservation(
 		Type: etcdstore.MutationPut, Key: runnerObservationKey(record.RunnerID), Value: value,
 	}})
 	if err != nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, err
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
 	}
 	if !result.Succeeded {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, stateConflict("runner observation", record.RunnerID)
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, stateConflict("runner observation", record.RunnerID)
 	}
-	return Versioned[runnerrecord.RunnerObservationRecord]{
+	return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{
 		Record: record, Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }
@@ -75,31 +75,31 @@ func (repository *RunnerRepository) PutRunnerObservation(
 func (repository *RunnerRepository) GetRunnerObservation(
 	ctx context.Context,
 	runnerID string,
-) (Versioned[runnerrecord.RunnerObservationRecord], bool, error) {
+) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindRunner, runnerID); err != nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, runnerObservationKey(runnerID))
 	if err != nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
 	}
 	if result == nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, false, errs.New(
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, errs.New(
 			errs.KindInternal,
 			"runner observation read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return Versioned[runnerrecord.RunnerObservationRecord]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	record, err := runnerrecord.DecodeRunnerObservation(result.Entry.Value)
 	if err != nil || record.RunnerID != runnerID {
-		return Versioned[runnerrecord.RunnerObservationRecord]{}, false, errs.New(errs.KindInternal, "runner observation is corrupt")
+		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, errs.New(errs.KindInternal, "runner observation is corrupt")
 	}
-	return Versioned[runnerrecord.RunnerObservationRecord]{
+	return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
 	}, true, nil
 }

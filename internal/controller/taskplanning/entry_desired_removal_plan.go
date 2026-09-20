@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -58,7 +59,7 @@ func (planner *EntryRemovalPlanner) PrepareDesiredEntryRemoval(
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}
-	var cleanup *etcd.Versioned[etcd.EnvironmentComposeProjection]
+	var cleanup *etcdstore.Versioned[etcd.EnvironmentComposeProjection]
 	if found {
 		for _, entry := range applied.Record.Entries {
 			if entry.Entry.ID == task.Target {

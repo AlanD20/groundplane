@@ -2,6 +2,7 @@ package volumeremoval
 
 import (
 	"crypto/sha256"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -31,10 +32,10 @@ type EnvironmentVolumeRemovalPathResult struct {
 }
 
 type EnvironmentVolumeRemovalResumeState struct {
-	Runtime  etcd.Versioned[removalrecord.Runtime]
+	Runtime  etcdstore.Versioned[removalrecord.Runtime]
 	Attempt  removalrecord.Attempt
-	Progress etcd.Versioned[removalrecord.Progress]
-	Pending  *etcd.Versioned[removalrecord.PendingPath]
+	Progress etcdstore.Versioned[removalrecord.Progress]
+	Pending  *etcdstore.Versioned[removalrecord.PendingPath]
 }
 
 func validateEnvironmentVolumeRemovalTask(

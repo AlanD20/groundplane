@@ -5,6 +5,7 @@ import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
 	"time"
@@ -38,8 +39,8 @@ type ServiceRemovalIntent struct {
 
 func NewServiceRemovalIntent(
 	taskID string,
-	service Versioned[ServiceRecord],
-	projection Versioned[EnvironmentComposeProjection],
+	service etcdstore.Versioned[ServiceRecord],
+	projection etcdstore.Versioned[EnvironmentComposeProjection],
 	expectedHeadRevision int64,
 	claim EnvironmentBlueprintStageClaim,
 	candidate EnvironmentComposeProjection,
@@ -66,34 +67,34 @@ func serviceRemovalIntentKey(taskID string) string { return serviceRemovalIntent
 func (repository *ServiceRepository) GetServiceRemovalIntent(
 	ctx context.Context,
 	taskID string,
-) (Versioned[ServiceRemovalIntent], bool, error) {
+) (etcdstore.Versioned[ServiceRemovalIntent], bool, error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[ServiceRemovalIntent]{}, false, err
+		return etcdstore.Versioned[ServiceRemovalIntent]{}, false, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil {
-		return Versioned[ServiceRemovalIntent]{}, false, errs.New(
+		return etcdstore.Versioned[ServiceRemovalIntent]{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Service removal Task id is invalid",
 		)
 	}
 	result, err := repository.store.Get(ctx, serviceRemovalIntentKey(taskID))
 	if err != nil {
-		return Versioned[ServiceRemovalIntent]{}, false, err
+		return etcdstore.Versioned[ServiceRemovalIntent]{}, false, err
 	}
 	if result == nil {
-		return Versioned[ServiceRemovalIntent]{}, false, errs.New(
+		return etcdstore.Versioned[ServiceRemovalIntent]{}, false, errs.New(
 			errs.KindInternal,
 			"Service removal intent read is empty",
 		)
 	}
 	if result.Entry == nil {
-		return Versioned[ServiceRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[ServiceRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
 	}
 	intent, err := decodeServiceRemovalIntent(result.Entry.Value)
 	if err != nil || intent.TaskID != taskID {
-		return Versioned[ServiceRemovalIntent]{}, false, corruptServiceRemovalIntent()
+		return etcdstore.Versioned[ServiceRemovalIntent]{}, false, corruptServiceRemovalIntent()
 	}
-	return Versioned[ServiceRemovalIntent]{
+	return etcdstore.Versioned[ServiceRemovalIntent]{
 		Record:       intent,
 		Revision:     result.Entry.ModRevision,
 		ReadRevision: result.ReadRevision,

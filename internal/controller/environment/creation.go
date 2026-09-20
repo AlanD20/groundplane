@@ -7,6 +7,7 @@ import (
 	"errors"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"net/netip"
 	"time"
@@ -31,13 +32,13 @@ const (
 )
 
 type environmentCreationRepository interface {
-	GetProject(context.Context, string) (etcd.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironmentPoolRegistry(context.Context) (etcd.Versioned[etcd.EnvironmentPoolRegistry], error)
+	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
+	GetEnvironmentPoolRegistry(context.Context) (etcdstore.Versioned[etcd.EnvironmentPoolRegistry], error)
 	CreateEnvironmentWithTask(
 		context.Context,
 		string,
-		etcd.Versioned[hierarchyrecord.ProjectRecord],
-		etcd.Versioned[etcd.EnvironmentPoolRegistry],
+		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+		etcdstore.Versioned[etcd.EnvironmentPoolRegistry],
 		hierarchyrecord.EnvironmentRecord,
 		[]componentrecord.Record,
 		etcd.TaskRecord,

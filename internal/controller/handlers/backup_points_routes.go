@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 )
 
 type RecoveryPointReader interface {
-	ListRecoveryPoints(context.Context, string, string) (etcd.Page[etcd.BackupRecoveryPointRecord], error)
+	ListRecoveryPoints(context.Context, string, string) (etcdstore.Page[etcd.BackupRecoveryPointRecord], error)
 }
 
 type recoveryPointListInput struct {

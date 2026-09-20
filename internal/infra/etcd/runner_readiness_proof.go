@@ -31,12 +31,12 @@ type RunnerReadinessProofRecord struct {
 func (repository *RunnerRepository) RecordRunnerReadinessProof(
 	ctx context.Context,
 	taskID string,
-) (Versioned[RunnerReadinessProofRecord], error) {
+) (etcdstore.Versioned[RunnerReadinessProofRecord], error) {
 	if err := validateContext(ctx); err != nil {
-		return Versioned[RunnerReadinessProofRecord]{}, err
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil {
-		return Versioned[RunnerReadinessProofRecord]{}, errs.New(
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"runner readiness task id is invalid",
 		)
@@ -47,24 +47,24 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 	}
 	initial, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
-		return Versioned[RunnerReadinessProofRecord]{}, err
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, err
 	}
 	if initial == nil || len(initial.Values) != len(keys) || initial.Values[0] == nil {
-		return Versioned[RunnerReadinessProofRecord]{}, errs.New(
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"runner readiness task is unavailable",
 		)
 	}
 	task, err := decodeTaskRecord(initial.Values[0].Value)
 	if err != nil {
-		return Versioned[RunnerReadinessProofRecord]{}, err
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, err
 	}
 	applies, err := taskOwnsRunnerCreation(task)
 	if err != nil {
-		return Versioned[RunnerReadinessProofRecord]{}, err
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, err
 	}
 	if !applies || task.ID != taskID || task.Status != TaskStatusRunning {
-		return Versioned[RunnerReadinessProofRecord]{}, errs.New(
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"runner readiness task is not running",
 		)
@@ -79,27 +79,27 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 		Keys: stateKeys, Revision: initial.ReadRevision,
 	})
 	if err != nil {
-		return Versioned[RunnerReadinessProofRecord]{}, err
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, err
 	}
 	if state == nil || len(state.Values) != len(stateKeys) ||
 		state.Values[0] == nil || state.Values[1] == nil || state.Values[2] == nil || state.Values[3] != nil {
-		return Versioned[RunnerReadinessProofRecord]{}, errs.New(
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"runner readiness evidence is incomplete",
 		)
 	}
 	runner, err := decodeRunnerAggregate(state.Values[0], state.Values[1])
 	if err != nil {
-		return Versioned[RunnerReadinessProofRecord]{}, err
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, err
 	}
 	ownership, err := runnerrecord.DecodeRunnerRuntimeOwnership(state.Values[2].Value)
 	if err != nil {
-		return Versioned[RunnerReadinessProofRecord]{}, err
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, err
 	}
 	if runner.Desired.ID != task.Target || runner.CreateTaskID != task.ID ||
 		runner.ProvisioningState != runnerrecord.RunnerProvisioningProvisioning || runner.ContainerID == "" ||
 		ownership.RunnerID != runner.Desired.ID || ownership.RuntimeEpoch != runner.RuntimeEpoch {
-		return Versioned[RunnerReadinessProofRecord]{}, errs.New(
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"runner readiness evidence does not match its lifecycle",
 		)
@@ -114,7 +114,7 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 	}
 	proofValue, err := encodeRunnerReadinessProof(proof)
 	if err != nil {
-		return Versioned[RunnerReadinessProofRecord]{}, err
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, err
 	}
 	defer clear(proofValue)
 	conditions := []etcdstore.Condition{
@@ -129,33 +129,33 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 		Type: etcdstore.MutationPut, Key: keys[1], Value: proofValue,
 	}})
 	if err != nil {
-		return Versioned[RunnerReadinessProofRecord]{}, err
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, err
 	}
 	if transaction.Succeeded {
-		return Versioned[RunnerReadinessProofRecord]{
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{
 			Record: proof, Revision: transaction.Revision, ReadRevision: transaction.Revision,
 		}, nil
 	}
 	if len(transaction.FailureReads) != len(conditions) {
-		return Versioned[RunnerReadinessProofRecord]{}, errs.New(
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, errs.New(
 			errs.KindInternal,
 			"runner readiness compare evidence is incomplete",
 		)
 	}
 	for index := 0; index < len(conditions)-1; index++ {
 		if keyValueRevision(transaction.FailureReads[index]) != conditions[index].ModRevision {
-			return Versioned[RunnerReadinessProofRecord]{}, stateConflict("runner readiness", task.Target)
+			return etcdstore.Versioned[RunnerReadinessProofRecord]{}, stateConflict("runner readiness", task.Target)
 		}
 	}
 	existing := transaction.FailureReads[len(conditions)-1]
 	if existing == nil {
-		return Versioned[RunnerReadinessProofRecord]{}, stateConflict("runner readiness", task.Target)
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, stateConflict("runner readiness", task.Target)
 	}
 	stored, err := decodeRunnerReadinessProof(existing.Value)
 	if err != nil || stored != proof {
-		return Versioned[RunnerReadinessProofRecord]{}, stateConflict("runner readiness", task.Target)
+		return etcdstore.Versioned[RunnerReadinessProofRecord]{}, stateConflict("runner readiness", task.Target)
 	}
-	return Versioned[RunnerReadinessProofRecord]{
+	return etcdstore.Versioned[RunnerReadinessProofRecord]{
 		Record: stored, Revision: existing.ModRevision, ReadRevision: transaction.Revision,
 	}, nil
 }
