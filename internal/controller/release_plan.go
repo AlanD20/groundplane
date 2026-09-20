@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/hex"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"math"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -611,7 +612,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	if err != nil {
 		return nil, err
 	}
-	return BuildPlan(PlanBuildInput{
+	return taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
 		TargetID: task.Target, Artifacts: artifacts,

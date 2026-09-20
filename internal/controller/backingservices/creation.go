@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
@@ -389,7 +390,7 @@ func (service *CreationService) createBackingServiceFromStage(
 			ctx, task, artifact, steps, desiredService.Hooks, hookInputs,
 		)
 	} else {
-		plan, buildErr := controller.BuildPlan(controller.PlanBuildInput{
+		plan, buildErr := taskplan.Build(taskplan.BuildInput{
 			VolumeRoot: service.volumeRoot, PlanID: planID, RenderGeneration: 1,
 			Operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE, TargetID: environment.ID,
 			Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,

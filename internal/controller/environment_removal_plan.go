@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -51,7 +52,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentRemovalPlan(
 		if found {
 			return nil, errs.New(errs.KindInternal, "artifact-free Environment removal lost its pinned desired state")
 		}
-		return BuildPlan(PlanBuildInput{
+		return taskplan.Build(taskplan.BuildInput{
 			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 			RenderGeneration: uint64(task.RenderGeneration),
 			Operation:        agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetID: task.Target,
@@ -72,7 +73,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentRemovalPlan(
 	if err != nil {
 		return nil, err
 	}
-	return BuildPlan(PlanBuildInput{
+	return taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),
 		Operation:        agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetID: task.Target,

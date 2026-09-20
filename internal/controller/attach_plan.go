@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"math"
 	"slices"
@@ -214,7 +215,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 		if len(task.Steps) != 1 {
 			return nil, errs.New(errs.KindInternal, "custom Attach Task step count is invalid")
 		}
-		return BuildPlan(PlanBuildInput{
+		return taskplan.Build(taskplan.BuildInput{
 			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 			RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
 			TargetID: task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact},
@@ -245,7 +246,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 		); err != nil {
 			return nil, err
 		}
-		return BuildPlan(PlanBuildInput{
+		return taskplan.Build(taskplan.BuildInput{
 			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 			RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
 			TargetID: task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact},
@@ -266,7 +267,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 			return buildErr
 		}
 		defer clearAdapterProcedurePasswords(steps)
-		plan, buildErr = BuildPlan(PlanBuildInput{
+		plan, buildErr = taskplan.Build(taskplan.BuildInput{
 			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 			RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
 			TargetID: task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,

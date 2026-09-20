@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/hex"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"math"
 	"slices"
@@ -225,7 +226,7 @@ func buildEntryMutationPlan(
 		}
 		steps = append(steps, step)
 	}
-	return BuildPlan(PlanBuildInput{VolumeRoot: volumeRoot, PlanID: task.PlanID,
+	return taskplan.Build(taskplan.BuildInput{VolumeRoot: volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration), Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
 		TargetID: task.Target, Artifacts: []*agentpb.ComposeArtifact{newArtifact, oldArtifact}, Steps: steps,
 		EntryMutationProcedure: &agentpb.EntryMutationProcedure{

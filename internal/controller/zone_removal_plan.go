@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/hex"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"math"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -136,7 +137,7 @@ func (resolver *TaskPlanResolver) buildZoneRemovalPlan(
 			NetworkId: intent.ZoneID, EnvironmentId: intent.EnvironmentID, DockerName: dockerName,
 		}},
 	})
-	return BuildPlan(PlanBuildInput{
+	return taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration), Operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE,
 		TargetID: task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact}, Steps: steps,

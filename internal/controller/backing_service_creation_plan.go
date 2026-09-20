@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/hex"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -124,7 +125,7 @@ func (resolver *TaskPlanResolver) PrepareBackingServiceCreationTask(
 	if len(preparedSteps) != 0 {
 		defer ClearBackingHookProcedure(preparedSteps[len(preparedSteps)-1].GetBackingHookProcedure())
 	}
-	plan, err := BuildPlan(PlanBuildInput{
+	plan, err := taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),
 		Operation:        agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE, TargetID: task.Target,

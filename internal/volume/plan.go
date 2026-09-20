@@ -2,13 +2,14 @@ package volume
 
 import (
 	"encoding/json"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"sort"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -55,7 +56,7 @@ func buildVolumeMutationPlan(
 		appendStep(volumeDockerEnsurePayload{artifactID: newArtifact.ArtifactId, volumeID: request.volumeID,
 			requireExisting: request.action == volumeMutationActionEdit})
 	}
-	plan, err := controller.BuildPlan(controller.PlanBuildInput{
+	plan, err := taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: volumeRoot, PlanID: planID, RenderGeneration: generation,
 		Operation: operation, TargetID: request.volumeID, Artifacts: artifacts, Steps: steps,
 	})

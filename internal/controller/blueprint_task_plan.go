@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -318,7 +319,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	if backingCreation.enabled {
 		operation = agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
 	}
-	return BuildPlan(PlanBuildInput{
+	return taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),
 		Operation:        operation, TargetID: task.Target,

@@ -3,6 +3,7 @@ package dnsresolver
 import (
 	"context"
 	"encoding/hex"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"net/netip"
 	"runtime"
@@ -423,14 +424,14 @@ func sealPlatformComponentTaskPlanHash(
 	}
 	var execution *agentpb.ExecutionPlan
 	if input.DisableService {
-		execution, err = controllerpkg.BuildComponentDisableExecutionPlan(controllerpkg.ComponentDisablePlanInput{
+		execution, err = taskplan.BuildComponentDisable(taskplan.ComponentDisableInput{
 			VolumeRoot: environmentpath.DefaultVolumeRoot, Envelope: envelope, PlanID: task.PlanID,
 			StepIDs: stepIDs, RenderGeneration: uint64(task.RenderGeneration),
 			ComposeArtifact: input.ComposeArtifact, ObservationAction: observationAction,
 			ExpectedPreviousArtifactDigest: previousArtifactDigest,
 		})
 	} else {
-		execution, err = controllerpkg.BuildComponentActionExecutionPlan(controllerpkg.ComponentActionPlanInput{
+		execution, err = taskplan.BuildComponentAction(taskplan.ComponentActionInput{
 			VolumeRoot: environmentpath.DefaultVolumeRoot, Envelope: envelope, PlanID: task.PlanID,
 			StepIDs: stepIDs, RenderGeneration: uint64(task.RenderGeneration),
 			ComposeArtifact: input.ComposeArtifact, RollbackComposeArtifact: input.RollbackComposeArtifact,

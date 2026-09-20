@@ -20,6 +20,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 const (
@@ -184,7 +185,7 @@ func (service *durableZoneDeletionIdempotency) MatchesStaged(
 }
 
 type zoneDeletionPlanResolver interface {
-	ResolveExecutionPlan(context.Context, etcd.TaskRecord) (*controller.ExecutionPlan, error)
+	ResolveExecutionPlan(context.Context, etcd.TaskRecord) (*agentpb.ExecutionPlan, error)
 	PrepareZoneRemovalTask(
 		context.Context,
 		etcd.TaskRecord,

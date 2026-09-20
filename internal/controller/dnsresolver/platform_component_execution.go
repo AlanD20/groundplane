@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"io"
 	"net/netip"
@@ -107,7 +108,7 @@ func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
 		if decodeErr != nil {
 			return nil, errs.New(errs.KindInternal, "platform Component prior artifact digest is invalid")
 		}
-		execution, err = controllerpkg.BuildComponentDisableExecutionPlan(controllerpkg.ComponentDisablePlanInput{
+		execution, err = taskplan.BuildComponentDisable(taskplan.ComponentDisableInput{
 			VolumeRoot: planner.volumeRoot, Envelope: resolved.envelope, PlanID: task.PlanID,
 			StepIDs: stepIDs, RenderGeneration: uint64(task.RenderGeneration), ComposeArtifact: composeArtifact,
 			ObservationAction:              service.ObservationAction,
@@ -120,7 +121,7 @@ func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
 		if decodeErr != nil {
 			return nil, errs.New(errs.KindInternal, "platform Component prior artifact digest is invalid")
 		}
-		execution, err = controllerpkg.BuildComponentActionExecutionPlan(controllerpkg.ComponentActionPlanInput{
+		execution, err = taskplan.BuildComponentAction(taskplan.ComponentActionInput{
 			VolumeRoot: planner.volumeRoot,
 			Envelope:   resolved.envelope, PlanID: task.PlanID, StepIDs: stepIDs,
 			RenderGeneration: uint64(task.RenderGeneration),

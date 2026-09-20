@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"math"
 	"sort"
@@ -358,7 +359,7 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 	if err != nil {
 		return nil, err
 	}
-	return BuildPlan(PlanBuildInput{
+	return taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration),
 		Operation:        agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetID: task.Target,

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
 	"sort"
@@ -139,7 +140,7 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 				},
 			},
 		}
-		return BuildPlan(PlanBuildInput{
+		return taskplan.Build(taskplan.BuildInput{
 			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 			Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, TargetID: task.Target,
 			Artifacts: []*agentpb.ComposeArtifact{candidateArtifact}, Steps: steps,
@@ -150,7 +151,7 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 			!volumeArtifactHasExactVolume(candidateArtifact, task.Target, key) {
 			return nil, errs.New(errs.KindInternal, "durable Volume edit procedure is invalid")
 		}
-		return BuildPlan(PlanBuildInput{
+		return taskplan.Build(taskplan.BuildInput{
 			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 			Operation: agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, TargetID: task.Target,
 			Artifacts: []*agentpb.ComposeArtifact{candidateArtifact}, Steps: []*agentpb.ExecutionStep{{
@@ -271,7 +272,7 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 			},
 		},
 	)
-	return BuildPlan(PlanBuildInput{
+	return taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE, TargetID: task.Target,
 		Artifacts: []*agentpb.ComposeArtifact{candidateArtifact, cleanupArtifact}, Steps: steps,

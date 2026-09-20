@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controller "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -137,7 +138,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		}
 		steps = append(steps, managedSteps...)
 		steps = append(steps, input.ComponentSteps...)
-		plan, buildErr := controller.BuildPlan(controller.PlanBuildInput{
+		plan, buildErr := taskplan.Build(taskplan.BuildInput{
 			VolumeRoot: input.VolumeRoot, PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 			Operation: agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY, TargetID: task.Target,
 			Artifacts:                 teardown.Artifacts,

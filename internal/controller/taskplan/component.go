@@ -1,4 +1,4 @@
-package controller
+package taskplan
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-type ComponentActionPlanInput struct {
+type ComponentActionInput struct {
 	VolumeRoot                     string
 	Envelope                       componentsdk.ActionEnvelope
 	PlanID                         string
@@ -24,7 +24,7 @@ type ComponentActionPlanInput struct {
 	ExpectedPreviousGeneration     uint64
 }
 
-func BuildComponentActionExecutionPlan(input ComponentActionPlanInput) (*ExecutionPlan, error) {
+func BuildComponentAction(input ComponentActionInput) (*agentpb.ExecutionPlan, error) {
 	componentID := input.Envelope.ComponentID().String()
 	definitionDigest := input.Envelope.DefinitionDigest()
 	catalogDigest := input.Envelope.CatalogDigest()
@@ -106,7 +106,7 @@ func BuildComponentActionExecutionPlan(input ComponentActionPlanInput) (*Executi
 	if input.RollbackComposeArtifact != nil {
 		artifacts = append(artifacts, input.RollbackComposeArtifact)
 	}
-	return BuildPlan(PlanBuildInput{
+	return Build(BuildInput{
 		VolumeRoot: input.VolumeRoot,
 		PlanID:     input.PlanID, RenderGeneration: input.RenderGeneration,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY,
@@ -159,7 +159,7 @@ func protoComponentAction(
 	}
 }
 
-type ComponentDisablePlanInput struct {
+type ComponentDisableInput struct {
 	VolumeRoot                     string
 	Envelope                       componentsdk.ActionEnvelope
 	PlanID                         string
@@ -170,7 +170,7 @@ type ComponentDisablePlanInput struct {
 	ExpectedPreviousArtifactDigest []byte
 }
 
-func BuildComponentDisableExecutionPlan(input ComponentDisablePlanInput) (*ExecutionPlan, error) {
+func BuildComponentDisable(input ComponentDisableInput) (*agentpb.ExecutionPlan, error) {
 	if len(input.StepIDs) != 2 || input.ComposeArtifact == nil ||
 		len(input.ComposeArtifact.GetServices()) != 1 || input.ObservationAction == "" ||
 		len(input.ExpectedPreviousArtifactDigest) != sha256.Size {
@@ -184,7 +184,7 @@ func BuildComponentDisableExecutionPlan(input ComponentDisablePlanInput) (*Execu
 	componentID := input.Envelope.ComponentID().String()
 	serviceID := input.ComposeArtifact.GetServices()[0].GetServiceId()
 	artifactID := input.ComposeArtifact.GetArtifactId()
-	return BuildPlan(PlanBuildInput{
+	return Build(BuildInput{
 		VolumeRoot: input.VolumeRoot,
 		PlanID:     input.PlanID, RenderGeneration: input.RenderGeneration,
 		Operation: agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY,

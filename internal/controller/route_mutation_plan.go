@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"math"
 
@@ -287,8 +288,8 @@ func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 		return nil, err
 	}
 	operation := agentpb.PlanOperation_PLAN_OPERATION_RECONCILE
-	return BuildPlan(
-		PlanBuildInput{
+	return taskplan.Build(
+		taskplan.BuildInput{
 			VolumeRoot:       resolver.volumeRoot,
 			PlanID:           task.PlanID,
 			RenderGeneration: uint64(task.RenderGeneration),

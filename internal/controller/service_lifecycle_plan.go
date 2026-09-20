@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -229,7 +230,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 			ServiceId:              input.ServiceID, ComposeNames: names, StepId: steps[index].StepId,
 		}
 	}
-	return BuildPlan(PlanBuildInput{
+	return taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 		RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
 		TargetID: task.Target, Artifacts: artifacts, Steps: steps,

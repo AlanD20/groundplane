@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
 
@@ -266,8 +267,8 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 	if err != nil {
 		return nil, err
 	}
-	return BuildPlan(
-		PlanBuildInput{
+	return taskplan.Build(
+		taskplan.BuildInput{
 			VolumeRoot:       resolver.volumeRoot,
 			PlanID:           task.PlanID,
 			RenderGeneration: uint64(task.RenderGeneration),
