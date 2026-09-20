@@ -1,12 +1,12 @@
 package desiredrevision
 
 import (
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"sort"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
@@ -15,7 +15,7 @@ func ComposeProjection(
 	environmentID string,
 	revisionID string,
 	generation uint64,
-	snapshot controller.ComposeIdentitySnapshot,
+	snapshot composeidentity.Snapshot,
 	volumeSlugs map[string]string,
 	volumeMounts []etcd.EnvironmentServiceVolumeMount,
 	artifact []byte,
@@ -26,7 +26,7 @@ func ComposeProjection(
 	components []componentrecord.Record,
 	entries []entryrecord.Record,
 ) etcd.EnvironmentComposeProjection {
-	convertVolumes := func(values []controller.ComposeResourceIdentity) []etcd.EnvironmentVolumeIdentity {
+	convertVolumes := func(values []composeidentity.Resource) []etcd.EnvironmentVolumeIdentity {
 		result := make([]etcd.EnvironmentVolumeIdentity, len(values))
 		for index, value := range values {
 			result[index] = etcd.EnvironmentVolumeIdentity{

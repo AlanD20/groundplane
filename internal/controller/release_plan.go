@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/hex"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"math"
 
@@ -142,7 +143,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			AuthorizedVolumeDir: first.AuthorizedVolumeDir,
 		},
 		first.Projection.RevisionID, first.ArtifactID, releaseProjection,
-		func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]ComposeResourceIdentity, error) {
+		func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]composeidentity.Resource, error) {
 			if err := projectReleaseWorkloadServices(project, releaseProjection); err != nil {
 				return nil, err
 			}

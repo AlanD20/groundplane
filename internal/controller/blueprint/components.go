@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -153,13 +154,13 @@ func projectedEnvironmentEntries(records []entryrecord.Record) []core.EnvEntry {
 }
 
 func environmentComponentComposeIdentities(
-	authored controller.ComposeIdentitySnapshot,
-	generated []controller.ComposeResourceIdentity,
-) controller.ComposeIdentitySnapshot {
-	result := controller.ComposeIdentitySnapshot{
-		Services: append([]controller.ComposeResourceIdentity(nil), authored.Services...),
-		Networks: append([]controller.ComposeResourceIdentity(nil), authored.Networks...),
-		Volumes:  append([]controller.ComposeResourceIdentity(nil), authored.Volumes...),
+	authored composeidentity.Snapshot,
+	generated []composeidentity.Resource,
+) composeidentity.Snapshot {
+	result := composeidentity.Snapshot{
+		Services: append([]composeidentity.Resource(nil), authored.Services...),
+		Networks: append([]composeidentity.Resource(nil), authored.Networks...),
+		Volumes:  append([]composeidentity.Resource(nil), authored.Volumes...),
 	}
 	result.Services = append(result.Services, generated...)
 	sort.Slice(result.Services, func(left int, right int) bool {

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"slices"
 	"sort"
 	"strings"
@@ -283,7 +284,7 @@ func renderServiceProxyTopology(
 	return result, nil
 }
 
-func composeServiceComponentOwner(identities []ComposeResourceIdentity, serviceID string) string {
+func composeServiceComponentOwner(identities []composeidentity.Resource, serviceID string) string {
 	for _, identity := range identities {
 		if identity.ID == serviceID {
 			return identity.ComponentID

@@ -2,6 +2,7 @@ package blueprintrelease
 
 import (
 	"context"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller"
@@ -17,7 +18,7 @@ type BlueprintPreflightInput struct {
 	EnvironmentID      string
 	Project            *composetypes.Project
 	PriorProject       *composetypes.Project
-	PreviousIdentities controller.ComposeIdentitySnapshot
+	PreviousIdentities composeidentity.Snapshot
 	ServiceExtensions  map[string]core.ServiceExtensionSpec
 	CurrentServices    []etcd.Versioned[etcd.ServiceRecord]
 	AuthoredGroups     map[string]core.ReleaseGroupSpec
@@ -33,7 +34,7 @@ func (service *Service) PreflightBlueprint(ctx context.Context, input BlueprintP
 	}
 	// Provisional IDs permit the same projection rules for new Services before a
 	// durable claim. Preflight returns only name-bound image/count seals, not IDs.
-	identities, err := controller.ReconcileOwnedComposeIdentities(input.Project, input.PreviousIdentities, ids.New)
+	identities, err := composeidentity.ReconcileOwned(input.Project, input.PreviousIdentities, ids.New)
 	if err != nil {
 		return WorkloadPreparation{}, err
 	}

@@ -1,7 +1,8 @@
 package blueprint
 
 import (
-	"github.com/AlanD20/groundplane/internal/controller"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -23,7 +24,7 @@ func environmentBlueprintServiceNames(project *composetypes.Project) map[string]
 func preserveEnvironmentBlueprintServiceExtensions(
 	submitted map[string]core.ServiceExtensionSpec,
 	submittedServiceNames map[string]struct{},
-	previous []controller.ComposeResourceIdentity,
+	previous []composeidentity.Resource,
 	previousExtensions map[string]core.ServiceExtensionSpec,
 ) (map[string]core.ServiceExtensionSpec, error) {
 	result := cloneEnvironmentBlueprintServiceExtensions(submitted)
@@ -51,7 +52,7 @@ func cloneEnvironmentBlueprintServiceExtensions(
 func preserveEnvironmentBlueprintResources(
 	project *composetypes.Project,
 	prior *composetypes.Project,
-	previous controller.ComposeIdentitySnapshot,
+	previous composeidentity.Snapshot,
 	previousVolumes []etcd.EnvironmentVolumeIdentity,
 	hasPrevious bool,
 ) error {

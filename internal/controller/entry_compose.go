@@ -1,6 +1,7 @@
 package controller
 
 import (
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"path"
@@ -44,7 +45,7 @@ func ProjectEnvironmentEntries(
 	project *composetypes.Project,
 	environmentID string,
 	volumeDir string,
-	authoredServices []ComposeResourceIdentity,
+	authoredServices []composeidentity.Resource,
 	entries []entryrecord.Record,
 ) (EnvironmentEntryComposeProjection, error) {
 	if project == nil || ids.Validate(ids.KindEnvironment, environmentID) != nil ||

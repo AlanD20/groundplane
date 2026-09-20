@@ -1,6 +1,7 @@
 package controller
 
 import (
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"sort"
 
 	"github.com/compose-spec/compose-go/v2/types"
@@ -15,17 +16,17 @@ import (
 // The parsed Compose project remains the lossless render source.
 func ProjectServiceProjection(
 	project *types.Project,
-	identities ComposeIdentitySnapshot,
+	identities composeidentity.Snapshot,
 	extensions map[string]core.ServiceExtensionSpec,
 ) ([]core.Service, error) {
 	if project == nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Service projection requires a parsed Compose project")
 	}
-	names, err := ownedServiceNames(project)
+	names, err := composeidentity.OwnedServiceNames(project)
 	if err != nil {
 		return nil, err
 	}
-	serviceIdentities := append([]ComposeResourceIdentity(nil), identities.Services...)
+	serviceIdentities := append([]composeidentity.Resource(nil), identities.Services...)
 	sort.Slice(serviceIdentities, func(left, right int) bool {
 		if serviceIdentities[left].Name == serviceIdentities[right].Name {
 			return serviceIdentities[left].ID < serviceIdentities[right].ID

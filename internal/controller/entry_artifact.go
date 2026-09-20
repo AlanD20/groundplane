@@ -2,6 +2,7 @@ package controller
 
 import (
 	"crypto/sha256"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -176,7 +177,7 @@ func mutateEnvironmentEntryArtifact(
 
 func entryArtifactRuntimeTargets(
 	artifact *agentpb.ComposeArtifact,
-	identities []ComposeResourceIdentity,
+	identities []composeidentity.Resource,
 	services *yaml.Node,
 ) (map[string][]string, error) {
 	logical := make(map[string]string, len(identities))
@@ -219,7 +220,7 @@ func entryArtifactIsWorkload(name string, targets map[string][]string) bool {
 func entryArtifactManagedEnvironmentPaths(
 	environmentID string,
 	volumeDir string,
-	services []ComposeResourceIdentity,
+	services []composeidentity.Resource,
 ) map[string]struct{} {
 	result := map[string]struct{}{
 		filepath.Join(volumeDir, filepath.FromSlash(environmentfile.EnvFileName(environmentID))): {},

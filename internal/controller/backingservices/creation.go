@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -310,12 +311,12 @@ func (service *CreationService) createBackingServiceFromStage(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	identities := controller.ComposeIdentitySnapshot{
-		Services: []controller.ComposeResourceIdentity{{ID: serviceID, Name: spec.ServiceName}},
-		Networks: []controller.ComposeResourceIdentity{{ID: zone.Desired.ID, Name: zone.Desired.Name}},
+	identities := composeidentity.Snapshot{
+		Services: []composeidentity.Resource{{ID: serviceID, Name: spec.ServiceName}},
+		Networks: []composeidentity.Resource{{ID: zone.Desired.ID, Name: zone.Desired.Name}},
 	}
 	if volume != nil {
-		identities.Volumes = []controller.ComposeResourceIdentity{{ID: volumeID, Name: volume.Key}}
+		identities.Volumes = []composeidentity.Resource{{ID: volumeID, Name: volume.Key}}
 	}
 	identities.Services = append(identities.Services, componentProjection.Services...)
 	planID := allocator.Named(ids.KindPlan, "execution-plan")

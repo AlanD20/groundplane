@@ -1,11 +1,12 @@
 package desiredrevision
 
 import (
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/scriptpolicy"
-	"github.com/AlanD20/groundplane/internal/controller"
+
 	"github.com/AlanD20/groundplane/internal/core"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +16,7 @@ import (
 // after Entry reconciliation and managed Compose identity allocation. No storage
 // or value lookup is permitted while resolving authored context keys.
 type BlueprintScriptResources struct {
-	Volumes []controller.ComposeResourceIdentity
+	Volumes []composeidentity.Resource
 	Entries []entryrecord.Record
 }
 

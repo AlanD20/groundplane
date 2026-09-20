@@ -1,6 +1,7 @@
 package controller
 
 import (
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/compose-spec/compose-go/v2/types"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -14,7 +15,7 @@ import (
 // explicit IPv4 subnet decision; Docker-derived IPAM is never desired state.
 func ProjectZoneProjection(
 	project *types.Project,
-	identities ComposeIdentitySnapshot,
+	identities composeidentity.Snapshot,
 	ownerKind core.ZoneOwnerKind,
 	ownerID string,
 ) ([]core.Zone, error) {
@@ -27,7 +28,7 @@ func ProjectZoneProjection(
 	if project == nil || ids.Validate(ownerIDKind, ownerID) != nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Zone projection ownership is invalid")
 	}
-	names, err := ownedNetworkNames(project)
+	names, err := composeidentity.OwnedNetworkNames(project)
 	if err != nil {
 		return nil, err
 	}

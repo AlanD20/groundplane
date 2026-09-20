@@ -1,7 +1,8 @@
 package backingservices
 
 import (
-	"github.com/AlanD20/groundplane/internal/controller"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -11,7 +12,7 @@ import (
 func buildBackingServiceCreationProjection(
 	environmentID string,
 	revisionID string,
-	identities controller.ComposeIdentitySnapshot,
+	identities composeidentity.Snapshot,
 	volumeSlugs map[string]string,
 	volumeMounts []etcd.EnvironmentServiceVolumeMount,
 	artifact []byte,

@@ -1,4 +1,4 @@
-package controller
+package composeidentity
 
 import (
 	"sort"
@@ -10,63 +10,63 @@ import (
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
-// ComposeResourceIdentity binds one mutable Compose key to its durable id.
-type ComposeResourceIdentity struct {
+// Resource binds one mutable Compose key to its durable id.
+type Resource struct {
 	ID             string
 	Name           string
 	ComponentID    string
-	ComponentImage *SelectedComponentImage
+	ComponentImage *ComponentImage
 }
 
-// SelectedComponentImage preserves one compiled selection across persisted rerenders.
-type SelectedComponentImage struct {
+// ComponentImage preserves one compiled selection across persisted rerenders.
+type ComponentImage struct {
 	Repository  string
 	IndexDigest string
 	Reference   string
 	Platform    componentsdk.OCIPlatform
 }
 
-// ComposeIdentitySnapshot is the durable identity projection for resources owned by one Compose project.
+// Snapshot is the durable identity projection for resources owned by one Compose project.
 // Every collection is sorted by Name.
-type ComposeIdentitySnapshot struct {
-	Services []ComposeResourceIdentity
-	Networks []ComposeResourceIdentity
-	Volumes  []ComposeResourceIdentity
+type Snapshot struct {
+	Services []Resource
+	Networks []Resource
+	Volumes  []Resource
 }
 
-// ComposeIdentityChanges separates the next desired projection from ids that require explicit removal handling.
-type ComposeIdentityChanges struct {
-	Current           ComposeIdentitySnapshot
+// Changes separates the next desired projection from ids that require explicit removal handling.
+type Changes struct {
+	Current           Snapshot
 	RemovedServiceIDs []string
 	RemovedNetworkIDs []string
 	RemovedVolumeIDs  []string
 }
 
-// ReconcileOwnedComposeIdentities assigns stable ids to the owned resources in a parsed Compose project.
+// ReconcileOwned assigns stable ids to the owned resources in a parsed Compose project.
 // External resources must be resolved to their owner's durable identity before entering this owned-resource stage.
-func ReconcileOwnedComposeIdentities(
+func ReconcileOwned(
 	project *composetypes.Project,
-	previous ComposeIdentitySnapshot,
+	previous Snapshot,
 	newID func(ids.Kind) string,
-) (ComposeIdentityChanges, error) {
+) (Changes, error) {
 	if project == nil {
-		return ComposeIdentityChanges{}, errs.New(errs.KindValidationFailed, "compose project is required")
+		return Changes{}, errs.New(errs.KindValidationFailed, "compose project is required")
 	}
 	if newID == nil {
-		return ComposeIdentityChanges{}, errs.New(errs.KindInternal, "compose identity allocator is required")
+		return Changes{}, errs.New(errs.KindInternal, "compose identity allocator is required")
 	}
 
-	serviceNames, err := ownedServiceNames(project)
+	serviceNames, err := OwnedServiceNames(project)
 	if err != nil {
-		return ComposeIdentityChanges{}, err
+		return Changes{}, err
 	}
-	networkNames, err := ownedNetworkNames(project)
+	networkNames, err := OwnedNetworkNames(project)
 	if err != nil {
-		return ComposeIdentityChanges{}, err
+		return Changes{}, err
 	}
 	volumeNames, err := ownedVolumeNames(project)
 	if err != nil {
-		return ComposeIdentityChanges{}, err
+		return Changes{}, err
 	}
 
 	services, removedServices, err := reconcileComposeResourceIdentities(
@@ -76,7 +76,7 @@ func ReconcileOwnedComposeIdentities(
 		newID,
 	)
 	if err != nil {
-		return ComposeIdentityChanges{}, err
+		return Changes{}, err
 	}
 	networks, removedNetworks, err := reconcileComposeResourceIdentities(
 		ids.KindNetwork,
@@ -85,7 +85,7 @@ func ReconcileOwnedComposeIdentities(
 		newID,
 	)
 	if err != nil {
-		return ComposeIdentityChanges{}, err
+		return Changes{}, err
 	}
 	volumes, removedVolumes, err := reconcileComposeResourceIdentities(
 		ids.KindVolume,
@@ -94,11 +94,11 @@ func ReconcileOwnedComposeIdentities(
 		newID,
 	)
 	if err != nil {
-		return ComposeIdentityChanges{}, err
+		return Changes{}, err
 	}
 
-	return ComposeIdentityChanges{
-		Current: ComposeIdentitySnapshot{
+	return Changes{
+		Current: Snapshot{
 			Services: services,
 			Networks: networks,
 			Volumes:  volumes,
@@ -109,7 +109,7 @@ func ReconcileOwnedComposeIdentities(
 	}, nil
 }
 
-func ownedServiceNames(project *composetypes.Project) ([]string, error) {
+func OwnedServiceNames(project *composetypes.Project) ([]string, error) {
 	names := make([]string, 0, len(project.Services)+len(project.DisabledServices))
 	seen := make(map[string]struct{}, len(project.Services)+len(project.DisabledServices))
 	for name := range project.Services {
@@ -127,7 +127,7 @@ func ownedServiceNames(project *composetypes.Project) ([]string, error) {
 	return names, nil
 }
 
-func ownedNetworkNames(project *composetypes.Project) ([]string, error) {
+func OwnedNetworkNames(project *composetypes.Project) ([]string, error) {
 	names := make([]string, 0, len(project.Networks))
 	for name, network := range project.Networks {
 		if network.External {
@@ -154,9 +154,9 @@ func ownedVolumeNames(project *composetypes.Project) ([]string, error) {
 func reconcileComposeResourceIdentities(
 	kind ids.Kind,
 	desiredNames []string,
-	previous []ComposeResourceIdentity,
+	previous []Resource,
 	newID func(ids.Kind) string,
-) ([]ComposeResourceIdentity, []string, error) {
+) ([]Resource, []string, error) {
 	byName := make(map[string]string, len(previous))
 	usedIDs := make(map[string]struct{}, len(previous)+len(desiredNames))
 	for _, identity := range previous {
@@ -173,7 +173,7 @@ func reconcileComposeResourceIdentities(
 		usedIDs[identity.ID] = struct{}{}
 	}
 
-	current := make([]ComposeResourceIdentity, 0, len(desiredNames))
+	current := make([]Resource, 0, len(desiredNames))
 	desired := make(map[string]struct{}, len(desiredNames))
 	for _, name := range desiredNames {
 		if name == "" {
@@ -195,7 +195,7 @@ func reconcileComposeResourceIdentities(
 			}
 			usedIDs[id] = struct{}{}
 		}
-		current = append(current, ComposeResourceIdentity{ID: id, Name: name})
+		current = append(current, Resource{ID: id, Name: name})
 	}
 
 	removed := make([]string, 0, len(previous))

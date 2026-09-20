@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/entry"
 	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
@@ -255,7 +256,7 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	changes, err := controller.ReconcileOwnedComposeIdentities(parsed.Project, previous, allocator.New)
+	changes, err := composeidentity.ReconcileOwned(parsed.Project, previous, allocator.New)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}

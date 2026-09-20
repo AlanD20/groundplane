@@ -1,6 +1,7 @@
 package operations
 
 import (
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"sort"
@@ -16,7 +17,7 @@ func PlanEntryRemovals(
 	environmentID string,
 	removed []entryrecord.Record,
 	next []entryrecord.Record,
-	services []controller.ComposeResourceIdentity,
+	services []composeidentity.Resource,
 ) ([]controller.EnvironmentEntryMaterialization, error) {
 	nextFiles := make(map[string]struct{})
 	nextScopes := make(map[string]struct{})
@@ -31,7 +32,7 @@ func PlanEntryRemovals(
 			}
 		}
 	}
-	serviceByName := make(map[string]controller.ComposeResourceIdentity, len(services))
+	serviceByName := make(map[string]composeidentity.Resource, len(services))
 	for _, service := range services {
 		serviceByName[service.Name] = service
 	}

@@ -2,7 +2,8 @@ package blueprint
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/slug"
-	"github.com/AlanD20/groundplane/internal/controller"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -10,7 +11,7 @@ import (
 	"sort"
 )
 
-func managedEnvironmentVolumeIDs(current []controller.ComposeResourceIdentity) []string {
+func managedEnvironmentVolumeIDs(current []composeidentity.Resource) []string {
 	result := make([]string, 0, len(current))
 	for _, volume := range current {
 		result = append(result, volume.ID)
@@ -62,7 +63,7 @@ func environmentBlueprintVolumeSlugs(
 
 func environmentBlueprintVolumeMounts(
 	project *composetypes.Project,
-	identities controller.ComposeIdentitySnapshot,
+	identities composeidentity.Snapshot,
 ) ([]etcd.EnvironmentServiceVolumeMount, error) {
 	if project == nil {
 		return nil, errs.New(errs.KindInternal, "Blueprint Compose project is missing")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"sort"
 
@@ -308,7 +309,7 @@ func (resolver *TaskPlanResolver) renderServiceLifecycleArtifact(
 			AuthorizedVolumeDir: source.AuthorizedVolumeDir,
 		},
 		projection.RevisionID, source.ArtifactID, projection, phase,
-		func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]ComposeResourceIdentity, error) {
+		func(project *composetypes.Project, _ etcd.EnvironmentComposeProjection) ([]composeidentity.Resource, error) {
 			if err := projectReleaseWorkloadServices(project, projection); err != nil {
 				return nil, err
 			}

@@ -1,13 +1,14 @@
 package blueprint
 
 import (
-	"github.com/AlanD20/groundplane/internal/controller"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+
 	"github.com/AlanD20/groundplane/internal/core"
 )
 
 // buildEnvironmentDependencyPlans freezes release phase edges at Blueprint apply.
 func buildEnvironmentDependencyPlans(
-	services []controller.ComposeResourceIdentity,
+	services []composeidentity.Resource,
 	extensions map[string]core.ServiceExtensionSpec,
 ) (core.ServiceDependencyPlans, error) {
 	names := make([]string, len(services))

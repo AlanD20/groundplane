@@ -3,7 +3,8 @@ package operations
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -13,8 +14,8 @@ import (
 
 func entryDesiredServiceIdentities(
 	projection etcd.EnvironmentComposeProjection,
-) ([]controller.ComposeResourceIdentity, error) {
-	result := make([]controller.ComposeResourceIdentity, len(projection.DesiredServices))
+) ([]composeidentity.Resource, error) {
+	result := make([]composeidentity.Resource, len(projection.DesiredServices))
 	seenIDs := make(map[string]string, len(projection.DesiredServices))
 	seenNames := make(map[string]string, len(projection.DesiredServices))
 	for index, service := range projection.DesiredServices {
@@ -31,7 +32,7 @@ func entryDesiredServiceIdentities(
 		}
 		seenIDs[service.Desired.ID] = service.Desired.Name
 		seenNames[service.Desired.Name] = service.Desired.ID
-		result[index] = controller.ComposeResourceIdentity{ID: service.Desired.ID, Name: service.Desired.Name}
+		result[index] = composeidentity.Resource{ID: service.Desired.ID, Name: service.Desired.Name}
 	}
 	return result, nil
 }

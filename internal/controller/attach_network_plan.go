@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"crypto/sha256"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"maps"
 	"sort"
 	"strings"
@@ -21,7 +22,7 @@ import (
 type environmentComposeTransform func(
 	*composetypes.Project,
 	etcd.EnvironmentComposeProjection,
-) ([]ComposeResourceIdentity, error)
+) ([]composeidentity.Resource, error)
 
 // ProjectAttachNetworks replaces the reserved Attach overlay on an owned
 // Compose project with the supplied complete network-membership union.
@@ -29,7 +30,7 @@ func ProjectAttachNetworks(
 	project *composetypes.Project,
 	projection etcd.EnvironmentComposeProjection,
 	joins []etcd.AttachTaskNetworkJoin,
-) ([]ComposeResourceIdentity, error) {
+) ([]composeidentity.Resource, error) {
 	if project == nil || ids.Validate(ids.KindEnvironment, projection.EnvironmentID) != nil {
 		return nil, errs.New(errs.KindInternal, "Attach network projection input is invalid")
 	}
@@ -45,7 +46,7 @@ func ProjectAttachNetworks(
 	if project.Networks == nil {
 		project.Networks = make(composetypes.Networks)
 	}
-	external := make([]ComposeResourceIdentity, 0, len(joins))
+	external := make([]composeidentity.Resource, 0, len(joins))
 	for _, join := range joins {
 		composeName := "gp_attach_" + strings.ToLower(join.NetworkID)
 		if ids.Validate(ids.KindNetwork, join.NetworkID) != nil {
@@ -58,7 +59,7 @@ func ProjectAttachNetworks(
 			)
 		}
 		project.Networks[composeName] = composetypes.NetworkConfig{External: true}
-		external = append(external, ComposeResourceIdentity{ID: join.NetworkID, Name: composeName})
+		external = append(external, composeidentity.Resource{ID: join.NetworkID, Name: composeName})
 		for _, serviceID := range join.ServiceIDs {
 			serviceName, exists := serviceNames[serviceID]
 			if !exists {
@@ -244,8 +245,8 @@ func removeManagedAttachNetworks(project *composetypes.Project) {
 	removeMemberships(project.DisabledServices)
 }
 
-func managedAttachExternalNetworks(project *composetypes.Project) ([]ComposeResourceIdentity, error) {
-	external := make([]ComposeResourceIdentity, 0)
+func managedAttachExternalNetworks(project *composetypes.Project) ([]composeidentity.Resource, error) {
+	external := make([]composeidentity.Resource, 0)
 	for name, network := range project.Networks {
 		networkID, managed := managedAttachNetworkID(name)
 		if !managed {
@@ -254,7 +255,7 @@ func managedAttachExternalNetworks(project *composetypes.Project) ([]ComposeReso
 		if !network.External {
 			return nil, errs.New(errs.KindInternal, "managed Attach network is not external")
 		}
-		external = append(external, ComposeResourceIdentity{ID: networkID, Name: name})
+		external = append(external, composeidentity.Resource{ID: networkID, Name: name})
 	}
 	sort.Slice(external, func(left int, right int) bool { return external[left].Name < external[right].Name })
 	return external, nil

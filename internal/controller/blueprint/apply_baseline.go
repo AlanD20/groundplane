@@ -2,7 +2,8 @@ package blueprint
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/controller"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -18,7 +19,7 @@ type applyBaseline struct {
 	previousProjection   etcd.Versioned[etcd.EnvironmentComposeProjection]
 	hasProjection        bool
 	expectedHeadRevision int64
-	previous             controller.ComposeIdentitySnapshot
+	previous             composeidentity.Snapshot
 	generation           uint64
 }
 

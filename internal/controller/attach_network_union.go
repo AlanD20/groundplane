@@ -1,6 +1,7 @@
 package controller
 
 import (
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"sort"
 
@@ -20,7 +21,7 @@ func ProjectEnvironmentAttachNetworks(
 	zones []etcd.EnvironmentZoneProjection,
 	services []etcd.EnvironmentServiceProjection,
 	attaches []etcd.Versioned[attachrecord.Record],
-) ([]ComposeResourceIdentity, error) {
+) ([]composeidentity.Resource, error) {
 	projection := etcd.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, DesiredZones: zones, DesiredServices: services,
 	}

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -170,7 +171,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 	if err := applyProjectedServiceDependencyPhase(project, projection.ServiceDependencyPlans, phase); err != nil {
 		return nil, err
 	}
-	externalNetworks := []ComposeResourceIdentity(nil)
+	externalNetworks := []composeidentity.Resource(nil)
 	if transform != nil {
 		externalNetworks, err = transform(project, projection)
 		if err != nil {

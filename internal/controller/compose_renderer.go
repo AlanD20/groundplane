@@ -2,6 +2,7 @@ package controller
 
 import (
 	"crypto/sha256"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -46,8 +47,8 @@ type ComposeRenderInput struct {
 	PlanID                   string
 	RenderGeneration         uint64
 	AuthorizedVolumeDir      string
-	Identities               ComposeIdentitySnapshot
-	ExternalNetworks         []ComposeResourceIdentity
+	Identities               composeidentity.Snapshot
+	ExternalNetworks         []composeidentity.Resource
 	Releases                 map[string]ComposeReleaseIdentity
 	RetainedComponentRuntime []byte
 }
@@ -75,7 +76,7 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 	if err := validateComposeRenderInput(input); err != nil {
 		return nil, err
 	}
-	serviceNames, err := ownedServiceNames(input.Project)
+	serviceNames, err := composeidentity.OwnedServiceNames(input.Project)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +300,7 @@ func renderableManagedVolumeNames(project *composetypes.Project) ([]string, erro
 func indexComposeIdentities(
 	kind ids.Kind,
 	desiredNames []string,
-	identities []ComposeResourceIdentity,
+	identities []composeidentity.Resource,
 ) (map[string]string, error) {
 	if len(desiredNames) != len(identities) {
 		return nil, errs.New(errs.KindInternal, "compose identity coverage is incomplete")

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/hex"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	"math"
 	"path/filepath"
@@ -37,7 +38,7 @@ type EnvironmentComponentEnvironmentFile struct {
 // project. Project is an owned clone; the caller's parsed project is unchanged.
 type EnvironmentComponentComposeProjection struct {
 	Project          *composetypes.Project
-	Services         []ComposeResourceIdentity
+	Services         []composeidentity.Resource
 	PlainFiles       []GeneratedEnvironmentFile
 	EnvironmentFiles []EnvironmentComponentEnvironmentFile
 }
@@ -86,7 +87,7 @@ func ProjectEnvironmentComponents(
 				"Component image platform is unavailable",
 			)
 		}
-		image := SelectedComponentImage{Repository: generated.Definition.Image.Repository,
+		image := composeidentity.ComponentImage{Repository: generated.Definition.Image.Repository,
 			IndexDigest: generated.Definition.Image.IndexDigest, Reference: reference, Platform: platform}
 		service, environmentFile, err := projectEnvironmentComponentService(environment, generated, image)
 		if err != nil {
@@ -112,7 +113,7 @@ func ProjectEnvironmentComponents(
 			return EnvironmentComponentComposeProjection{}, err
 		}
 		projected.Services[generated.Name] = service
-		result.Services = append(result.Services, ComposeResourceIdentity{
+		result.Services = append(result.Services, composeidentity.Resource{
 			ID: generated.Definition.ID, Name: generated.Name, ComponentID: generated.ComponentID,
 			ComponentImage: &image,
 		})
@@ -180,7 +181,7 @@ func cloneComposeProjectServices(project *composetypes.Project) *composetypes.Pr
 func projectEnvironmentComponentService(
 	environment core.Environment,
 	generated GeneratedEnvironmentService,
-	image SelectedComponentImage,
+	image composeidentity.ComponentImage,
 ) (composetypes.ServiceConfig, *EnvironmentComponentEnvironmentFile, error) {
 	definition := generated.Definition
 	projected := composetypes.ServiceConfig{
@@ -277,7 +278,7 @@ func environmentComponentImageReference(image componentsdk.OCIImage) (string, bo
 }
 
 func bindEnvironmentComponentImage(
-	identities []ComposeResourceIdentity,
+	identities []composeidentity.Resource,
 	authored composetypes.ServiceConfig,
 	service *agentpb.ComposeService,
 ) error {
@@ -321,7 +322,7 @@ func bindEnvironmentComponentImage(
 	return errs.New(errs.KindInternal, "Compose Service identity is absent")
 }
 
-func validateSelectedComponentImage(image SelectedComponentImage) error {
+func validateSelectedComponentImage(image composeidentity.ComponentImage) error {
 	p := image.Platform
 	if !validPlatformSHA256(image.IndexDigest) || !validPlatformSHA256(p.ChildDigest) ||
 		!validPlatformSHA256(p.ConfigDigest) ||
@@ -339,8 +340,8 @@ func validateSelectedComponentImage(image SelectedComponentImage) error {
 func pinnedComponentServiceIdentity(
 	service *agentpb.ComposeService,
 	componentID string,
-) (ComposeResourceIdentity, error) {
-	image := SelectedComponentImage{Repository: service.GetImageRepository(), Reference: service.GetImageReference(),
+) (composeidentity.Resource, error) {
+	image := composeidentity.ComponentImage{Repository: service.GetImageRepository(), Reference: service.GetImageReference(),
 		IndexDigest: hex.EncodeToString(service.GetImageIndexDigest()), Platform: componentsdk.OCIPlatform{
 			OS: service.GetImageOs(), Architecture: service.GetImageArchitecture(), Variant: service.GetImageVariant(),
 			ChildDigest: hex.EncodeToString(
@@ -348,8 +349,8 @@ func pinnedComponentServiceIdentity(
 			), ConfigDigest: hex.EncodeToString(service.GetImageConfigDigest()),
 		}}
 	if service.GetOwnerComponentId() != componentID || validateSelectedComponentImage(image) != nil {
-		return ComposeResourceIdentity{}, errs.New(errs.KindInternal, "pinned Component image authority is invalid")
+		return composeidentity.Resource{}, errs.New(errs.KindInternal, "pinned Component image authority is invalid")
 	}
-	return ComposeResourceIdentity{ID: service.GetServiceId(), Name: service.GetComposeName(),
+	return composeidentity.Resource{ID: service.GetServiceId(), Name: service.GetComposeName(),
 		ComponentID: componentID, ComponentImage: &image}, nil
 }

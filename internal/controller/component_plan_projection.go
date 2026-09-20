@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -30,14 +31,14 @@ func projectPinnedEnvironmentComponents(
 	}
 	// Generated identities are not members of the desired Service collection.
 	// Their count therefore cannot be subtracted from its allocation bound.
-	authored := make([]ComposeResourceIdentity, 0, len(projection.DesiredServices))
+	authored := make([]composeidentity.Resource, 0, len(projection.DesiredServices))
 	for _, service := range projection.DesiredServices {
 		if _, owned := generated[service.Desired.ID]; owned {
 			continue
 		}
-		authored = append(authored, ComposeResourceIdentity{ID: service.Desired.ID, Name: service.Desired.Name})
+		authored = append(authored, composeidentity.Resource{ID: service.Desired.ID, Name: service.Desired.Name})
 	}
-	identities := ComposeIdentitySnapshot{
+	identities := composeidentity.Snapshot{
 		Services: authored,
 		Networks: desiredZoneResourceIdentities(projection.DesiredZones),
 		Volumes:  composeVolumeResourceIdentities(projection.Volumes),
@@ -99,18 +100,18 @@ func projectPinnedEnvironmentComponents(
 	return ProjectEnvironmentComponents(project, environment, catalog)
 }
 
-func desiredZoneResourceIdentities(values []etcd.EnvironmentZoneProjection) []ComposeResourceIdentity {
-	result := make([]ComposeResourceIdentity, len(values))
+func desiredZoneResourceIdentities(values []etcd.EnvironmentZoneProjection) []composeidentity.Resource {
+	result := make([]composeidentity.Resource, len(values))
 	for index, value := range values {
-		result[index] = ComposeResourceIdentity{ID: value.Desired.ID, Name: value.Desired.Name}
+		result[index] = composeidentity.Resource{ID: value.Desired.ID, Name: value.Desired.Name}
 	}
 	return result
 }
 
-func composeVolumeResourceIdentities(values []etcd.EnvironmentVolumeIdentity) []ComposeResourceIdentity {
-	result := make([]ComposeResourceIdentity, len(values))
+func composeVolumeResourceIdentities(values []etcd.EnvironmentVolumeIdentity) []composeidentity.Resource {
+	result := make([]composeidentity.Resource, len(values))
 	for index, value := range values {
-		result[index] = ComposeResourceIdentity{ID: value.ID, Name: value.Key}
+		result[index] = composeidentity.Resource{ID: value.ID, Name: value.Key}
 	}
 	return result
 }
