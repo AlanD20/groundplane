@@ -1,5 +1,10 @@
 "use client";
 import {
+  createReleaseActions,
+  useReleaseRefresh,
+  type ReleaseActions,
+} from "@/features/release/actions";
+import {
   createEnvironmentActions,
   type EnvironmentActions,
 } from "@/features/environment/actions";
@@ -59,8 +64,6 @@ import {
   createReleaseGroupActions,
   type ReleaseGroupActions,
 } from "@/features/release-group/actions";
-import { listAllReleaseGroups } from "@/features/release-group/api";
-import { refreshReleaseGroupTags } from "@/features/release-group/projection";
 import {
   createScriptActions,
   type ScriptActions,
@@ -84,17 +87,13 @@ import {
   type RunnerState,
   type RunnerActions,
 } from "@/features/runner/use-runner-store";
-import {
-  listAllZones,
-  listAllRoutes,
-} from "@/features/environment/network-api";
-import { listAllReleases, projectReleaseSummary } from "@/features/release/api";
+import { listAllRoutes } from "@/features/environment/network-api";
 import {
   useConnectorStore,
   type ConnectorState,
   type ConnectorActions,
 } from "@/features/connectors/use-connector-store";
-import { emptyTaskJournal, requireTaskId } from "@/features/task/journal-model";
+import { emptyTaskJournal } from "@/features/task/journal-model";
 import { controllerRequest, waitForRequest } from "./controller-json-request";
 import { useBackupStore } from "@/features/backup/use-backup-store";
 import {
@@ -105,7 +104,7 @@ import {
 } from "@/features/secrets/secret-store";
 import { controllerUpdateRejected } from "./controller-request-errors";
 import { applyServiceObservations } from "@/features/service/service-observation";
-import { releaseForServiceName, listAllServices } from "@/features/service/api";
+import { listAllServices } from "@/features/service/api";
 import {
   createContext,
   useCallback,
@@ -122,14 +121,7 @@ import {
   type TransientLogEvent,
 } from "./transient-logs";
 import { useControllerPlatform } from "@/features/platform-controller/use-controller-platform";
-import type {
-  EnvFile,
-  Environment,
-  Project,
-  Service,
-  Tenant,
-  PlatformInfra,
-} from "./types";
+import type { Environment, Project, Tenant, PlatformInfra } from "./types";
 import {
   createBlueprintActions,
   type BlueprintActions,
@@ -148,7 +140,6 @@ import {
   mergeEnvironmentProjectLoads,
 } from "@/features/environment/workspace-reconciliation";
 import { environmentDeletionGuard } from "@/features/environment/mutation-guard";
-import { newId } from "./utils";
 type EnvironmentDeleteResponse =
   operations["environment.delete"]["responses"][202]["content"]["application/json"];
 type BackupKeyRotateResponse =
@@ -243,6 +234,7 @@ type StoreContext = State &
   TaskJournalActions &
   TaskEventActions &
   EnvironmentActions &
+  ReleaseActions &
   ComponentActions &
   ComponentRefreshActions &
   ReturnType<typeof useControllerPlatform> &
@@ -279,17 +271,6 @@ type StoreContext = State &
     isEnvironmentDeletionPending: (environmentId: string) => boolean;
     // mutations
     retryTask: (taskId: string) => Promise<string>;
-    commitDeploy: (
-      envId: string,
-      service: string,
-      tag: string,
-      strategy: Service["strategy"],
-    ) => Promise<string>;
-    commitRollback: (
-      envId: string,
-      service: string,
-      tag: string,
-    ) => Promise<string>;
     getTask: (taskId: string, signal?: AbortSignal) => Promise<TaskResponse>;
     abortTask: (taskId: string) => Promise<void>;
   };
@@ -454,36 +435,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     refreshEnvironmentComponents,
   } = useComponentRefresh(update);
 
-  const refreshEnvironmentReleases = useCallback(
-    async (environmentId: string, signal?: AbortSignal) => {
-      const environment = findEnvironment(state, environmentId);
-      if (!environment)
-        throw new Error(`Environment ${environmentId} is not loaded`);
-      try {
-        const [deploys, releaseGroups] = await Promise.all([
-          listAllReleases(environmentId, environment.services, signal),
-          listAllReleaseGroups(environmentId, environment.services, signal),
-        ]);
-        update((draft) => {
-          const current = findEnvironment(draft, environmentId);
-          if (!current) return;
-          Object.assign(current, projectReleaseSummary(deploys));
-          current.deploys = deploys;
-          current.releaseGroups = releaseGroups;
-          refreshReleaseGroupTags(current);
-        });
-      } catch (error) {
-        update((draft) => {
-          draft.projectError =
-            error instanceof Error
-              ? error.message
-              : "Unable to refresh release state";
-        });
-        throw error;
-      }
-    },
-    [state, update],
-  );
+  const refreshEnvironmentReleases = useReleaseRefresh(state, update);
 
   const refreshAgents = useAgentRefresh(update);
 
@@ -774,46 +726,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             throw new Error("Controller response is missing task_id");
           return accepted.task_id;
         }),
-      commitDeploy: async (envId, service, tag, strategy) => {
-        assertEnvironmentMutable(envId, "deployment");
-        const target = findEnvironment(state, envId)?.services.find(
-          (candidate) => candidate.name === service,
-        );
-        if (!target) throw new Error(`Service ${service} no longer exists`);
-        const body: operations["service.deploy"]["requestBody"]["content"]["application/json"] =
-          {
-            tag,
-            strategy,
-            on_failure: "switch_back",
-          };
-        const accepted = await controllerRequest<
-          operations["service.deploy"]["responses"][202]["content"]["application/json"]
-        >(`/services/${encodeURIComponent(target.id)}/deploy`, 202, {
-          method: "POST",
-          body,
-        });
-        if (!accepted.task_id)
-          throw new Error("Controller response is missing deploy task_id");
-        return accepted.task_id;
-      },
-      commitRollback: async (envId, service, tag) => {
-        assertEnvironmentMutable(envId, "rollback");
-        const target = findEnvironment(state, envId)?.services.find(
-          (candidate) => candidate.name === service,
-        );
-        if (!target) throw new Error(`Service ${service} no longer exists`);
-        const body: operations["service.rollback"]["requestBody"]["content"]["application/json"] =
-          { tag };
-        const accepted = await controllerRequest<
-          operations["service.rollback"]["responses"][202]["content"]["application/json"]
-        >(`/services/${encodeURIComponent(target.id)}/rollback`, 202, {
-          method: "POST",
-          body,
-        });
-        if (!accepted.task_id)
-          throw new Error("Controller response is missing rollback task_id");
-        return accepted.task_id;
-      },
+      ...createReleaseActions(state, assertEnvironmentMutable),
       ...createTenantActions(state, update),
       ...createProjectActions(update),
       ...createEnvironmentActions({
