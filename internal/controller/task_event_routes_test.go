@@ -153,39 +153,6 @@ func TestTaskEventRouteDisconnectsSafelyAfterHeaders(t *testing.T) {
 	}
 }
 
-// Delivery: operation-scoped OpenAPI metadata, not a working stream or generated-client behavior.
-// Rationale: task.events must own its resume header, success media type and event
-// schema; finding those strings elsewhere in the document is insufficient.
-func TestTaskEventOpenAPIExpressesTheStreamContract(t *testing.T) {
-	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
-	path := server.API.OpenAPI().Paths["/tasks/{id}/events"]
-	if path == nil || path.Get == nil || path.Get.OperationID != "task.events" {
-		t.Fatalf("Task events GET operation = %#v", path)
-	}
-	resumeHeaders := 0
-	for _, parameter := range path.Get.Parameters {
-		if parameter.Name == "Last-Event-ID" {
-			resumeHeaders++
-			if parameter.In != "header" || parameter.Required || parameter.Schema == nil ||
-				parameter.Schema.Pattern != "^(0|[1-9][0-9]{0,19})$" {
-				t.Fatalf("Task events resume parameter = %#v", parameter)
-			}
-		}
-	}
-	if resumeHeaders != 1 {
-		t.Fatalf("resume header declarations = %d, want 1", resumeHeaders)
-	}
-	success := path.Get.Responses["200"]
-	if success == nil || success.Content["text/event-stream"] == nil {
-		t.Fatalf("Task events success response = %#v", success)
-	}
-	schema := success.Content["text/event-stream"].Schema
-	if schema == nil || schema.Items == nil || schema.Items.Properties["data"] == nil ||
-		schema.Items.Properties["data"].Ref != "#/components/schemas/TaskEvent" {
-		t.Fatalf("Task events success schema = %#v", schema)
-	}
-}
-
 type fakeTaskEventStreamOpener struct {
 	runner taskEventRunner
 	err    error

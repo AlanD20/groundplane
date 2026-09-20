@@ -89,31 +89,3 @@ func TestControllerConfigRouteRequiresAndForwardsIdempotencyKey(t *testing.T) {
 		t.Fatalf("response = %#v", document)
 	}
 }
-
-// Rationale: client generation must see Idempotency-Key as a required PUT
-// parameter rather than relying only on the server's generic middleware.
-func TestControllerConfigOpenAPIRequiresIdempotencyHeader(t *testing.T) {
-	t.Parallel()
-	document, err := New(nil, nil, Options{}).OpenAPIDocument()
-	if err != nil {
-		t.Fatalf("OpenAPIDocument() error = %v", err)
-	}
-	var contract struct {
-		Paths map[string]map[string]struct {
-			Parameters []struct {
-				Name     string `json:"name"`
-				In       string `json:"in"`
-				Required bool   `json:"required"`
-			} `json:"parameters"`
-		} `json:"paths"`
-	}
-	if err := json.Unmarshal(document, &contract); err != nil {
-		t.Fatalf("decode OpenAPI: %v", err)
-	}
-	for _, parameter := range contract.Paths["/controller/config"]["put"].Parameters {
-		if parameter.Name == "Idempotency-Key" && parameter.In == "header" && parameter.Required {
-			return
-		}
-	}
-	t.Fatal("PUT /controller/config lacks a required Idempotency-Key header")
-}

@@ -5,28 +5,6 @@ import (
 	"testing"
 )
 
-func TestOnFailureWithDefault(t *testing.T) {
-	// Rationale: every omitted service or group policy must resolve to the
-	// single accepted switch_back default before execution.
-	tests := []struct {
-		name string
-		in   OnFailure
-		want OnFailure
-	}{
-		{name: "omitted", want: OnFailureSwitchBack},
-		{name: "switch back", in: OnFailureSwitchBack, want: OnFailureSwitchBack},
-		{name: "leave active", in: OnFailureLeaveActive, want: OnFailureLeaveActive},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.in.WithDefault(); got != tt.want {
-				t.Fatalf("WithDefault() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestReleaseGroupValidateOnFailure(t *testing.T) {
 	// Rationale: persistence and execution may trust a validated group to carry
 	// only the two accepted policies or the well-defined omitted value.

@@ -1,12 +1,10 @@
 package controller
 
 import (
-	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -95,23 +93,5 @@ func TestScaffoldRoutesMatchNormalizedHumanContract(t *testing.T) {
 		if pattern != "" {
 			t.Errorf("retired route %s %s matched %q", operation.method, operation.path, pattern)
 		}
-	}
-}
-
-// Rationale: OpenAPI and Console use one stable identity, so the first typed
-// operation must not retain the former presentation-oriented kebab id.
-func TestHostOpenAPIOperationUsesParityIdentity(t *testing.T) {
-	t.Parallel()
-
-	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
-	document, err := json.Marshal(server.API.OpenAPI())
-	if err != nil {
-		t.Fatalf("marshal OpenAPI: %v", err)
-	}
-	if !strings.Contains(string(document), `"operationId":"host.show"`) {
-		t.Fatalf("OpenAPI does not contain host.show: %s", document)
-	}
-	if strings.Contains(string(document), `"operationId":"host-show"`) {
-		t.Fatalf("OpenAPI retains presentation-oriented host-show: %s", document)
 	}
 }

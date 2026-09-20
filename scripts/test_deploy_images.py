@@ -29,14 +29,6 @@ class DeploymentImagesTest(unittest.TestCase):
         self.assertEqual(environment["PRESERVED"], "yes")
         self.assertEqual(parent["GOMAXPROCS"], "64")
 
-    # Delivery: static Dockerfile stage constraint, not Agent concurrency behavior.
-    # Rationale: a build-only CPU limit must not leak into the deployed Agent stage.
-    def test_agent_compilation_is_bounded_only_in_the_build_stage(self):
-        dockerfile = (deploy.REPOSITORY_ROOT / "Dockerfile.agent").read_text()
-        build, runtime = dockerfile.split("FROM docker/compose-bin:", 1)
-        self.assertIn("GOMAXPROCS=2 go build -p=2", build)
-        self.assertNotIn("GOMAXPROCS", runtime)
-
     # Delivery: deployment command error boundary, not network recovery.
     # Rationale: expected transport failures must return failure with a useful message.
     def test_transport_input_and_timeout_errors_are_reported_without_a_traceback(self):

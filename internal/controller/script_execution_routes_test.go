@@ -14,24 +14,6 @@ import (
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-// Rationale: generated clients must see the same closed, non-nullable execution
-// union enforced by the HTTP decoder, not a bag of independently optional fields.
-func TestScriptExecutionOpenAPISchema(t *testing.T) {
-	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
-	registry := server.API.OpenAPI().Components.Schemas
-	execution := registry.SchemaFromRef("#/components/schemas/ScriptExecution")
-	if execution == nil || len(execution.OneOf) != 2 {
-		t.Fatalf("execution is not a closed two-mode union: %#v", execution)
-	}
-	for _, name := range []string{"Script", "ScriptCreate", "ScriptEdit"} {
-		schema := registry.SchemaFromRef("#/components/schemas/" + name)
-		if schema == nil || schema.Properties["execution"] == nil ||
-			schema.Properties["execution"].Ref != "#/components/schemas/ScriptExecution" {
-			t.Fatalf("%s execution must use the non-nullable closed union", name)
-		}
-	}
-}
-
 // Rationale: create and edit preserve exact access decisions and reject malformed
 // or oversized contexts before the mutation service can publish anything.
 func TestScriptExecutionHTTPBoundary(t *testing.T) {

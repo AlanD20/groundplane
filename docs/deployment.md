@@ -93,7 +93,7 @@ need a separate public release location before these URLs could work.
 
 The independent `.github/workflows/pages.yml` runs on every push to `main`,
 without path filters or a dependency on release/CI jobs. It can also be dispatched
-manually on `main`. It tests the site builder, validates version metadata, and
+manually on `main`. It validates version metadata and
 publishes the exact installer from that commit with its checksum.
 Only the landing page, installer, installer checksum and `.nojekyll` are uploaded;
 the repository, private evidence and internal docs are not exported to Pages.

@@ -4,7 +4,6 @@ import test from 'node:test'
 import {
   createAndSelectZone,
   mergeOrdinaryZones,
-  toggleSelectedZone,
 } from '../features/environment/component-zone-picker-state.ts'
 
 const zone = (id, name, ownerKind = 'environment') => ({
@@ -15,20 +14,6 @@ const zone = (id, name, ownerKind = 'environment') => ({
   internal: false,
   ownerKind,
   ownerId: ownerKind === 'environment' ? 'env_test' : 'prj_backing',
-})
-
-// QA: CMP-01, HTTP-07; local selection, not Component networking.
-// Rationale: Component networking is multi-select, so choosing another Zone
-// must preserve every existing selection and deselect only the requested id.
-test('Zone selection preserves multiple stable ids', () => {
-  assert.deepEqual(toggleSelectedZone(['net_frontend'], 'net_backend', true), [
-    'net_frontend',
-    'net_backend',
-  ])
-  assert.deepEqual(
-    toggleSelectedZone(['net_frontend', 'net_backend'], 'net_frontend', false),
-    ['net_backend'],
-  )
 })
 
 // QA: NET-02, CMP-01; local callback and selection, not Controller allocation.

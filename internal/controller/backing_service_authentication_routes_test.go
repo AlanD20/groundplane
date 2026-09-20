@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"testing"
 
@@ -55,18 +54,6 @@ func TestBackingServiceAuthenticationHTTPBoundary(t *testing.T) {
 					response.Code, mutations.calls, mutations.mode, response.Body.String())
 			}
 		})
-	}
-}
-
-// Rationale: generated consumers must see the conditional requirement, not
-// documentation claiming a requirement while the schema accepts omission.
-func TestBackingServiceAuthenticationOpenAPISchema(t *testing.T) {
-	server := New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
-	schema := server.API.OpenAPI().Components.Schemas.SchemaFromRef("#/components/schemas/BackingServiceCreate")
-	if schema == nil || len(schema.OneOf) != 2 ||
-		!slices.Contains(schema.OneOf[0].Required, "authentication") ||
-		schema.Properties["authentication"].Default != nil {
-		t.Fatalf("authentication must be required for Valkey with no default: %#v", schema)
 	}
 }
 

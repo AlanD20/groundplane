@@ -170,36 +170,6 @@ func TestDecodeZoneCreateRejectsAmbiguousJSON(t *testing.T) {
 	}
 }
 
-// Rationale: both Zone reads are operator capabilities, so the generated
-// contract must carry their canonical 1:1 operation identities.
-func TestZoneOpenAPIContainsReadOperations(t *testing.T) {
-	t.Parallel()
-	document, err := New(nil, nil, Options{}).OpenAPIDocument()
-	if err != nil {
-		t.Fatalf("OpenAPIDocument() error = %v", err)
-	}
-	var contract struct {
-		Paths map[string]map[string]struct {
-			OperationID string `json:"operationId"`
-		} `json:"paths"`
-	}
-	if err := json.Unmarshal(document, &contract); err != nil {
-		t.Fatalf("decode OpenAPI: %v", err)
-	}
-	if got := contract.Paths["/zones"]["post"].OperationID; got != "zone.create" {
-		t.Fatalf("POST /zones operationId = %q, want zone.create", got)
-	}
-	if got := contract.Paths["/zones"]["get"].OperationID; got != "zone.list" {
-		t.Fatalf("GET /zones operationId = %q, want zone.list", got)
-	}
-	if got := contract.Paths["/zones/{id}"]["get"].OperationID; got != "zone.show" {
-		t.Fatalf("GET /zones/{id} operationId = %q, want zone.show", got)
-	}
-	if got := contract.Paths["/zones/{id}"]["delete"].OperationID; got != "zone.remove" {
-		t.Fatalf("DELETE /zones/{id} operationId = %q, want zone.remove", got)
-	}
-}
-
 func zoneRouteTestRecord() corenetwork.Zone {
 	at := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)

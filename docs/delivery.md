@@ -47,9 +47,35 @@ unchanged passing evidence. Existing debt and deferred qualification stay explic
 Do not defer a landing blocker through an issue record. A deferred issue does
 not waive any requirement in `mvp.md`.
 
+## Testing policy
+
+Straightforward implementation does not require testing. Do not write tests or
+add test gates for basic rendering, static pages, simple wiring or other direct
+implementation without complex behavior. Do not run dedicated test suites or
+create QA-matrix cases merely because such code changed. Ordinary code inspection
+and a user-requested visual preview are not reasons to build a test suite.
+
+Reserve tests for convoluted logic, several interacting actions, or substantial
+edge cases. Name the concrete behavior and failure cases that justify each test;
+coverage percentages and a blanket test-per-change rule are not justification.
+Static source-text and contract-shape tests are prohibited: do not assert source
+strings, regex matches, declaration structure or generated schema/type inventories.
+Exercise actual behavior when a test is justified. Compiler, generation-parity
+and architecture gates remain separate from these tests.
+When uncertain whether testing is needed, ask the user before writing or running
+tests. This policy applies to fixes as well as new implementation and takes
+precedence over generic skill defaults and the verification ladder below.
+
+Test removals must stay within the requested cleanup scope. Keep tests with a
+concrete complex-behavior or edge-case rationale; ask about uncertain removals.
+Existing release/integration gates still run at their established milestones,
+not after every straightforward change. Explicit user-requested product QA
+remains in scope.
+
 ## Verification ladder
 
-Select proof for the changed behavior before implementation. Run the smallest
+First apply the testing policy above. When tests are justified, select proof
+for the changed behavior before implementation. Run the smallest
 meaningful check first, then affected package/integration or operator-surface
 checks as the change becomes executable. Documentation-only changes use consistency,
 link and diff checks unless they alter executable behavior or a required gate.
@@ -165,7 +191,7 @@ Use supported dependency versions; do not resolve conflicts with `--force` or
 ## Review checklist
 
 - Bug fixes satisfy [root-cause repair](agents.md#root-cause-repair): the causal
-  explanation, affected workflows and regression proof agree; mitigation is not
+  explanation, affected workflows and any required regression proof agree; mitigation is not
   reported as resolution.
 - Product vocabulary matches `mvp.md`.
 - The Console/CLI/API 1:1 rule still holds for every operator-facing

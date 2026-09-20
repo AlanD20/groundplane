@@ -56,6 +56,13 @@ evidence only when it is relevant to the current task.
 
 ## Execution
 
+**Testing scope:** do not write tests for straightforward implementation. Tests
+are for complex logic, interacting actions or substantial edge cases. If uncertain,
+ask the user before writing or running tests. Follow `docs/delivery.md`'s testing
+policy and its existing release-gate boundary.
+**No static contract tests:** do not test source text, declaration shapes or
+generated schema/type inventories. Justified tests must exercise behavior.
+
 Follow `docs/agents.md`'s execution policy. The primary owns verified delivery
 to `main`; delegation is optional and bounded. Current user task instructions
 override workflow defaults and skill guidelines, subject to higher-priority

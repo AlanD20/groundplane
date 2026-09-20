@@ -63,8 +63,9 @@ Use these sections when relevant:
    required; do not invent targets to fill a template.
 4. **Technical design.** Owning modules, interfaces, data flow, state transitions
    and dependencies. Explain important choices and link to the code and schemas.
-5. **Acceptance.** Observable conditions and the tests or operator checks that
-   prove them. Map behavioral tests to stable cases in [the QA matrix](qa-matrix.md)
+5. **Acceptance.** Observable conditions; add tests or operator checks only when
+   warranted by [testing policy](delivery.md#testing-policy). Map justified
+   behavioral tests to stable cases in [the QA matrix](qa-matrix.md)
    and link per-case evidence; do not paste execution transcripts. Build success
    is a prerequisite, not feature acceptance.
 6. **Current status.** Distinguish agreed requirements, implemented behavior and

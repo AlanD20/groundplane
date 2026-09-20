@@ -3,7 +3,6 @@ package entry
 import (
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -100,62 +99,6 @@ func TestRemovalServicePreservesPlannerConflictAtRetryBound(t *testing.T) {
 		repository.inspectCalls != maximumEntryDeletionAttempts || repository.publishCalls != 0 {
 		t.Fatalf("RemoveEntry() error/calls = %v/%d/%d", err, repository.inspectCalls, repository.publishCalls)
 	}
-}
-
-// Rationale: the capability service constructor and repository seam must not
-// expose etcd DTOs; persistence translation is owned only by EtcdRepository.
-func TestRemovalCapabilityBoundaryContainsNoEtcdDTOs(t *testing.T) {
-	t.Parallel()
-	types := []reflect.Type{reflect.TypeFor[Repository](), reflect.TypeOf(NewRemovalService)}
-	for _, boundary := range types {
-		if containsEntryRemovalPersistenceType(boundary, make(map[reflect.Type]bool)) {
-			t.Fatalf("entry removal boundary exposes persistence type: %s", boundary)
-		}
-	}
-}
-
-func containsEntryRemovalPersistenceType(typ reflect.Type, seen map[reflect.Type]bool) bool {
-	if typ == nil {
-		return false
-	}
-	if typ.PkgPath() == "github.com/AlanD20/groundplane/internal/infra/etcd" {
-		return true
-	}
-	if seen[typ] {
-		return false
-	}
-	seen[typ] = true
-	switch typ.Kind() {
-	case reflect.Array, reflect.Chan, reflect.Map, reflect.Pointer, reflect.Slice:
-		if typ.Kind() == reflect.Map && containsEntryRemovalPersistenceType(typ.Key(), seen) {
-			return true
-		}
-		return containsEntryRemovalPersistenceType(typ.Elem(), seen)
-	case reflect.Func:
-		for index := 0; index < typ.NumIn(); index++ {
-			if containsEntryRemovalPersistenceType(typ.In(index), seen) {
-				return true
-			}
-		}
-		for index := 0; index < typ.NumOut(); index++ {
-			if containsEntryRemovalPersistenceType(typ.Out(index), seen) {
-				return true
-			}
-		}
-	case reflect.Interface:
-		for index := 0; index < typ.NumMethod(); index++ {
-			if containsEntryRemovalPersistenceType(typ.Method(index).Type, seen) {
-				return true
-			}
-		}
-	case reflect.Struct:
-		for index := 0; index < typ.NumField(); index++ {
-			if containsEntryRemovalPersistenceType(typ.Field(index).Type, seen) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func removalServiceTestCandidate(at time.Time) RemovalCandidate {

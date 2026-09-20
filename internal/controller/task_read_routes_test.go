@@ -387,46 +387,6 @@ func requestTaskAliasPage(
 	return page
 }
 
-// Delivery: generated Task schema vocabulary; not Task execution or public read behavior.
-// Rationale: generated clients must retain the closed type, owner and actor enums.
-func TestTaskOpenAPIConstrainsPublicJournalEnums(t *testing.T) {
-	document, err := New(nil, nil, Options{}).OpenAPIDocument()
-	if err != nil {
-		t.Fatalf("OpenAPIDocument() error = %v", err)
-	}
-	var contract struct {
-		Components struct {
-			Schemas map[string]struct {
-				Properties map[string]struct {
-					Enum []string `json:"enum"`
-				} `json:"properties"`
-			} `json:"schemas"`
-		} `json:"components"`
-	}
-	if err := json.Unmarshal(document, &contract); err != nil {
-		t.Fatalf("decode OpenAPI: %v", err)
-	}
-	properties := contract.Components.Schemas["Task"].Properties
-	assertTaskOpenAPIEnum(t, properties["type"].Enum,
-		"deploy", "rollback", "backup", "backup_prune", "restore", "attach", "detach", "run", "script",
-		"provision", "create", "update", "remove", "start", "stop", "destroy", "rotate",
-	)
-	assertTaskOpenAPIEnum(t, properties["workspace_type"].Enum, "platform", "tenant")
-	assertTaskOpenAPIEnum(t, properties["actor"].Enum, "operator", "system")
-}
-
-func assertTaskOpenAPIEnum(t *testing.T, got []string, want ...string) {
-	t.Helper()
-	if len(got) != len(want) {
-		t.Fatalf("OpenAPI enum = %v, want %v", got, want)
-	}
-	for index := range want {
-		if got[index] != want[index] {
-			t.Fatalf("OpenAPI enum = %v, want %v", got, want)
-		}
-	}
-}
-
 // QA: TASK-01, UI-03; HTTP-to-query dispatch only, not actual ownership indexes or storage isolation.
 // Rationale: each stable-id scope must reach its exact query once; conflicting
 // scopes must return validation.failed before invoking any repository query.
@@ -488,43 +448,6 @@ func TestTaskListDispatchesEveryScopeAndRejectsScopeConflicts(t *testing.T) {
 		}
 		if err := json.NewDecoder(response.Body).Decode(&problem); err != nil || problem.Code != "validation.failed" {
 			t.Fatalf("conflicting scope %q problem = %#v, %v", query, problem, err)
-		}
-	}
-}
-
-// Delivery: code-first operation/media declarations, not working Task/Activity reads or client parity.
-// Rationale: generated clients require the exact read operation identities and JSON success media type.
-func TestTaskOpenAPIContainsServingReadOperations(t *testing.T) {
-	t.Parallel()
-	document, err := New(nil, nil, Options{}).OpenAPIDocument()
-	if err != nil {
-		t.Fatalf("OpenAPIDocument() error = %v", err)
-	}
-	var contract struct {
-		Paths map[string]map[string]struct {
-			OperationID string `json:"operationId"`
-			Responses   map[string]struct {
-				Content map[string]json.RawMessage `json:"content"`
-			} `json:"responses"`
-		} `json:"paths"`
-	}
-	if err := json.Unmarshal(document, &contract); err != nil {
-		t.Fatalf("decode OpenAPI: %v", err)
-	}
-	operation := contract.Paths["/tasks/{id}"]["get"]
-	if operation.OperationID != "task.show" {
-		t.Fatalf("GET /tasks/{id} operationId = %q, want task.show", operation.OperationID)
-	}
-	if _, exists := operation.Responses["200"].Content["application/json"]; !exists {
-		t.Fatalf("task.show responses = %#v, want JSON 200", operation.Responses)
-	}
-	for path, operationID := range map[string]string{"/tasks": "task.list", "/activity": "activity.list"} {
-		operation := contract.Paths[path]["get"]
-		if operation.OperationID != operationID {
-			t.Fatalf("GET %s operationId = %q, want %s", path, operation.OperationID, operationID)
-		}
-		if _, exists := operation.Responses["200"].Content["application/json"]; !exists {
-			t.Fatalf("%s responses = %#v, want JSON 200", operationID, operation.Responses)
 		}
 	}
 }

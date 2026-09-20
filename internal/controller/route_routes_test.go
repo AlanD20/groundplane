@@ -154,40 +154,6 @@ func TestRouteHTTPBoundaryPreservesExactReadAndMutationContracts(t *testing.T) {
 	}
 }
 
-func TestRouteOpenAPIContainsCanonicalOperations(t *testing.T) {
-	// Rationale: generated Console and CLI clients depend on canonical Route
-	// operation identities rather than handwritten transport paths.
-	t.Parallel()
-	document, err := New(nil, nil, Options{}).OpenAPIDocument()
-	if err != nil {
-		t.Fatalf("OpenAPIDocument() error = %v", err)
-	}
-	var contract struct {
-		Paths map[string]map[string]struct {
-			OperationID string `json:"operationId"`
-		} `json:"paths"`
-	}
-	if err := json.Unmarshal(document, &contract); err != nil {
-		t.Fatalf("decode OpenAPI: %v", err)
-	}
-	want := []struct {
-		method      string
-		path        string
-		operationID string
-	}{
-		{method: "get", path: "/routes", operationID: "route.list"},
-		{method: "post", path: "/routes", operationID: "route.create"},
-		{method: "get", path: "/routes/{id}", operationID: "route.show"},
-		{method: "patch", path: "/routes/{id}", operationID: "route.edit"},
-		{method: "delete", path: "/routes/{id}", operationID: "route.remove"},
-	}
-	for _, operation := range want {
-		if got := contract.Paths[operation.path][operation.method].OperationID; got != operation.operationID {
-			t.Fatalf("%s %s operationId = %q, want %q", operation.method, operation.path, got, operation.operationID)
-		}
-	}
-}
-
 func routeSurfaceTestRecord() corenetwork.Route {
 	at := time.Date(2026, time.August, 22, 20, 0, 0, 0, time.UTC)
 	return corenetwork.Route{

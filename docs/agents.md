@@ -25,9 +25,9 @@ Never place deployment credentials in the repository.
 2. Locate the owning Console feature/action, CLI command, and REST endpoint.
 3. State the contract change before editing implementation files.
 4. Change the authoritative document and every mirror in the same slice.
-5. Name the earliest executable proof for the changed behavior.
-6. Run that proof as soon as the behavior can execute, then keep it green while
-   the slice evolves.
+5. Apply [testing policy](delivery.md#testing-policy) before planning tests.
+6. When testing is warranted, run the smallest relevant proof as soon as the
+   behavior can execute; straightforward implementation does not need tests.
 7. Finish with the delivery gates in `delivery.md`.
 
 A slice is complete when every changed operator-facing Controller behavior has
@@ -59,7 +59,9 @@ and resolved through the user-decision rule; passing existing code or tests is n
 evidence that a conflicting design is correct. Do not weaken validation, discard
 failure evidence or rewrite immutable history to obtain a passing result.
 
-Add a regression that fails on the cause and passes with the correction. Exercise
+Apply [testing policy](delivery.md#testing-policy): a fix does not automatically
+require a regression test. For complex behavior that warrants one, add a regression
+that fails on the cause and passes with the correction. Exercise
 the relevant operation sequence through the owning interface, including prior
 successful changes and failure/replay when they affect the result. Then verify
 the original operator-visible outcome at the appropriate verification rung.
