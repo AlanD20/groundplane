@@ -5,6 +5,7 @@ package attachplanning
 import (
 	"context"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
+	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
@@ -195,7 +196,7 @@ func clearAttachPlanSecrets(plan *agentpb.ExecutionPlan) {
 	}
 	for _, step := range plan.Steps {
 		if procedure := step.GetBackingHookProcedure(); procedure != nil {
-			controllerpkg.ClearBackingHookProcedure(procedure)
+			taskplan.ClearBackingHookProcedure(procedure)
 		}
 		procedure := step.GetAdapterProcedure()
 		if procedure == nil {

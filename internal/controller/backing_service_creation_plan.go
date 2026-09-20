@@ -123,7 +123,7 @@ func (resolver *TaskPlanResolver) PrepareBackingServiceCreationTask(
 		return etcd.TaskRecord{}, err
 	}
 	if len(preparedSteps) != 0 {
-		defer ClearBackingHookProcedure(preparedSteps[len(preparedSteps)-1].GetBackingHookProcedure())
+		defer taskplan.ClearBackingHookProcedure(preparedSteps[len(preparedSteps)-1].GetBackingHookProcedure())
 	}
 	plan, err := taskplan.Build(taskplan.BuildInput{
 		VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,

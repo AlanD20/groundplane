@@ -1,9 +1,10 @@
-package controller
+package taskcheckpoint
 
 import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	"time"
 
@@ -151,7 +152,7 @@ func ClearBackingHookPlan(plan *agentpb.ExecutionPlan) {
 		return
 	}
 	for _, step := range plan.GetSteps() {
-		ClearBackingHookProcedure(step.GetBackingHookProcedure())
+		taskplan.ClearBackingHookProcedure(step.GetBackingHookProcedure())
 	}
 }
 

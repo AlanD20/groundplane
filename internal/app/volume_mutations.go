@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
+	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
@@ -31,7 +32,7 @@ func configureVolumeMutationPlans(
 	if err != nil {
 		return nil, err
 	}
-	checkpoints, err := controller.NewVolumeRemovalCheckpointService(runtime)
+	checkpoints, err := taskcheckpoint.NewVolumeRemovalCheckpointService(runtime)
 	if err != nil {
 		return nil, err
 	}

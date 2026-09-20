@@ -210,7 +210,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 		}
 		defer func() {
 			for _, step := range steps {
-				ClearBackingHookProcedure(step.GetBackingHookProcedure())
+				taskplan.ClearBackingHookProcedure(step.GetBackingHookProcedure())
 			}
 		}()
 	}

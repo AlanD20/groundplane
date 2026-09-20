@@ -307,7 +307,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		return nil, err
 	}
 	if backingCreation.hasAfterStart {
-		defer ClearBackingHookProcedure(steps[len(steps)-1].GetBackingHookProcedure())
+		defer taskplan.ClearBackingHookProcedure(steps[len(steps)-1].GetBackingHookProcedure())
 	}
 	if stepIndex != len(task.Steps) {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task step order is invalid")

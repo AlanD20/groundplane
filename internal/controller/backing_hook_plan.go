@@ -60,7 +60,7 @@ func (resolver *TaskPlanResolver) resolveCustomAttachPlan(
 		if buildErr != nil {
 			return buildErr
 		}
-		defer ClearBackingHookProcedure(hookStep.GetBackingHookProcedure())
+		defer taskplan.ClearBackingHookProcedure(hookStep.GetBackingHookProcedure())
 		plan, buildErr = taskplan.Build(taskplan.BuildInput{
 			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
 			RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
@@ -130,17 +130,5 @@ func encodeBackingHookEvent(event backinghook.Event) (agentpb.BackingHookEvent, 
 		return agentpb.BackingHookEvent_BACKING_HOOK_EVENT_AFTER_START, true
 	default:
 		return 0, false
-	}
-}
-
-func ClearBackingHookProcedure(procedure *agentpb.BackingHookProcedure) {
-	if procedure == nil {
-		return
-	}
-	for _, value := range append(procedure.Inputs, procedure.Facts...) {
-		if value != nil {
-			clear(value.Value)
-			value.Value = nil
-		}
 	}
 }

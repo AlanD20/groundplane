@@ -11,6 +11,7 @@ import (
 	handlers "github.com/AlanD20/groundplane/internal/controller/handlers"
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
+	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"log/slog"
 	"os"
@@ -419,7 +420,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Backup checkpoint service: %w", err)
 	}
-	scriptCheckpoints, err := controller.NewScriptCheckpointService(scriptRecords)
+	scriptCheckpoints, err := taskcheckpoint.NewScriptCheckpointService(scriptRecords)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Script checkpoint service: %w", err)
@@ -475,7 +476,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup plan resolver: %w", err)
 	}
-	backingHookCheckpoints, err := controller.NewBackingHookCheckpointService(
+	backingHookCheckpoints, err := taskcheckpoint.NewBackingHookCheckpointService(
 		tasks, planResolver, attachRecords, attachFactValues,
 	)
 	if err != nil {
