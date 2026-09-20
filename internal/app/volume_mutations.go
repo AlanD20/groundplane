@@ -5,10 +5,10 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+	"github.com/AlanD20/groundplane/internal/controller/volume"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/volumeremoval"
-	"github.com/AlanD20/groundplane/internal/volume"
 )
 
 type volumeEvidenceStore interface {

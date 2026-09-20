@@ -52,6 +52,7 @@ import (
 	serviceoperations "github.com/AlanD20/groundplane/internal/controller/services"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	taskoperations "github.com/AlanD20/groundplane/internal/controller/tasks"
+	"github.com/AlanD20/groundplane/internal/controller/volume"
 	ageinfra "github.com/AlanD20/groundplane/internal/infra/age"
 	controllerconfigstore "github.com/AlanD20/groundplane/internal/infra/controllerconfig"
 	"github.com/AlanD20/groundplane/internal/infra/docker/etcdcontainer"
@@ -61,7 +62,6 @@ import (
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
 	"github.com/AlanD20/groundplane/internal/infra/hostresolution"
-	"github.com/AlanD20/groundplane/internal/volume"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
