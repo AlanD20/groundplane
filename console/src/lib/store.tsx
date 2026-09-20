@@ -36,7 +36,6 @@ import {
 import {
   controllerUpdateRejected,
   isTaskNotFoundError,
-  controllerResponseError,
 } from "./controller-request-errors";
 import { applyServiceObservations } from "@/features/service/service-observation";
 import {
@@ -97,9 +96,9 @@ import type {
   ManagedConfigFile,
 } from "./types";
 import {
-  createBlueprintMultipartBody,
-  type BlueprintApplyRequest,
-} from "./blueprint-bundle";
+  createBlueprintActions,
+  type BlueprintActions,
+} from "@/features/blueprint/api";
 import {
   adapters as seedAdapters,
   platform as seedPlatform,
@@ -288,12 +287,6 @@ type ConnectorCreateRequest =
   operations["connector.create"]["requestBody"]["content"]["application/json"];
 type ConnectorTaskAccepted =
   operations["connector.remove"]["responses"][202]["content"]["application/json"];
-export type BlueprintDocumentResponse =
-  operations["blueprint.show"]["responses"][200]["content"]["application/json"];
-export type BlueprintValidationResponse =
-  operations["blueprint.validate"]["responses"][200]["content"]["application/json"];
-type BlueprintTaskAccepted =
-  operations["blueprint.apply"]["responses"][202]["content"]["application/json"];
 type AgentTaskAccepted =
   operations["agent.join"]["responses"][202]["content"]["application/json"];
 type AgentConfigResponse =
@@ -1213,6 +1206,7 @@ function seed(): State {
 }
 
 type StoreContext = State &
+  BlueprintActions &
   ReusableSecretActions &
   ReturnType<typeof useControllerPlatform> &
   ReturnType<typeof useBackupStore> & {
@@ -1352,17 +1346,6 @@ type StoreContext = State &
       onEvent: (event: TaskEventResponse) => void,
       onMalformed: (message: string) => void,
     ) => () => void;
-    getBlueprint: (envId: string) => Promise<BlueprintDocumentResponse>;
-    validateBlueprint: (
-      envId: string,
-      request: BlueprintApplyRequest,
-      expectedRevision: string,
-    ) => Promise<BlueprintValidationResponse>;
-    applyBlueprint: (
-      envId: string,
-      request: BlueprintApplyRequest,
-      expectedRevision?: string,
-    ) => Promise<BlueprintTaskAccepted>;
     deleteEnvironment: (envId: string) => Promise<string>;
     addZone: (
       envId: string,
@@ -3053,52 +3036,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         if (accepted.task_id !== taskId)
           throw new Error("Task abort returned a different Task id");
       },
-      getBlueprint: async (envId) =>
-        controllerRequest<BlueprintDocumentResponse>(
-          `/environments/${encodeURIComponent(envId)}/blueprint`,
-          200,
-        ),
-      validateBlueprint: async (envId, request, expectedRevision) => {
-        const path = `/environments/${encodeURIComponent(envId)}/blueprint/validate`;
-        const multipart = await createBlueprintMultipartBody(request);
-        const response = await fetch(`/api/v1${path}`, {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": multipart.contentType,
-            "If-Match": `"${expectedRevision}"`,
-          },
-          body: multipart.body,
-        });
-        if (response.status !== 200)
-          throw await controllerResponseError(response, "POST", path);
-        return (await response.json()) as BlueprintValidationResponse;
-      },
-      applyBlueprint: async (envId, request, expectedRevision) => {
-        assertEnvironmentMutable(envId, "desired-state apply");
-        const path = `/environments/${encodeURIComponent(envId)}/blueprint`;
-        const revision =
-          expectedRevision ??
-          (await controllerRequest<BlueprintDocumentResponse>(path, 200))
-            .revision;
-        const multipart = await createBlueprintMultipartBody(request);
-        const response = await fetch(`/api/v1${path}`, {
-          method: "PUT",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": multipart.contentType,
-            "If-Match": `"${revision}"`,
-            "Idempotency-Key": newULID(),
-          },
-          body: multipart.body,
-        });
-        if (response.status !== 202)
-          throw await controllerResponseError(response, "PUT", path);
-        const accepted = (await response.json()) as BlueprintTaskAccepted;
-        if (!accepted.task_id)
-          throw new Error("Controller response is missing task_id");
-        return accepted;
-      },
+      ...createBlueprintActions(assertEnvironmentMutable),
       deleteEnvironment: async (envId) => {
         if (!isEnvironmentDeletionPending(envId))
           assertEnvironmentMutable(envId, "Environment deletion");
