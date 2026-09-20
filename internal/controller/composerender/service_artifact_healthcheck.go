@@ -1,26 +1,25 @@
-package taskplanning
+package composerender
 
 import (
-	"strconv"
-	"strings"
-
 	"github.com/AlanD20/groundplane/internal/core"
 	"gopkg.in/yaml.v3"
+	"strconv"
+	"strings"
 )
 
 func serviceNodeHasHealthcheck(service *yaml.Node) bool {
-	index := mappingIndex(service, "healthcheck")
+	index := MappingIndex(service, "healthcheck")
 	if index < 0 || service.Content[index+1].Kind != yaml.MappingNode {
 		return false
 	}
 	health := service.Content[index+1]
-	if disabled := mappingIndex(health, "disable"); disabled >= 0 {
+	if disabled := MappingIndex(health, "disable"); disabled >= 0 {
 		var value bool
 		if health.Content[disabled+1].Decode(&value) != nil || value {
 			return false
 		}
 	}
-	if test := mappingIndex(health, "test"); test >= 0 {
+	if test := MappingIndex(health, "test"); test >= 0 {
 		value := health.Content[test+1]
 		return value.Kind != yaml.SequenceNode || len(value.Content) == 0 || value.Content[0].Value != "NONE"
 	}
@@ -79,7 +78,7 @@ func equalHealthcheckNodes(left, right *yaml.Node) bool {
 	}
 	if left.Kind == yaml.MappingNode {
 		for index := 0; index < len(left.Content); index += 2 {
-			other := mappingIndex(right, left.Content[index].Value)
+			other := MappingIndex(right, left.Content[index].Value)
 			if other < 0 || !equalHealthcheckNodes(left.Content[index+1], right.Content[other+1]) {
 				return false
 			}
@@ -108,16 +107,16 @@ func serviceHealthcheckNode(health core.Healthcheck) *yaml.Node {
 	}
 	test := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 	test.Content = append(test.Content, scalarNode("CMD-SHELL"), scalarNode(command))
-	appendMappingValue(node, "test", test)
+	AppendMappingValue(node, "test", test)
 	for _, field := range []struct{ key, value string }{
 		{"interval", health.Interval}, {"timeout", health.Timeout}, {"start_period", health.StartPeriod},
 	} {
 		if field.value != "" {
-			appendMappingValue(node, field.key, scalarNode(field.value))
+			AppendMappingValue(node, field.key, scalarNode(field.value))
 		}
 	}
 	if health.Retries != 0 {
-		appendMappingValue(
+		AppendMappingValue(
 			node,
 			"retries",
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: strconv.Itoa(health.Retries)},

@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"context"
 	"encoding/hex"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -50,7 +51,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	}
 	first := input.Members[0].Render
 	images := make(map[string]domain.WorkloadSeal, len(input.Members))
-	labels := make(map[string]ComposeReleaseIdentity, len(input.Members))
+	labels := make(map[string]composerender.ComposeReleaseIdentity, len(input.Members))
 	serviceIDs := make([]string, len(input.Members))
 	for index, member := range input.Members {
 		if member.Render.PlanID != task.PlanID || member.Render.ArtifactID != first.ArtifactID ||
@@ -62,7 +63,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 			)
 		}
 		images[member.Render.ServiceName] = member.Render.CandidateWorkload
-		labels[member.Render.ServiceID] = ComposeReleaseIdentity{
+		labels[member.Render.ServiceID] = composerender.ComposeReleaseIdentity{
 			ProxyImage: member.Render.ProxyImage,
 			ReleaseID:  member.Intent.ID, Target: member.Render.CandidateTarget,
 			Image: member.Render.CandidateWorkload.LocalImageID, ServingReleaseID: member.Intent.ID,
@@ -380,7 +381,7 @@ func bindBlueprintCandidateServiceImages(
 		}
 		releaseID := ""
 		for _, label := range service.GetExpectedLabels() {
-			if label.GetKey() == composeLabelReleaseID {
+			if label.GetKey() == composerender.ComposeLabelReleaseID {
 				releaseID = label.GetValue()
 				break
 			}

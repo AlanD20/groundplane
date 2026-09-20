@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -174,9 +175,9 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	candidate, _, err := taskplanning.ProjectEnvironmentEntryMutation(
+	candidate, _, err := composerender.ProjectEnvironmentEntryMutation(
 		runtime.Projection,
-		taskplanning.EnvironmentEntryArtifactMutation{
+		composerender.EnvironmentEntryArtifactMutation{
 			RevisionID: candidateTaskID, ArtifactID: entryStableIDFromRevision(ids.KindConfig, candidateTaskID),
 			PlanID: entryStableIDFromRevision(ids.KindPlan, candidateTaskID), RenderGeneration: generation,
 			Entries: replaceProjectedEntry(current.Record.Entries, previous, candidateRecord),
@@ -210,9 +211,9 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		}
 	}
 	entries := replaceProjectedEntry(current.Record.Entries, previous, candidateRecord)
-	candidate, materializations, err := taskplanning.ProjectEnvironmentEntryMutation(
+	candidate, materializations, err := composerender.ProjectEnvironmentEntryMutation(
 		runtime.Projection,
-		taskplanning.EnvironmentEntryArtifactMutation{
+		composerender.EnvironmentEntryArtifactMutation{
 			RevisionID: claim.RevisionID, ArtifactID: entryStableIDFromRevision(ids.KindConfig, claim.RevisionID),
 			PlanID: entryStableIDFromRevision(ids.KindPlan, claim.RevisionID), RenderGeneration: generation,
 			Entries: entries,

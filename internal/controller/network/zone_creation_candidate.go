@@ -1,12 +1,13 @@
 package network
 
 import (
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -50,12 +51,12 @@ func buildZoneCreationProjection(
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(current.ComposeArtifact, artifact); err != nil {
 		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Zone baseline artifact is corrupt")
 	}
-	addition := taskplanning.ZoneArtifactAddition{
+	addition := composerender.ZoneArtifactAddition{
 		Zone: zone.Desired, ProjectID: project.ID, TenantID: project.TenantID,
 		ArtifactID: zoneStableIDFromRevision(ids.KindConfig, revisionID),
 		PlanID:     zoneStableIDFromRevision(ids.KindPlan, revisionID), RenderGeneration: generation,
 	}
-	mutated, err := taskplanning.AddEnvironmentZoneArtifact(artifact, addition)
+	mutated, err := composerender.AddEnvironmentZoneArtifact(artifact, addition)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
@@ -63,11 +64,11 @@ func buildZoneCreationProjection(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, errs.Wrap(errs.KindInternal, err)
 	}
-	normalized, err := taskplanning.NormalizedEnvironmentArtifact(current)
+	normalized, err := composerender.NormalizedEnvironmentArtifact(current)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
-	normalized, err = taskplanning.AddEnvironmentZoneArtifact(normalized, addition)
+	normalized, err = composerender.AddEnvironmentZoneArtifact(normalized, addition)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}

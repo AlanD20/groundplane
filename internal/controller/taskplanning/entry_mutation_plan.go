@@ -3,6 +3,7 @@ package taskplanning
 import (
 	"context"
 	"encoding/hex"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -183,8 +184,8 @@ func buildEntryMutationPlan(
 	}
 	// The sealed candidate owns the captured serving runtime. The older desired
 	// revision supplies only the previous Entry decorations, not live slot choice.
-	oldArtifact, err = mutateEnvironmentEntryArtifact(newArtifact, candidate,
-		EnvironmentEntryArtifactMutation{ArtifactID: oldArtifact.ArtifactId, Entries: baseline.Entries})
+	oldArtifact, err = composerender.MutateEnvironmentEntryArtifact(newArtifact, candidate,
+		composerender.EnvironmentEntryArtifactMutation{ArtifactID: oldArtifact.ArtifactId, Entries: baseline.Entries})
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +288,7 @@ func entryMutationConsumerIDs(
 	if len(previous) != 0 {
 		return nil, errs.New(errs.KindInternal, "Entry reconciliation cannot remove an Entry")
 	}
-	identities, err := ComposeIdentitySnapshotFromProjection(candidate)
+	identities, err := composerender.ComposeIdentitySnapshotFromProjection(candidate)
 	if err != nil {
 		return nil, err
 	}

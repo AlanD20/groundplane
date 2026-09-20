@@ -1,4 +1,4 @@
-package taskplanning
+package composerender
 
 import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -6,7 +6,7 @@ import (
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
-func applySealedWorkload(service *composetypes.ServiceConfig, seal domain.WorkloadSeal) error {
+func ApplySealedWorkload(service *composetypes.ServiceConfig, seal domain.WorkloadSeal) error {
 	if err := domain.ValidateWorkloadSeal(seal); err != nil {
 		return err
 	}

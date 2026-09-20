@@ -2,6 +2,7 @@ package taskplanning
 
 import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -31,6 +32,6 @@ func onlyVolumeSlugExtension(extensions map[string]any) bool {
 	if len(extensions) == 0 {
 		return true
 	}
-	_, exists := extensions[composeVolumeSlugExtension]
+	_, exists := extensions[composerender.ComposeVolumeSlugExtension]
 	return exists && len(extensions) == 1
 }

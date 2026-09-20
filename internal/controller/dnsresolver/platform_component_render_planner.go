@@ -3,6 +3,7 @@ package dnsresolver
 import (
 	"context"
 	"encoding/hex"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -15,7 +16,7 @@ import (
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/common/environmentpath"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -321,8 +322,8 @@ func (planner *PlatformRenderPlanner) prepareConfigTask(
 		ownershipGeneration = observation.Record.OwnershipGeneration
 		composeArtifactID = observation.Record.ComposeArtifactID
 	}
-	composeArtifact, err := taskplanning.RenderPlatformComponentCompose(
-		taskplanning.PlatformComponentComposeInput{
+	composeArtifact, err := composerender.RenderPlatformComponentCompose(
+		composerender.PlatformComponentComposeInput{
 			ComponentID: desired.ID, PlanID: ownershipPlanID, RenderGeneration: ownershipGeneration,
 			ArtifactID: composeArtifactID, Plan: selectedPlan,
 			ImageRepository: image.Repository, ImageIndexDigest: image.IndexDigest,

@@ -1,6 +1,7 @@
 package taskplanning
 
 import (
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"sort"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -38,5 +39,5 @@ func retainBlueprintUnselectedRuntime(
 		serviceIDs = append(serviceIDs, serviceID)
 	}
 	sort.Strings(serviceIDs)
-	return RetainBlueprintNativeRuntime(artifact, prior, serviceIDs)
+	return composerender.RetainBlueprintNativeRuntime(artifact, prior, serviceIDs)
 }

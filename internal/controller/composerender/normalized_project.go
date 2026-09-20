@@ -1,10 +1,8 @@
-package taskplanning
+package composerender
 
 import (
 	"context"
 	"crypto/sha256"
-	"strings"
-
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -14,6 +12,7 @@ import (
 	"github.com/compose-spec/compose-go/v2/loader"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
+	"strings"
 )
 
 // LoadNormalizedEnvironmentProject reconstructs the immutable authored Compose
@@ -174,7 +173,7 @@ func loadNormalizedEnvironmentProject(
 			if volume.Extensions == nil {
 				volume.Extensions = make(composetypes.Extensions)
 			}
-			volume.Extensions[composeVolumeSlugExtension] = identity.Slug
+			volume.Extensions[ComposeVolumeSlugExtension] = identity.Slug
 		}
 		project.Volumes[name] = volume
 	}
@@ -203,7 +202,7 @@ func stripControllerLabels(labels composetypes.Labels) {
 	}
 }
 
-func applyProjectedServiceDependencyPhase(
+func ApplyProjectedServiceDependencyPhase(
 	project *composetypes.Project,
 	plans core.ServiceDependencyPlans,
 	phase core.ServiceLifecyclePhase,

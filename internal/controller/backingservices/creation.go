@@ -7,6 +7,7 @@ import (
 	"errors"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -305,7 +306,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		Entries: entryDesired, CreatedAt: environment.CreatedAt,
 	}
 	baseProject := backingComposeProject(spec, serviceID, zone.Desired, volume, environment)
-	componentProjection, err := taskplanning.ProjectEnvironmentComponents(
+	componentProjection, err := composerender.ProjectEnvironmentComponents(
 		baseProject,
 		environmentProjection,
 		service.componentCatalog,
@@ -323,9 +324,9 @@ func (service *CreationService) createBackingServiceFromStage(
 	identities.Services = append(identities.Services, componentProjection.Services...)
 	planID := allocator.Named(ids.KindPlan, "execution-plan")
 	artifactID := allocator.Named(ids.KindConfig, "compose-artifact")
-	artifact, err := taskplanning.RenderCompose(taskplanning.ComposeRenderInput{
+	artifact, err := composerender.RenderCompose(composerender.ComposeRenderInput{
 		Project: componentProjection.Project, ArtifactID: artifactID,
-		ProjectOwnerKind: taskplanning.ComposeProjectOwnerBacking,
+		ProjectOwnerKind: composerender.ComposeProjectOwnerBacking,
 		ProjectID:        project.ID, EnvironmentID: environment.ID, PlanID: planID,
 		RenderGeneration: 1, AuthorizedVolumeDir: environment.VolumeDir, Identities: identities,
 	})
@@ -414,7 +415,7 @@ func (service *CreationService) createBackingServiceFromStage(
 			{ServiceID: serviceID, VolumeID: volumeID, Target: spec.MountPath},
 		}
 	}
-	normalizedCompose, err := taskplanning.MarshalNormalizedEnvironmentProject(baseProject)
+	normalizedCompose, err := composerender.MarshalNormalizedEnvironmentProject(baseProject)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}

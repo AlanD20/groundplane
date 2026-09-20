@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"maps"
 	"sort"
 	"strings"
@@ -35,7 +36,7 @@ func ProjectAttachNetworks(
 		return nil, errs.New(errs.KindInternal, "Attach network projection input is invalid")
 	}
 	removeManagedAttachNetworks(project)
-	identities, err := ComposeIdentitySnapshotFromProjection(projection)
+	identities, err := composerender.ComposeIdentitySnapshotFromProjection(projection)
 	if err != nil {
 		return nil, err
 	}

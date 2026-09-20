@@ -2,6 +2,7 @@ package taskplanning
 
 import (
 	"context"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 
@@ -107,7 +108,7 @@ func (resolver *TaskPlanResolver) resolveComponentFileFromProjection(
 	}
 	// The upload is an audit input, not the complete retained topology. Use
 	// the same pinned normalized desired revision as runtime artifact replay.
-	normalized, err := loadNormalizedEnvironmentProject(ctx, projection)
+	normalized, err := composerender.LoadNormalizedEnvironmentProject(ctx, projection)
 	if err != nil {
 		return nil, err
 	}

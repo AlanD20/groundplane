@@ -2,6 +2,7 @@ package taskplanning
 
 import (
 	"context"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -32,7 +33,7 @@ func RetainBlueprintNativeRuntimeSources(
 	combined := proto.CloneOf(current)
 	combined.Services, combined.Networks, combined.Volumes = nil, nil, nil
 	root := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	services := ensureMappingValue(root, "services")
+	services := composerender.EnsureMappingValue(root, "services")
 	for _, source := range sources {
 		if source == nil || source.OwnerKind != current.OwnerKind || source.OwnerId != current.OwnerId ||
 			source.ProjectName != current.ProjectName ||
@@ -44,17 +45,17 @@ func RetainBlueprintNativeRuntimeSources(
 			document.Content[0].Kind != yaml.MappingNode {
 			return nil, errs.New(errs.KindValidationFailed, "Blueprint retained source YAML is invalid")
 		}
-		mapping, err := serviceArtifactMapping(document.Content[0])
+		mapping, err := composerender.ServiceArtifactMapping(document.Content[0])
 		if err != nil {
 			return nil, err
 		}
 		references := make(map[string]map[string]bool)
 		for _, service := range source.Services {
-			index := mappingIndex(mapping, service.ComposeName)
+			index := composerender.MappingIndex(mapping, service.ComposeName)
 			if service.OwnerComponentId != "" ||
 				service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED ||
 				index < 0 ||
-				mappingIndex(services, service.ComposeName) >= 0 {
+				composerender.MappingIndex(services, service.ComposeName) >= 0 {
 				return nil, errs.New(
 					errs.KindStateConflict,
 					"Blueprint retained physical member is duplicated or invalid",
@@ -66,14 +67,14 @@ func RetainBlueprintNativeRuntimeSources(
 					return nil, errs.New(errs.KindStateConflict, "Blueprint retained physical role is duplicated")
 				}
 			}
-			appendMappingValue(services, service.ComposeName, mapping.Content[index+1])
-			if err := retainedServiceResourceReferences(mapping.Content[index+1], references); err != nil {
+			composerender.AppendMappingValue(services, service.ComposeName, mapping.Content[index+1])
+			if err := composerender.RetainedServiceResourceReferences(mapping.Content[index+1], references); err != nil {
 				return nil, err
 			}
 			combined.Services = append(combined.Services, proto.CloneOf(service))
 		}
 		for _, section := range []string{"networks", "volumes", "configs", "secrets"} {
-			index := mappingIndex(document.Content[0], section)
+			index := composerender.MappingIndex(document.Content[0], section)
 			if index < 0 {
 				continue
 			}
@@ -81,18 +82,18 @@ func RetainBlueprintNativeRuntimeSources(
 			if prior.Kind != yaml.MappingNode {
 				return nil, errs.New(errs.KindValidationFailed, "Blueprint retained resource is invalid")
 			}
-			next := ensureMappingValue(root, section)
+			next := composerender.EnsureMappingValue(root, section)
 			for entry := 0; entry < len(prior.Content); entry += 2 {
 				name, value := prior.Content[entry].Value, prior.Content[entry+1]
 				if !references[section][name] {
 					continue
 				}
-				existing := mappingIndex(next, name)
+				existing := composerender.MappingIndex(next, name)
 				if existing < 0 {
-					appendMappingValue(next, name, value)
+					composerender.AppendMappingValue(next, name, value)
 					continue
 				}
-				if !sameComponentRuntimeNode(value, next.Content[existing+1]) {
+				if !composerender.SameComponentRuntimeNode(value, next.Content[existing+1]) {
 					return nil, errs.New(errs.KindStateConflict, "Blueprint retained resource sources disagree")
 				}
 			}
@@ -105,5 +106,5 @@ func RetainBlueprintNativeRuntimeSources(
 	if err != nil {
 		return nil, errs.Wrap(errs.KindInternal, err)
 	}
-	return RetainBlueprintNativeRuntime(current, combined, serviceIDs)
+	return composerender.RetainBlueprintNativeRuntime(current, combined, serviceIDs)
 }

@@ -1,16 +1,15 @@
-package taskplanning
+package composerender
 
 import (
 	"bytes"
 	"crypto/sha256"
-	"strconv"
-
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
+	"strconv"
 )
 
 // RetainEnvironmentComponentRuntime retains equivalent effective Component
@@ -44,11 +43,11 @@ func RetainEnvironmentComponentRuntime(
 	if err != nil {
 		return nil, err
 	}
-	nextServices, err := serviceArtifactMapping(nextRoot)
+	nextServices, err := ServiceArtifactMapping(nextRoot)
 	if err != nil {
 		return nil, err
 	}
-	priorServices, err := serviceArtifactMapping(priorRoot)
+	priorServices, err := ServiceArtifactMapping(priorRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +93,7 @@ func RetainEnvironmentComponentRuntime(
 			continue
 		}
 		owned.Services[index] = proto.CloneOf(selected)
-		nextServices.Content[mappingIndex(nextServices, service.ComposeName)+1] = priorNode
+		nextServices.Content[MappingIndex(nextServices, service.ComposeName)+1] = priorNode
 		changed = true
 	}
 	if !changed {
@@ -111,14 +110,14 @@ func RetainEnvironmentComponentRuntime(
 
 func sameComponentRuntimeResources(service, current, prior *yaml.Node) (bool, error) {
 	references := make(map[string]map[string]bool)
-	if err := retainedServiceResourceReferences(service, references); err != nil {
+	if err := RetainedServiceResourceReferences(service, references); err != nil {
 		return false, err
 	}
 	for section, names := range references {
 		for name := range names {
 			next := componentRetentionValue(componentRetentionValue(current, section), name)
 			previous := componentRetentionValue(componentRetentionValue(prior, section), name)
-			if next == nil || previous == nil || !sameComponentRuntimeNode(next, previous) {
+			if next == nil || previous == nil || !SameComponentRuntimeNode(next, previous) {
 				return false, nil
 			}
 		}
@@ -140,7 +139,7 @@ func componentRetentionValue(mapping *yaml.Node, key string) *yaml.Node {
 	if mapping == nil || mapping.Kind != yaml.MappingNode {
 		return nil
 	}
-	index := mappingIndex(mapping, key)
+	index := MappingIndex(mapping, key)
 	if index < 0 {
 		return nil
 	}
@@ -197,13 +196,13 @@ func sameComponentRuntimeService(next, prior *yaml.Node, current, previous *agen
 		[]*yaml.Node(nil),
 		nextContent...)
 	for _, key := range []string{composeLabelPlanID, composeLabelRenderGen} {
-		removeMappingValue(priorLabels, key)
-		removeMappingValue(nextLabels, key)
+		RemoveMappingValue(priorLabels, key)
+		RemoveMappingValue(nextLabels, key)
 	}
-	return sameComponentRuntimeNode(next, prior), nil
+	return SameComponentRuntimeNode(next, prior), nil
 }
 
-func sameComponentRuntimeNode(left, right *yaml.Node) bool {
+func SameComponentRuntimeNode(left, right *yaml.Node) bool {
 	if left == nil || right == nil {
 		return left == right
 	}

@@ -1,17 +1,16 @@
-package taskplanning
+package composerender
 
 import (
 	"fmt"
-	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
-	"slices"
-	"sort"
-	"strings"
-
 	"github.com/AlanD20/groundplane/internal/common/serviceproxy"
+	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
+	"slices"
+	"sort"
+	"strings"
 )
 
 const (
@@ -332,8 +331,8 @@ func composeServiceRuntimeLabels(
 		expected = append(expected, &agentpb.LabelPair{Key: composeLabelSlot, Value: slot})
 	}
 	if releaseID != "" {
-		labels[composeLabelReleaseID] = releaseID
-		expected = append(expected, &agentpb.LabelPair{Key: composeLabelReleaseID, Value: releaseID})
+		labels[ComposeLabelReleaseID] = releaseID
+		expected = append(expected, &agentpb.LabelPair{Key: ComposeLabelReleaseID, Value: releaseID})
 	}
 	sort.Slice(expected, func(i, j int) bool { return expected[i].Key < expected[j].Key })
 	return labels, expected, nil

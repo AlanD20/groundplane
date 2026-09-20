@@ -1,9 +1,7 @@
-package taskplanning
+package composerender
 
 import (
 	"crypto/sha256"
-	"sort"
-
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
@@ -12,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
+	"sort"
 )
 
 // ZoneArtifactMutation identifies one authored Environment network to remove
@@ -61,11 +60,11 @@ func AddEnvironmentZoneArtifact(
 		return nil, errs.New(errs.KindInternal, "normalized Compose artifact YAML is corrupt")
 	}
 	root := document.Content[0]
-	networks := ensureMappingValue(root, "networks")
+	networks := EnsureMappingValue(root, "networks")
 	if networks == nil {
 		return nil, errs.New(errs.KindInternal, "normalized Compose network mapping is corrupt")
 	}
-	if mappingIndex(networks, addition.Zone.Name) >= 0 {
+	if MappingIndex(networks, addition.Zone.Name) >= 0 {
 		return nil, errs.New(errs.KindStateConflict, "Zone network already exists in the current desired revision")
 	}
 	for _, network := range owned.GetNetworks() {
@@ -78,7 +77,7 @@ func AddEnvironmentZoneArtifact(
 		}
 	}
 
-	network := ensureMappingValue(networks, addition.Zone.Name)
+	network := EnsureMappingValue(networks, addition.Zone.Name)
 	if network == nil {
 		return nil, errs.New(errs.KindInternal, "normalized Compose Zone network is corrupt")
 	}
@@ -95,21 +94,21 @@ func AddEnvironmentZoneArtifact(
 		setMappingTypedScalar(network, "internal", "!!bool", "true")
 	}
 	config := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(config, "subnet", scalarNode(addition.Zone.Subnet))
+	AppendMappingValue(config, "subnet", scalarNode(addition.Zone.Subnet))
 	setMappingNode(network, "ipam", &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: []*yaml.Node{
 		scalarNode("config"), {Kind: yaml.SequenceNode, Tag: "!!seq", Content: []*yaml.Node{config}},
 	}})
 	labelNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	for _, key := range sortedStringKeys(labels) {
-		appendMappingValue(labelNode, key, scalarNode(labels[key]))
+		AppendMappingValue(labelNode, key, scalarNode(labels[key]))
 	}
 	setMappingNode(network, "labels", labelNode)
 	resource := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(resource, "kind", scalarNode("network"))
-	appendMappingValue(resource, "id", scalarNode(addition.Zone.ID))
+	AppendMappingValue(resource, "kind", scalarNode("network"))
+	AppendMappingValue(resource, "id", scalarNode(addition.Zone.ID))
 	parent := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(parent, "environment_id", scalarNode(current.GetOwnerId()))
-	appendMappingValue(resource, "parent", parent)
+	AppendMappingValue(parent, "environment_id", scalarNode(current.GetOwnerId()))
+	AppendMappingValue(resource, "parent", parent)
 	setMappingNode(network, composeResourceExtension, resource)
 	sortMapping(network)
 	sortMapping(networks)
@@ -164,12 +163,12 @@ func MutateEnvironmentZoneArtifact(
 		return nil, errs.New(errs.KindInternal, "normalized Compose artifact YAML is corrupt")
 	}
 	root := document.Content[0]
-	networksIndex := mappingIndex(root, "networks")
+	networksIndex := MappingIndex(root, "networks")
 	if networksIndex < 0 || root.Content[networksIndex+1].Kind != yaml.MappingNode {
 		return nil, errs.New(errs.KindStateConflict, "Zone network is absent from the current desired revision")
 	}
 	networks := root.Content[networksIndex+1]
-	zoneIndex := mappingIndex(networks, mutation.ZoneName)
+	zoneIndex := MappingIndex(networks, mutation.ZoneName)
 	metadataIndex := -1
 	for index, network := range owned.GetNetworks() {
 		if network != nil && network.GetNetworkId() == mutation.ZoneID &&
@@ -186,7 +185,7 @@ func MutateEnvironmentZoneArtifact(
 	networks.Content = append(networks.Content[:zoneIndex], networks.Content[zoneIndex+2:]...)
 	owned.Networks = append(owned.Networks[:metadataIndex], owned.Networks[metadataIndex+1:]...)
 
-	servicesIndex := mappingIndex(root, "services")
+	servicesIndex := MappingIndex(root, "services")
 	if servicesIndex >= 0 {
 		services := root.Content[servicesIndex+1]
 		if services.Kind != yaml.MappingNode {
@@ -229,14 +228,14 @@ func MutateEnvironmentZoneArtifact(
 }
 
 func removeZoneFromServiceNetworks(service *yaml.Node, zoneName string) error {
-	index := mappingIndex(service, "networks")
+	index := MappingIndex(service, "networks")
 	if index < 0 {
 		return nil
 	}
 	networks := service.Content[index+1]
 	switch networks.Kind {
 	case yaml.MappingNode:
-		removeMappingValue(networks, zoneName)
+		RemoveMappingValue(networks, zoneName)
 	case yaml.SequenceNode:
 		for item := 0; item < len(networks.Content); item++ {
 			if networks.Content[item].Kind == yaml.ScalarNode && networks.Content[item].Value == zoneName {
@@ -248,7 +247,7 @@ func removeZoneFromServiceNetworks(service *yaml.Node, zoneName string) error {
 		return errs.New(errs.KindInternal, "normalized Compose Service networks are corrupt")
 	}
 	if len(networks.Content) == 0 {
-		removeMappingValue(service, "networks")
+		RemoveMappingValue(service, "networks")
 	}
 	return nil
 }

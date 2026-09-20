@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/entry"
 	entryoperations "github.com/AlanD20/groundplane/internal/controller/entry/operations"
@@ -238,7 +239,7 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	normalizedCompose, err := taskplanning.MarshalNormalizedEnvironmentProject(parsed.Project)
+	normalizedCompose, err := composerender.MarshalNormalizedEnvironmentProject(parsed.Project)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -400,7 +401,7 @@ func (service *Service) applyBlueprintOnce(
 		effectiveComponents,
 		reconciledEntries.Current,
 	)
-	componentProjection, err := taskplanning.ProjectEnvironmentComponents(
+	componentProjection, err := composerender.ProjectEnvironmentComponents(
 		parsed.Project,
 		componentEnvironment,
 		service.componentCatalog,
@@ -409,7 +410,7 @@ func (service *Service) applyBlueprintOnce(
 		return etcd.IdempotencyResponse{}, err
 	}
 	renderIdentities := environmentComponentComposeIdentities(changes.Current, componentProjection.Services)
-	entryProjection, err := taskplanning.ProjectEnvironmentEntries(
+	entryProjection, err := composerender.ProjectEnvironmentEntries(
 		componentProjection.Project,
 		environmentID,
 		environment.Record.VolumeDir,
@@ -440,9 +441,9 @@ func (service *Service) applyBlueprintOnce(
 	}
 	planID := allocator.Named(ids.KindPlan, "execution-plan")
 	artifactID := allocator.Named(ids.KindConfig, "compose-artifact")
-	artifact, err := taskplanning.RenderCompose(taskplanning.ComposeRenderInput{
+	artifact, err := composerender.RenderCompose(composerender.ComposeRenderInput{
 		Project: componentProjection.Project, ArtifactID: artifactID,
-		ProjectOwnerKind: taskplanning.ComposeProjectOwnerTenant,
+		ProjectOwnerKind: composerender.ComposeProjectOwnerTenant,
 		TenantID:         tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environmentID,
 		PlanID: planID, RenderGeneration: generation, AuthorizedVolumeDir: environment.Record.VolumeDir,
 		Identities: renderIdentities, ExternalNetworks: externalNetworks,

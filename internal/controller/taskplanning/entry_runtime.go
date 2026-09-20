@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"strings"
@@ -109,8 +110,8 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 			return EntryMutationRuntime{}, err
 		}
 	}
-	baseline, err = mutateEnvironmentEntryArtifact(baseline, current.Record,
-		EnvironmentEntryArtifactMutation{ArtifactID: baseline.ArtifactId, Entries: current.Record.Entries})
+	baseline, err = composerender.MutateEnvironmentEntryArtifact(baseline, current.Record,
+		composerender.EnvironmentEntryArtifactMutation{ArtifactID: baseline.ArtifactId, Entries: current.Record.Entries})
 	if err != nil {
 		return EntryMutationRuntime{}, err
 	}
@@ -144,7 +145,7 @@ func entryRuntimeWithoutReplacedProxyConfigs(
 		return nil, errs.New(errs.KindValidationFailed, "Entry runtime YAML is invalid")
 	}
 	root := document.Content[0]
-	services, err := serviceArtifactMapping(root)
+	services, err := composerender.ServiceArtifactMapping(root)
 	if err != nil {
 		return nil, err
 	}
@@ -154,17 +155,17 @@ func entryRuntimeWithoutReplacedProxyConfigs(
 			continue
 		}
 		configName := "gp-proxy-" + strings.ToLower(service.ServiceId)
-		configIndex, serviceIndex := mappingIndex(root, "configs"), mappingIndex(services, service.ComposeName)
+		configIndex, serviceIndex := composerender.MappingIndex(root, "configs"), composerender.MappingIndex(services, service.ComposeName)
 		if service.OwnerComponentId != "" || configIndex < 0 || serviceIndex < 0 {
 			return nil, errs.New(errs.KindStateConflict, "Entry proxy config ownership changed")
 		}
 		configs := root.Content[configIndex+1]
-		index := mappingIndex(configs, configName)
+		index := composerender.MappingIndex(configs, configName)
 		if index < 0 {
 			return nil, errs.New(errs.KindStateConflict, "Entry proxy config is absent")
 		}
 		config := configs.Content[index+1]
-		contentIndex := mappingIndex(config, "content")
+		contentIndex := composerender.MappingIndex(config, "content")
 		digest := sha256.Sum256(service.ProxyConfigJson)
 		if len(config.Content) != 2 || contentIndex < 0 || len(service.ProxyConfigJson) == 0 ||
 			!bytes.Equal(digest[:], service.ProxyConfigSha256) ||
@@ -174,7 +175,7 @@ func entryRuntimeWithoutReplacedProxyConfigs(
 		}
 		for index := 0; index < len(services.Content); index += 2 {
 			references := make(map[string]map[string]bool)
-			if err := retainedServiceResourceReferences(services.Content[index+1], references); err != nil {
+			if err := composerender.RetainedServiceResourceReferences(services.Content[index+1], references); err != nil {
 				return nil, err
 			}
 			if index == serviceIndex {
@@ -185,7 +186,7 @@ func entryRuntimeWithoutReplacedProxyConfigs(
 				return nil, errs.New(errs.KindStateConflict, "Entry proxy config is shared with another Service")
 			}
 		}
-		removeMappingValue(configs, configName)
+		composerender.RemoveMappingValue(configs, configName)
 	}
 	owned := proto.CloneOf(baseline)
 	owned.CanonicalYaml, err = yaml.Marshal(&document)

@@ -2,6 +2,7 @@ package taskplanning
 
 import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/compose-spec/compose-go/v2/types"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -32,7 +33,7 @@ func ProjectZoneProjection(
 	if err != nil {
 		return nil, err
 	}
-	networkIDs, err := indexComposeIdentities(ids.KindNetwork, names, identities.Networks)
+	networkIDs, err := composerender.IndexComposeIdentities(ids.KindNetwork, names, identities.Networks)
 	if err != nil {
 		return nil, err
 	}

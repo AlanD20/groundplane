@@ -1,11 +1,7 @@
-package taskplanning
+package composerender
 
 import (
 	"crypto/sha256"
-	"sort"
-	"strconv"
-	"strings"
-
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/ipam"
 	"github.com/AlanD20/groundplane/internal/common/networkname"
@@ -14,6 +10,9 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 type ServiceArtifactAction string
@@ -70,11 +69,11 @@ func MutateEnvironmentServiceArtifact(
 		return nil, errs.New(errs.KindInternal, "normalized Compose artifact YAML is corrupt")
 	}
 	root := document.Content[0]
-	services, err := serviceArtifactMapping(root)
+	services, err := ServiceArtifactMapping(root)
 	if err != nil {
 		return nil, err
 	}
-	found := mappingIndex(services, mutation.Desired.Name)
+	found := MappingIndex(services, mutation.Desired.Name)
 	metadataIndex := serviceArtifactMetadataIndex(owned, mutation.Desired.ID, mutation.Desired.Name)
 	if mutation.Action != ServiceArtifactCreate && metadataIndex >= 0 {
 		componentID, err := serviceArtifactComponentOwner(owned.Services[metadataIndex])
@@ -93,20 +92,20 @@ func MutateEnvironmentServiceArtifact(
 		node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 		labelNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 		for _, key := range sortedStringKeys(labels) {
-			appendMappingValue(labelNode, key, scalarNode(labels[key]))
+			AppendMappingValue(labelNode, key, scalarNode(labels[key]))
 		}
-		appendMappingValue(node, "labels", labelNode)
+		AppendMappingValue(node, "labels", labelNode)
 		resource := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		appendMappingValue(resource, "kind", scalarNode("service"))
-		appendMappingValue(resource, "id", scalarNode(mutation.Desired.ID))
+		AppendMappingValue(resource, "kind", scalarNode("service"))
+		AppendMappingValue(resource, "id", scalarNode(mutation.Desired.ID))
 		parent := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		appendMappingValue(parent, "environment_id", scalarNode(current.GetOwnerId()))
-		appendMappingValue(resource, "parent", parent)
-		appendMappingValue(node, composeResourceExtension, resource)
+		AppendMappingValue(parent, "environment_id", scalarNode(current.GetOwnerId()))
+		AppendMappingValue(resource, "parent", parent)
+		AppendMappingValue(node, composeResourceExtension, resource)
 		if err := applyDirectServiceDesired(node, mutation.Desired); err != nil {
 			return nil, err
 		}
-		appendMappingValue(services, mutation.Desired.Name, node)
+		AppendMappingValue(services, mutation.Desired.Name, node)
 		sortMapping(services)
 		owned.Services = append(owned.Services, &agentpb.ComposeService{
 			ServiceId: mutation.Desired.ID, ComposeName: mutation.Desired.Name,
@@ -173,12 +172,12 @@ func ProjectEnvironmentServiceNativeCompose(
 		return "", errs.New(errs.KindInternal, "normalized Compose artifact YAML is corrupt")
 	}
 	root := document.Content[0]
-	servicesIndex := mappingIndex(root, "services")
+	servicesIndex := MappingIndex(root, "services")
 	if servicesIndex < 0 || root.Content[servicesIndex+1].Kind != yaml.MappingNode {
 		return "", errs.New(errs.KindInternal, "normalized Compose Service mapping is missing")
 	}
 	services := root.Content[servicesIndex+1]
-	serviceIndex := mappingIndex(services, serviceName)
+	serviceIndex := MappingIndex(services, serviceName)
 	if serviceIndex < 0 || services.Content[serviceIndex+1].Kind != yaml.MappingNode {
 		return "", errs.New(errs.KindInternal, "Service is absent from its current desired revision")
 	}
@@ -195,16 +194,16 @@ func ProjectEnvironmentServiceNativeCompose(
 		}
 	}
 	service := services.Content[serviceIndex+1]
-	removeMappingValue(service, composeResourceExtension)
+	RemoveMappingValue(service, composeResourceExtension)
 	for _, key := range []string{"labels", "annotations"} {
 		if err := removeGroundplaneServiceMetadata(service, key); err != nil {
 			return "", err
 		}
 	}
 	projectedServices := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(projectedServices, serviceName, service)
+	AppendMappingValue(projectedServices, serviceName, service)
 	projectedRoot := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(projectedRoot, "services", projectedServices)
+	AppendMappingValue(projectedRoot, "services", projectedServices)
 	projected := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{projectedRoot}}
 	encoded, err := yaml.Marshal(projected)
 	if err != nil {
@@ -233,7 +232,7 @@ func serviceArtifactComponentOwner(service *agentpb.ComposeService) (string, err
 }
 
 func removeGroundplaneServiceMetadata(service *yaml.Node, key string) error {
-	index := mappingIndex(service, key)
+	index := MappingIndex(service, key)
 	if index < 0 {
 		return nil
 	}
@@ -250,7 +249,7 @@ func removeGroundplaneServiceMetadata(service *yaml.Node, key string) error {
 	}
 	metadata.Content = kept
 	if len(metadata.Content) == 0 {
-		removeMappingValue(service, key)
+		RemoveMappingValue(service, key)
 	}
 	return nil
 }
@@ -279,7 +278,7 @@ func ensureServiceZoneNetworks(
 	artifact *agentpb.ComposeArtifact,
 	mutation ServiceArtifactMutation,
 ) error {
-	networks := ensureMappingValue(root, "networks")
+	networks := EnsureMappingValue(root, "networks")
 	if networks == nil {
 		return errs.New(errs.KindInternal, "normalized Compose network mapping is corrupt")
 	}
@@ -299,12 +298,12 @@ func ensureServiceZoneNetworks(
 			}
 		}
 		if owned {
-			if mappingIndex(networks, zone.Name) < 0 {
+			if MappingIndex(networks, zone.Name) < 0 {
 				return errs.New(errs.KindInternal, "Service artifact owned Zone network is absent")
 			}
 			continue
 		}
-		network := ensureMappingValue(networks, zone.Name)
+		network := EnsureMappingValue(networks, zone.Name)
 		if network == nil {
 			return errs.New(errs.KindInternal, "normalized Compose Zone network is corrupt")
 		}
@@ -315,29 +314,29 @@ func ensureServiceZoneNetworks(
 		}
 		setMappingScalar(network, "name", dockerName)
 		setMappingScalar(network, "driver", "bridge")
-		removeMappingValue(network, "external")
+		RemoveMappingValue(network, "external")
 		if zone.Internal {
 			setMappingTypedScalar(network, "internal", "!!bool", "true")
 		} else {
-			removeMappingValue(network, "internal")
+			RemoveMappingValue(network, "internal")
 		}
 		config := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		appendMappingValue(config, "subnet", scalarNode(zone.Subnet))
+		AppendMappingValue(config, "subnet", scalarNode(zone.Subnet))
 		configs := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: []*yaml.Node{config}}
 		ipamNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		appendMappingValue(ipamNode, "config", configs)
+		AppendMappingValue(ipamNode, "config", configs)
 		setMappingNode(network, "ipam", ipamNode)
 		labelNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 		for _, key := range sortedStringKeys(labels) {
-			appendMappingValue(labelNode, key, scalarNode(labels[key]))
+			AppendMappingValue(labelNode, key, scalarNode(labels[key]))
 		}
 		setMappingNode(network, "labels", labelNode)
 		resource := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		appendMappingValue(resource, "kind", scalarNode("network"))
-		appendMappingValue(resource, "id", scalarNode(zone.ID))
+		AppendMappingValue(resource, "kind", scalarNode("network"))
+		AppendMappingValue(resource, "id", scalarNode(zone.ID))
 		parent := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		appendMappingValue(parent, "environment_id", scalarNode(artifact.GetOwnerId()))
-		appendMappingValue(resource, "parent", parent)
+		AppendMappingValue(parent, "environment_id", scalarNode(artifact.GetOwnerId()))
+		AppendMappingValue(resource, "parent", parent)
 		setMappingNode(network, composeResourceExtension, resource)
 		sortMapping(network)
 		artifact.Networks = append(artifact.Networks, &agentpb.ComposeNetwork{
@@ -352,11 +351,11 @@ func ensureServiceZoneNetworks(
 	return nil
 }
 
-func serviceArtifactMapping(root *yaml.Node) (*yaml.Node, error) {
-	index := mappingIndex(root, "services")
+func ServiceArtifactMapping(root *yaml.Node) (*yaml.Node, error) {
+	index := MappingIndex(root, "services")
 	if index < 0 {
 		value := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		appendMappingValue(root, "services", value)
+		AppendMappingValue(root, "services", value)
 		return value, nil
 	}
 	value := root.Content[index+1]
@@ -388,18 +387,18 @@ func applyDirectServiceDesired(node *yaml.Node, desired core.Service) error {
 	setOrRemoveMappingScalar(node, "restart", desired.Restart)
 	setOrRemoveMappingScalar(node, "mem_limit", desired.Resources.Mem)
 	if desired.Resources.CPUs == 0 {
-		removeMappingValue(node, "cpus")
+		RemoveMappingValue(node, "cpus")
 	} else {
 		setMappingTypedScalar(node, "cpus", "!!float", strconv.FormatFloat(desired.Resources.CPUs, 'g', -1, 64))
 	}
-	deploy := ensureMappingValue(node, "deploy")
+	deploy := EnsureMappingValue(node, "deploy")
 	if deploy == nil {
 		return errs.New(errs.KindInternal, "normalized Compose Service deploy mapping is corrupt")
 	}
 	setMappingTypedScalar(deploy, "replicas", "!!int", strconv.Itoa(desired.Replicas))
 	if desired.Healthcheck == (core.Healthcheck{}) {
-		if index := mappingIndex(node, "healthcheck"); index >= 0 && typedServiceHealthcheck(node.Content[index+1]) {
-			removeMappingValue(node, "healthcheck")
+		if index := MappingIndex(node, "healthcheck"); index >= 0 && typedServiceHealthcheck(node.Content[index+1]) {
+			RemoveMappingValue(node, "healthcheck")
 		}
 	} else {
 		setMappingNode(node, "healthcheck", serviceHealthcheckNode(desired.Healthcheck))
@@ -410,7 +409,7 @@ func applyDirectServiceDesired(node *yaml.Node, desired core.Service) error {
 
 func setServiceZones(service *yaml.Node, zones []string) {
 	current := map[string]*yaml.Node{}
-	if index := mappingIndex(service, "networks"); index >= 0 && service.Content[index+1].Kind == yaml.MappingNode {
+	if index := MappingIndex(service, "networks"); index >= 0 && service.Content[index+1].Kind == yaml.MappingNode {
 		mapping := service.Content[index+1]
 		for offset := 0; offset+1 < len(mapping.Content); offset += 2 {
 			current[mapping.Content[offset].Value] = mapping.Content[offset+1]
@@ -422,14 +421,14 @@ func setServiceZones(service *yaml.Node, zones []string) {
 		if value == nil {
 			value = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 		}
-		appendMappingValue(networks, zone, value)
+		AppendMappingValue(networks, zone, value)
 	}
 	setMappingNode(service, "networks", networks)
 }
 
 func setServiceStringSequence(mapping *yaml.Node, key string, values []string) {
 	if len(values) == 0 {
-		removeMappingValue(mapping, key)
+		RemoveMappingValue(mapping, key)
 		return
 	}
 	sequence := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
@@ -475,11 +474,11 @@ func sortedStringKeys(values map[string]string) []string {
 }
 
 func setMappingNode(mapping *yaml.Node, key string, value *yaml.Node) {
-	if index := mappingIndex(mapping, key); index >= 0 {
+	if index := MappingIndex(mapping, key); index >= 0 {
 		mapping.Content[index+1] = value
 		return
 	}
-	appendMappingValue(mapping, key, value)
+	AppendMappingValue(mapping, key, value)
 }
 
 func setMappingTypedScalar(mapping *yaml.Node, key, tag, value string) {
@@ -488,26 +487,26 @@ func setMappingTypedScalar(mapping *yaml.Node, key, tag, value string) {
 
 func setOrRemoveMappingScalar(mapping *yaml.Node, key, value string) {
 	if value == "" {
-		removeMappingValue(mapping, key)
+		RemoveMappingValue(mapping, key)
 		return
 	}
 	setMappingScalar(mapping, key, value)
 }
 
-func removeMappingValue(mapping *yaml.Node, key string) {
-	if index := mappingIndex(mapping, key); index >= 0 {
+func RemoveMappingValue(mapping *yaml.Node, key string) {
+	if index := MappingIndex(mapping, key); index >= 0 {
 		mapping.Content = append(mapping.Content[:index], mapping.Content[index+2:]...)
 	}
 }
 
-func ensureMappingValue(mapping *yaml.Node, key string) *yaml.Node {
-	if index := mappingIndex(mapping, key); index >= 0 {
+func EnsureMappingValue(mapping *yaml.Node, key string) *yaml.Node {
+	if index := MappingIndex(mapping, key); index >= 0 {
 		if mapping.Content[index+1].Kind != yaml.MappingNode {
 			return nil
 		}
 		return mapping.Content[index+1]
 	}
 	value := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(mapping, key, value)
+	AppendMappingValue(mapping, key, value)
 	return value
 }

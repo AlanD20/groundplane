@@ -2,12 +2,13 @@ package serviceread
 
 import (
 	"context"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -113,5 +114,5 @@ func (service *Reader) GetServiceNativeCompose(
 	); err != nil {
 		return "", errs.New(errs.KindInternal, "Service desired Compose artifact is corrupt")
 	}
-	return taskplanning.ProjectEnvironmentServiceNativeCompose(artifact, serviceName)
+	return composerender.ProjectEnvironmentServiceNativeCompose(artifact, serviceName)
 }

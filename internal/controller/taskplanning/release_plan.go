@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"math"
 
@@ -103,7 +104,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 		return nil, errs.New(errs.KindInternal, "frozen release dependency phase is invalid")
 	}
 	images := make(map[string]domain.WorkloadSeal, len(input.Members))
-	labels := make(map[string]ComposeReleaseIdentity, len(input.Members))
+	labels := make(map[string]composerender.ComposeReleaseIdentity, len(input.Members))
 	for _, member := range input.Members {
 		if member.Render.PlanID != task.PlanID || member.Render.ArtifactID != first.ArtifactID ||
 			member.Render.EnvironmentID != first.EnvironmentID ||
@@ -116,7 +117,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 			return nil, errs.New(errs.KindInternal, "ordinary release predecessor authority is partial")
 		}
 		images[member.Render.ServiceName] = member.Render.CandidateWorkload
-		labels[member.Render.ServiceID] = ComposeReleaseIdentity{
+		labels[member.Render.ServiceID] = composerender.ComposeReleaseIdentity{
 			ProxyImage: member.Render.ProxyImage,
 			ReleaseID:  member.Render.ReleaseID, Target: member.Render.CandidateTarget, Image: member.Render.CandidateWorkload.LocalImageID,
 			ServingReleaseID:       member.Intent.PriorServingReleaseID,
@@ -159,7 +160,7 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 				if !exists {
 					return nil, errs.New(errs.KindInternal, "release service is missing from frozen Blueprint")
 				}
-				if err := applySealedWorkload(&service, image); err != nil {
+				if err := composerender.ApplySealedWorkload(&service, image); err != nil {
 					return nil, err
 				}
 				// Explicit Deploy selects this Service, not its whole profile.

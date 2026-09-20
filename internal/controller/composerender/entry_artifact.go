@@ -1,24 +1,23 @@
-package taskplanning
+package composerender
 
 import (
 	"crypto/sha256"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
-	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
-	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
-	"path"
-	"path/filepath"
-	"sort"
-	"strings"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
+	"path"
+	"path/filepath"
+	"sort"
+	"strings"
 )
 
 type EnvironmentEntryArtifactMutation struct {
@@ -53,7 +52,7 @@ func ProjectEnvironmentEntryMutation(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, nil, err
 	}
-	mutated, err := mutateEnvironmentEntryArtifact(artifact, current, mutation)
+	mutated, err := MutateEnvironmentEntryArtifact(artifact, current, mutation)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, nil, err
 	}
@@ -112,13 +111,13 @@ func artifactVolumeDirectory(projection etcd.EnvironmentComposeProjection) strin
 	return artifact.GetAuthorizedVolumeDir()
 }
 
-func mutateEnvironmentEntryArtifact(
+func MutateEnvironmentEntryArtifact(
 	current *agentpb.ComposeArtifact,
 	projection etcd.EnvironmentComposeProjection,
 	mutation EnvironmentEntryArtifactMutation,
 ) (*agentpb.ComposeArtifact, error) {
 	owned := proto.Clone(current).(*agentpb.ComposeArtifact)
-	if err := validateRuntimeServiceOwnership(owned); err != nil {
+	if err := ValidateRuntimeServiceOwnership(owned); err != nil {
 		return nil, err
 	}
 	var document yaml.Node
@@ -127,7 +126,7 @@ func mutateEnvironmentEntryArtifact(
 		return nil, errs.New(errs.KindInternal, "normalized Compose artifact YAML is corrupt")
 	}
 	root := document.Content[0]
-	services, err := serviceArtifactMapping(root)
+	services, err := ServiceArtifactMapping(root)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +188,7 @@ func entryArtifactRuntimeTargets(
 	for _, service := range artifact.GetServices() {
 		name := service.GetComposeName()
 		logicalName, exists := logical[service.GetServiceId()]
-		if !exists || mappingIndex(services, name) < 0 {
+		if !exists || MappingIndex(services, name) < 0 {
 			return nil, errs.New(errs.KindInternal, "Environment Entry runtime Service identity is inconsistent")
 		}
 		seenRuntime[name] = struct{}{}
@@ -296,7 +295,7 @@ func rewriteEntryArtifactEnvironmentFiles(
 	scoped string,
 ) error {
 	retained := make([]*yaml.Node, 0)
-	if index := mappingIndex(service, "env_file"); index >= 0 {
+	if index := MappingIndex(service, "env_file"); index >= 0 {
 		sequence := service.Content[index+1]
 		if sequence.Kind != yaml.SequenceNode {
 			return errs.New(errs.KindInternal, "normalized Compose env_file is corrupt")
@@ -328,7 +327,7 @@ func entryArtifactEnvironmentFilePath(node *yaml.Node) (string, error) {
 	if node.Kind != yaml.MappingNode {
 		return "", errs.New(errs.KindInternal, "normalized Compose env_file item is corrupt")
 	}
-	index := mappingIndex(node, "path")
+	index := MappingIndex(node, "path")
 	if index < 0 || node.Content[index+1].Kind != yaml.ScalarNode {
 		return "", errs.New(errs.KindInternal, "normalized Compose env_file path is corrupt")
 	}
@@ -337,8 +336,8 @@ func entryArtifactEnvironmentFilePath(node *yaml.Node) (string, error) {
 
 func entryArtifactEnvironmentFileNode(value string) *yaml.Node {
 	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(node, "path", scalarNode(value))
-	appendMappingValue(node, "required", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
+	AppendMappingValue(node, "path", scalarNode(value))
+	AppendMappingValue(node, "required", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
 	return node
 }
 
@@ -350,7 +349,7 @@ func rewriteEntryArtifactMounts(
 	newMounts []entryArtifactMount,
 ) error {
 	retained := make([]*yaml.Node, 0)
-	if index := mappingIndex(service, "volumes"); index >= 0 {
+	if index := MappingIndex(service, "volumes"); index >= 0 {
 		sequence := service.Content[index+1]
 		if sequence.Kind != yaml.SequenceNode {
 			return errs.New(errs.KindInternal, "normalized Compose Service volumes are corrupt")
@@ -391,7 +390,7 @@ func rewriteEntryArtifactMounts(
 		retained = append(retained, entryArtifactMountNode(mount))
 	}
 	if len(retained) == 0 {
-		removeMappingValue(service, "volumes")
+		RemoveMappingValue(service, "volumes")
 		return nil
 	}
 	setMappingNode(service, "volumes", &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: retained})
@@ -427,16 +426,16 @@ func entryArtifactMountIdentity(node *yaml.Node) (string, string, error) {
 	if node.Kind != yaml.MappingNode {
 		return "", "", errs.New(errs.KindInternal, "normalized Compose mount is corrupt")
 	}
-	source := mappingScalar(node, "source")
-	target := mappingScalar(node, "target")
+	source := MappingScalar(node, "source")
+	target := MappingScalar(node, "target")
 	if target == "" {
 		return "", "", errs.New(errs.KindInternal, "normalized Compose mount target is absent")
 	}
 	return source, target, nil
 }
 
-func mappingScalar(node *yaml.Node, key string) string {
-	index := mappingIndex(node, key)
+func MappingScalar(node *yaml.Node, key string) string {
+	index := MappingIndex(node, key)
 	if index < 0 || node.Content[index+1].Kind != yaml.ScalarNode {
 		return ""
 	}
@@ -445,12 +444,12 @@ func mappingScalar(node *yaml.Node, key string) string {
 
 func entryArtifactMountNode(mount entryArtifactMount) *yaml.Node {
 	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(node, "type", scalarNode("bind"))
-	appendMappingValue(node, "source", scalarNode(mount.source))
-	appendMappingValue(node, "target", scalarNode(mount.target))
-	appendMappingValue(node, "read_only", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
+	AppendMappingValue(node, "type", scalarNode("bind"))
+	AppendMappingValue(node, "source", scalarNode(mount.source))
+	AppendMappingValue(node, "target", scalarNode(mount.target))
+	AppendMappingValue(node, "read_only", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "true"})
 	bind := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(bind, "create_host_path", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "false"})
-	appendMappingValue(node, "bind", bind)
+	AppendMappingValue(bind, "create_host_path", &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: "false"})
+	AppendMappingValue(node, "bind", bind)
 	return node
 }

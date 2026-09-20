@@ -1,16 +1,15 @@
-package taskplanning
+package composerender
 
 import (
 	"crypto/sha256"
-	"sort"
-	"strconv"
-	"strings"
-
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 type VolumeArtifactAction string
@@ -53,7 +52,7 @@ func MutateEnvironmentVolumeArtifact(
 		) != nil || ids.Validate(ids.KindProject, mutation.ProjectID) != nil ||
 		mutation.RenderGeneration == 0 ||
 		(mutation.Action != VolumeArtifactAdd && mutation.Action != VolumeArtifactEdit && mutation.Action != VolumeArtifactRemove) ||
-		!validVolumeArtifactKey(mutation.Key) {
+		!ValidVolumeArtifactKey(mutation.Key) {
 		return nil, errs.New(errs.KindInternal, "Volume artifact mutation input is invalid")
 	}
 	owned := proto.Clone(current).(*agentpb.ComposeArtifact)
@@ -67,14 +66,14 @@ func MutateEnvironmentVolumeArtifact(
 	if err != nil {
 		return nil, err
 	}
-	found := mappingIndex(volumes, mutation.Key)
+	found := MappingIndex(volumes, mutation.Key)
 	switch mutation.Action {
 	case VolumeArtifactAdd:
 		if found >= 0 || composeArtifactHasVolume(owned, mutation.VolumeID, mutation.Key) {
 			return nil, errs.New(errs.KindStateConflict, "Volume artifact identity is already present")
 		}
 		labels := volumeArtifactOwnershipLabels(current.GetOwnerId(), mutation)
-		appendMappingValue(volumes, mutation.Key, renderedVolumeNode(
+		AppendMappingValue(volumes, mutation.Key, renderedVolumeNode(
 			current.GetAuthorizedVolumeDir(), current.GetOwnerId(), mutation, labels,
 		))
 		sortMapping(volumes)
@@ -102,7 +101,7 @@ func MutateEnvironmentVolumeArtifact(
 		}
 		owned.Volumes = kept
 	}
-	if err := validateRuntimeServiceOwnership(owned); err != nil {
+	if err := ValidateRuntimeServiceOwnership(owned); err != nil {
 		return nil, err
 	}
 	for _, network := range owned.Networks {
@@ -135,7 +134,7 @@ func MutateEnvironmentVolumeArtifact(
 
 // Volume identity changes do not replace a serving Release's execution ownership.
 // Full plan validation still checks label ordering, resource identity and YAML.
-func validateRuntimeServiceOwnership(artifact *agentpb.ComposeArtifact) error {
+func ValidateRuntimeServiceOwnership(artifact *agentpb.ComposeArtifact) error {
 	for _, service := range artifact.Services {
 		plan, generation := "", ""
 		for _, label := range service.GetExpectedLabels() {
@@ -165,7 +164,7 @@ func validateRuntimeServiceOwnership(artifact *agentpb.ComposeArtifact) error {
 }
 
 func removeVolumeArtifactMounts(root *yaml.Node, key string) error {
-	servicesIndex := mappingIndex(root, "services")
+	servicesIndex := MappingIndex(root, "services")
 	if servicesIndex < 0 {
 		return nil
 	}
@@ -175,7 +174,7 @@ func removeVolumeArtifactMounts(root *yaml.Node, key string) error {
 	}
 	for index := 1; index < len(services.Content); index += 2 {
 		service := services.Content[index]
-		mountsIndex := mappingIndex(service, "volumes")
+		mountsIndex := MappingIndex(service, "volumes")
 		if mountsIndex < 0 {
 			continue
 		}
@@ -204,11 +203,11 @@ func volumeArtifactMountUsesKey(mount *yaml.Node, key string) (bool, error) {
 		source, _, _ := strings.Cut(mount.Value, ":")
 		return source == key, nil
 	case yaml.MappingNode:
-		sourceIndex := mappingIndex(mount, "source")
+		sourceIndex := MappingIndex(mount, "source")
 		if sourceIndex < 0 || mount.Content[sourceIndex+1].Kind != yaml.ScalarNode {
 			return false, errs.New(errs.KindInternal, "normalized Compose Volume mount source is corrupt")
 		}
-		typeIndex := mappingIndex(mount, "type")
+		typeIndex := MappingIndex(mount, "type")
 		if typeIndex >= 0 && (mount.Content[typeIndex+1].Kind != yaml.ScalarNode ||
 			mount.Content[typeIndex+1].Value != "volume") {
 			return false, nil
@@ -219,7 +218,7 @@ func volumeArtifactMountUsesKey(mount *yaml.Node, key string) (bool, error) {
 	}
 }
 
-func validVolumeArtifactKey(value string) bool {
+func ValidVolumeArtifactKey(value string) bool {
 	if value == "" || value == "." || value == ".." || len(value) > 255 {
 		return false
 	}
@@ -235,7 +234,7 @@ func validVolumeArtifactKey(value string) bool {
 }
 
 func volumeArtifactMapping(root *yaml.Node, create bool) (*yaml.Node, error) {
-	index := mappingIndex(root, "volumes")
+	index := MappingIndex(root, "volumes")
 	if index >= 0 {
 		value := root.Content[index+1]
 		if value.Kind != yaml.MappingNode {
@@ -247,11 +246,11 @@ func volumeArtifactMapping(root *yaml.Node, create bool) (*yaml.Node, error) {
 		return nil, errs.New(errs.KindStateConflict, "normalized Compose Volume mapping is absent")
 	}
 	value := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(root, "volumes", value)
+	AppendMappingValue(root, "volumes", value)
 	return value, nil
 }
 
-func mappingIndex(mapping *yaml.Node, key string) int {
+func MappingIndex(mapping *yaml.Node, key string) int {
 	if mapping == nil || mapping.Kind != yaml.MappingNode {
 		return -1
 	}
@@ -263,7 +262,7 @@ func mappingIndex(mapping *yaml.Node, key string) int {
 	return -1
 }
 
-func appendMappingValue(mapping *yaml.Node, key string, value *yaml.Node) {
+func AppendMappingValue(mapping *yaml.Node, key string, value *yaml.Node) {
 	mapping.Content = append(mapping.Content,
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}, value,
 	)
@@ -289,13 +288,13 @@ func renderedVolumeNode(
 	labels map[string]string,
 ) *yaml.Node {
 	node := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(node, "name", scalarNode("gp_vol_"+strings.ToLower(mutation.VolumeID)))
-	appendMappingValue(node, "driver", scalarNode("local"))
+	AppendMappingValue(node, "name", scalarNode("gp_vol_"+strings.ToLower(mutation.VolumeID)))
+	AppendMappingValue(node, "driver", scalarNode("local"))
 	driverOptions := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(driverOptions, "type", scalarNode("none"))
-	appendMappingValue(driverOptions, "o", scalarNode("bind"))
-	appendMappingValue(driverOptions, "device", scalarNode(volumeDirectory+"/"+mutation.Key))
-	appendMappingValue(node, "driver_opts", driverOptions)
+	AppendMappingValue(driverOptions, "type", scalarNode("none"))
+	AppendMappingValue(driverOptions, "o", scalarNode("bind"))
+	AppendMappingValue(driverOptions, "device", scalarNode(volumeDirectory+"/"+mutation.Key))
+	AppendMappingValue(node, "driver_opts", driverOptions)
 	labelNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	keys := make([]string, 0, len(labels))
 	for key := range labels {
@@ -303,16 +302,16 @@ func renderedVolumeNode(
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		appendMappingValue(labelNode, key, scalarNode(labels[key]))
+		AppendMappingValue(labelNode, key, scalarNode(labels[key]))
 	}
-	appendMappingValue(node, "labels", labelNode)
+	AppendMappingValue(node, "labels", labelNode)
 	resource := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(resource, "kind", scalarNode("volume"))
-	appendMappingValue(resource, "id", scalarNode(mutation.VolumeID))
+	AppendMappingValue(resource, "kind", scalarNode("volume"))
+	AppendMappingValue(resource, "id", scalarNode(mutation.VolumeID))
 	parent := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-	appendMappingValue(parent, "environment_id", scalarNode(environmentID))
-	appendMappingValue(resource, "parent", parent)
-	appendMappingValue(node, composeResourceExtension, resource)
+	AppendMappingValue(parent, "environment_id", scalarNode(environmentID))
+	AppendMappingValue(resource, "parent", parent)
+	AppendMappingValue(node, composeResourceExtension, resource)
 	return node
 }
 
@@ -354,7 +353,7 @@ func composeArtifactHasVolume(artifact *agentpb.ComposeArtifact, volumeID string
 
 func rewriteArtifactOwnership(root *yaml.Node, planID string, generation uint64) error {
 	for _, section := range []string{"services", "networks", "volumes"} {
-		sectionIndex := mappingIndex(root, section)
+		sectionIndex := MappingIndex(root, section)
 		if sectionIndex < 0 {
 			continue
 		}
@@ -364,7 +363,7 @@ func rewriteArtifactOwnership(root *yaml.Node, planID string, generation uint64)
 		}
 		for index := 1; index < len(resources.Content); index += 2 {
 			resource := resources.Content[index]
-			labelsIndex := mappingIndex(resource, "labels")
+			labelsIndex := MappingIndex(resource, "labels")
 			if labelsIndex < 0 {
 				continue
 			}
@@ -376,8 +375,8 @@ func rewriteArtifactOwnership(root *yaml.Node, planID string, generation uint64)
 				setMappingScalar(labels, composeLabelPlanID, planID)
 				setMappingScalar(labels, composeLabelRenderGen, strconv.FormatUint(generation, 10))
 			} else {
-				removeMappingValue(labels, composeLabelPlanID)
-				removeMappingValue(labels, composeLabelRenderGen)
+				RemoveMappingValue(labels, composeLabelPlanID)
+				RemoveMappingValue(labels, composeLabelRenderGen)
 			}
 		}
 	}
@@ -417,11 +416,11 @@ func stableExpectedLabels(labels []*agentpb.LabelPair) ([]*agentpb.LabelPair, er
 }
 
 func setMappingScalar(mapping *yaml.Node, key string, value string) {
-	index := mappingIndex(mapping, key)
+	index := MappingIndex(mapping, key)
 	if index >= 0 {
 		mapping.Content[index+1] = scalarNode(value)
 		return
 	}
-	appendMappingValue(mapping, key, scalarNode(value))
+	AppendMappingValue(mapping, key, scalarNode(value))
 	sortMapping(mapping)
 }

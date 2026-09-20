@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -23,7 +24,7 @@ func projectPinnedEnvironmentComponents(
 	componentSpecs map[string]core.ComponentSpec,
 	entries []core.EnvEntry,
 	catalog []componentrender.EnvironmentComponentRegistration,
-) (EnvironmentComponentComposeProjection, error) {
+) (composerender.EnvironmentComponentComposeProjection, error) {
 	generated := make(map[string]struct{})
 	for _, component := range projection.Components {
 		for _, serviceID := range component.Runtime.GeneratedServices {
@@ -41,8 +42,8 @@ func projectPinnedEnvironmentComponents(
 	}
 	identities := composeidentity.Snapshot{
 		Services: authored,
-		Networks: desiredZoneResourceIdentities(projection.DesiredZones),
-		Volumes:  composeVolumeResourceIdentities(projection.Volumes),
+		Networks: composerender.DesiredZoneResourceIdentities(projection.DesiredZones),
+		Volumes:  composerender.ComposeVolumeResourceIdentities(projection.Volumes),
 	}
 	zones, err := ProjectZoneProjection(
 		project,
@@ -51,11 +52,11 @@ func projectPinnedEnvironmentComponents(
 		identity.EnvironmentID,
 	)
 	if err != nil {
-		return EnvironmentComponentComposeProjection{}, err
+		return composerender.EnvironmentComponentComposeProjection{}, err
 	}
 	services, err := ProjectServiceProjection(project, identities, serviceExtensions)
 	if err != nil {
-		return EnvironmentComponentComposeProjection{}, err
+		return composerender.EnvironmentComponentComposeProjection{}, err
 	}
 	effectiveRoutes := make([]core.Route, len(projection.DesiredRoutes))
 	for index, route := range projection.DesiredRoutes {
@@ -65,7 +66,7 @@ func projectPinnedEnvironmentComponents(
 	for index, record := range projection.Components {
 		componentRecords[index], err = componentrecord.ProjectRecord(record)
 		if err != nil {
-			return EnvironmentComponentComposeProjection{}, err
+			return composerender.EnvironmentComponentComposeProjection{}, err
 		}
 		// Health is mutable runtime state, not part of the immutable Blueprint
 		// projection. Replaying a pinned Task must not schedule a second repair.
@@ -79,7 +80,7 @@ func projectPinnedEnvironmentComponents(
 		return ""
 	})
 	if err != nil || componentAllocated || len(components.Candidates) != 0 {
-		return EnvironmentComponentComposeProjection{}, errs.New(
+		return composerender.EnvironmentComponentComposeProjection{}, errs.New(
 			errs.KindInternal,
 			"Blueprint Task Component projection cannot be reproduced exactly",
 		)
@@ -98,21 +99,5 @@ func projectPinnedEnvironmentComponents(
 	for _, service := range services {
 		environment.Services[service.Name] = service
 	}
-	return ProjectEnvironmentComponents(project, environment, catalog)
-}
-
-func desiredZoneResourceIdentities(values []etcd.EnvironmentZoneProjection) []composeidentity.Resource {
-	result := make([]composeidentity.Resource, len(values))
-	for index, value := range values {
-		result[index] = composeidentity.Resource{ID: value.Desired.ID, Name: value.Desired.Name}
-	}
-	return result
-}
-
-func composeVolumeResourceIdentities(values []etcd.EnvironmentVolumeIdentity) []composeidentity.Resource {
-	result := make([]composeidentity.Resource, len(values))
-	for index, value := range values {
-		result[index] = composeidentity.Resource{ID: value.ID, Name: value.Key}
-	}
-	return result
+	return composerender.ProjectEnvironmentComponents(project, environment, catalog)
 }

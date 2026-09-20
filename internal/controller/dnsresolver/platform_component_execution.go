@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -17,7 +18,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/managedconfig"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -84,8 +85,8 @@ func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(
 		ownershipPlanID = resolved.input.OwnershipPlanID
 		ownershipGeneration = resolved.input.OwnershipGeneration
 	}
-	composeArtifact, err := taskplanning.RenderPlatformComponentCompose(
-		taskplanning.PlatformComponentComposeInput{
+	composeArtifact, err := composerender.RenderPlatformComponentCompose(
+		composerender.PlatformComponentComposeInput{
 			ComponentID: task.Target, PlanID: ownershipPlanID,
 			RenderGeneration: ownershipGeneration,
 			ArtifactID:       resolved.input.ComposeArtifactID, Plan: resolved.plan,

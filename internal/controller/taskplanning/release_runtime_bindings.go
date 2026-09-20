@@ -2,6 +2,7 @@ package taskplanning
 
 import (
 	"context"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/networkname"
@@ -20,17 +21,17 @@ func loadPinnedEnvironmentProject(
 	ctx context.Context,
 	projection etcd.EnvironmentComposeProjection,
 	volumeDir string,
-	releases map[string]ComposeReleaseIdentity,
+	releases map[string]composerender.ComposeReleaseIdentity,
 ) (*composetypes.Project, error) {
-	project, err := loadNormalizedEnvironmentProject(ctx, projection)
+	project, err := composerender.LoadNormalizedEnvironmentProject(ctx, projection)
 	if err != nil || len(releases) == 0 {
 		return project, err
 	}
-	identities, err := ComposeIdentitySnapshotFromProjection(projection)
+	identities, err := composerender.ComposeIdentitySnapshotFromProjection(projection)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := ProjectEnvironmentEntries(
+	entries, err := composerender.ProjectEnvironmentEntries(
 		project, projection.EnvironmentID, volumeDir, identities.Services, projection.Entries,
 	)
 	if err != nil {
@@ -57,7 +58,7 @@ func sealedReleaseAttachJoins(projection etcd.EnvironmentComposeProjection) ([]e
 	if err := yaml.Unmarshal(artifact.CanonicalYaml, &document); err != nil || len(document.Content) != 1 {
 		return nil, errs.New(errs.KindInternal, "sealed release binding YAML is invalid")
 	}
-	services, err := serviceArtifactMapping(document.Content[0])
+	services, err := composerender.ServiceArtifactMapping(document.Content[0])
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +67,7 @@ func sealedReleaseAttachJoins(projection etcd.EnvironmentComposeProjection) ([]e
 		selected[service.Desired.ID] = true
 	}
 	networks := &yaml.Node{Kind: yaml.MappingNode}
-	if index := mappingIndex(document.Content[0], "networks"); index >= 0 {
+	if index := composerender.MappingIndex(document.Content[0], "networks"); index >= 0 {
 		networks = document.Content[0].Content[index+1]
 	}
 	members := make(map[string]map[string]bool)
@@ -74,12 +75,12 @@ func sealedReleaseAttachJoins(projection etcd.EnvironmentComposeProjection) ([]e
 		if !selected[service.ServiceId] {
 			continue
 		}
-		index := mappingIndex(services, service.ComposeName)
+		index := composerender.MappingIndex(services, service.ComposeName)
 		if index < 0 {
 			return nil, errs.New(errs.KindInternal, "sealed release binding Service is absent")
 		}
 		references := make(map[string]map[string]bool)
-		if err := retainedServiceResourceReferences(services.Content[index+1], references); err != nil {
+		if err := composerender.RetainedServiceResourceReferences(services.Content[index+1], references); err != nil {
 			return nil, err
 		}
 		for name := range references["networks"] {
@@ -87,11 +88,11 @@ func sealedReleaseAttachJoins(projection etcd.EnvironmentComposeProjection) ([]e
 			if !managed {
 				continue
 			}
-			index := mappingIndex(networks, name)
+			index := composerender.MappingIndex(networks, name)
 			dockerName, nameErr := networkname.New(networkID)
 			if index < 0 || nameErr != nil ||
-				mappingScalar(networks.Content[index+1], "external") != "true" ||
-				mappingScalar(networks.Content[index+1], "name") != dockerName {
+				composerender.MappingScalar(networks.Content[index+1], "external") != "true" ||
+				composerender.MappingScalar(networks.Content[index+1], "name") != dockerName {
 				return nil, errs.New(errs.KindInternal, "sealed release Attach network identity diverges")
 			}
 			if members[networkID] == nil {

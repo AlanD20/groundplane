@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -68,7 +69,7 @@ func (service *Service) prepareApplyPreflight(ctx context.Context, environmentID
 	submittedServiceNames := environmentBlueprintServiceNames(parsed.Project)
 	var priorProject *composetypes.Project
 	if hasProjection {
-		priorProject, err = taskplanning.LoadNormalizedEnvironmentProject(ctx, previousProjection.Record)
+		priorProject, err = composerender.LoadNormalizedEnvironmentProject(ctx, previousProjection.Record)
 		if err != nil {
 			return applyPreflight{}, err
 		}

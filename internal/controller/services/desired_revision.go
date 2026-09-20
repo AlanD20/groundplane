@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
@@ -10,7 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -245,11 +246,11 @@ func buildServiceDesiredProjection(
 			)
 		}
 	}
-	action := taskplanning.ServiceArtifactEdit
+	action := composerender.ServiceArtifactEdit
 	if create {
-		action = taskplanning.ServiceArtifactCreate
+		action = composerender.ServiceArtifactCreate
 	}
-	mutated, err := taskplanning.MutateEnvironmentServiceArtifact(artifact, taskplanning.ServiceArtifactMutation{
+	mutated, err := composerender.MutateEnvironmentServiceArtifact(artifact, composerender.ServiceArtifactMutation{
 		Action: action, Desired: record.Desired,
 		Zones:      serviceArtifactZones(references),
 		ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
@@ -261,14 +262,14 @@ func buildServiceDesiredProjection(
 	}
 	normalizedArtifact := proto.Clone(artifact).(*agentpb.ComposeArtifact)
 	if hasCurrent {
-		normalizedArtifact, err = taskplanning.NormalizedEnvironmentArtifact(current)
+		normalizedArtifact, err = composerender.NormalizedEnvironmentArtifact(current)
 		if err != nil {
 			return etcd.EnvironmentComposeProjection{}, err
 		}
 	}
-	normalizedArtifact, err = taskplanning.MutateEnvironmentServiceArtifact(
+	normalizedArtifact, err = composerender.MutateEnvironmentServiceArtifact(
 		normalizedArtifact,
-		taskplanning.ServiceArtifactMutation{
+		composerender.ServiceArtifactMutation{
 			Action: action, Desired: record.Desired,
 			Zones:      serviceArtifactZones(references),
 			ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
@@ -289,10 +290,10 @@ func buildServiceDesiredProjection(
 	return candidate, nil
 }
 
-func serviceArtifactZones(references etcd.ServiceMutationReferences) []taskplanning.ServiceArtifactZone {
-	zones := make([]taskplanning.ServiceArtifactZone, len(references.Zones))
+func serviceArtifactZones(references etcd.ServiceMutationReferences) []composerender.ServiceArtifactZone {
+	zones := make([]composerender.ServiceArtifactZone, len(references.Zones))
 	for index, zone := range references.Zones {
-		zones[index] = taskplanning.ServiceArtifactZone{
+		zones[index] = composerender.ServiceArtifactZone{
 			ID: zone.Record.Desired.ID, Name: zone.Record.Desired.Name,
 			Subnet: zone.Record.Desired.Subnet, Internal: zone.Record.Desired.Internal,
 		}
@@ -334,8 +335,8 @@ func buildServiceRemovalProjection(
 	if err := proto.Unmarshal(current.ComposeArtifact, artifact); err != nil {
 		return etcd.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Service baseline artifact is corrupt")
 	}
-	mutated, err := taskplanning.MutateEnvironmentServiceArtifact(artifact, taskplanning.ServiceArtifactMutation{
-		Action: taskplanning.ServiceArtifactRemove, Desired: record.Desired,
+	mutated, err := composerender.MutateEnvironmentServiceArtifact(artifact, composerender.ServiceArtifactMutation{
+		Action: composerender.ServiceArtifactRemove, Desired: record.Desired,
 		ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
 		PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
 		RenderGeneration: generation,
@@ -343,14 +344,14 @@ func buildServiceRemovalProjection(
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
-	normalizedArtifact, err := taskplanning.NormalizedEnvironmentArtifact(current)
+	normalizedArtifact, err := composerender.NormalizedEnvironmentArtifact(current)
 	if err != nil {
 		return etcd.EnvironmentComposeProjection{}, err
 	}
-	normalizedArtifact, err = taskplanning.MutateEnvironmentServiceArtifact(
+	normalizedArtifact, err = composerender.MutateEnvironmentServiceArtifact(
 		normalizedArtifact,
-		taskplanning.ServiceArtifactMutation{
-			Action: taskplanning.ServiceArtifactRemove, Desired: record.Desired,
+		composerender.ServiceArtifactMutation{
+			Action: composerender.ServiceArtifactRemove, Desired: record.Desired,
 			ArtifactID: serviceStableIDFromRevision(ids.KindConfig, revisionID),
 			PlanID:     serviceStableIDFromRevision(ids.KindPlan, revisionID), TenantID: tenantID, ProjectID: projectID,
 			RenderGeneration: generation,

@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
@@ -193,8 +194,8 @@ func (service *Service) environmentComponentMaterializations(
 	generation uint64,
 	allocate func(ids.Kind, string) string,
 	runtimeFiles []core.BlueprintFile,
-	projection taskplanning.EnvironmentComponentComposeProjection,
-	entryMaterializations []taskplanning.EnvironmentEntryMaterialization,
+	projection composerender.EnvironmentComponentComposeProjection,
+	entryMaterializations []composerender.EnvironmentEntryMaterialization,
 	entries []entryrecord.Record,
 ) ([]etcd.TaskMaterializationRecord, []*agentpb.ExecutionStep, error) {
 	inputs := make([]environmentComponentMaterializationInput, 0,

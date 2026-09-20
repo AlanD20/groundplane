@@ -1,19 +1,18 @@
-package taskplanning
+package composerender
 
 import (
+	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"path"
 	"path/filepath"
 	"sort"
-
-	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	"github.com/AlanD20/groundplane/pkg/errs"
-	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
 // EnvironmentEntryMaterialization is one immutable Entry-derived file that

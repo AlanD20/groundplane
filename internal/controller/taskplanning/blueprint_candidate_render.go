@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -21,7 +22,7 @@ func renderBlueprintCandidateArtifact(
 	task etcd.TaskRecord,
 	input etcd.ReleaseRenderInput,
 	images map[string]domain.WorkloadSeal,
-	releases map[string]ComposeReleaseIdentity,
+	releases map[string]composerender.ComposeReleaseIdentity,
 ) (*agentpb.ComposeArtifact, error) {
 	projection := input.Projection
 	artifact := &agentpb.ComposeArtifact{}
@@ -34,7 +35,7 @@ func renderBlueprintCandidateArtifact(
 	if !bytes.Equal(digest[:], artifact.YamlSha256) {
 		return nil, errs.New(errs.KindInternal, "Blueprint resolved runtime digest diverges")
 	}
-	project, err := loadNormalizedEnvironmentProject(ctx, projection)
+	project, err := composerender.LoadNormalizedEnvironmentProject(ctx, projection)
 	if err != nil {
 		return nil, err
 	}
@@ -42,13 +43,13 @@ func renderBlueprintCandidateArtifact(
 	// renderer metadata while preserving the frozen runtime fields/resources.
 	runtimeProjection := projection
 	runtimeProjection.NormalizedCompose = artifact.CanonicalYaml
-	runtime, err := loadNormalizedEnvironmentProject(ctx, runtimeProjection)
+	runtime, err := composerender.LoadNormalizedEnvironmentProject(ctx, runtimeProjection)
 	if err != nil {
 		return nil, err
 	}
 	nativeProjection := projection
 	nativeProjection.Components = nil
-	identities, err := ComposeIdentitySnapshotFromProjection(nativeProjection)
+	identities, err := composerender.ComposeIdentitySnapshotFromProjection(nativeProjection)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +76,7 @@ func renderBlueprintCandidateArtifact(
 		if err != nil {
 			return nil, errs.New(errs.KindInternal, "Blueprint candidate is absent from resolved runtime")
 		}
-		if err := applySealedWorkload(&service, seal); err != nil {
+		if err := composerender.ApplySealedWorkload(&service, seal); err != nil {
 			return nil, err
 		}
 		if _, enabled := project.Services[name]; enabled {
@@ -103,7 +104,7 @@ func renderBlueprintCandidateArtifact(
 			}
 			continue
 		}
-		identity, err := pinnedComponentServiceIdentity(service, owner)
+		identity, err := composerender.PinnedComponentServiceIdentity(service, owner)
 		if err != nil {
 			return nil, err
 		}
@@ -133,8 +134,8 @@ func renderBlueprintCandidateArtifact(
 		identities.Services,
 		func(i, j int) bool { return identities.Services[i].Name < identities.Services[j].Name },
 	)
-	return RenderCompose(ComposeRenderInput{
-		Project: project, ArtifactID: input.ArtifactID, ProjectOwnerKind: ComposeProjectOwnerTenant,
+	return composerender.RenderCompose(composerender.ComposeRenderInput{
+		Project: project, ArtifactID: input.ArtifactID, ProjectOwnerKind: composerender.ComposeProjectOwnerTenant,
 		TenantID: input.TenantID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
 		PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 		AuthorizedVolumeDir: input.AuthorizedVolumeDir, Identities: identities, ExternalNetworks: external, Releases: releases,

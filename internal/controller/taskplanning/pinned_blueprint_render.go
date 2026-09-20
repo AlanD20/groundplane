@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
@@ -135,7 +136,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactWithReleases(
 	artifactID string,
 	projection etcd.EnvironmentComposeProjection,
 	transform environmentComposeTransform,
-	releases map[string]ComposeReleaseIdentity,
+	releases map[string]composerender.ComposeReleaseIdentity,
 ) (*agentpb.ComposeArtifact, error) {
 	return resolver.renderPinnedEnvironmentArtifactForPhaseWithReleases(
 		ctx, task, identity, revisionID, artifactID, projection, "", transform, releases,
@@ -151,7 +152,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 	projection etcd.EnvironmentComposeProjection,
 	phase core.ServiceLifecyclePhase,
 	transform environmentComposeTransform,
-	releases map[string]ComposeReleaseIdentity,
+	releases map[string]composerender.ComposeReleaseIdentity,
 ) (*agentpb.ComposeArtifact, error) {
 	if projection.RevisionID != revisionID || projection.EnvironmentID != identity.EnvironmentID {
 		return nil, errs.New(errs.KindInternal, "pinned Environment normalized projection changed")
@@ -168,7 +169,7 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 		}
 		project = managed.Project
 	}
-	if err := applyProjectedServiceDependencyPhase(project, projection.ServiceDependencyPlans, phase); err != nil {
+	if err := composerender.ApplyProjectedServiceDependencyPhase(project, projection.ServiceDependencyPlans, phase); err != nil {
 		return nil, err
 	}
 	externalNetworks := []composeidentity.Resource(nil)
@@ -183,13 +184,13 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentArtifactForPhaseWithRel
 			return nil, err
 		}
 	}
-	identities, err := ComposeIdentitySnapshotFromProjection(projection)
+	identities, err := composerender.ComposeIdentitySnapshotFromProjection(projection)
 	if err != nil {
 		return nil, err
 	}
-	return RenderCompose(ComposeRenderInput{
+	return composerender.RenderCompose(composerender.ComposeRenderInput{
 		Project: project, ArtifactID: artifactID,
-		ProjectOwnerKind: ComposeProjectOwnerTenant,
+		ProjectOwnerKind: composerender.ComposeProjectOwnerTenant,
 		TenantID:         identity.TenantID, ProjectID: identity.ProjectID, EnvironmentID: identity.EnvironmentID,
 		PlanID: task.PlanID, RenderGeneration: uint64(task.RenderGeneration),
 		AuthorizedVolumeDir:      identity.AuthorizedVolumeDir,

@@ -3,9 +3,10 @@ package operations
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -137,9 +138,9 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	candidate, _, err := taskplanning.ProjectEnvironmentEntryMutation(
+	candidate, _, err := composerender.ProjectEnvironmentEntryMutation(
 		runtime.Projection,
-		taskplanning.EnvironmentEntryArtifactMutation{
+		composerender.EnvironmentEntryArtifactMutation{
 			RevisionID:       candidateTaskID,
 			ArtifactID:       entryStableIDFromRevision(ids.KindConfig, candidateTaskID),
 			PlanID:           entryStableIDFromRevision(ids.KindPlan, candidateTaskID),
@@ -183,9 +184,9 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 			return etcd.IdempotencyResponse{}, err
 		}
 	}
-	candidate, materializations, err := taskplanning.ProjectEnvironmentEntryMutation(
+	candidate, materializations, err := composerender.ProjectEnvironmentEntryMutation(
 		runtime.Projection,
-		taskplanning.EnvironmentEntryArtifactMutation{
+		composerender.EnvironmentEntryArtifactMutation{
 			RevisionID:       claim.RevisionID,
 			ArtifactID:       entryStableIDFromRevision(ids.KindConfig, claim.RevisionID),
 			PlanID:           entryStableIDFromRevision(ids.KindPlan, claim.RevisionID),

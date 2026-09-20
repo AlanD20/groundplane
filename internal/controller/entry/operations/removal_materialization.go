@@ -2,12 +2,13 @@ package operations
 
 import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -18,7 +19,7 @@ func PlanEntryRemovals(
 	removed []entryrecord.Record,
 	next []entryrecord.Record,
 	services []composeidentity.Resource,
-) ([]taskplanning.EnvironmentEntryMaterialization, error) {
+) ([]composerender.EnvironmentEntryMaterialization, error) {
 	nextFiles := make(map[string]struct{})
 	nextScopes := make(map[string]struct{})
 	for _, record := range next {
@@ -37,7 +38,7 @@ func PlanEntryRemovals(
 		serviceByName[service.Name] = service
 	}
 	seen := make(map[string]struct{})
-	result := make([]taskplanning.EnvironmentEntryMaterialization, 0, len(removed))
+	result := make([]composerender.EnvironmentEntryMaterialization, 0, len(removed))
 	for _, record := range removed {
 		entry := record.Entry
 		if entry.Kind == core.EntryKindFile {
@@ -55,7 +56,7 @@ func PlanEntryRemovals(
 			}
 			if _, duplicate := seen[entry.Path]; !duplicate {
 				seen[entry.Path] = struct{}{}
-				result = append(result, taskplanning.EnvironmentEntryMaterialization{
+				result = append(result, composerender.EnvironmentEntryMaterialization{
 					Destination: entry.Path, OutputKind: output, UID: *entry.UID, GID: *entry.GID, Mode: mode,
 					Source: etcd.TaskMaterializationSource{Kind: etcd.TaskMaterializationSourceRemoval},
 				})
@@ -78,7 +79,7 @@ func PlanEntryRemovals(
 				return nil, errs.New(errs.KindInternal, "removed Blueprint Entry exposure Service is missing")
 			}
 			seen[destination] = struct{}{}
-			result = append(result, taskplanning.EnvironmentEntryMaterialization{
+			result = append(result, composerender.EnvironmentEntryMaterialization{
 				Destination: destination, ServiceID: identity.ID, ServiceName: identity.Name,
 				OutputKind: etcd.TaskMaterializationOutputRemoveGeneratedEnv,
 				Mode:       entrymaterialization.ModePrivate,

@@ -1,4 +1,4 @@
-package taskplanning
+package composerender
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -88,7 +88,7 @@ func ComposeIdentitySnapshotFromProjection(
 					"Component generated Service render identity or name is duplicated",
 				)
 			}
-			identity, err := pinnedComponentServiceIdentity(service, componentID)
+			identity, err := PinnedComponentServiceIdentity(service, componentID)
 			if err != nil {
 				return composeidentity.Snapshot{}, err
 			}
@@ -107,7 +107,23 @@ func ComposeIdentitySnapshotFromProjection(
 	sort.Slice(services, func(left, right int) bool { return services[left].Name < services[right].Name })
 	return composeidentity.Snapshot{
 		Services: services,
-		Networks: desiredZoneResourceIdentities(projection.DesiredZones),
-		Volumes:  composeVolumeResourceIdentities(projection.Volumes),
+		Networks: DesiredZoneResourceIdentities(projection.DesiredZones),
+		Volumes:  ComposeVolumeResourceIdentities(projection.Volumes),
 	}, nil
+}
+
+func DesiredZoneResourceIdentities(values []etcd.EnvironmentZoneProjection) []composeidentity.Resource {
+	result := make([]composeidentity.Resource, len(values))
+	for index, value := range values {
+		result[index] = composeidentity.Resource{ID: value.Desired.ID, Name: value.Desired.Name}
+	}
+	return result
+}
+
+func ComposeVolumeResourceIdentities(values []etcd.EnvironmentVolumeIdentity) []composeidentity.Resource {
+	result := make([]composeidentity.Resource, len(values))
+	for index, value := range values {
+		result[index] = composeidentity.Resource{ID: value.ID, Name: value.Key}
+	}
+	return result
 }

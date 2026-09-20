@@ -2,6 +2,7 @@ package taskplanning
 
 import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"sort"
 
 	"github.com/compose-spec/compose-go/v2/types"
@@ -33,7 +34,7 @@ func ProjectServiceProjection(
 		}
 		return serviceIdentities[left].Name < serviceIdentities[right].Name
 	})
-	serviceIDs, err := indexComposeIdentities(ids.KindService, names, serviceIdentities)
+	serviceIDs, err := composerender.IndexComposeIdentities(ids.KindService, names, serviceIdentities)
 	if err != nil {
 		return nil, err
 	}

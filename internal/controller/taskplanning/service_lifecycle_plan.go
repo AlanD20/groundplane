@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
@@ -295,7 +296,7 @@ func (resolver *TaskPlanResolver) renderServiceLifecycleArtifact(
 		return nil, errs.New(errs.KindInternal, "lifecycle source projection does not contain selected Service")
 	}
 	sourceTask := etcd.TaskRecord{PlanID: source.PlanID, RenderGeneration: int32(source.Projection.RenderGeneration)}
-	identity := ComposeReleaseIdentity{
+	identity := composerender.ComposeReleaseIdentity{
 		ProxyImage: source.ProxyImage, ReleaseID: source.ReleaseID, Target: source.CandidateTarget,
 		Image: source.CandidateWorkload.LocalImageID, ServingReleaseID: source.ReleaseID,
 		ServingTarget: source.CandidateTarget, ServingProxyGeneration: source.ProxyGeneration,
@@ -319,7 +320,7 @@ func (resolver *TaskPlanResolver) renderServiceLifecycleArtifact(
 				service = project.DisabledServices[source.ServiceName]
 			}
 			service.DependsOn = nil
-			if err := applySealedWorkload(&service, source.CandidateWorkload); err != nil {
+			if err := composerender.ApplySealedWorkload(&service, source.CandidateWorkload); err != nil {
 				return nil, err
 			}
 			if active {
@@ -329,7 +330,7 @@ func (resolver *TaskPlanResolver) renderServiceLifecycleArtifact(
 			}
 			return managedAttachExternalNetworks(project)
 		},
-		map[string]ComposeReleaseIdentity{source.ServiceID: identity},
+		map[string]composerender.ComposeReleaseIdentity{source.ServiceID: identity},
 	)
 	if err != nil {
 		return nil, err

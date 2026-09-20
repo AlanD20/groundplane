@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
@@ -57,7 +58,7 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 		params[etcd.TaskMaterializationEnvironmentParam] == "" ||
 		ids.Validate(ids.KindTask, params[etcd.EnvironmentDesiredRevisionParam]) != nil ||
 		ids.Validate(ids.KindConfig, params[etcd.TaskComposeArtifactParam]) != nil ||
-		!validVolumeArtifactKey(params[VolumeTaskComposeKeyParam]) {
+		!composerender.ValidVolumeArtifactKey(params[VolumeTaskComposeKeyParam]) {
 		return nil, errs.New(errs.KindInternal, "durable Volume Task shape is invalid")
 	}
 	if (action != VolumeTaskActionAdd && action != VolumeTaskActionEdit && action != VolumeTaskActionRemove) ||
@@ -198,8 +199,8 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 			return nil, errs.New(errs.KindInternal, "durable Volume removal retained its identity")
 		}
 	}
-	expectedCandidate, err := MutateEnvironmentVolumeArtifact(baselineArtifact, VolumeArtifactMutation{
-		Action: VolumeArtifactRemove, VolumeID: task.Target, Key: key, ArtifactID: candidateArtifactID,
+	expectedCandidate, err := composerender.MutateEnvironmentVolumeArtifact(baselineArtifact, composerender.VolumeArtifactMutation{
+		Action: composerender.VolumeArtifactRemove, VolumeID: task.Target, Key: key, ArtifactID: candidateArtifactID,
 		PlanID: task.PlanID, TenantID: tenant.Record.ID, ProjectID: project.Record.ID,
 		RenderGeneration: uint64(task.RenderGeneration),
 	})
@@ -392,7 +393,7 @@ func rebindVolumeArtifactForPlan(
 	}
 	owned := proto.Clone(source).(*agentpb.ComposeArtifact)
 	owned.ArtifactId = artifactID
-	if err := validateRuntimeServiceOwnership(owned); err != nil {
+	if err := composerender.ValidateRuntimeServiceOwnership(owned); err != nil {
 		return nil, err
 	}
 	return owned, nil

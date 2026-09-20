@@ -1,20 +1,18 @@
-package taskplanning
+package composerender
 
 import (
 	"crypto/sha256"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/networkname"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	domain "github.com/AlanD20/groundplane/internal/core/release"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/networkname"
-	domain "github.com/AlanD20/groundplane/internal/core/release"
-
-	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
 const (
@@ -27,13 +25,13 @@ const (
 	composeLabelRenderGen        = "com.groundplane.render-generation"
 	composeLabelServiceID        = "com.groundplane.service-id"
 	composeLabelTenantID         = "com.groundplane.tenant-id"
-	composeLabelReleaseID        = "com.groundplane.release-id"
+	ComposeLabelReleaseID        = "com.groundplane.release-id"
 	composeLabelSlot             = "com.groundplane.slot"
 	composeLabelRuntimeRole      = "com.groundplane.runtime-role"
 	composeResourceExtension     = "x-gp-resource"
 	composeNetworkExtension      = "x-gp-network"
 	composeVolumeBackupExtension = "x-gp-backup"
-	composeVolumeSlugExtension   = "x-gp-slug"
+	ComposeVolumeSlugExtension   = "x-gp-slug"
 )
 
 // ComposeRenderInput is the complete Controller-owned input to one environment artifact render.
@@ -84,15 +82,15 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 	if err != nil {
 		return nil, err
 	}
-	serviceIDs, err := indexComposeIdentities(ids.KindService, serviceNames, input.Identities.Services)
+	serviceIDs, err := IndexComposeIdentities(ids.KindService, serviceNames, input.Identities.Services)
 	if err != nil {
 		return nil, err
 	}
-	networkIDs, err := indexComposeIdentities(ids.KindNetwork, ownedNetworkNames, input.Identities.Networks)
+	networkIDs, err := IndexComposeIdentities(ids.KindNetwork, ownedNetworkNames, input.Identities.Networks)
 	if err != nil {
 		return nil, err
 	}
-	externalNetworkIDs, err := indexComposeIdentities(ids.KindNetwork, externalNetworkNames, input.ExternalNetworks)
+	externalNetworkIDs, err := IndexComposeIdentities(ids.KindNetwork, externalNetworkNames, input.ExternalNetworks)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +98,7 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 	if err != nil {
 		return nil, err
 	}
-	volumeIDs, err := indexComposeIdentities(ids.KindVolume, volumeNames, input.Identities.Volumes)
+	volumeIDs, err := IndexComposeIdentities(ids.KindVolume, volumeNames, input.Identities.Volumes)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +167,7 @@ func RenderCompose(input ComposeRenderInput) (*agentpb.ComposeArtifact, error) {
 		}
 		authoredExtensions := make(composetypes.Extensions, len(volume.Extensions))
 		for key, value := range volume.Extensions {
-			if key != composeVolumeBackupExtension && key != composeVolumeSlugExtension {
+			if key != composeVolumeBackupExtension && key != ComposeVolumeSlugExtension {
 				authoredExtensions[key] = value
 			}
 		}
@@ -287,7 +285,7 @@ func renderableManagedVolumeNames(project *composetypes.Project) ([]string, erro
 		}
 		for extension := range volume.Extensions {
 			if strings.HasPrefix(extension, "x-gp-") &&
-				extension != composeVolumeBackupExtension && extension != composeVolumeSlugExtension {
+				extension != composeVolumeBackupExtension && extension != ComposeVolumeSlugExtension {
 				return nil, errs.New(errs.KindNotImplemented, "compose volume extension is not implemented")
 			}
 		}
@@ -297,7 +295,7 @@ func renderableManagedVolumeNames(project *composetypes.Project) ([]string, erro
 	return names, nil
 }
 
-func indexComposeIdentities(
+func IndexComposeIdentities(
 	kind ids.Kind,
 	desiredNames []string,
 	identities []composeidentity.Resource,

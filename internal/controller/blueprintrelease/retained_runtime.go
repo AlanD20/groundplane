@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 
@@ -107,12 +108,12 @@ func (service *Service) PrepareRuntimeArtifact(
 		return nil, err
 	}
 	if workloads.retained != nil {
-		return taskplanning.RetainEnvironmentComponentRuntime(artifact, workloads.retained.applied.Record.ComposeArtifact)
+		return composerender.RetainEnvironmentComponentRuntime(artifact, workloads.retained.applied.Record.ComposeArtifact)
 	}
 	for _, predecessor := range workloads.predecessors {
 		// All captures share one planning revision; each is checked again by
 		// preparePredecessor and its applied-key CAS before final publication.
-		return taskplanning.RetainEnvironmentComponentRuntime(artifact, predecessor.applied.Record.ComposeArtifact)
+		return composerender.RetainEnvironmentComponentRuntime(artifact, predecessor.applied.Record.ComposeArtifact)
 	}
 	return artifact, nil
 }

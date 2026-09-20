@@ -1,6 +1,7 @@
 package volume
 
 import (
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -74,12 +75,12 @@ func buildVolumeMutationProjection(
 	normalizedArtifact := proto.Clone(oldArtifact).(*agentpb.ComposeArtifact)
 	var err error
 	if hasCurrent {
-		normalizedArtifact, err = taskplanning.NormalizedEnvironmentArtifact(current)
+		normalizedArtifact, err = composerender.NormalizedEnvironmentArtifact(current)
 		if err != nil {
 			return etcd.EnvironmentComposeProjection{}, nil, nil, err
 		}
 	}
-	action := taskplanning.VolumeArtifactAdd
+	action := composerender.VolumeArtifactAdd
 	switch request.action {
 	case volumeMutationActionAdd:
 		candidate.Volumes = append(candidate.Volumes, etcd.EnvironmentVolumeIdentity{
@@ -90,14 +91,14 @@ func buildVolumeMutationProjection(
 			func(left, right int) bool { return candidate.Volumes[left].Key < candidate.Volumes[right].Key },
 		)
 	case volumeMutationActionEdit:
-		action = taskplanning.VolumeArtifactEdit
+		action = composerender.VolumeArtifactEdit
 		for index := range candidate.Volumes {
 			if candidate.Volumes[index].ID == request.volumeID {
 				candidate.Volumes[index].Slug = request.slug
 			}
 		}
 	case volumeMutationActionRemove:
-		action = taskplanning.VolumeArtifactRemove
+		action = composerender.VolumeArtifactRemove
 		keptVolumes := candidate.Volumes[:0]
 		for _, volume := range candidate.Volumes {
 			if volume.ID != request.volumeID {
@@ -118,7 +119,7 @@ func buildVolumeMutationProjection(
 			"Volume mutation action is invalid",
 		)
 	}
-	newArtifact, err := taskplanning.MutateEnvironmentVolumeArtifact(oldArtifact, taskplanning.VolumeArtifactMutation{
+	newArtifact, err := composerender.MutateEnvironmentVolumeArtifact(oldArtifact, composerender.VolumeArtifactMutation{
 		Action: action, VolumeID: request.volumeID, Key: request.key,
 		ArtifactID: stableIDFromTask(ids.KindConfig, revisionID), PlanID: stableIDFromTask(ids.KindPlan, revisionID),
 		TenantID: tenantID, ProjectID: projectID, RenderGeneration: generation,
@@ -130,9 +131,9 @@ func buildVolumeMutationProjection(
 	// identities have no execution labels and are not runtime validation input;
 	// the complete runtime artifact was independently checked above.
 	normalizedArtifact.Services = nil
-	normalizedArtifact, err = taskplanning.MutateEnvironmentVolumeArtifact(
+	normalizedArtifact, err = composerender.MutateEnvironmentVolumeArtifact(
 		normalizedArtifact,
-		taskplanning.VolumeArtifactMutation{
+		composerender.VolumeArtifactMutation{
 			Action: action, VolumeID: request.volumeID, Key: request.key,
 			ArtifactID: stableIDFromTask(
 				ids.KindConfig,

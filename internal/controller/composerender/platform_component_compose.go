@@ -1,19 +1,18 @@
-package taskplanning
+package composerender
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"math"
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
 const (

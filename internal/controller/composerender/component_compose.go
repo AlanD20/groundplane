@@ -1,26 +1,24 @@
-package taskplanning
+package composerender
 
 import (
 	"encoding/hex"
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/internal/common/imageref"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
+	"github.com/AlanD20/groundplane/internal/core"
+	"github.com/AlanD20/groundplane/pkg/errs"
+	"github.com/AlanD20/groundplane/proto/agentpb"
+	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"math"
 	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 	"time"
-
-	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
-
-	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
-	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/common/imageref"
-	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/pkg/errs"
-	"github.com/AlanD20/groundplane/proto/agentpb"
-	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
 // EnvironmentComponentEnvironmentFile is one service-specific generated env
@@ -333,7 +331,7 @@ func validateSelectedComponentImage(image composeidentity.ComponentImage) error 
 	return nil
 }
 
-func pinnedComponentServiceIdentity(
+func PinnedComponentServiceIdentity(
 	service *agentpb.ComposeService,
 	componentID string,
 ) (composeidentity.Resource, error) {

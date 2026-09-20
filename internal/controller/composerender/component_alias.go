@@ -1,10 +1,9 @@
-package taskplanning
+package composerender
 
 import (
-	"slices"
-
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/compose-spec/compose-go/v2/types"
+	"slices"
 )
 
 func validateManagedNetworkAliases(project *types.Project, candidate types.ServiceConfig) error {

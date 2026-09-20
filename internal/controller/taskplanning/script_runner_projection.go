@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"math"
 	"sort"
 	"strconv"
@@ -74,7 +75,7 @@ func buildScriptRunnerPlan(
 	if err := validateScriptRunnerReleaseSource(sources); err != nil {
 		return nil, err
 	}
-	project, err := loadNormalizedEnvironmentProject(ctx, sources.RenderInput.Record.Projection)
+	project, err := composerender.LoadNormalizedEnvironmentProject(ctx, sources.RenderInput.Record.Projection)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +85,7 @@ func buildScriptRunnerPlan(
 	}
 	// The remainder of the projection is shared by manual Scripts and staged
 	// lifecycle hooks. Source loading owns whether the Release is terminal.
-	desiredProject, err := loadNormalizedEnvironmentProject(ctx, sources.DesiredProjection.Record)
+	desiredProject, err := composerender.LoadNormalizedEnvironmentProject(ctx, sources.DesiredProjection.Record)
 	if err != nil {
 		return nil, err
 	}

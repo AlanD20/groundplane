@@ -1,13 +1,12 @@
-package taskplanning
+package composerender
 
 import (
 	"crypto/sha256"
-	"sort"
-
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
+	"sort"
 )
 
 // RetainBlueprintNativeRuntime copies only captured native runtime entries into
@@ -37,11 +36,11 @@ func RetainBlueprintNativeRuntime(
 		}
 		selected[id] = true
 	}
-	nextServices, err := serviceArtifactMapping(next.Content[0])
+	nextServices, err := ServiceArtifactMapping(next.Content[0])
 	if err != nil {
 		return nil, err
 	}
-	priorServices, err := serviceArtifactMapping(prior.Content[0])
+	priorServices, err := ServiceArtifactMapping(prior.Content[0])
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +50,7 @@ func RetainBlueprintNativeRuntime(
 			if service.OwnerComponentId != "" {
 				return nil, errs.New(errs.KindStateConflict, "retained Blueprint native Service changed owner")
 			}
-			removeMappingValue(nextServices, service.ComposeName)
+			RemoveMappingValue(nextServices, service.ComposeName)
 			continue
 		}
 		kept = append(kept, service)
@@ -62,15 +61,15 @@ func RetainBlueprintNativeRuntime(
 		if !selected[service.ServiceId] {
 			continue
 		}
-		index := mappingIndex(priorServices, service.ComposeName)
+		index := MappingIndex(priorServices, service.ComposeName)
 		if service.OwnerComponentId != "" ||
 			service.Role == agentpb.ComposeServiceRole_COMPOSE_SERVICE_ROLE_UNSPECIFIED ||
 			index < 0 ||
-			mappingIndex(nextServices, service.ComposeName) >= 0 {
+			MappingIndex(nextServices, service.ComposeName) >= 0 {
 			return nil, errs.New(errs.KindStateConflict, "retained Blueprint physical Service authority changed")
 		}
-		appendMappingValue(nextServices, service.ComposeName, priorServices.Content[index+1])
-		if err := retainedServiceResourceReferences(priorServices.Content[index+1], references); err != nil {
+		AppendMappingValue(nextServices, service.ComposeName, priorServices.Content[index+1])
+		if err := RetainedServiceResourceReferences(priorServices.Content[index+1], references); err != nil {
 			return nil, err
 		}
 		kept = append(kept, proto.CloneOf(service))
@@ -82,12 +81,12 @@ func RetainBlueprintNativeRuntime(
 	// Persistent resources keep stable ownership. A configuration edit that
 	// would change a retained resource is not silently applied around its users.
 	for _, section := range []string{"networks", "volumes", "configs", "secrets"} {
-		priorIndex := mappingIndex(prior.Content[0], section)
+		priorIndex := MappingIndex(prior.Content[0], section)
 		if priorIndex < 0 {
 			continue
 		}
 		priorMapping := prior.Content[0].Content[priorIndex+1]
-		nextMapping := ensureMappingValue(next.Content[0], section)
+		nextMapping := EnsureMappingValue(next.Content[0], section)
 		if priorMapping.Kind != yaml.MappingNode || nextMapping == nil {
 			return nil, errs.New(errs.KindValidationFailed, "retained Blueprint resource mapping is invalid")
 		}
@@ -96,14 +95,14 @@ func RetainBlueprintNativeRuntime(
 			if !references[section][name] {
 				continue
 			}
-			currentIndex := mappingIndex(nextMapping, name)
+			currentIndex := MappingIndex(nextMapping, name)
 			if currentIndex >= 0 {
-				if !sameComponentRuntimeNode(value, nextMapping.Content[currentIndex+1]) {
+				if !SameComponentRuntimeNode(value, nextMapping.Content[currentIndex+1]) {
 					return nil, errs.Newf(errs.KindStateConflict,
 						"retained Blueprint %s resource %q configuration changed", section, name)
 				}
 			} else if section == "configs" || section == "secrets" {
-				appendMappingValue(nextMapping, name, value)
+				AppendMappingValue(nextMapping, name, value)
 			} else {
 				return nil, errs.New(errs.KindStateConflict, "retained Blueprint persistent resource disappeared")
 			}
@@ -151,9 +150,9 @@ func RetainBlueprintNativeRuntime(
 	return owned, nil
 }
 
-func retainedServiceResourceReferences(service *yaml.Node, references map[string]map[string]bool) error {
+func RetainedServiceResourceReferences(service *yaml.Node, references map[string]map[string]bool) error {
 	for _, section := range []string{"networks", "volumes", "configs", "secrets"} {
-		index := mappingIndex(service, section)
+		index := MappingIndex(service, section)
 		if index < 0 {
 			continue
 		}
@@ -179,7 +178,7 @@ func retainedServiceResourceReferences(service *yaml.Node, references map[string
 				return errs.New(errs.KindValidationFailed, "retained Blueprint resource reference is not canonical")
 			}
 			if section == "volumes" {
-				typeIndex := mappingIndex(entry, "type")
+				typeIndex := MappingIndex(entry, "type")
 				if typeIndex < 0 {
 					return errs.New(errs.KindValidationFailed, "retained Blueprint volume type is absent")
 				}
@@ -187,7 +186,7 @@ func retainedServiceResourceReferences(service *yaml.Node, references map[string
 					continue
 				}
 			}
-			sourceIndex := mappingIndex(entry, "source")
+			sourceIndex := MappingIndex(entry, "source")
 			if sourceIndex < 0 {
 				return errs.New(errs.KindValidationFailed, "retained Blueprint resource source is absent")
 			}

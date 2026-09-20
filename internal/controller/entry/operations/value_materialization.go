@@ -5,9 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	controllerrevision "github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/controller/entrygeneration"
-	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
+
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -48,7 +49,7 @@ func (service *entryDesiredMutationService) entryMaterializations(
 	ctx context.Context,
 	environmentID string,
 	allocator *controllerrevision.BlueprintIdentityAllocator,
-	inputs []taskplanning.EnvironmentEntryMaterialization,
+	inputs []composerender.EnvironmentEntryMaterialization,
 ) ([]etcd.TaskMaterializationRecord, error) {
 	sort.Slice(inputs, func(left, right int) bool { return inputs[left].Destination < inputs[right].Destination })
 	records := make([]etcd.TaskMaterializationRecord, 0, len(inputs))
