@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -90,7 +91,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	projection HostResolutionProjectionRecord,
 	task TaskRecord,
 	renderInput PlatformComponentTaskRenderInput,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) error {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
@@ -142,7 +143,7 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 		return err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return err
 	}
@@ -380,7 +381,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 		clear(renderValue)
 		return hostResolutionReconciliationChange{}, err
 	}
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		clear(renderValue)
 		clear(taskValue)

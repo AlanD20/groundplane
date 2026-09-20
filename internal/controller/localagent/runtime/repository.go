@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -17,7 +18,7 @@ type localAgentRecords interface {
 		context.Context,
 		etcdstore.Versioned[etcd.LocalAgentRecord],
 		etcd.LocalAgentConfig,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcdstore.Versioned[etcd.LocalAgentRecord], etcd.IdempotencyTransactionResult, error)
 	MarkReady(context.Context, string, uint64, int64, time.Time) (etcdstore.Versioned[etcd.LocalAgentRecord], error)
 	ReplaceGeneration(

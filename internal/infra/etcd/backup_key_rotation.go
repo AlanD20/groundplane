@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sync"
 	"time"
@@ -213,7 +214,7 @@ func (repository *BackupPolicyRepository) PublishBackupKeyRotation(
 	ctx context.Context,
 	prepared PreparedBackupKeyRotation,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	publication := prepared.Publication
 	if publication == nil || publication.state == nil {
@@ -235,7 +236,7 @@ func (repository *BackupPolicyRepository) PublishBackupKeyRotation(
 }
 
 func (publication *PreparedBackupKeyRotationPublication) publish(
-	ctx context.Context, task TaskRecord, marker IdempotencyMarker,
+	ctx context.Context, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if publication == nil || publication.state == nil {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -260,7 +261,7 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 	if task.Type != TaskRotate || task.Executor != TaskExecutorController || task.Status != TaskStatusPending ||
 		task.Target != plan.record.EnvironmentID || task.ID != plan.record.TaskID || task.OperationID != plan.record.OperationID ||
 		task.Owner.EnvironmentID != plan.record.EnvironmentID || task.CreatedAt.UTC() != plan.record.CreatedAt ||
-		marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending || marker.TaskID != task.ID {
+		marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != task.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"backup key rotation Task publication is invalid",
@@ -269,7 +270,7 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	initiation, err := newTaskInitiation(task.Owner, TaskActorOperator)
@@ -283,7 +284,7 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -567,7 +568,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	source etcdstore.Versioned[TaskRecord],
 	retryTaskID string,
 	actor TaskActor,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if actor != TaskActorOperator {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -579,14 +580,14 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending || marker.TaskID != retry.ID ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != retry.ID ||
 		!marker.CreatedAt.Equal(retry.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"backup key rotation retry marker does not match its Task",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	retry.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
@@ -667,7 +668,7 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(retry.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(retry.ID)
 	if err != nil {
 		clear(rotationValue)
 		clear(lockValue)

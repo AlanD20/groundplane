@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -44,7 +45,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		state.Values[5].ModRevision != intent.AppliedProjectionRevision || string(state.Values[6].Value) != task.ID {
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal terminal ownership changed")
 	}
-	headID, err := decodeTaskReference(state.Values[4].Value)
+	headID, err := idempotencyrecord.DecodeTaskReference(state.Values[4].Value)
 	if err != nil || headID != intent.DesiredProjection.RevisionID {
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal desired head changed")
 	}
@@ -105,12 +106,12 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		ctx, intent.Claim,
 		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
 		intent.CandidateProjection,
-		IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent}, intent.DesiredHeadRevision,
+		idempotencyrecord.IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent}, intent.DesiredHeadRevision,
 	)
 	if err != nil {
 		return nil, nil, err
 	}
-	headValue, err := encodeTaskReference(intent.Claim.RevisionID)
+	headValue, err := idempotencyrecord.EncodeTaskReference(intent.Claim.RevisionID)
 	if err != nil {
 		clear(publication.publishedDescriptor)
 		return nil, nil, err
@@ -187,7 +188,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	if err != nil {
 		return err
 	}
-	headID, err := decodeTaskReference(state.Values[3].Value)
+	headID, err := idempotencyrecord.DecodeTaskReference(state.Values[3].Value)
 	if err != nil {
 		return err
 	}

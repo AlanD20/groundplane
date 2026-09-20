@@ -10,6 +10,7 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -99,30 +100,30 @@ func NewMutationService(
 
 func (service *MutationService) resolveMutationResult(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence attachMutationEvidence,
 	result etcd.IdempotencyTransactionResult,
 	mutationErr error,
-	response etcd.IdempotencyResponse,
-) (etcd.IdempotencyResponse, error) {
+	response idempotencyrecord.IdempotencyResponse,
+) (idempotencyrecord.IdempotencyResponse, error) {
 	var resolution requestidempotency.Resolution
 	var err error
 	if mutationErr != nil {
 		if !isUnknownAttachMutationOutcome(mutationErr) {
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if resolution.Kind == requestidempotency.ResolutionReplay {
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach mutation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach mutation resolution is invalid")
 	}
 	return requestidempotency.CloneResponse(response), nil
 }

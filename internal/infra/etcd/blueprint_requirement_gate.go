@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -401,7 +402,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 	if headRead.Values[0] == nil {
 		return nil, nil, nil
 	}
-	candidateTaskID, err := decodeTaskReference(headRead.Values[0].Value)
+	candidateTaskID, err := idempotencyrecord.DecodeTaskReference(headRead.Values[0].Value)
 	if err != nil {
 		return nil, nil, nil
 	}

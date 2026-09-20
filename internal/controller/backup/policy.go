@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"time"
 
@@ -36,7 +37,7 @@ type backupPolicyRepository interface {
 	ReplaceBackupPolicyProtected(
 		context.Context,
 		etcd.PreparedBackupPolicyReplacement,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
@@ -47,16 +48,16 @@ type backupPolicyEvidence struct {
 type backupPolicyIdempotency interface {
 	Prepare(context.Context, string, apiTypes.BackupPolicyReplacementRequest) (backupPolicyEvidence, error)
 	ResolveExisting(
-		context.Context, etcd.IdempotencyLocator, backupPolicyEvidence,
+		context.Context, idempotencyrecord.IdempotencyLocator, backupPolicyEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	NewMarker(
-		backupPolicyEvidence, etcd.IdempotencyLocator, etcd.IdempotencyResponse, time.Time,
-	) (etcd.IdempotencyMarker, error)
+		backupPolicyEvidence, idempotencyrecord.IdempotencyLocator, idempotencyrecord.IdempotencyResponse, time.Time,
+	) (idempotencyrecord.IdempotencyMarker, error)
 	ResolveKnown(
 		context.Context, backupPolicyEvidence, etcd.IdempotencyTransactionResult,
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
-		context.Context, etcd.IdempotencyLocator, backupPolicyEvidence, error,
+		context.Context, idempotencyrecord.IdempotencyLocator, backupPolicyEvidence, error,
 	) (requestidempotency.Resolution, error)
 }
 
@@ -94,7 +95,7 @@ func (service *durableBackupPolicyIdempotency) Prepare(
 
 func (service *durableBackupPolicyIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence backupPolicyEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -102,16 +103,16 @@ func (service *durableBackupPolicyIdempotency) ResolveExisting(
 
 func (*durableBackupPolicyIdempotency) NewMarker(
 	evidence backupPolicyEvidence,
-	locator etcd.IdempotencyLocator,
-	response etcd.IdempotencyResponse,
+	locator idempotencyrecord.IdempotencyLocator,
+	response idempotencyrecord.IdempotencyResponse,
 	now time.Time,
-) (etcd.IdempotencyMarker, error) {
+) (idempotencyrecord.IdempotencyMarker, error) {
 	intent, err := evidence.candidate.DurableRecord()
 	if err != nil {
-		return etcd.IdempotencyMarker{}, err
+		return idempotencyrecord.IdempotencyMarker{}, err
 	}
 	defer clear(intent.Ciphertext)
-	return etcd.NewCompletedDirectIdempotencyMarker(locator, intent, response, now)
+	return idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, intent, response, now)
 }
 
 func (service *durableBackupPolicyIdempotency) ResolveKnown(
@@ -124,7 +125,7 @@ func (service *durableBackupPolicyIdempotency) ResolveKnown(
 
 func (service *durableBackupPolicyIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence backupPolicyEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -262,7 +263,7 @@ func (service *backupPolicyService) SetBackupPolicy(
 		return apiTypes.BackupPolicyMutationResult{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
 	defer clear(response.Body)
@@ -288,7 +289,7 @@ func (service *backupPolicyService) SetBackupPolicy(
 		return apiTypes.BackupPolicyMutationResult{}, err
 	}
 	if resolution.Kind == requestidempotency.ResolutionApplied {
-		resolution.Response = etcd.IdempotencyResponse{
+		resolution.Response = idempotencyrecord.IdempotencyResponse{
 			Status: response.Status, ContentKind: response.ContentKind,
 			Body: append([]byte(nil), response.Body...),
 		}
@@ -352,9 +353,9 @@ func backupPolicyTimestamp(value time.Time) string {
 	return value.UTC().Format(time.RFC3339)
 }
 
-func backupPolicyLocator(environmentID string, key string) etcd.IdempotencyLocator {
-	return etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+func backupPolicyLocator(environmentID string, key string) idempotencyrecord.IdempotencyLocator {
+	return idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environmentID,
 		Method: http.MethodPut, Route: backupPolicyReplacementRoute, Key: key,
 	}
 }
@@ -387,7 +388,7 @@ func backupPolicyIntent(
 }
 
 func decodeBackupPolicyResponse(
-	response etcd.IdempotencyResponse,
+	response idempotencyrecord.IdempotencyResponse,
 ) (apiTypes.BackupPolicyMutationResult, error) {
 	if response.Status != http.StatusOK || response.ContentKind != "application/json" {
 		return apiTypes.BackupPolicyMutationResult{}, errs.New(

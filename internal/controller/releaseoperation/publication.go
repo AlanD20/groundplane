@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"slices"
 	"strings"
@@ -28,16 +29,16 @@ func (service *Service) publish(
 	desiredRevision int64,
 	groupID string,
 	candidates []releaseCandidateInput,
-	locator etcd.IdempotencyLocator,
-	durable etcd.ProtectedIntentRecord,
+	locator idempotencyrecord.IdempotencyLocator,
+	durable idempotencyrecord.ProtectedIntentRecord,
 	protected requestidempotency.ProtectedEvidence,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if err := service.sealCandidates(ctx, candidates); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	projection, err := service.captureDesiredProjection(ctx, scope)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	now := service.now().UTC()
 	operationKind := domain.OperationDeploy
@@ -56,7 +57,7 @@ func (service *Service) publish(
 		dependencyPlan = scope.Compose.Record.RollbackDependencyPlan
 	}
 	if err := validateReleaseDependencyOrder(candidates, dependencyPlan); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	budget := int64((20*time.Minute + time.Duration(len(candidates))*10*time.Minute) / time.Second)
 	if policy == domain.OnFailureSwitchBack {
@@ -69,7 +70,7 @@ func (service *Service) publish(
 	artifactID := ids.New(ids.KindConfig)
 	owner, err := etcd.EnvironmentTaskOwner(scope.Project.Record, scope.Environment.Record)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: operationID, IdempotencyKey: locator.Key,
@@ -101,11 +102,11 @@ func (service *Service) publish(
 		}
 		candidateTarget, err := domain.TargetFor(candidate.strategy, candidate.slot)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		priorTarget, err := domain.TargetFor(candidate.priorStrategy, priorSlot)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		if releaseNeedsPriorArtifact(candidate) {
 			priorArtifactID = ids.New(ids.KindConfig)
@@ -127,10 +128,10 @@ func (service *Service) publish(
 		if candidate.priorReleaseID != "" {
 			prior, err := service.ledger.GetReleaseRenderInputAt(ctx, candidate.priorReleaseID, scope.ReadRevision)
 			if err != nil {
-				return etcd.IdempotencyResponse{}, err
+				return idempotencyrecord.IdempotencyResponse{}, err
 			}
 			if prior.Record.ServiceID != render.ServiceID || prior.Record.EnvironmentID != render.EnvironmentID {
-				return etcd.IdempotencyResponse{}, errs.New(
+				return idempotencyrecord.IdempotencyResponse{}, errs.New(
 					errs.KindStateConflict,
 					"historical Service proxy source identity changed",
 				)
@@ -139,17 +140,17 @@ func (service *Service) publish(
 		}
 		if err := configureReleaseProxy(&render, candidate.planning.Service.Record.Desired.Expose,
 			priorRender, candidate.planning.Projection.Revision); err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		if err := service.plans.PrepareReleaseProxyImage(&render, priorRender); err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		if err := service.captureServingRuntime(ctx, scope, &render, candidate.priorReleaseID); err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		raw, err := etcd.EncodeReleaseRenderInput(render)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		digest, _ := domain.Digest(json.RawMessage(raw))
 		intent := domain.Intent{
@@ -184,16 +185,16 @@ func (service *Service) publish(
 	}
 	manifest, err := service.ledger.Stage(ctx, stage)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	hooks, err := service.prepareReleaseHooks(ctx, scope, manifest.ReadRevision, operationKind, task, renderMembers)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task, renderMembers = hooks.task, hooks.members
 	budget += int64(hooks.executions) * int64(executionplan.ScriptExecutionTimeoutSeconds)
 	if configured < budget {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindReleaseDeadlineTooShort,
 			"configured release deadline is below the computed attempt budget",
 		)
@@ -212,11 +213,11 @@ func (service *Service) publish(
 			ConfiguredTimeoutSeconds: configured, ComputedBudgetSeconds: budget,
 		})
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		progress, err := executor.Begin(taskID, now)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		head.Progress = &progress
 	}
@@ -224,40 +225,40 @@ func (service *Service) publish(
 		PublicationID: publicationID, Operation: head, Members: renderMembers,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task, err = service.ledger.PrepareTaskConfigurationAtRevision(ctx, preparedTask, scope.ReadRevision)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	candidateDescriptor, err := executionplan.DescribeCandidateRelease(plan)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	var executions []etcd.ScriptExecutionRecord
 	if len(plan.GetScriptRunnerSnapshots()) != 0 {
 		executions, err = etcd.NewScriptExecutionRecords(task, plan, now)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
 	if len(executions) != hooks.executions {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release hook execution authority is incomplete")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "release hook execution authority is incomplete")
 	}
 	hookPublications := make([]etcd.ReleaseHookExecutionPublication, len(executions))
 	for index, execution := range executions {
 		sources, exists := hooks.sources[execution.ID]
 		if !exists {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release hook execution source is missing")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "release hook execution source is missing")
 		}
 		hookPublications[index] = etcd.ReleaseHookExecutionPublication{Sources: sources, Execution: execution}
 	}
 	response, responseBody, err := releaseAcceptedResponse(groupID, taskID, operationID, groupMembers)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: durable, Response: response, TaskID: taskID,
 		CreatedAt: now, UpdatedAt: now,
 	}
@@ -276,17 +277,17 @@ func (service *Service) publish(
 	})
 	if err != nil {
 		if !releaseGroupUnknownOutcome(err) {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		resolution, resolveErr := service.coordinator.ResolveUnknown(ctx, service.idempotency, locator, protected, err)
 		if resolveErr != nil {
-			return etcd.IdempotencyResponse{}, resolveErr
+			return idempotencyrecord.IdempotencyResponse{}, resolveErr
 		}
 		return releaseOperationResolution(resolution, response)
 	}
 	resolution, err := service.coordinator.ResolveKnown(ctx, protected, result.Idempotency)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	_ = responseBody
 	return releaseOperationResolution(resolution, response)
@@ -350,7 +351,7 @@ func releaseAcceptedResponse(
 	taskID string,
 	operationID string,
 	members []domain.GroupMember,
-) (etcd.IdempotencyResponse, []byte, error) {
+) (idempotencyrecord.IdempotencyResponse, []byte, error) {
 	var value any
 	if groupID == "" {
 		value = apiTypes.ReleaseTaskAccepted{TaskID: taskID, OperationID: operationID, ReleaseID: members[0].ReleaseID}
@@ -365,22 +366,22 @@ func releaseAcceptedResponse(
 	}
 	body, err := json.Marshal(value)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, nil, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
-	return etcd.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}, body, nil
+	return idempotencyrecord.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}, body, nil
 }
 
 func releaseOperationResolution(
 	resolution requestidempotency.Resolution,
-	applied etcd.IdempotencyResponse,
-) (etcd.IdempotencyResponse, error) {
+	applied idempotencyrecord.IdempotencyResponse,
+) (idempotencyrecord.IdempotencyResponse, error) {
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
 		return cloneIdempotencyResponse(applied), nil
 	case requestidempotency.ResolutionReplay:
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release idempotency resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "release idempotency resolution is invalid")
 	}
 }
 
@@ -469,7 +470,7 @@ func inactiveReleaseSlot(strategy domain.Strategy, serving domain.Slot) domain.S
 	return domain.SlotBlue
 }
 
-func cloneIdempotencyResponse(response etcd.IdempotencyResponse) etcd.IdempotencyResponse {
+func cloneIdempotencyResponse(response idempotencyrecord.IdempotencyResponse) idempotencyrecord.IdempotencyResponse {
 	response.Body = append([]byte(nil), response.Body...)
 	return response
 }

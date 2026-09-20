@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +16,7 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	ctx context.Context,
 	current etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	replacement hierarchyrecord.ProjectRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -37,13 +38,13 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 			"Project mutation identity is invalid",
 		)
 	}
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != IdempotencyScopeProject || marker.Locator.ScopeID != current.Record.ID {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject || marker.Locator.ScopeID != current.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Project mutation marker must be a completed Project-scoped direct mutation",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	renaming := current.Record.Slug != replacement.Slug

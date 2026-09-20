@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strconv"
@@ -204,7 +205,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		return HierarchyDeletionChildEntry{}, err
 	}
 	defer clear(taskValue)
-	taskReference, err := encodeTaskReference(task.ID)
+	taskReference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return HierarchyDeletionChildEntry{}, err
 	}

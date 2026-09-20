@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -274,19 +275,19 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	replayTargetIndex := -1
 	markerKey := ""
 	if task.RetryOf == "" {
-		locator := IdempotencyLocator{
-			ScopeKind: IdempotencyScopeEnvironment,
+		locator := idempotencyrecord.IdempotencyLocator{
+			ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
 			ScopeID:   input.EnvironmentID,
 			Method:    "DELETE",
 			Route:     "/attaches/{id}",
 			Key:       task.IdempotencyKey,
 		}
-		markerKey, err = idempotencyMarkerKey(locator)
+		markerKey, err = idempotencyrecord.IdempotencyMarkerKey(locator)
 		if err != nil {
 			return err
 		}
-		replayTargetKey, keyErr := idempotencyReplayTargetKey(
-			IdempotencyReplayTarget{Kind: IdempotencyReplayTargetAttach, ID: task.Target},
+		replayTargetKey, keyErr := idempotencyrecord.IdempotencyReplayTargetKey(
+			idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetAttach, ID: task.Target},
 			locator.Method,
 			locator.Route,
 			locator.Key,
@@ -399,7 +400,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	}
 	if replayTargetIndex >= 0 {
 		replayTarget := state.Values[replayTargetIndex]
-		if replayTarget == nil || decodeReplayTargetReference(replayTarget.Value, markerKey) != nil {
+		if replayTarget == nil || idempotencyrecord.DecodeReplayTargetReference(replayTarget.Value, markerKey) != nil {
 			return errs.New(errs.KindStateConflict, "attach detach replay target is missing or corrupt")
 		}
 	}

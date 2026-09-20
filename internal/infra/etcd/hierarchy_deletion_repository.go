@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
@@ -76,7 +77,7 @@ func (repository *HierarchyDeletionRepository) ResolveProjectDeletionTargetKind(
 
 type HierarchyDeletionTargetResolution struct {
 	TargetKind HierarchyDeletionTargetKind
-	ScopeKind  IdempotencyScopeKind
+	ScopeKind  idempotencyrecord.IdempotencyScopeKind
 	ScopeID    string
 }
 
@@ -95,7 +96,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		}
 		return HierarchyDeletionTargetResolution{
 			TargetKind: requested,
-			ScopeKind:  IdempotencyScopeTenant,
+			ScopeKind:  idempotencyrecord.IdempotencyScopeTenant,
 			ScopeID:    targetID,
 		}, nil
 	case HierarchyDeletionTargetProject:
@@ -118,7 +119,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		}
 		return HierarchyDeletionTargetResolution{
 			TargetKind: requested,
-			ScopeKind:  IdempotencyScopeTenant,
+			ScopeKind:  idempotencyrecord.IdempotencyScopeTenant,
 			ScopeID:    project.Record.TenantID,
 		}, nil
 	case HierarchyDeletionTargetBacking:
@@ -138,7 +139,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		}
 		return HierarchyDeletionTargetResolution{
 			TargetKind: requested,
-			ScopeKind:  IdempotencyScopePlatform,
+			ScopeKind:  idempotencyrecord.IdempotencyScopePlatform,
 			ScopeID:    "-",
 		}, nil
 	case HierarchyDeletionTargetEnvironment:
@@ -162,7 +163,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		}
 		return HierarchyDeletionTargetResolution{
 			TargetKind: requested,
-			ScopeKind:  IdempotencyScopeProject,
+			ScopeKind:  idempotencyrecord.IdempotencyScopeProject,
 			ScopeID:    environment.Record.ProjectID,
 		}, nil
 	default:
@@ -181,7 +182,7 @@ type HierarchyDeletionBegin struct {
 	TargetID        string
 	TaskID          string
 	IdempotencyHash string
-	Marker          IdempotencyMarker
+	Marker          idempotencyrecord.IdempotencyMarker
 	CreatedAt       time.Time
 	DeadlineAt      time.Time
 }
@@ -189,7 +190,7 @@ type HierarchyDeletionBegin struct {
 type HierarchyDeletionOperation struct {
 	Tombstone         HierarchyDeletionTombstone
 	RootTaskID        string
-	MarkerLocator     IdempotencyLocator
+	MarkerLocator     idempotencyrecord.IdempotencyLocator
 	Owner             TaskOwner
 	TombstoneRevision int64
 	Fence             HierarchyDeletionCleanupFence
@@ -272,7 +273,7 @@ func (repository *HierarchyDeletionRepository) Begin(
 		return HierarchyDeletionBeginResult{}, err
 	}
 	defer clear(encodedTask)
-	taskReference, err := encodeTaskReference(task.ID)
+	taskReference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return HierarchyDeletionBeginResult{}, err
 	}
@@ -341,9 +342,9 @@ func validateHierarchyDeletionBegin(begin HierarchyDeletionBegin) error {
 		!begin.DeadlineAt.Equal(begin.CreatedAt.Add(hierarchyDeletionAttemptTimeout)) {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion publication is invalid")
 	}
-	if begin.Marker.Kind != IdempotencyMarkerTask || begin.Marker.State != IdempotencyMarkerPending ||
+	if begin.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask || begin.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		begin.Marker.TaskID != begin.TaskID || !begin.Marker.CreatedAt.Equal(begin.CreatedAt) ||
-		!begin.Marker.UpdatedAt.Equal(begin.CreatedAt) || validateIdempotencyMarker(begin.Marker) != nil {
+		!begin.Marker.UpdatedAt.Equal(begin.CreatedAt) || idempotencyrecord.ValidateIdempotencyMarker(begin.Marker) != nil {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion idempotency evidence is invalid")
 	}
 	return nil
@@ -398,8 +399,8 @@ func classifyHierarchyDeletionBegin(begin HierarchyDeletionBegin) idempotencyPla
 
 func (repository *HierarchyDeletionRepository) validateHierarchyDeletionBeginReplay(
 	begin HierarchyDeletionBegin,
-) func(context.Context, IdempotencyMarker, int64, int64) error {
-	return func(ctx context.Context, marker IdempotencyMarker, _, revision int64) error {
+) func(context.Context, idempotencyrecord.IdempotencyMarker, int64, int64) error {
+	return func(ctx context.Context, marker idempotencyrecord.IdempotencyMarker, _, revision int64) error {
 		if marker.TaskID != begin.TaskID || revision <= 0 {
 			return errs.New(errs.KindStateConflict, "hierarchy deletion replay identity changed")
 		}

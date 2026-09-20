@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 	"time"
@@ -50,7 +51,7 @@ func (service *BackupRunService) RunBackup(
 	ctx context.Context,
 	environmentID, idempotencyKey string,
 	fixedRevision ...int64,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.runBackup(
 		ctx, environmentID, idempotencyKey, backupRunRoute,
 		etcd.BackupRunInitiatorOperator, nil, time.Time{}, fixedRevision...,
@@ -63,10 +64,10 @@ func (service *BackupRunService) RunBackup(
 func (service *BackupRunService) RunScheduledBackup(
 	ctx context.Context, environmentID string, policyRevision int64,
 	scheduledAt, evaluatedAt time.Time, fixedRevision ...int64,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if policyRevision <= 0 || scheduledAt.IsZero() || evaluatedAt.IsZero() ||
 		scheduledAt.After(evaluatedAt) {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed, "scheduled backup identity is invalid",
 		)
 	}
@@ -84,7 +85,7 @@ func (service *BackupRunService) RetryBackupTask(
 	ctx context.Context,
 	sourceTaskID string,
 	retryTaskID string,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	if service == nil || service.repository == nil || service.plans == nil {
 		return etcd.IdempotencyTransactionResult{}, errs.New(
@@ -141,22 +142,22 @@ func (service *BackupRunService) runBackup(
 	environmentID, idempotencyKey, route string,
 	initiator etcd.BackupRunInitiator, scheduledAt *time.Time,
 	createdAtOverride time.Time, fixedRevision ...int64,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.repository == nil || service.plans == nil ||
 		service.idempotency == nil {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"backup run service is not configured",
 		)
 	}
 	if environmentID == "" || idempotencyKey == "" {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"environment and idempotency key are required",
 		)
 	}
 	if len(fixedRevision) > 1 {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"at most one fixed revision may be supplied",
 		)
@@ -166,18 +167,18 @@ func (service *BackupRunService) runBackup(
 		revision = fixedRevision[0]
 	}
 
-	locator := etcd.IdempotencyLocator{
+	locator := idempotencyrecord.IdempotencyLocator{
 		Method: http.MethodPost, Route: route, Key: idempotencyKey,
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environmentID,
 	}
 	evidence, err := service.idempotency.Prepare(ctx, environmentID, route)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer evidence.candidate.Destroy()
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		return resolution.Response, nil
@@ -200,7 +201,7 @@ func (service *BackupRunService) runBackup(
 		Initiator: initiator, ScheduledAt: scheduledAt,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer prepared.Publication.Clear()
 
@@ -231,7 +232,7 @@ func (service *BackupRunService) runBackup(
 		Task: task, Run: prepared.Run, Upload: BackupRunUploadAuthorities(prepared.Run),
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	// The sealed digest is task metadata, not a parameter or materialization.
 	// The persistence seam validates this exact digest before publication.
@@ -241,9 +242,9 @@ func (service *BackupRunService) runBackup(
 		TaskID string `json:"task_id"`
 	}{TaskID: taskID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status:      http.StatusAccepted,
 		ContentKind: "application/json",
 		Body:        append([]byte(nil), responseBody...),
@@ -251,7 +252,7 @@ func (service *BackupRunService) runBackup(
 	marker, err := service.idempotency.NewMarker(evidence, locator, response, taskID, createdAt)
 	clear(responseBody)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -259,17 +260,17 @@ func (service *BackupRunService) runBackup(
 	if publishErr != nil {
 		if !errors.Is(publishErr, errs.New(errs.KindStorageUnavailable, "")) &&
 			!errors.Is(publishErr, context.DeadlineExceeded) {
-			return etcd.IdempotencyResponse{}, publishErr
+			return idempotencyrecord.IdempotencyResponse{}, publishErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, publishErr)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		return resolution.Response, nil
 	}
 	resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if resolution.Kind == requestidempotency.ResolutionApplied {
 		resolution.Response = response

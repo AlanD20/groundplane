@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
@@ -49,14 +50,14 @@ type zoneCreationRepository interface {
 
 type zoneCreationEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type zoneCreationIdempotency interface {
 	Prepare(context.Context, apiTypes.ZoneCreate) (zoneCreationEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		zoneCreationEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -66,11 +67,11 @@ type zoneCreationIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		zoneCreationEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
-	MatchesStaged(context.Context, zoneCreationEvidence, etcd.ProtectedIntentRecord) (bool, error)
+	MatchesStaged(context.Context, zoneCreationEvidence, idempotencyrecord.ProtectedIntentRecord) (bool, error)
 }
 
 type durableZoneCreationIdempotency struct {
@@ -124,7 +125,7 @@ func (service *durableZoneCreationIdempotency) Prepare(
 
 func (service *durableZoneCreationIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence zoneCreationEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -140,7 +141,7 @@ func (service *durableZoneCreationIdempotency) ResolveKnown(
 
 func (service *durableZoneCreationIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence zoneCreationEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -150,7 +151,7 @@ func (service *durableZoneCreationIdempotency) ResolveUnknown(
 func (service *durableZoneCreationIdempotency) MatchesStaged(
 	ctx context.Context,
 	evidence zoneCreationEvidence,
-	existing etcd.ProtectedIntentRecord,
+	existing idempotencyrecord.ProtectedIntentRecord,
 ) (bool, error) {
 	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
 }
@@ -177,12 +178,12 @@ func (service *zoneCreationService) CreateZone(
 	ctx context.Context,
 	input apiTypes.ZoneCreate,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone creation context is required")
 	}
 	if err := validateZoneCreationInput(input); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	for attempt := 0; attempt < maximumZoneCreationAttempts; attempt++ {
 		response, err := service.createZoneOnce(ctx, input, idempotencyKey)
@@ -191,24 +192,24 @@ func (service *zoneCreationService) CreateZone(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumZoneCreationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone creation retry bound was not enforced")
 }
 
 func (service *zoneCreationService) createZoneOnce(
 	ctx context.Context,
 	input apiTypes.ZoneCreate,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := service.idempotency.Prepare(ctx, input)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
 		ScopeID:   input.EnvironmentID,
 		Method:    http.MethodPost,
 		Route:     zoneCreationRoute,
@@ -216,11 +217,11 @@ func (service *zoneCreationService) createZoneOnce(
 	}
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Zone creation replay resolution is invalid",
 			)
@@ -229,25 +230,25 @@ func (service *zoneCreationService) createZoneOnce(
 	}
 	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, input.EnvironmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !found {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindStateConflict,
 			"Environment has no current desired revision",
 		)
 	}
 	environment, err := service.repository.GetEnvironment(ctx, input.EnvironmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if environment.ReadRevision <= 0 || projection.ReadRevision != environment.ReadRevision ||
 		project.ReadRevision != environment.ReadRevision {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindStateConflict,
 			"Zone creation hierarchy changed during selection",
 		)
@@ -255,24 +256,24 @@ func (service *zoneCreationService) createZoneOnce(
 	if environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady ||
 		environment.Record.ID != input.EnvironmentID || projection.Record.EnvironmentID != input.EnvironmentID ||
 		project.Record.ID != environment.Record.ProjectID {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindStateConflict,
 			"Zone creation requires a ready Environment hierarchy",
 		)
 	}
 	environmentPool, err := ipam.ParseIPv4Prefix(environment.Record.NetworkPool)
 	if err != nil || environmentPool.String() != environment.Record.NetworkPool {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment network pool is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment network pool is invalid")
 	}
 	requestedSubnet, _ := ipam.ParseIPv4Prefix(input.Subnet)
 	if requestedSubnet.Bits() < environmentPool.Bits() || !environmentPool.Contains(requestedSubnet.Addr()) {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Zone subnet must be inside the Environment network pool",
 		)
 	}
 	if projection.Record.RenderGeneration == ^uint64(0) {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindStateConflict,
 			"Environment render generation is exhausted",
 		)
@@ -281,7 +282,7 @@ func (service *zoneCreationService) createZoneOnce(
 	claim, err := desiredrevision.Claim(ctx, service.repository, desiredrevision.ClaimInput{
 		EnvironmentID: input.EnvironmentID, CandidateTaskID: ids.New(ids.KindTask),
 		Locator: locator, Intent: evidence.durable,
-		MatchExistingIntent: func(matchContext context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
+		MatchExistingIntent: func(matchContext context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
 			return service.idempotency.MatchesStaged(matchContext, evidence, existing)
 		},
 		BaselineHeadRevision: projection.Revision,
@@ -290,11 +291,11 @@ func (service *zoneCreationService) createZoneOnce(
 		CreatedAt:            createdAt,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	allocator, err := desiredrevision.NewBlueprintIdentityAllocator(claim)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	ownerKind := core.ZoneOwnerEnvironment
 	ownerID := environment.Record.ID
@@ -307,17 +308,17 @@ func (service *zoneCreationService) createZoneOnce(
 		Internal: input.Internal, OwnerKind: ownerKind, OwnerID: ownerID,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	candidate, err := buildZoneCreationProjection(
 		projection.Record, project.Record, record, claim.RevisionID, claim.RenderGeneration,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	projectionEvidence, err := desiredrevision.PreflightProjection(candidate)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if _, err := service.repository.StageEnvironmentBlueprintRevision(ctx, etcd.EnvironmentBlueprintStageRequest{
 		Claim: claim,
@@ -330,7 +331,7 @@ func (service *zoneCreationService) createZoneOnce(
 		}},
 		Projection: candidate, DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	responseBody, err := json.Marshal(apiTypes.Zone{
 		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Name: record.Desired.Name,
@@ -338,16 +339,16 @@ func (service *zoneCreationService) createZoneOnce(
 		OwnerKind: apiTypes.ZoneOwnerKind(record.Desired.OwnerKind), OwnerID: record.Desired.OwnerID,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusCreated, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, claim.CreatedAt)
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, claim.CreatedAt)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -364,14 +365,14 @@ func (service *zoneCreationService) createZoneOnce(
 	)
 	if createErr != nil {
 		if !isUnknownZoneCreationOutcome(createErr) {
-			return etcd.IdempotencyResponse{}, createErr
+			return idempotencyrecord.IdempotencyResponse{}, createErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, createErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -379,7 +380,7 @@ func (service *zoneCreationService) createZoneOnce(
 	case requestidempotency.ResolutionReplay:
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone creation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone creation resolution is invalid")
 	}
 }
 

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"maps"
@@ -62,7 +63,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		state.Values[3].ModRevision != intent.AppliedProjectionRevision {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry authority changed")
 	}
-	headID, err := decodeTaskReference(state.Values[2].Value)
+	headID, err := idempotencyrecord.DecodeTaskReference(state.Values[2].Value)
 	if err != nil || headID != intent.DesiredProjection.RevisionID {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry head changed")
 	}
@@ -89,7 +90,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 			RevisionID:    retryIntent.Claim.RevisionID,
 		},
 		retryIntent.CandidateProjection,
-		IdempotencyMarker{
+		idempotencyrecord.IdempotencyMarker{
 			Locator: retryIntent.Claim.Locator,
 			Intent:  retryIntent.Claim.Intent,
 		},

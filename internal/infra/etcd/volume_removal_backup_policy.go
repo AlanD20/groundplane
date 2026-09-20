@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -177,7 +178,7 @@ func (prepared VolumeRemovalBackupPolicyPreparation) validateDesiredPublication(
 	claim EnvironmentBlueprintStageClaim,
 	projection EnvironmentComposeProjection,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	removedVolumeID string,
 ) error {
 	state := prepared.state

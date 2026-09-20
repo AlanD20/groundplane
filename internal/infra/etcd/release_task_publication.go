@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
@@ -34,7 +35,7 @@ func (repository *TaskRepository) prepareReleaseTaskPublicationFragment(
 	if err != nil {
 		return releaseTaskPublicationFragment{}, err
 	}
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		clear(taskValue)
 		return releaseTaskPublicationFragment{}, err

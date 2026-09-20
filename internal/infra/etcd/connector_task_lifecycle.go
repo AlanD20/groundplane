@@ -4,6 +4,7 @@ import (
 	"context"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/http"
@@ -366,8 +367,8 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 	}
 	markerKey := ""
 	if task.RetryOf == "" {
-		markerKey, err = idempotencyMarkerKey(IdempotencyLocator{
-			ScopeKind: IdempotencyScopeEnvironment,
+		markerKey, err = idempotencyrecord.IdempotencyMarkerKey(idempotencyrecord.IdempotencyLocator{
+			ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
 			ScopeID:   environmentID,
 			Method:    http.MethodDelete,
 			Route:     connectorDeletionRoute,
@@ -376,8 +377,8 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 		if err != nil {
 			return err
 		}
-		replayTargetKey, keyErr := idempotencyReplayTargetKey(
-			IdempotencyReplayTarget{Kind: IdempotencyReplayTargetConnector, ID: task.Target},
+		replayTargetKey, keyErr := idempotencyrecord.IdempotencyReplayTargetKey(
+			idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetConnector, ID: task.Target},
 			http.MethodDelete,
 			connectorDeletionRoute,
 			task.IdempotencyKey,
@@ -404,7 +405,7 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 		if stored.Values[6] == nil {
 			return errs.New(errs.KindStateConflict, "connector deletion replay target is missing")
 		}
-		if err := decodeReplayTargetReference(stored.Values[6].Value, markerKey); err != nil {
+		if err := idempotencyrecord.DecodeReplayTargetReference(stored.Values[6].Value, markerKey); err != nil {
 			return errs.New(errs.KindStateConflict, "connector deletion replay target is corrupt")
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -87,8 +88,8 @@ type EnvironmentBlueprintStageClaimRequest struct {
 	EnvironmentID        string
 	CandidateRevisionID  string
 	CandidateTaskID      string
-	Locator              IdempotencyLocator
-	Intent               ProtectedIntentRecord
+	Locator              idempotencyrecord.IdempotencyLocator
+	Intent               idempotencyrecord.ProtectedIntentRecord
 	BaselineHeadRevision int64
 	SourceKind           EnvironmentBlueprintSourceKind
 	RenderGeneration     uint64
@@ -104,8 +105,8 @@ type EnvironmentBlueprintStageClaim struct {
 	EnvironmentID        string
 	RevisionID           string
 	TaskID               string
-	Locator              IdempotencyLocator
-	Intent               ProtectedIntentRecord
+	Locator              idempotencyrecord.IdempotencyLocator
+	Intent               idempotencyrecord.ProtectedIntentRecord
 	BaselineHeadRevision int64
 	SourceKind           EnvironmentBlueprintSourceKind
 	RenderGeneration     uint64
@@ -317,8 +318,8 @@ func environmentBlueprintRevisionPrefixFinal(environmentID, revisionID string) s
 		recordcodec.EncodeKeySegment(revisionID) + "/"
 }
 
-func environmentBlueprintLocatorKey(locator IdempotencyLocator) (string, [sha256.Size]byte, error) {
-	if _, err := idempotencyMarkerKey(locator); err != nil {
+func environmentBlueprintLocatorKey(locator idempotencyrecord.IdempotencyLocator) (string, [sha256.Size]byte, error) {
+	if _, err := idempotencyrecord.IdempotencyMarkerKey(locator); err != nil {
 		return "", [sha256.Size]byte{}, err
 	}
 	scope := canonicalBlueprintLocatorScope(locator)
@@ -334,7 +335,7 @@ func environmentBlueprintLocatorKey(locator IdempotencyLocator) (string, [sha256
 	return key, keyDigest, nil
 }
 
-func canonicalBlueprintLocatorScope(locator IdempotencyLocator) []byte {
+func canonicalBlueprintLocatorScope(locator idempotencyrecord.IdempotencyLocator) []byte {
 	fields := []string{string(locator.ScopeKind), locator.ScopeID, locator.Method, locator.Route}
 	length := 0
 	for _, field := range fields {
@@ -765,13 +766,13 @@ func validateEnvironmentBlueprintStageClaim(claim EnvironmentBlueprintStageClaim
 		ids.Validate(ids.KindEnvironment, claim.EnvironmentID) != nil ||
 		ids.Validate(ids.KindTask, claim.RevisionID) != nil || ids.Validate(ids.KindTask, claim.TaskID) != nil ||
 		claim.BaselineHeadRevision < 0 || claim.RenderGeneration == 0 || claim.ProjectionSchema == 0 ||
-		!validBlueprintRecordTime(claim.CreatedAt) || validateProtectedIntent(claim.Intent) != nil {
+		!validBlueprintRecordTime(claim.CreatedAt) || idempotencyrecord.ValidateProtectedIntent(claim.Intent) != nil {
 		return errs.New(errs.KindValidationFailed, "Blueprint staging claim is invalid")
 	}
 	if claim.SourceKind != EnvironmentBlueprintSourceApply && claim.SourceKind != EnvironmentBlueprintSourceMutation {
 		return errs.New(errs.KindValidationFailed, "Blueprint staging source kind is invalid")
 	}
-	if claim.Locator.ScopeKind != IdempotencyScopeEnvironment || claim.Locator.ScopeID != claim.EnvironmentID {
+	if claim.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || claim.Locator.ScopeID != claim.EnvironmentID {
 		return errs.New(errs.KindValidationFailed, "Blueprint staging locator must belong to its Environment")
 	}
 	if _, _, err := environmentBlueprintLocatorKey(claim.Locator); err != nil {

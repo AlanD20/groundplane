@@ -5,19 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"log/slog"
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type ProjectChanger interface {
-	EditProject(context.Context, string, hierarchy.EditProjectInput, string) (etcd.IdempotencyResponse, error)
-	RenameProject(context.Context, string, hierarchy.RenameProjectInput, string) (etcd.IdempotencyResponse, error)
+	EditProject(context.Context, string, hierarchy.EditProjectInput, string) (idempotencyrecord.IdempotencyResponse, error)
+	RenameProject(context.Context, string, hierarchy.RenameProjectInput, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 func (s *Server) editProject(ctx context.Context, request *projectEditInput) (*projectMutationOutput, error) {
@@ -57,7 +58,7 @@ func (s *Server) renameProject(ctx context.Context, request *projectRenameInput)
 }
 
 func (s *Server) projectMutationResponse(
-	response etcd.IdempotencyResponse,
+	response idempotencyrecord.IdempotencyResponse,
 	action string,
 ) *projectMutationOutput {
 	return &projectMutationOutput{

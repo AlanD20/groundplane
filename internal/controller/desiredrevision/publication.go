@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"net/netip"
@@ -52,13 +53,13 @@ type PublicationRepository interface {
 		etcd.BlueprintReleasePublication,
 		etcd.BlueprintRequirementGate,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type PublicationIdempotency interface {
 	ResolveKnown(context.Context, Evidence, etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error)
-	ResolveUnknown(context.Context, etcd.IdempotencyLocator, Evidence, error) (requestidempotency.Resolution, error)
+	ResolveUnknown(context.Context, idempotencyrecord.IdempotencyLocator, Evidence, error) (requestidempotency.Resolution, error)
 }
 
 // Repository is the aggregate used by mutation services that both stage and
@@ -85,16 +86,16 @@ type Repository interface {
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type ClaimInput struct {
 	EnvironmentID        string
 	CandidateTaskID      string
-	Locator              etcd.IdempotencyLocator
-	Intent               etcd.ProtectedIntentRecord
-	MatchExistingIntent  func(context.Context, etcd.ProtectedIntentRecord) (bool, error)
+	Locator              idempotencyrecord.IdempotencyLocator
+	Intent               idempotencyrecord.ProtectedIntentRecord
+	MatchExistingIntent  func(context.Context, idempotencyrecord.ProtectedIntentRecord) (bool, error)
 	BaselineHeadRevision int64
 	SourceKind           etcd.EnvironmentBlueprintSourceKind
 	RenderGeneration     uint64
@@ -173,7 +174,7 @@ type PublishInput struct {
 	ExpectedHeadRevision    int64
 	Staged                  StagedPublication
 	Evidence                Evidence
-	Locator                 etcd.IdempotencyLocator
+	Locator                 idempotencyrecord.IdempotencyLocator
 	ZoneChanges             []etcd.EnvironmentBlueprintZoneChange
 	ServiceChanges          []etcd.EnvironmentBlueprintServiceChange
 	RouteChanges            []etcd.EnvironmentBlueprintRouteChange
@@ -204,7 +205,7 @@ type StagedPublication struct {
 type stagedPublicationState struct {
 	mu         sync.Mutex
 	consumed   bool
-	locator    etcd.IdempotencyLocator
+	locator    idempotencyrecord.IdempotencyLocator
 	claim      etcd.EnvironmentBlueprintStageClaim
 	seal       etcd.EnvironmentBlueprintSeal
 	projection etcd.EnvironmentComposeProjection
@@ -275,7 +276,7 @@ func Stage(
 	}}, nil
 }
 
-func (publication StagedPublication) consume(environmentID, taskID string, locator etcd.IdempotencyLocator) (
+func (publication StagedPublication) consume(environmentID, taskID string, locator idempotencyrecord.IdempotencyLocator) (
 	etcd.EnvironmentBlueprintStageClaim,
 	etcd.EnvironmentComposeProjection,
 	error,
@@ -406,9 +407,9 @@ func Publish(
 	repository PublicationRepository,
 	idempotency PublicationIdempotency,
 	input PublishInput,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil || repository == nil {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Environment desired revision publication is not configured",
 		)
@@ -416,28 +417,28 @@ func Publish(
 	claim, projection, err := input.Staged.consume(input.Environment.Record.ID, input.Task.ID, input.Locator)
 	if err != nil {
 		if claim.DescriptorID != "" {
-			return etcd.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim, err)
+			return idempotencyrecord.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim, err)
 		}
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if idempotency == nil {
-		return etcd.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, abandonKnownFailure(ctx, repository, claim, errs.New(
 			errs.KindInternal, "Environment Blueprint idempotency is not configured",
 		))
 	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: input.Task.ID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, abandonKnownFailure(
+		return idempotencyrecord.IdempotencyResponse{}, abandonKnownFailure(
 			ctx, repository, claim, errs.Wrap(errs.KindInternal, err),
 		)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: input.Locator, Intent: claim.Intent, Response: response,
 		TaskID: input.Task.ID, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
@@ -455,7 +456,7 @@ func Publish(
 	var resolution requestidempotency.Resolution
 	if publicationErr != nil {
 		if !unknownOutcome(publicationErr) {
-			return etcd.IdempotencyResponse{}, abandonBlueprintKnownFailure(
+			return idempotencyrecord.IdempotencyResponse{}, abandonBlueprintKnownFailure(
 				ctx, repository, claim, input.ReleasePublication, publicationErr,
 			)
 		}
@@ -464,7 +465,7 @@ func Publish(
 		resolution, err = idempotency.ResolveKnown(ctx, input.Evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -472,7 +473,7 @@ func Publish(
 	case requestidempotency.ResolutionReplay:
 		return cloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint resolution is invalid")
 	}
 }
 
@@ -514,7 +515,7 @@ func unknownOutcome(err error) bool {
 	return ok && kind == errs.KindStorageUnavailable
 }
 
-func cloneResponse(response etcd.IdempotencyResponse) etcd.IdempotencyResponse {
+func cloneResponse(response idempotencyrecord.IdempotencyResponse) idempotencyrecord.IdempotencyResponse {
 	response.Body = append([]byte(nil), response.Body...)
 	return response
 }

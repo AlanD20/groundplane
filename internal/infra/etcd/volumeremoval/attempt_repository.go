@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
@@ -17,7 +18,7 @@ import (
 func (repository *EnvironmentVolumeRemovalRuntimeRepository) ReplayRootResponse(
 	ctx context.Context,
 	operationID string,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	intentSHA256 [sha256.Size]byte,
 ) (string, bool, error) {
 	state, err := repository.Resume(ctx, operationID)
@@ -183,7 +184,7 @@ func validateEnvironmentVolumeRemovalRootMarker(
 	runtime removalrecord.Runtime,
 ) error {
 	marker, err := etcd.DecodeCapabilityIdempotencyMarker(value, volumeRemovalRootLocator(runtime))
-	if err != nil || marker.Kind != etcd.IdempotencyMarkerTask || marker.State != etcd.IdempotencyMarkerPending ||
+	if err != nil || marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != runtime.OriginTaskID || marker.Locator != volumeRemovalRootLocator(runtime) ||
 		marker.Response.Status != http.StatusAccepted ||
 		sha256.Sum256(marker.Response.Body) != runtime.RootResponseSHA256 {

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -104,7 +105,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	expectedBlueprintRevision int64,
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -149,8 +150,8 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			"environment deletion Task and tombstone do not match",
 		)
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -279,7 +280,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	tombstoneValue, err := encodeDeletionTombstone(tombstone)
@@ -292,7 +293,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -452,7 +453,7 @@ func classifyEnvironmentDeletionStartConflict(
 			)
 		}
 		if values[2] != nil {
-			activeTaskID, err := decodeTaskReference(values[2].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[2].Value)
 			if err != nil {
 				return err
 			}

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -130,7 +131,7 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintHead(
 	if result.Entry == nil {
 		return etcdstore.Versioned[EnvironmentBlueprintHead]{ReadRevision: result.ReadRevision}, false, nil
 	}
-	revisionID, err := decodeTaskReference(result.Entry.Value)
+	revisionID, err := idempotencyrecord.DecodeTaskReference(result.Entry.Value)
 	if err != nil {
 		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, false, err
 	}
@@ -279,7 +280,7 @@ func classifyEnvironmentBlueprintBaseConflict(
 	operationID string,
 ) error {
 	if values[2] != nil {
-		activeTaskID, err := decodeTaskReference(values[2].Value)
+		activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[2].Value)
 		if err != nil {
 			return err
 		}

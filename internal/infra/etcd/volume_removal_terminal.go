@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
@@ -30,14 +31,14 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 	if err != nil || !volumeRemovalTerminalTaskMatches(task, runtime) {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	locator := IdempotencyLocator{ScopeKind: IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
+	locator := idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
 		ScopeID: runtime.RootLocator.ScopeID, Method: runtime.RootLocator.Method,
 		Route: runtime.RootLocator.Route, Key: runtime.RootLocator.Key}
-	markerKey, err := idempotencyMarkerKey(locator)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(locator)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
-	replayKey, err := idempotencyReplayTargetKey(IdempotencyReplayTarget{Kind: IdempotencyReplayTargetVolume,
+	replayKey, err := idempotencyrecord.IdempotencyReplayTargetKey(idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
 		ID: runtime.VolumeID}, locator.Method, locator.Route, locator.Key)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
@@ -84,22 +85,22 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 			return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 		}
 	}
-	head, err := decodeTaskReference(read.Values[7].Value)
+	head, err := idempotencyrecord.DecodeTaskReference(read.Values[7].Value)
 	if err != nil || head != runtime.DesiredRevisionID {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	marker, err := decodeIdempotencyMarker(read.Values[5].Value, locator)
+	marker, err := idempotencyrecord.DecodeIdempotencyMarker(read.Values[5].Value, locator)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	if marker.State != IdempotencyMarkerPending || marker.Kind != IdempotencyMarkerTask ||
+	if marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
 		marker.TaskID != runtime.OriginTaskID || marker.Response.Status != http.StatusAccepted ||
-		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != IdempotencyReplayTargetVolume ||
+		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume ||
 		marker.ReplayTarget.ID != runtime.VolumeID || sha256.Sum256(marker.Intent.Ciphertext) != runtime.IntentSHA256 ||
 		sha256.Sum256(marker.Response.Body) != runtime.RootResponseSHA256 ||
-		decodeReplayTargetReference(read.Values[6].Value, markerKey) != nil {
+		idempotencyrecord.DecodeReplayTargetReference(read.Values[6].Value, markerKey) != nil {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
 	completionKey := removalrecord.CompletionKey(runtime.OperationID, progress.NextRequestOrdinal-1)
@@ -176,18 +177,18 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 			etcdstore.Condition{Key: HierarchyDeletionTombstoneKey(string(HierarchyDeletionTargetTenant), task.Owner.TenantID)},
 		)
 	}
-	marker.State, marker.UpdatedAt, marker.TerminalAt = IdempotencyMarkerCompleted, *task.FinishedAt, *task.FinishedAt
-	marker.RetainUntil = task.FinishedAt.Add(markerRetention)
-	markerValue, err := encodeIdempotencyMarker(marker)
+	marker.State, marker.UpdatedAt, marker.TerminalAt = idempotencyrecord.IdempotencyMarkerCompleted, *task.FinishedAt, *task.FinishedAt
+	marker.RetainUntil = task.FinishedAt.Add(idempotencyrecord.MarkerRetention)
+	markerValue, err := idempotencyrecord.EncodeIdempotencyMarker(marker)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
 	defer clear(markerValue)
-	retentionKey, err := idempotencyRetentionKey(markerKey, marker.RetainUntil)
+	retentionKey, err := idempotencyrecord.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
-	retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
+	retentionValue, err := json.Marshal(idempotencyrecord.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
 	if err != nil {
 		return etcdstore.TransactionResult{}, errs.Wrap(errs.KindInternal, err)
 	}
@@ -281,17 +282,17 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 		runtime.Checkpoint < removalrecord.DesiredPublished || runtime.Checkpoint > removalrecord.DirectoryAbsent {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	locator := IdempotencyLocator{ScopeKind: IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
+	locator := idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
 		ScopeID: runtime.RootLocator.ScopeID, Method: runtime.RootLocator.Method,
 		Route: runtime.RootLocator.Route, Key: runtime.RootLocator.Key}
-	markerKey, err := idempotencyMarkerKey(locator)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(locator)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
 	keys := []string{removalrecord.OwnerKey(runtime.VolumeID), removalrecord.EnvironmentLockKey(runtime.EnvironmentID),
 		removalrecord.ProgressKey(runtime.OperationID), removalrecord.PendingPathKey(runtime.OperationID),
 		removalrecord.AttemptKey(runtime.OperationID, runtime.AttemptOrdinal), markerKey}
-	replayKey, err := idempotencyReplayTargetKey(IdempotencyReplayTarget{Kind: IdempotencyReplayTargetVolume,
+	replayKey, err := idempotencyrecord.IdempotencyReplayTargetKey(idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
 		ID: runtime.VolumeID}, locator.Method, locator.Route, locator.Key)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
@@ -354,25 +355,25 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 		attempt.PredecessorTaskID != task.RetryOf {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	marker, err := decodeIdempotencyMarker(read.Values[5].Value, locator)
+	marker, err := idempotencyrecord.DecodeIdempotencyMarker(read.Values[5].Value, locator)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != runtime.OriginTaskID || marker.Response.Status != http.StatusAccepted || marker.ReplayTarget == nil ||
-		marker.ReplayTarget.Kind != IdempotencyReplayTargetVolume || marker.ReplayTarget.ID != runtime.VolumeID ||
+		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume || marker.ReplayTarget.ID != runtime.VolumeID ||
 		sha256.Sum256(marker.Intent.Ciphertext) != runtime.IntentSHA256 ||
 		sha256.Sum256(marker.Response.Body) != runtime.RootResponseSHA256 ||
-		decodeReplayTargetReference(read.Values[7].Value, markerKey) != nil {
+		idempotencyrecord.DecodeReplayTargetReference(read.Values[7].Value, markerKey) != nil {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	head, err := decodeTaskReference(read.Values[6].Value)
+	head, err := idempotencyrecord.DecodeTaskReference(read.Values[6].Value)
 	if err != nil || head != runtime.DesiredRevisionID {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	retentionKey, err := idempotencyRetentionKey(markerKey, task.FinishedAt.Add(markerRetention))
+	retentionKey, err := idempotencyrecord.IdempotencyRetentionKey(markerKey, task.FinishedAt.Add(idempotencyrecord.MarkerRetention))
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}

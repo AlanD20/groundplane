@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -404,7 +405,7 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
 		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
 	}
-	headRevisionID, err := decodeTaskReference(read.Values[3].Value)
+	headRevisionID, err := idempotencyrecord.DecodeTaskReference(read.Values[3].Value)
 	if err != nil || ids.Validate(ids.KindTask, headRevisionID) != nil {
 		return blueprintCandidateAuthoritySnapshot{}, corruptReleaseRecord()
 	}

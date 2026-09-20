@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 
@@ -18,7 +19,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	current etcdstore.Versioned[secretrecord.Record],
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateSecretOwnership(ctx, owner, current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -44,8 +45,8 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		)
 	}
 	expectedScope, expectedScopeID := secretIdempotencyScope(owner)
-	wantReplayTarget := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetSecret, ID: secretID}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetSecret, ID: secretID}
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != expectedScope ||
 		marker.Locator.ScopeID != expectedScopeID || marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
@@ -92,7 +93,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	tombstoneValue, err := encodeDeletionTombstone(tombstone)
@@ -105,7 +106,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -196,11 +197,11 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func secretIdempotencyScope(owner SecretOwner) (IdempotencyScopeKind, string) {
+func secretIdempotencyScope(owner SecretOwner) (idempotencyrecord.IdempotencyScopeKind, string) {
 	if owner.Project == nil {
-		return IdempotencyScopePlatform, "-"
+		return idempotencyrecord.IdempotencyScopePlatform, "-"
 	}
-	return IdempotencyScopeProject, owner.Project.Record.ID
+	return idempotencyrecord.IdempotencyScopeProject, owner.Project.Record.ID
 }
 
 func classifySecretDeletionStartConflict(
@@ -229,7 +230,7 @@ func classifySecretDeletionStartConflict(
 			return errs.New(errs.KindResourceInUse, "Secret is referenced by a Component")
 		}
 		if values[2] != nil {
-			activeTaskID, err := decodeTaskReference(values[2].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[2].Value)
 			if err != nil {
 				return err
 			}

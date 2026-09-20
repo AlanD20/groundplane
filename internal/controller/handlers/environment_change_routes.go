@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"unicode/utf8"
 
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,13 +20,13 @@ type EnvironmentChanger interface {
 		string,
 		environmentcapability.EditEnvironmentInput,
 		string,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 	RenameEnvironment(
 		context.Context,
 		string,
 		environmentcapability.RenameEnvironmentInput,
 		string,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 func (s *Server) editEnvironment(

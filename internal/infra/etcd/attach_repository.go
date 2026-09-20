@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -50,7 +51,7 @@ func (repository *AttachRepository) CreateAttachWithTask(
 	facts *attachrecord.EncryptedFacts,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	return repository.CreateAttachWithTaskHookInputs(ctx, scope, record, facts, nil, renderInput, task, marker)
 }
@@ -63,7 +64,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	hookInputs *BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, returnErr error) {
 	if err := validateAttachCreateScope(ctx, scope, record, facts); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -74,7 +75,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	if err := validateAttachTaskRenderInputScope(scope, record, task, renderInput); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
@@ -123,7 +124,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	recordValue, err := attachrecord.EncodeAttachRecord(record)
@@ -146,7 +147,7 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	taskReference, err := encodeTaskReference(task.ID)
+	taskReference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -314,7 +315,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTask(
 	current etcdstore.Versioned[attachrecord.Record],
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	return repository.BeginAttachDetachWithTaskHookInputs(ctx, scope, current, nil, renderInput, task, marker)
 }
@@ -326,7 +327,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskHookInputs(
 	hookInputs *BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	return repository.beginAttachDetachWithTask(ctx, scope, current, hookInputs, renderInput, task, marker, nil)
 }
@@ -337,7 +338,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskInitiation(
 	current etcdstore.Versioned[attachrecord.Record],
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	initiation TaskInitiation,
 ) (IdempotencyTransactionResult, error) {
 	return repository.BeginAttachDetachWithTaskInitiationHookInputs(
@@ -352,7 +353,7 @@ func (repository *AttachRepository) BeginAttachDetachWithTaskInitiationHookInput
 	hookInputs *BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	initiation TaskInitiation,
 ) (IdempotencyTransactionResult, error) {
 	return repository.beginAttachDetachWithTask(ctx, scope, current, hookInputs, renderInput, task, marker, &initiation)
@@ -365,7 +366,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	hookInputs *BackingHookEncryptedInputs,
 	renderInput AttachTaskRenderInput,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	provided *TaskInitiation,
 ) (_ IdempotencyTransactionResult, returnErr error) {
 	if err := validateAttachDetachScope(ctx, scope, current); err != nil {
@@ -381,7 +382,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	if err := validateAttachTaskRenderInputScope(scope, detaching, task, renderInput); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
@@ -490,7 +491,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	attachValue, err := attachrecord.EncodeAttachRecord(detaching)
@@ -513,7 +514,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	taskReference, err := encodeTaskReference(task.ID)
+	taskReference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -817,7 +818,7 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	current etcdstore.Versioned[attachrecord.Record],
 	name string,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -834,16 +835,16 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 		environment.Revision <= 0 || project.Revision <= 0 {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindScopeUnauthorized, "Attach rename scope is invalid")
 	}
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != current.Record.EnvironmentID || marker.ReplayTarget == nil ||
-		marker.ReplayTarget.Kind != IdempotencyReplayTargetAttach || marker.ReplayTarget.ID != current.Record.ID {
+		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetAttach || marker.ReplayTarget.ID != current.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach rename marker must be a completed Environment-scoped direct mutation",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
@@ -1319,7 +1320,7 @@ func validateAttachCreateScope(
 	return attachrecord.ValidateAttachEncryptedFacts(*facts)
 }
 
-func validateAttachCreationTask(record attachrecord.Record, task TaskRecord, marker IdempotencyMarker) error {
+func validateAttachCreationTask(record attachrecord.Record, task TaskRecord, marker idempotencyrecord.IdempotencyMarker) error {
 	pendingAttachOwned := record.Status == core.AttachPending && record.Operation == attachrecord.AttachOperationProvision &&
 		record.TaskID == task.ID && record.CreatedAt.Equal(task.CreatedAt)
 	validTaskShape := task.Type == TaskAttach && task.Target == record.ID && task.Executor == TaskExecutorAgent &&
@@ -1328,8 +1329,8 @@ func validateAttachCreationTask(record attachrecord.Record, task TaskRecord, mar
 	if !pendingAttachOwned || !validTaskShape {
 		return errs.New(errs.KindValidationFailed, "Attach creation Task does not own its pending Attach")
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != record.EnvironmentID || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || marker.ReplayTarget != nil {
 		return errs.New(
@@ -1423,7 +1424,7 @@ func validateAttachDetachTask(
 	current attachrecord.Record,
 	detaching attachrecord.Record,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) error {
 	validOwnership := detaching.Status == core.AttachDetaching && detaching.Operation == attachrecord.AttachOperationDetach &&
 		detaching.TaskID == task.ID && attachImmutableEqual(current, detaching)
@@ -1433,11 +1434,11 @@ func validateAttachDetachTask(
 	if !validOwnership || !validTaskShape {
 		return errs.New(errs.KindValidationFailed, "Attach detach Task does not own its detaching Attach")
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != current.EnvironmentID || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || marker.ReplayTarget == nil ||
-		marker.ReplayTarget.Kind != IdempotencyReplayTargetAttach || marker.ReplayTarget.ID != current.ID {
+		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetAttach || marker.ReplayTarget.ID != current.ID {
 		return errs.New(errs.KindValidationFailed, "Attach detach marker does not match its Environment-scoped Task")
 	}
 	return nil

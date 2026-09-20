@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
@@ -100,7 +101,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	tombstone DeletionTombstoneRecord,
 	intent ServiceRemovalIntent,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateServiceLifecycleHierarchy(&tenant, project, environment, current); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -126,8 +127,8 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 			"Service removal state does not match its Task",
 		)
 	}
-	wantReplay := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetService, ID: current.Record.Desired.ID}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending || marker.TaskID != task.ID ||
+	wantReplay := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetService, ID: current.Record.Desired.ID}
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != task.ID ||
 		marker.Locator != intent.Claim.Locator || marker.ReplayTarget == nil || *marker.ReplayTarget != wantReplay ||
 		!sameBlueprintProtectedIntent(marker.Intent, intent.Claim.Intent) ||
 		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
@@ -136,7 +137,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 			"Service removal marker does not match its Task",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
@@ -180,7 +181,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		ctx, intent.Claim,
 		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
 		intent.CandidateProjection,
-		IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
+		idempotencyrecord.IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
 		intent.ExpectedHeadRevision,
 	)
 	if err != nil {
@@ -200,7 +201,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

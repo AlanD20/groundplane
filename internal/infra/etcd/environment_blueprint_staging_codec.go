@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"math"
 	"time"
 	"unicode/utf8"
@@ -396,8 +397,8 @@ func decodeEnvironmentBlueprintClaim(reader *blueprintRecordReader) EnvironmentB
 		RevisionID:    reader.string(128),
 		TaskID:        reader.string(128),
 	}
-	claim.Locator = IdempotencyLocator{
-		ScopeKind: IdempotencyScopeKind(reader.string(32)), ScopeID: reader.string(128),
+	claim.Locator = idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeKind(reader.string(32)), ScopeID: reader.string(128),
 		Method: reader.string(16), Route: reader.string(1024), Key: reader.string(128),
 	}
 	claim.Intent.EnvelopeVersion = reader.uint8()
@@ -405,7 +406,7 @@ func decodeEnvironmentBlueprintClaim(reader *blueprintRecordReader) EnvironmentB
 	claim.Intent.DigestAlgorithm = reader.string(32)
 	digest := reader.digest()
 	claim.Intent.CiphertextDigest = hex.EncodeToString(digest[:])
-	claim.Intent.Ciphertext = reader.bytes(maximumIntentCiphertext)
+	claim.Intent.Ciphertext = reader.bytes(idempotencyrecord.MaximumIntentCiphertext)
 	baseline := reader.uint64()
 	if baseline > math.MaxInt64 {
 		reader.err = corruptEnvironmentBlueprintStage()

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 )
@@ -65,7 +66,7 @@ func DesiredRevisionDescriptorKey(descriptorID string) string {
 	return environmentBlueprintDescriptorKeyByID(descriptorID)
 }
 
-func DesiredRevisionLocatorKey(locator IdempotencyLocator) (string, [sha256.Size]byte, error) {
+func DesiredRevisionLocatorKey(locator idempotencyrecord.IdempotencyLocator) (string, [sha256.Size]byte, error) {
 	return environmentBlueprintLocatorKey(locator)
 }
 
@@ -107,7 +108,7 @@ func NextDesiredRevisionProgressTime(previous time.Time) time.Time {
 	return nextBlueprintProgressTime(previous)
 }
 
-func ProtectedDesiredRevisionIntentDigest(intent ProtectedIntentRecord) ([sha256.Size]byte, error) {
+func ProtectedDesiredRevisionIntentDigest(intent idempotencyrecord.ProtectedIntentRecord) ([sha256.Size]byte, error) {
 	return protectedBlueprintIntentDigest(intent)
 }
 

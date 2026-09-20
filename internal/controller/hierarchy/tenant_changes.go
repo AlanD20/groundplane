@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
@@ -28,13 +29,13 @@ type tenantChangeRepository interface {
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.TenantRecord],
 		hierarchyrecord.TenantRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type tenantChangeEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type tenantChangeIdempotency interface {
@@ -42,7 +43,7 @@ type tenantChangeIdempotency interface {
 	PrepareRename(context.Context, string, RenameTenantInput) (tenantChangeEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		tenantChangeEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -52,7 +53,7 @@ type tenantChangeIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		tenantChangeEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -134,7 +135,7 @@ func (service *durableTenantChangeIdempotency) prepare(
 
 func (service *durableTenantChangeIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence tenantChangeEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -150,7 +151,7 @@ func (service *durableTenantChangeIdempotency) ResolveKnown(
 
 func (service *durableTenantChangeIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence tenantChangeEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -178,9 +179,9 @@ func (service *tenantChangeService) EditTenant(
 	id string,
 	input EditTenantInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if err := ValidateTenantEditInput(input); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.changeTenant(ctx, id, http.MethodPatch, tenantEditRoute, idempotencyKey,
 		func(ctx context.Context) (tenantChangeEvidence, error) {
@@ -195,9 +196,9 @@ func (service *tenantChangeService) RenameTenant(
 	id string,
 	input RenameTenantInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if err := ValidateTenantRenameInput(input); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.changeTenant(ctx, id, http.MethodPost, tenantRenameRoute, idempotencyKey,
 		func(ctx context.Context) (tenantChangeEvidence, error) {
@@ -215,12 +216,12 @@ func (service *tenantChangeService) changeTenant(
 	idempotencyKey string,
 	prepare func(context.Context) (tenantChangeEvidence, error),
 	change func(core.Tenant) (core.Tenant, error),
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant change context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant change context is required")
 	}
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopePlatform, ScopeID: "-",
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
 		Method: method, Route: route, Key: idempotencyKey,
 	}
 	for attempt := 0; attempt < maximumTenantMutationAttempts; attempt++ {
@@ -230,37 +231,37 @@ func (service *tenantChangeService) changeTenant(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumTenantMutationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant change retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant change retry bound was not enforced")
 }
 
 func (service *tenantChangeService) changeTenantOnce(
 	ctx context.Context,
 	id string,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	prepare func(context.Context) (tenantChangeEvidence, error),
 	change func(core.Tenant) (core.Tenant, error),
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := prepare(ctx)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant change replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant change replay resolution is invalid")
 		}
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	current, err := service.repository.GetTenant(ctx, id)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	currentCore := core.Tenant{
 		ID: current.Record.ID, Slug: current.Record.Slug,
@@ -268,23 +269,23 @@ func (service *tenantChangeService) changeTenantOnce(
 	}
 	replacement, err := change(currentCore)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	responseBody, err := json.Marshal(apiTypes.Tenant{
 		ID: replacement.ID, Slug: replacement.Slug,
 		Name: replacement.Name, Description: replacement.Description,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -294,14 +295,14 @@ func (service *tenantChangeService) changeTenantOnce(
 	}, marker)
 	if mutationErr != nil {
 		if !isUnknownTenantChangeOutcome(mutationErr) {
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -309,7 +310,7 @@ func (service *tenantChangeService) changeTenantOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant change resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant change resolution is invalid")
 	}
 }
 

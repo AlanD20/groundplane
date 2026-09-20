@@ -3,6 +3,7 @@ package desiredrevision
 import (
 	"context"
 	"crypto/sha256"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"sort"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -15,7 +16,7 @@ const blueprintRoute = "/environments/{id}/blueprint"
 
 type Evidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	Durable   etcd.ProtectedIntentRecord
+	Durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type IntentAddress struct {
@@ -43,7 +44,7 @@ func NewIdempotency(
 func (service *Idempotency) MatchesStaged(
 	ctx context.Context,
 	evidence Evidence,
-	existing etcd.ProtectedIntentRecord,
+	existing idempotencyrecord.ProtectedIntentRecord,
 ) (bool, error) {
 	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
 }
@@ -82,7 +83,7 @@ func (service *Idempotency) Prepare(
 
 func (service *Idempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence Evidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -98,7 +99,7 @@ func (service *Idempotency) ResolveKnown(
 
 func (service *Idempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence Evidence,
 	original error,
 ) (requestidempotency.Resolution, error) {

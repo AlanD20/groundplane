@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -15,7 +16,7 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 	ctx context.Context,
 	current etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	replacement hierarchyrecord.EnvironmentRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -39,15 +40,15 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 			"Environment mutation identity is invalid",
 		)
 	}
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != current.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Environment mutation marker must be a completed Environment-scoped direct mutation",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	projectAuthority, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{

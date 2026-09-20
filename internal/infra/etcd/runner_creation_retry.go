@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 
@@ -17,7 +18,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	ctx context.Context,
 	sourceTaskID string,
 	retry TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -52,7 +53,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	if existing != nil {
 		return IdempotencyTransactionResult{
 			kind: idempotencyTransactionExisting, revision: existing.modRevision,
-			marker: cloneIdempotencyMarker(existing.marker),
+			marker: idempotencyrecord.CloneIdempotencyMarker(existing.marker),
 		}, nil
 	}
 	sourceResult, err := repository.store.Get(ctx, taskKey(sourceTaskID))
@@ -126,7 +127,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(retry.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(retry.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -177,7 +178,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 			return errs.New(errs.KindInternal, "runner creation retry compare evidence is incomplete")
 		}
 		if values[2] != nil {
-			activeTaskID, decodeErr := decodeTaskReference(values[2].Value)
+			activeTaskID, decodeErr := idempotencyrecord.DecodeTaskReference(values[2].Value)
 			if decodeErr != nil {
 				return decodeErr
 			}

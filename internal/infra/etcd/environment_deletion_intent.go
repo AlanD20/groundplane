@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -254,7 +255,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 	}
 	retentionCondition := etcdstore.Condition{Key: retentionKey}
 	if state.Values[2] != nil {
-		retainedTaskID, decodeErr := decodeTaskReference(state.Values[2].Value)
+		retainedTaskID, decodeErr := idempotencyrecord.DecodeTaskReference(state.Values[2].Value)
 		if decodeErr != nil || retainedTaskID != source.ID {
 			return environmentTaskChange{}, errs.New(
 				errs.KindInternal,
@@ -287,7 +288,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 		clear(lockValue)
 		return environmentTaskChange{}, err
 	}
-	retentionValue, err := encodeTaskReference(source.ID)
+	retentionValue, err := idempotencyrecord.EncodeTaskReference(source.ID)
 	if err != nil {
 		clear(tombstoneValue)
 		clear(lockValue)

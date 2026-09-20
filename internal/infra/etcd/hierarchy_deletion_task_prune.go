@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -16,7 +17,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	revision int64,
 	now time.Time,
 ) (bool, bool, error) {
-	markerKey, err := idempotencyMarkerKey(*task.idempotencyMarker)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(*task.idempotencyMarker)
 	if err != nil {
 		return false, false, corruptHierarchyDeletion()
 	}

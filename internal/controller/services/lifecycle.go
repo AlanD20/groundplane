@@ -8,6 +8,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -67,7 +68,7 @@ func (service *serviceMutationService) StartService(
 	ctx context.Context,
 	serviceID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, etcd.TaskStart)
 }
 
@@ -75,7 +76,7 @@ func (service *serviceMutationService) StopService(
 	ctx context.Context,
 	serviceID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, etcd.TaskStop)
 }
 
@@ -83,7 +84,7 @@ func (service *serviceMutationService) DestroyService(
 	ctx context.Context,
 	serviceID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.runServiceLifecycle(ctx, serviceID, idempotencyKey, etcd.TaskDestroy)
 }
 
@@ -92,9 +93,9 @@ func (service *serviceMutationService) runServiceLifecycle(
 	serviceID string,
 	idempotencyKey string,
 	taskType etcd.TaskType,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.lifecycle == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle is not configured")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle is not configured")
 	}
 	return service.lifecycle.Run(ctx, serviceID, idempotencyKey, taskType)
 }
@@ -104,12 +105,12 @@ func (service *serviceLifecycleService) Run(
 	serviceID string,
 	idempotencyKey string,
 	taskType etcd.TaskType,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle context is required")
 	}
 	if ids.Validate(ids.KindService, serviceID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Service lifecycle requires a stable Service id",
 		)
@@ -121,10 +122,10 @@ func (service *serviceLifecycleService) Run(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumServiceLifecycleAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle retry bound was not enforced")
 }
 
 func (service *serviceLifecycleService) runOnce(
@@ -132,30 +133,30 @@ func (service *serviceLifecycleService) runOnce(
 	serviceID string,
 	idempotencyKey string,
 	taskType etcd.TaskType,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	route, intent, err := serviceLifecycleContract(taskType)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetService, ID: serviceID}
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetService, ID: serviceID}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodPost, route, idempotencyKey,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
 		evidence, prepareErr := service.idempotency.Prepare(ctx, locator, serviceID, taskType, route)
 		if prepareErr != nil {
-			return etcd.IdempotencyResponse{}, prepareErr
+			return idempotencyrecord.IdempotencyResponse{}, prepareErr
 		}
 		defer clear(evidence.durable.Ciphertext)
 		resolution, existing, resolveErr := service.idempotency.ResolveExisting(ctx, locator, evidence)
 		if resolveErr != nil {
-			return etcd.IdempotencyResponse{}, resolveErr
+			return idempotencyrecord.IdempotencyResponse{}, resolveErr
 		}
 		if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Service lifecycle replay target is inconsistent",
 			)
@@ -165,24 +166,24 @@ func (service *serviceLifecycleService) runOnce(
 
 	current, err := service.repository.GetService(ctx, serviceID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	locator = etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: current.Record.EnvironmentID,
+	locator = idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: current.Record.EnvironmentID,
 		Method: http.MethodPost, Route: route, Key: idempotencyKey,
 	}
 	evidence, err := service.idempotency.Prepare(ctx, locator, serviceID, taskType, route)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Service lifecycle replay resolution is invalid",
 			)
@@ -192,46 +193,46 @@ func (service *serviceLifecycleService) runOnce(
 
 	environment, err := service.repository.GetEnvironment(ctx, current.Record.EnvironmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	var tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord]
 	switch project.Record.Kind {
 	case hierarchyrecord.ProjectKindTenant:
 		if project.Record.TenantID == "" {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service Project Tenant is missing")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service Project Tenant is missing")
 		}
 		currentTenant, getErr := service.repository.GetTenant(ctx, project.Record.TenantID)
 		if getErr != nil {
-			return etcd.IdempotencyResponse{}, getErr
+			return idempotencyrecord.IdempotencyResponse{}, getErr
 		}
 		tenant = &currentTenant
 	case hierarchyrecord.ProjectKindBacking:
 		if project.Record.TenantID != "" {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Backing Project has a Tenant")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Backing Project has a Tenant")
 		}
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Service Project kind is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Service Project kind is invalid")
 	}
 	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	projection, hasProjection, err := service.repository.GetEnvironmentAppliedComposeProjection(
 		ctx,
 		environment.Record.ID,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	applied := hasProjection && serviceInComposeProjection(projection.Record, serviceID)
 	var projectionInput *etcdstore.Versioned[etcd.EnvironmentComposeProjection]
 	replacement, err := etcd.SetServiceRuntimeIntent(current.Record, intent)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 
 	now := service.now().UTC()
@@ -255,26 +256,26 @@ func (service *serviceLifecycleService) runOnce(
 			ctx, taskType, current, tenant, project, environment, projection, task,
 		)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		renderInput = &input
 	} else {
 		task, err = prepareControllerServiceLifecycleTask(task, environment.Record.ID, current.Revision)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
 
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
@@ -284,14 +285,14 @@ func (service *serviceLifecycleService) runOnce(
 	)
 	if mutationErr != nil {
 		if !isUnknownServiceLifecycleMutationOutcome(mutationErr) {
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -299,7 +300,7 @@ func (service *serviceLifecycleService) runOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle resolution is invalid")
 	}
 }
 

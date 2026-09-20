@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -114,7 +115,7 @@ func (repository *HierarchyRepository) CreateTenant(
 func (repository *HierarchyRepository) CreateTenantIdempotent(
 	ctx context.Context,
 	record hierarchyrecord.TenantRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -122,13 +123,13 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 	if err := hierarchyrecord.ValidateTenant(record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Tenant creation marker must be a completed direct mutation",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	value, err := hierarchyrecord.EncodeTenant(record)
@@ -185,7 +186,7 @@ func classifyTenantCreateConflict(slug string) idempotencyPlanClassifier {
 func (repository *HierarchyRepository) CreateProjectIdempotent(
 	ctx context.Context,
 	record hierarchyrecord.ProjectRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -198,12 +199,12 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 			errs.KindValidationFailed, "direct Project creation requires a tenant-owned Project",
 		)
 	}
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Project creation marker must be a completed direct mutation",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	owner, err := repository.GetTenant(ctx, record.TenantID)
@@ -297,7 +298,7 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 	ctx context.Context,
 	current etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	replacement hierarchyrecord.TenantRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -314,7 +315,7 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 			"Tenant mutation revision is invalid",
 		)
 	}
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Tenant mutation marker must be a completed direct mutation",

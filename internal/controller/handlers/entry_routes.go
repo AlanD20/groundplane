@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"log/slog"
@@ -15,7 +16,7 @@ import (
 	"unicode/utf8"
 
 	entrycapability "github.com/AlanD20/groundplane/internal/controller/entry"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -32,18 +33,18 @@ type EntryMutator interface {
 		context.Context,
 		apiTypes.EntryCreateRequest,
 		string,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 	BulkUpsertEntries(
 		context.Context,
 		apiTypes.EntryBulkUpsertRequest,
 		string,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 	EditEntry(
 		context.Context,
 		string,
 		apiTypes.EntryEditRequest,
 		string,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 	RemoveEntry(context.Context, entrycapability.RemoveRequest) (entrycapability.RemovalOutcome, error)
 }
 

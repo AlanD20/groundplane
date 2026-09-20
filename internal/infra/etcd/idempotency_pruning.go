@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -67,14 +68,14 @@ func (repository *IdempotencyRepository) collectExpired(
 		return nil, scan, err
 	}
 	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: idempotencyRetentionPrefix, StartExclusive: scan.After,
+		Prefix: idempotencyrecord.IdempotencyRetentionPrefix, StartExclusive: scan.After,
 		Limit: maximumPruneMarkers,
 	})
 	if err != nil {
 		return nil, scan, err
 	}
 	if page == nil || page.ReadRevision <= 0 || len(page.Values) > maximumPruneMarkers {
-		return nil, scan, corruptIdempotencyMarker()
+		return nil, scan, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	scan.ReadRevision, scan.More = page.ReadRevision, page.More
 	defer clearKeyValueSlice(page.Values)
@@ -82,16 +83,16 @@ func (repository *IdempotencyRepository) collectExpired(
 	retentionEntries := make([]etcdstore.KeyValue, 0, len(page.Values))
 	for _, entry := range page.Values {
 		if entry.ModRevision <= 0 {
-			return nil, scan, corruptIdempotencyMarker()
+			return nil, scan, idempotencyrecord.CorruptIdempotencyMarker()
 		}
-		markerKey, retainUntil, err := parseIdempotencyRetentionKey(entry.Key)
+		markerKey, retainUntil, err := idempotencyrecord.ParseIdempotencyRetentionKey(entry.Key)
 		if err != nil {
 			return nil, scan, err
 		}
 		if retainUntil.After(now) {
 			break
 		}
-		if err := decodeRetentionReference(entry.Value, markerKey); err != nil {
+		if err := idempotencyrecord.DecodeRetentionReference(entry.Value, markerKey); err != nil {
 			return nil, scan, err
 		}
 		markerKeys = append(markerKeys, markerKey)
@@ -107,26 +108,26 @@ func (repository *IdempotencyRepository) collectExpired(
 		return nil, scan, err
 	}
 	if markers == nil || markers.ReadRevision != page.ReadRevision || len(markers.Values) != len(markerKeys) {
-		return nil, scan, corruptIdempotencyMarker()
+		return nil, scan, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer clearKeyValues(markers.Values)
 	candidates := make([]idempotencyPruneCandidate, 0, len(markerKeys))
 	for index, markerEntry := range markers.Values {
 		if markerEntry == nil || markerEntry.Key != markerKeys[index] || markerEntry.ModRevision <= 0 {
 			clearPruneCandidates(candidates)
-			return nil, scan, corruptIdempotencyMarker()
+			return nil, scan, idempotencyrecord.CorruptIdempotencyMarker()
 		}
-		locator, err := parseIdempotencyMarkerKey(markerEntry.Key)
+		locator, err := idempotencyrecord.ParseIdempotencyMarkerKey(markerEntry.Key)
 		if err != nil {
 			clearPruneCandidates(candidates)
 			return nil, scan, err
 		}
-		marker, err := decodeIdempotencyMarker(markerEntry.Value, locator)
+		marker, err := idempotencyrecord.DecodeIdempotencyMarker(markerEntry.Value, locator)
 		if err != nil {
 			clearPruneCandidates(candidates)
 			return nil, scan, err
 		}
-		if err := validateIdempotencyRetentionKey(
+		if err := idempotencyrecord.ValidateIdempotencyRetentionKey(
 			retentionEntries[index].Key,
 			markerEntry.Key,
 			marker.RetainUntil,
@@ -137,7 +138,7 @@ func (repository *IdempotencyRepository) collectExpired(
 			return nil, scan, err
 		}
 		candidates = append(candidates, idempotencyPruneCandidate{
-			Marker:               IdempotencyEvidence{marker: marker, modRevision: markerEntry.ModRevision},
+			Marker:               idempotencyrecord.IdempotencyEvidence{marker: marker, modRevision: markerEntry.ModRevision},
 			RetentionKey:         retentionEntries[index].Key,
 			RetentionValue:       append([]byte(nil), retentionEntries[index].Value...),
 			RetentionModRevision: retentionEntries[index].ModRevision,
@@ -150,12 +151,12 @@ func (repository *IdempotencyRepository) collectExpired(
 		if marker.ReplayTarget == nil {
 			continue
 		}
-		targetKey, err := idempotencyReplayTargetKey(
+		targetKey, err := idempotencyrecord.IdempotencyReplayTargetKey(
 			*marker.ReplayTarget, marker.Locator.Method, marker.Locator.Route, marker.Locator.Key,
 		)
 		if err != nil {
 			clearPruneCandidates(candidates)
-			return nil, scan, corruptIdempotencyMarker()
+			return nil, scan, idempotencyrecord.CorruptIdempotencyMarker()
 		}
 		targetKeys = append(targetKeys, targetKey)
 		targetIndexes = append(targetIndexes, index)
@@ -168,17 +169,17 @@ func (repository *IdempotencyRepository) collectExpired(
 		}
 		if targets == nil || targets.ReadRevision != page.ReadRevision || len(targets.Values) != len(targetKeys) {
 			clearPruneCandidates(candidates)
-			return nil, scan, corruptIdempotencyMarker()
+			return nil, scan, idempotencyrecord.CorruptIdempotencyMarker()
 		}
 		defer clearKeyValues(targets.Values)
 		for index, targetEntry := range targets.Values {
 			candidateIndex := targetIndexes[index]
-			markerKey, keyErr := idempotencyMarkerKey(candidates[candidateIndex].Marker.marker.Locator)
+			markerKey, keyErr := idempotencyrecord.IdempotencyMarkerKey(candidates[candidateIndex].Marker.marker.Locator)
 			if keyErr != nil || targetEntry == nil || targetEntry.Key != targetKeys[index] ||
 				targetEntry.ModRevision <= 0 ||
-				decodeReplayTargetReference(targetEntry.Value, markerKey) != nil {
+				idempotencyrecord.DecodeReplayTargetReference(targetEntry.Value, markerKey) != nil {
 				clearPruneCandidates(candidates)
-				return nil, scan, corruptIdempotencyMarker()
+				return nil, scan, idempotencyrecord.CorruptIdempotencyMarker()
 			}
 			candidates[candidateIndex].ReplayTargetKey = targetEntry.Key
 			candidates[candidateIndex].ReplayTargetValue = append([]byte(nil), targetEntry.Value...)
@@ -235,26 +236,26 @@ func (repository *IdempotencyRepository) pruneExpiredWithFences(
 	seenMarkers := make(map[string]struct{}, len(candidates))
 	for _, candidate := range candidates {
 		if candidate.Marker.modRevision <= 0 || candidate.RetentionModRevision <= 0 ||
-			validateIdempotencyMarker(candidate.Marker.marker) != nil ||
+			idempotencyrecord.ValidateIdempotencyMarker(candidate.Marker.marker) != nil ||
 			candidate.Marker.marker.RetainUntil.After(now) {
-			return 0, corruptIdempotencyMarker()
+			return 0, idempotencyrecord.CorruptIdempotencyMarker()
 		}
-		markerKey, err := idempotencyMarkerKey(candidate.Marker.marker.Locator)
+		markerKey, err := idempotencyrecord.IdempotencyMarkerKey(candidate.Marker.marker.Locator)
 		if err != nil {
-			return 0, corruptIdempotencyMarker()
+			return 0, idempotencyrecord.CorruptIdempotencyMarker()
 		}
 		if _, duplicate := seenMarkers[markerKey]; duplicate {
-			return 0, corruptIdempotencyMarker()
+			return 0, idempotencyrecord.CorruptIdempotencyMarker()
 		}
 		seenMarkers[markerKey] = struct{}{}
-		if err := validateIdempotencyRetentionKey(
+		if err := idempotencyrecord.ValidateIdempotencyRetentionKey(
 			candidate.RetentionKey,
 			markerKey,
 			candidate.Marker.marker.RetainUntil,
 		); err != nil {
 			return 0, err
 		}
-		if err := decodeRetentionReference(candidate.RetentionValue, markerKey); err != nil {
+		if err := idempotencyrecord.DecodeRetentionReference(candidate.RetentionValue, markerKey); err != nil {
 			return 0, err
 		}
 		conditions = append(conditions,
@@ -266,7 +267,7 @@ func (repository *IdempotencyRepository) pruneExpiredWithFences(
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: candidate.RetentionKey},
 		)
 		if candidate.Marker.marker.ReplayTarget != nil {
-			targetKey, targetErr := idempotencyReplayTargetKey(
+			targetKey, targetErr := idempotencyrecord.IdempotencyReplayTargetKey(
 				*candidate.Marker.marker.ReplayTarget,
 				candidate.Marker.marker.Locator.Method,
 				candidate.Marker.marker.Locator.Route,
@@ -274,8 +275,8 @@ func (repository *IdempotencyRepository) pruneExpiredWithFences(
 			)
 			if targetErr != nil || candidate.ReplayTargetKey != targetKey ||
 				candidate.ReplayTargetModRevision <= 0 ||
-				decodeReplayTargetReference(candidate.ReplayTargetValue, markerKey) != nil {
-				return 0, corruptIdempotencyMarker()
+				idempotencyrecord.DecodeReplayTargetReference(candidate.ReplayTargetValue, markerKey) != nil {
+				return 0, idempotencyrecord.CorruptIdempotencyMarker()
 			}
 			conditions = append(conditions, etcdstore.Condition{
 				Key: candidate.ReplayTargetKey, ModRevision: candidate.ReplayTargetModRevision,
@@ -283,7 +284,7 @@ func (repository *IdempotencyRepository) pruneExpiredWithFences(
 			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: candidate.ReplayTargetKey})
 		} else if candidate.ReplayTargetKey != "" || candidate.ReplayTargetModRevision != 0 ||
 			len(candidate.ReplayTargetValue) != 0 {
-			return 0, corruptIdempotencyMarker()
+			return 0, idempotencyrecord.CorruptIdempotencyMarker()
 		}
 	}
 	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
@@ -305,7 +306,7 @@ func (repository *IdempotencyRepository) loadPruneScan(ctx context.Context) (ide
 		return idempotencyPruneScan{}, err
 	}
 	if read == nil || read.ReadRevision <= 0 {
-		return idempotencyPruneScan{}, corruptIdempotencyMarker()
+		return idempotencyPruneScan{}, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	if read.Entry == nil {
 		return idempotencyPruneScan{}, nil
@@ -313,10 +314,10 @@ func (repository *IdempotencyRepository) loadPruneScan(ctx context.Context) (ide
 	defer clear(read.Entry.Value)
 	cursor, err := recordcodec.Decode[idempotencyPruneCursor](read.Entry.Value, "idempotency_prune_cursor")
 	if err != nil || read.Entry.Key != idempotencyPruneCursorKey || read.Entry.ModRevision <= 0 {
-		return idempotencyPruneScan{}, corruptIdempotencyMarker()
+		return idempotencyPruneScan{}, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	if _, _, err := parseIdempotencyRetentionKey(cursor.After); err != nil {
-		return idempotencyPruneScan{}, corruptIdempotencyMarker()
+	if _, _, err := idempotencyrecord.ParseIdempotencyRetentionKey(cursor.After); err != nil {
+		return idempotencyPruneScan{}, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	return idempotencyPruneScan{After: cursor.After, CursorRevision: read.Entry.ModRevision}, nil
 }
@@ -401,7 +402,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 	ctx context.Context, candidate idempotencyPruneCandidate, revision int64,
 ) ([]etcdstore.Condition, bool, error) {
 	marker := candidate.Marker.marker
-	if marker.Kind != IdempotencyMarkerTask {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask {
 		return nil, false, nil
 	}
 	taskRead, err := repository.store.GetMany(
@@ -413,12 +414,12 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 	}
 	if taskRead == nil || taskRead.ReadRevision != revision || len(taskRead.Values) != 1 || taskRead.Values[0] == nil ||
 		taskRead.Values[0].Key != taskKey(marker.TaskID) || taskRead.Values[0].ModRevision <= 0 {
-		return nil, false, corruptIdempotencyMarker()
+		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer clearKeyValues(taskRead.Values)
 	task, err := decodeTaskRecord(taskRead.Values[0].Value)
 	if err != nil || task.ID != marker.TaskID {
-		return nil, false, corruptIdempotencyMarker()
+		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	if task.Type != TaskRemove || task.Params[TaskResourceKindParam] != TaskResourceVolume {
 		return nil, false, nil
@@ -429,7 +430,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 		return nil, false, err
 	}
 	if operation == nil || operation.ReadRevision != revision || len(operation.Values) > 1 {
-		return nil, false, corruptIdempotencyMarker()
+		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer clearKeyValueSlice(operation.Values)
 	if len(operation.Values) != 0 {
@@ -445,7 +446,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 		return nil, false, err
 	}
 	if owners == nil || owners.ReadRevision != revision || len(owners.Values) != len(keys) {
-		return nil, false, corruptIdempotencyMarker()
+		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer clearKeyValues(owners.Values)
 	fences := []etcdstore.Condition{
@@ -459,7 +460,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 			if err != nil || value.Key != keys[index] || value.ModRevision <= 0 ||
 				index == 0 &&
 					owner.VolumeID != task.Target || index == 1 && owner.EnvironmentID != task.Owner.EnvironmentID {
-				return nil, false, corruptIdempotencyMarker()
+				return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 			}
 			if owner.OperationID == task.OperationID {
 				return nil, true, nil
@@ -478,14 +479,14 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 		return nil, false, nil // The candidate's own terminal marker is the root.
 	}
 	if recordcodec.ValidateID(ids.KindTask, originID) != nil {
-		return nil, false, corruptIdempotencyMarker()
+		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{taskKey(originID)}, Revision: revision})
 	if err != nil {
 		return nil, false, err
 	}
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 {
-		return nil, false, corruptIdempotencyMarker()
+		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer clearKeyValues(read.Values)
 	fences := []etcdstore.Condition{{Key: taskKey(originID), ModRevision: keyValueRevision(read.Values[0])}}
@@ -495,9 +496,9 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 	origin, err := decodeTaskRecord(read.Values[0].Value)
 	if err != nil || origin.ID != originID || origin.OperationID != task.OperationID || origin.Owner != task.Owner ||
 		origin.idempotencyMarker == nil || read.Values[0].Key != taskKey(originID) || read.Values[0].ModRevision <= 0 {
-		return nil, false, corruptIdempotencyMarker()
+		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	key, err := idempotencyMarkerKey(*origin.idempotencyMarker)
+	key, err := idempotencyrecord.IdempotencyMarkerKey(*origin.idempotencyMarker)
 	if err != nil {
 		return nil, false, err
 	}
@@ -506,17 +507,17 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 		return nil, false, err
 	}
 	if markerRead == nil || markerRead.ReadRevision != revision || len(markerRead.Values) != 1 {
-		return nil, false, corruptIdempotencyMarker()
+		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer clearKeyValues(markerRead.Values)
 	if value := markerRead.Values[0]; value != nil {
-		marker, err := decodeIdempotencyMarker(value.Value, *origin.idempotencyMarker)
+		marker, err := idempotencyrecord.DecodeIdempotencyMarker(value.Value, *origin.idempotencyMarker)
 		if err != nil || value.Key != key || value.ModRevision <= 0 || marker.TaskID != originID {
-			return nil, false, corruptIdempotencyMarker()
+			return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 		}
 		defer clear(marker.Intent.Ciphertext)
 		defer clear(marker.Response.Body)
-		if marker.State == IdempotencyMarkerPending {
+		if marker.State == idempotencyrecord.IdempotencyMarkerPending {
 			return nil, true, nil
 		}
 	}

@@ -2,19 +2,20 @@ package handlers
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/controller/backupkey"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type BackupKeyMutator interface {
-	RotateBackupKey(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	RotateBackupKey(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type BackupKeyExporter interface {

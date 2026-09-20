@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -85,14 +86,14 @@ func prepareEntryBulkUpsert(request apiTypes.EntryBulkUpsertRequest) (entryBulkU
 	}, nil
 }
 
-func entryBulkUpsertResponse(changes []entryBulkChange, taskID string) (etcd.IdempotencyResponse, error) {
+func entryBulkUpsertResponse(changes []entryBulkChange, taskID string) (idempotencyrecord.IdempotencyResponse, error) {
 	entries := make([]apiTypes.Entry, len(changes))
 	for index, change := range changes {
 		entries[index] = entryCreationResponse(change.record.Entry)
 	}
 	body, err := json.Marshal(apiTypes.EntryBulkUpsertResult{TaskID: taskID, Entries: entries})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return etcd.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}, nil
+	return idempotencyrecord.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}, nil
 }

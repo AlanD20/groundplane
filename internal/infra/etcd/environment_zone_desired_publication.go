@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -26,7 +27,7 @@ type EnvironmentZoneDesiredPublication struct {
 	Revision             EnvironmentDesiredRevisionIdentity
 	Projection           EnvironmentComposeProjection
 	Zone                 zonerecord.Record
-	Marker               IdempotencyMarker
+	Marker               idempotencyrecord.IdempotencyMarker
 }
 
 // PublishEnvironmentZoneDesiredRevisionDirect atomically advances the sole
@@ -92,7 +93,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(publication.publishedDescriptor)
-	headReference, err := encodeTaskReference(input.Revision.RevisionID)
+	headReference, err := idempotencyrecord.EncodeTaskReference(input.Revision.RevisionID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -195,12 +196,12 @@ func validateDirectZoneDesiredPublicationInput(input EnvironmentZoneDesiredPubli
 			input.Zone.Desired.OwnerID != input.Project.Record.ID) {
 		return errs.New(errs.KindValidationFailed, "backing Project Zone ownership is invalid")
 	}
-	if input.Marker.Kind != IdempotencyMarkerDirect || input.Marker.State != IdempotencyMarkerCompleted ||
-		input.Marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	if input.Marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || input.Marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+		input.Marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		input.Marker.Locator.ScopeID != input.Environment.Record.ID {
 		return errs.New(errs.KindValidationFailed, "direct Zone desired publication marker is invalid")
 	}
-	if err := validateIdempotencyMarker(input.Marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(input.Marker); err != nil {
 		return err
 	}
 	if input.Marker.Locator != input.Claim.Locator ||

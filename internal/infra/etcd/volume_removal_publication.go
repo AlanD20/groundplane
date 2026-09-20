@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"net/netip"
@@ -31,7 +32,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemova
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord], environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	expectedHeadRevision int64, claim EnvironmentBlueprintStageClaim,
 	projection EnvironmentComposeProjection, policy VolumeRemovalBackupPolicyPreparation,
-	initial removalrecord.InitialPublication, task TaskRecord, marker IdempotencyMarker,
+	initial removalrecord.InitialPublication, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	return repository.publishEnvironmentDesiredRevisionWithTask(
 		ctx,
@@ -67,7 +68,7 @@ func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 	claim EnvironmentBlueprintStageClaim,
 	projection EnvironmentComposeProjection,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	removedVolumeID string,
 	readRevision int64,
 ) (volumeRemovalInitialPublication, error) {
@@ -183,7 +184,7 @@ func EnvironmentVolumeRemovalTaskParams(runtime removalrecord.Runtime, attemptOr
 func prepareVolumeRemovalInitialPublication(
 	initial removalrecord.InitialPublication,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (volumeRemovalInitialPublication, error) {
 	runtime, attempt, progress, err := initial.Records()
 	if err != nil {
@@ -235,12 +236,12 @@ func prepareVolumeRemovalInitialPublication(
 func validateVolumeRemovalInitialBinding(
 	runtime removalrecord.Runtime,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) error {
 	if err := validateTaskRecord(task); err != nil {
 		return err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return err
 	}
 	if task.ID != runtime.OriginTaskID || task.OperationID != runtime.OperationID || task.RetryOf != "" ||
@@ -261,13 +262,13 @@ func validateVolumeRemovalInitialBinding(
 			return errs.New(errs.KindValidationFailed, "initial Volume removal Task parameters changed")
 		}
 	}
-	locator := IdempotencyLocator{
-		ScopeKind: IdempotencyScopeKind(runtime.RootLocator.ScopeKind), ScopeID: runtime.RootLocator.ScopeID,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeKind(runtime.RootLocator.ScopeKind), ScopeID: runtime.RootLocator.ScopeID,
 		Method: runtime.RootLocator.Method, Route: runtime.RootLocator.Route, Key: runtime.RootLocator.Key,
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != runtime.OriginTaskID || marker.Locator != locator ||
-		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != IdempotencyReplayTargetVolume ||
+		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume ||
 		marker.ReplayTarget.ID != runtime.VolumeID || marker.Response.Status != http.StatusAccepted ||
 		!bytes.Equal(marker.Response.Body, []byte(`{"task_id":"`+runtime.OriginTaskID+`"}`)) ||
 		sha256.Sum256(marker.Response.Body) != runtime.RootResponseSHA256 ||

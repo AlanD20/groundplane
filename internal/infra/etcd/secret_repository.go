@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
@@ -94,7 +95,7 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 	owner SecretOwner,
 	record secretrecord.Record,
 	value secretrecord.EncryptedValue,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateSecretOwnership(ctx, owner, record); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -102,13 +103,13 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 	if err := validateSecretValueBinding(record, value); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret creation marker must be a completed direct mutation",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	primaryValue, err := secretrecord.EncodeRecord(record)

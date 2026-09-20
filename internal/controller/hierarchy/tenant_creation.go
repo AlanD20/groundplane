@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"time"
 
@@ -21,13 +22,13 @@ type tenantCreationRepository interface {
 	CreateTenantIdempotent(
 		context.Context,
 		hierarchyrecord.TenantRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type tenantCreationEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type tenantCreationIdempotency interface {
@@ -39,7 +40,7 @@ type tenantCreationIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		tenantCreationEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -100,7 +101,7 @@ func (service *durableTenantCreationIdempotency) ResolveKnown(
 
 func (service *durableTenantCreationIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence tenantCreationEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -133,37 +134,37 @@ func (service *tenantCreationService) CreateTenant(
 	ctx context.Context,
 	input CreateTenantInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant creation context is required")
 	}
 	tenant, err := PrepareTenant(input)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	evidence, err := service.idempotency.Prepare(ctx, tenant)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	responseBody, err := json.Marshal(apiTypes.Tenant{
 		ID: tenant.ID, Slug: tenant.Slug, Name: tenant.Name, Description: tenant.Description,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusCreated, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopePlatform, ScopeID: "-",
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
 		Method: http.MethodPost, Route: tenantCreationRoute, Key: idempotencyKey,
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -173,14 +174,14 @@ func (service *tenantCreationService) CreateTenant(
 	var resolution requestidempotency.Resolution
 	if createErr != nil {
 		if !isUnknownTenantCreationOutcome(createErr) {
-			return etcd.IdempotencyResponse{}, createErr
+			return idempotencyrecord.IdempotencyResponse{}, createErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, createErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -188,7 +189,7 @@ func (service *tenantCreationService) CreateTenant(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant creation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant creation resolution is invalid")
 	}
 }
 

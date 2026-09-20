@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -46,15 +47,15 @@ func (service *MutationService) RenameAttach(
 	attachID string,
 	request apiTypes.AttachRenameRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename context is required")
 	}
 	if ids.Validate(ids.KindAttach, attachID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Attach id is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Attach id is invalid")
 	}
 	if err := attachrecord.ValidateAttachName(request.Name); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	for attempt := 0; attempt < maximumAttachMutationTries; attempt++ {
 		response, err := service.renameAttachOnce(ctx, attachID, request, idempotencyKey)
@@ -63,10 +64,10 @@ func (service *MutationService) RenameAttach(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumAttachMutationTries-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename retry bound was not enforced")
 }
 
 func (service *MutationService) renameAttachOnce(
@@ -74,61 +75,61 @@ func (service *MutationService) renameAttachOnce(
 	attachID string,
 	request apiTypes.AttachRenameRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetAttach, ID: attachID}
+) (idempotencyrecord.IdempotencyResponse, error) {
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetAttach, ID: attachID}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodPost, attachRenameRoute, idempotencyKey,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
 		return service.replayAttachRename(ctx, locator, attachID, request)
 	}
 	current, err := service.repository.GetAttach(ctx, attachID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	locator = etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: current.Record.EnvironmentID,
+	locator = idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: current.Record.EnvironmentID,
 		Method: http.MethodPost, Route: attachRenameRoute, Key: idempotencyKey,
 	}
 	evidence, err := service.idempotency.PrepareRename(ctx, current.Record.EnvironmentID, attachID, request)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename replay resolution is invalid")
 		}
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	environment, err := service.repository.GetEnvironment(ctx, current.Record.EnvironmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	replacement := current.Record
 	replacement.Name = request.Name
 	responseBody, err := json.Marshal(attachAPI(replacement))
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	marker.ReplayTarget = &target
 	defer clear(marker.Intent.Ciphertext)
@@ -138,14 +139,14 @@ func (service *MutationService) renameAttachOnce(
 	)
 	if mutationErr != nil {
 		if !isUnknownAttachChangeOutcome(mutationErr) {
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -153,27 +154,27 @@ func (service *MutationService) renameAttachOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename resolution is invalid")
 	}
 }
 
 func (service *MutationService) replayAttachRename(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	attachID string,
 	request apiTypes.AttachRenameRequest,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := service.idempotency.PrepareRename(ctx, locator.ScopeID, attachID, request)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename replay index is inconsistent")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename replay index is inconsistent")
 	}
 	return requestidempotency.CloneResponse(resolution.Response), nil
 }

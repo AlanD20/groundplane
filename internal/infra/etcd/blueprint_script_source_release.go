@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -105,7 +106,7 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	if err != nil || root.OperationID != task.OperationID {
 		return scriptTerminalSourceRelease{}, false, corruptReleaseRecord()
 	}
-	activeTaskID, err := decodeTaskReference(read.Values[2].Value)
+	activeTaskID, err := idempotencyrecord.DecodeTaskReference(read.Values[2].Value)
 	if err != nil || activeTaskID != task.ID {
 		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
 	}

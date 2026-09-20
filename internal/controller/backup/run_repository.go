@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"time"
@@ -51,7 +52,7 @@ type backupRunPublication interface {
 		context.Context,
 		etcd.TaskRecord,
 		*agentpb.ExecutionPlan,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	Clear()
 }

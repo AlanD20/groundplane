@@ -2,14 +2,13 @@ package handlers
 
 import (
 	"context"
-
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 )
 
 type TaskRetrier interface {
-	RetryTask(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	RetryTask(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type TaskAborter interface {
-	AbortTask(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	AbortTask(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }

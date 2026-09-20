@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
@@ -32,7 +33,7 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if claim.SourceKind != EnvironmentBlueprintSourceMutation {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -73,7 +74,7 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDes
 	releasePublication BlueprintReleasePublication,
 	requirementGate BlueprintRequirementGate,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if claim.SourceKind != EnvironmentBlueprintSourceApply {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -113,7 +114,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	volumePolicyPreparation VolumeRemovalBackupPolicyPreparation,
 	volumeInitial *removalrecord.InitialPublication,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	blueprintTransactions environmentBlueprintTransactionStore,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -149,8 +150,8 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			errs.KindValidationFailed, "Environment desired revision publication identity is invalid",
 		)
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -182,7 +183,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
@@ -318,7 +319,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -413,7 +414,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			return errs.New(errs.KindStateConflict, "Environment Volume removal is in progress")
 		}
 		if values[2] != nil {
-			activeTaskID, decodeErr := decodeTaskReference(values[2].Value)
+			activeTaskID, decodeErr := idempotencyrecord.DecodeTaskReference(values[2].Value)
 			if decodeErr != nil {
 				return decodeErr
 			}

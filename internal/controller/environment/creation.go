@@ -7,6 +7,7 @@ import (
 	"errors"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"net/netip"
@@ -42,20 +43,20 @@ type environmentCreationRepository interface {
 		hierarchyrecord.EnvironmentRecord,
 		[]componentrecord.Record,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type environmentCreationEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type environmentCreationIdempotency interface {
 	Prepare(context.Context, CreateEnvironmentInput) (environmentCreationEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		environmentCreationEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -65,7 +66,7 @@ type environmentCreationIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		environmentCreationEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -117,7 +118,7 @@ func (service *durableEnvironmentCreationIdempotency) Prepare(
 
 func (service *durableEnvironmentCreationIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence environmentCreationEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -133,7 +134,7 @@ func (service *durableEnvironmentCreationIdempotency) ResolveKnown(
 
 func (service *durableEnvironmentCreationIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence environmentCreationEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -174,9 +175,9 @@ func (service *environmentCreationService) CreateEnvironment(
 	ctx context.Context,
 	input CreateEnvironmentInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation context is required")
 	}
 	for attempt := 0; attempt < maximumEnvironmentCreationAttempts; attempt++ {
 		response, err := service.createEnvironmentOnce(ctx, input, idempotencyKey)
@@ -185,36 +186,36 @@ func (service *environmentCreationService) CreateEnvironment(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumEnvironmentCreationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation retry bound was not enforced")
 }
 
 func (service *environmentCreationService) createEnvironmentOnce(
 	ctx context.Context,
 	input CreateEnvironmentInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if err := ValidateEnvironmentCreateInput(input); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	evidence, err := service.idempotency.Prepare(ctx, input)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeProject, ScopeID: input.ProjectID,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeProject, ScopeID: input.ProjectID,
 		Method: http.MethodPost, Route: environmentCreationRoute, Key: idempotencyKey,
 	}
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Environment creation replay resolution is invalid",
 			)
@@ -223,14 +224,14 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	}
 	project, err := service.repository.GetProject(ctx, input.ProjectID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if project.Record.ID != input.ProjectID || project.Record.Kind != hierarchyrecord.ProjectKindTenant {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindProjectNotFound, "project was not found")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	poolRegistry, err := service.repository.GetEnvironmentPoolRegistry(ctx)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	now := service.now().UTC()
 	taskID := ids.New(ids.KindTask)
@@ -241,7 +242,7 @@ func (service *environmentCreationService) createEnvironmentOnce(
 		input.NetworkPool,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	poolRegistry.Record = nextPoolRegistry
 	environment, err := hierarchyrecord.NewProvisioningEnvironment(
@@ -254,11 +255,11 @@ func (service *environmentCreationService) createEnvironmentOnce(
 		now,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	components, err := newInitialEnvironmentComponents(environment.ID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task, err := newEnvironmentCreationTask(
 		project.Record,
@@ -269,19 +270,19 @@ func (service *environmentCreationService) createEnvironmentOnce(
 		service.volumeRoot,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
@@ -297,20 +298,20 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	)
 	if createErr != nil {
 		if !isUnknownEnvironmentCreationOutcome(createErr) {
-			return etcd.IdempotencyResponse{}, createErr
+			return idempotencyrecord.IdempotencyResponse{}, createErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, createErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if resolution.Kind == requestidempotency.ResolutionReplay {
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation resolution is invalid")
 	}
 	return cloneIdempotencyResponse(response), nil
 }

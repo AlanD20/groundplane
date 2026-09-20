@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
@@ -34,20 +35,20 @@ type secretCreationRepository interface {
 		etcd.SecretOwner,
 		secretrecord.Record,
 		secretrecord.EncryptedValue,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type secretCreationEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type secretCreationIdempotency interface {
 	Prepare(context.Context, apiTypes.SecretCreateRequest) (secretCreationEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		secretCreationEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -57,7 +58,7 @@ type secretCreationIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		secretCreationEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -120,7 +121,7 @@ func (service *durableSecretCreationIdempotency) Prepare(
 
 func (service *durableSecretCreationIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence secretCreationEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -136,7 +137,7 @@ func (service *durableSecretCreationIdempotency) ResolveKnown(
 
 func (service *durableSecretCreationIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence secretCreationEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -167,9 +168,9 @@ func (service *secretCreationService) CreateSecret(
 	ctx context.Context,
 	input apiTypes.SecretCreateRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Secret creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Secret creation context is required")
 	}
 	for attempt := 0; attempt < maximumSecretCreationAttempts; attempt++ {
 		response, err := service.createSecretOnce(ctx, input, idempotencyKey)
@@ -178,10 +179,10 @@ func (service *secretCreationService) CreateSecret(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumSecretCreationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
 		errs.KindInternal,
 		"Secret creation retry bound was not enforced",
 	)
@@ -191,24 +192,24 @@ func (service *secretCreationService) createSecretOnce(
 	ctx context.Context,
 	input apiTypes.SecretCreateRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	record, err := prepareSecretCreation(input, service.now().UTC())
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	evidence, err := service.idempotency.Prepare(ctx, input)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	locator := secretCreationLocator(input, idempotencyKey)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Secret creation replay resolution is invalid",
 			)
@@ -220,7 +221,7 @@ func (service *secretCreationService) createSecretOnce(
 	if input.ProjectID != "" {
 		project, projectErr := service.repository.GetProject(ctx, input.ProjectID)
 		if projectErr != nil {
-			return etcd.IdempotencyResponse{}, projectErr
+			return idempotencyrecord.IdempotencyResponse{}, projectErr
 		}
 		owner = etcd.ProjectSecretOwner(project)
 	}
@@ -228,7 +229,7 @@ func (service *secretCreationService) createSecretOnce(
 	defer clear(plaintext)
 	envelope, err := service.protector.Seal(ctx, plaintext)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	metadata := envelope.Metadata()
 	ciphertext := envelope.Ciphertext()
@@ -240,35 +241,35 @@ func (service *secretCreationService) createSecretOnce(
 	}
 	responseBody, err := json.Marshal(secretCreationResponse(record))
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusCreated, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
 		locator,
 		evidence.durable,
 		response,
 		service.now().UTC(),
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
 	result, createErr := service.repository.CreateSecretIdempotent(ctx, owner, record, value, marker)
 	if createErr != nil {
 		if !isUnknownSecretCreationOutcome(createErr) {
-			return etcd.IdempotencyResponse{}, createErr
+			return idempotencyrecord.IdempotencyResponse{}, createErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, createErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -276,7 +277,7 @@ func (service *secretCreationService) createSecretOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Secret creation resolution is invalid",
 		)
@@ -320,14 +321,14 @@ func prepareSecretCreation(
 	return secretrecord.NewProjectRecord(id, input.ProjectID, input.Key, kind, input.Path, updatedAt)
 }
 
-func secretCreationLocator(input apiTypes.SecretCreateRequest, key string) etcd.IdempotencyLocator {
-	scopeKind := etcd.IdempotencyScopePlatform
+func secretCreationLocator(input apiTypes.SecretCreateRequest, key string) idempotencyrecord.IdempotencyLocator {
+	scopeKind := idempotencyrecord.IdempotencyScopePlatform
 	scopeID := "-"
 	if input.ProjectID != "" {
-		scopeKind = etcd.IdempotencyScopeProject
+		scopeKind = idempotencyrecord.IdempotencyScopeProject
 		scopeID = input.ProjectID
 	}
-	return etcd.IdempotencyLocator{
+	return idempotencyrecord.IdempotencyLocator{
 		ScopeKind: scopeKind, ScopeID: scopeID,
 		Method: http.MethodPost, Route: secretCreationRoute, Key: key,
 	}

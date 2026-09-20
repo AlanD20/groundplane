@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"slices"
@@ -16,7 +17,7 @@ import (
 // Retry publishes the successor and its operation ownership together. The
 // accepted DELETE response and all completed traversal work remain unchanged.
 func (repository *TaskRepository) retryVolumeRemovalTask(
-	ctx context.Context, source etcdstore.Versioned[TaskRecord], retryID string, actor TaskActor, marker IdempotencyMarker,
+	ctx context.Context, source etcdstore.Versioned[TaskRecord], retryID string, actor TaskActor, marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if actor != TaskActorOperator ||
 		(source.Record.Status != TaskStatusFailed && source.Record.Status != TaskStatusTimedOut) {
@@ -29,10 +30,10 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending || marker.TaskID != retry.ID ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != retry.ID ||
 		marker.Locator.Method != http.MethodPost || marker.Locator.Route != "/tasks/{id}/retry" ||
-		marker.Locator.ScopeKind != IdempotencyScopeEnvironment || marker.Locator.ScopeID != source.Record.Owner.EnvironmentID ||
-		marker.ReplayTarget != nil || !marker.CreatedAt.Equal(marker.UpdatedAt) || validateIdempotencyMarker(marker) != nil {
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || marker.Locator.ScopeID != source.Record.Owner.EnvironmentID ||
+		marker.ReplayTarget != nil || !marker.CreatedAt.Equal(marker.UpdatedAt) || idempotencyrecord.ValidateIdempotencyMarker(marker) != nil {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Volume removal retry marker is invalid",
@@ -60,14 +61,14 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		retry.CreatedAt.Before(*source.Record.FinishedAt) {
 		return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	locator := IdempotencyLocator{ScopeKind: IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
+	locator := idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
 		ScopeID: runtime.RootLocator.ScopeID, Method: runtime.RootLocator.Method,
 		Route: runtime.RootLocator.Route, Key: runtime.RootLocator.Key}
-	rootKey, err := idempotencyMarkerKey(locator)
+	rootKey, err := idempotencyrecord.IdempotencyMarkerKey(locator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	replayKey, err := idempotencyReplayTargetKey(IdempotencyReplayTarget{Kind: IdempotencyReplayTargetVolume,
+	replayKey, err := idempotencyrecord.IdempotencyReplayTargetKey(idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
 		ID: runtime.VolumeID}, locator.Method, locator.Route, locator.Key)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -157,24 +158,24 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 			return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 		}
 	}
-	root, err := decodeIdempotencyMarker(read.Values[5].Value, locator)
+	root, err := idempotencyrecord.DecodeIdempotencyMarker(read.Values[5].Value, locator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(root.Intent.Ciphertext)
 	defer clear(root.Response.Body)
-	if root.Kind != IdempotencyMarkerTask || root.State != IdempotencyMarkerPending ||
+	if root.Kind != idempotencyrecord.IdempotencyMarkerTask || root.State != idempotencyrecord.IdempotencyMarkerPending ||
 		root.TaskID != runtime.OriginTaskID ||
 		root.Response.Status != http.StatusAccepted ||
 		root.ReplayTarget == nil ||
-		root.ReplayTarget.Kind != IdempotencyReplayTargetVolume ||
+		root.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume ||
 		root.ReplayTarget.ID != runtime.VolumeID ||
 		sha256.Sum256(root.Intent.Ciphertext) != runtime.IntentSHA256 ||
 		sha256.Sum256(root.Response.Body) != runtime.RootResponseSHA256 ||
-		decodeReplayTargetReference(read.Values[6].Value, rootKey) != nil {
+		idempotencyrecord.DecodeReplayTargetReference(read.Values[6].Value, rootKey) != nil {
 		return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	head, err := decodeTaskReference(read.Values[7].Value)
+	head, err := idempotencyrecord.DecodeTaskReference(read.Values[7].Value)
 	if err != nil || head != runtime.DesiredRevisionID {
 		return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 	}
@@ -189,7 +190,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(retry.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(retry.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

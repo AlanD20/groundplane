@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"maps"
 	"slices"
@@ -21,7 +22,7 @@ type EnvironmentServiceDesiredPublication struct {
 	Projection           EnvironmentComposeProjection
 	Change               EnvironmentBlueprintServiceChange
 	References           ServiceMutationReferences
-	Marker               IdempotencyMarker
+	Marker               idempotencyrecord.IdempotencyMarker
 }
 
 func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionDirect(
@@ -99,7 +100,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(publication.publishedDescriptor)
-	headReference, err := encodeTaskReference(input.Revision.RevisionID)
+	headReference, err := idempotencyrecord.EncodeTaskReference(input.Revision.RevisionID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -316,7 +317,7 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
 	projection EnvironmentComposeProjection,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	expectedHeadRevision int64,
 ) (environmentBlueprintPublicationEvidence, error) {
 	digest, err := EnvironmentBlueprintDependencyDigest(projection)

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -48,7 +49,7 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 	if values.Values[2] != nil {
 		return serviceTaskChange{}, errs.New(errs.KindInternal, "Service retry render input already exists")
 	}
-	reference, err := encodeTaskReference(retry.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(retry.ID)
 	if err != nil {
 		return serviceTaskChange{}, err
 	}
@@ -99,7 +100,7 @@ func (repository *TaskRepository) prepareServiceTaskAcknowledgement(
 	if values == nil || len(values.Values) != 1 || values.Values[0] == nil {
 		return serviceTaskChange{}, errs.New(errs.KindStateConflict, "Service lifecycle Task is not active")
 	}
-	activeTaskID, err := decodeTaskReference(values.Values[0].Value)
+	activeTaskID, err := idempotencyrecord.DecodeTaskReference(values.Values[0].Value)
 	if err != nil {
 		return serviceTaskChange{}, err
 	}

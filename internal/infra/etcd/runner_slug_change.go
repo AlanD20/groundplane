@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -13,16 +14,16 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 	ctx context.Context,
 	runnerID string,
 	slug string,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if ids.Validate(ids.KindRunner, runnerID) != nil || runnerrecord.ValidateRunnerSlug(slug) != nil ||
-		marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
+		marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.Method != http.MethodPatch || marker.Locator.Route != "/runners/{id}" ||
-		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != IdempotencyReplayTargetRunner ||
-		marker.ReplayTarget.ID != runnerID || validateIdempotencyMarker(marker) != nil {
+		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetRunner ||
+		marker.ReplayTarget.ID != runnerID || idempotencyrecord.ValidateIdempotencyMarker(marker) != nil {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindValidationFailed, "runner slug mutation is invalid")
 	}
 	idempotency, err := newIdempotencyRepository(repository.store)
@@ -36,7 +37,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 	if existing != nil {
 		return IdempotencyTransactionResult{
 			kind: idempotencyTransactionExisting, revision: existing.modRevision,
-			marker: cloneIdempotencyMarker(existing.marker),
+			marker: idempotencyrecord.CloneIdempotencyMarker(existing.marker),
 		}, nil
 	}
 	current, err := repository.GetRunner(ctx, runnerID)

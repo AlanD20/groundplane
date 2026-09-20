@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 
@@ -20,7 +21,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	current etcdstore.Versioned[scriptrecord.Record],
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateScriptHierarchy(ctx, environment, project, target, current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -54,9 +55,9 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 			errs.KindValidationFailed, "Script deletion Task and tombstone do not match",
 		)
 	}
-	wantReplayTarget := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetScript, ID: scriptID}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetScript, ID: scriptID}
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
@@ -88,7 +89,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	tombstoneValue, err := encodeDeletionTombstone(tombstone)
@@ -101,7 +102,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -196,7 +197,7 @@ func classifyScriptDeletionStartConflict(
 			return errs.New(errs.KindInternal, "Script deletion compare evidence is incomplete")
 		}
 		if values[2] != nil {
-			activeTaskID, err := decodeTaskReference(values[2].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[2].Value)
 			if err != nil {
 				return err
 			}

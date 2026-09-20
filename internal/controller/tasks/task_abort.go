@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"encoding/json"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
@@ -54,20 +55,20 @@ func (service *taskAbortService) AbortTask(
 	ctx context.Context,
 	taskID string,
 	_ string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Task abort context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Task abort context is required")
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Task id is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Task id is invalid")
 	}
 	for attempt := 0; attempt < 8; attempt++ {
 		current, err := service.repository.GetTask(ctx, taskID)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		if current.Record.Type == etcd.TaskBackupPrune {
-			return etcd.IdempotencyResponse{}, errs.Newf(
+			return idempotencyrecord.IdempotencyResponse{}, errs.Newf(
 				errs.KindTaskNotAbortable,
 				"internal task %s of type %s is not operator-abortable",
 				taskID,
@@ -79,12 +80,12 @@ func (service *taskAbortService) AbortTask(
 			if current.Record.StartedAt == nil && current.Record.Params[etcd.TaskReleasePublicationParam] != "" &&
 				(current.Record.Type == etcd.TaskDeploy || current.Record.Type == etcd.TaskRollback) {
 				if _, err := service.repository.AbortPendingTask(ctx, taskID, service.now().UTC()); err != nil {
-					return etcd.IdempotencyResponse{}, err
+					return idempotencyrecord.IdempotencyResponse{}, err
 				}
 			}
 			return taskAbortResponse(taskID)
 		case etcd.TaskStatusCompleted, etcd.TaskStatusFailed, etcd.TaskStatusTimedOut:
-			return etcd.IdempotencyResponse{}, errs.Newf(
+			return idempotencyrecord.IdempotencyResponse{}, errs.Newf(
 				errs.KindTaskNotAbortable,
 				"task %s has status %s",
 				taskID,
@@ -95,7 +96,7 @@ func (service *taskAbortService) AbortTask(
 				if isTaskAbortStateRace(err) {
 					continue
 				}
-				return etcd.IdempotencyResponse{}, err
+				return idempotencyrecord.IdempotencyResponse{}, err
 			}
 		case etcd.TaskStatusRunning:
 			assignment, err := service.repository.GetTaskAssignment(ctx, taskID)
@@ -103,7 +104,7 @@ func (service *taskAbortService) AbortTask(
 				if isTaskAbortStateRace(err) {
 					continue
 				}
-				return etcd.IdempotencyResponse{}, err
+				return idempotencyrecord.IdempotencyResponse{}, err
 			}
 			switch assignment.Assignment.Record.Executor {
 			case etcd.TaskExecutorAgent:
@@ -117,13 +118,13 @@ func (service *taskAbortService) AbortTask(
 				if isTaskAbortStateRace(err) {
 					continue
 				}
-				return etcd.IdempotencyResponse{}, err
+				return idempotencyrecord.IdempotencyResponse{}, err
 			}
 		default:
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Task abort status is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Task abort status is invalid")
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Task changed repeatedly during abort")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Task changed repeatedly during abort")
 }
 
 func (service *taskAbortService) abortAgentTask(ctx context.Context, assignment etcd.TaskAssignment) error {
@@ -171,12 +172,12 @@ func (service *taskAbortService) abortAgentTask(ctx context.Context, assignment 
 	}
 }
 
-func taskAbortResponse(taskID string) (etcd.IdempotencyResponse, error) {
+func taskAbortResponse(taskID string) (idempotencyrecord.IdempotencyResponse, error) {
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return etcd.IdempotencyResponse{
+	return idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json", Body: body,
 	}, nil
 }

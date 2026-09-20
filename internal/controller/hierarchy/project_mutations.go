@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
@@ -28,13 +29,13 @@ type projectChangeRepository interface {
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		hierarchyrecord.ProjectRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type projectChangeEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type projectChangeIdempotency interface {
@@ -42,7 +43,7 @@ type projectChangeIdempotency interface {
 	PrepareRename(context.Context, string, RenameProjectInput) (projectChangeEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		projectChangeEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -52,7 +53,7 @@ type projectChangeIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		projectChangeEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -123,7 +124,7 @@ func (service *durableProjectChangeIdempotency) prepare(
 
 func (service *durableProjectChangeIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence projectChangeEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -139,7 +140,7 @@ func (service *durableProjectChangeIdempotency) ResolveKnown(
 
 func (service *durableProjectChangeIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence projectChangeEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -167,9 +168,9 @@ func (service *projectChangeService) EditProject(
 	id string,
 	input EditProjectInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if err := ValidateProjectEditInput(input); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.changeProject(ctx, id, http.MethodPatch, projectEditRoute, idempotencyKey,
 		func(ctx context.Context) (projectChangeEvidence, error) {
@@ -184,9 +185,9 @@ func (service *projectChangeService) RenameProject(
 	id string,
 	input RenameProjectInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if err := ValidateProjectRenameInput(input); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.changeProject(ctx, id, http.MethodPost, projectRenameRoute, idempotencyKey,
 		func(ctx context.Context) (projectChangeEvidence, error) {
@@ -206,12 +207,12 @@ func (service *projectChangeService) changeProject(
 	idempotencyKey string,
 	prepare func(context.Context) (projectChangeEvidence, error),
 	change func(core.Project) (core.Project, error),
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project change context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project change context is required")
 	}
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeProject, ScopeID: id,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeProject, ScopeID: id,
 		Method: method, Route: route, Key: idempotencyKey,
 	}
 	for attempt := 0; attempt < maximumProjectMutationAttempts; attempt++ {
@@ -221,31 +222,31 @@ func (service *projectChangeService) changeProject(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumProjectMutationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project change retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project change retry bound was not enforced")
 }
 
 func (service *projectChangeService) changeProjectOnce(
 	ctx context.Context,
 	id string,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	prepare func(context.Context) (projectChangeEvidence, error),
 	change func(core.Project) (core.Project, error),
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := prepare(ctx)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Project change replay resolution is invalid",
 			)
@@ -254,7 +255,7 @@ func (service *projectChangeService) changeProjectOnce(
 	}
 	current, err := service.repository.GetProject(ctx, id)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	currentCore := core.Project{
 		ID: current.Record.ID, TenantID: current.Record.TenantID, Slug: current.Record.Slug,
@@ -262,22 +263,22 @@ func (service *projectChangeService) changeProjectOnce(
 	}
 	replacement, err := change(currentCore)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	responseBody, err := json.Marshal(apiTypes.Project{
 		ID: replacement.ID, TenantID: replacement.TenantID, Slug: replacement.Slug,
 		Name: replacement.Name, Description: replacement.Description, Kind: string(replacement.Kind),
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -287,14 +288,14 @@ func (service *projectChangeService) changeProjectOnce(
 	}, marker)
 	if mutationErr != nil {
 		if !isUnknownProjectChangeOutcome(mutationErr) {
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -302,7 +303,7 @@ func (service *projectChangeService) changeProjectOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project change resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project change resolution is invalid")
 	}
 }
 

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -104,7 +105,7 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 	if err != nil || task.ID != taskID || task.Params[TaskResourceKindParam] != TaskResourceHierarchyDeletion {
 		return HierarchyDeletionOperation{}, corruptHierarchyDeletion()
 	}
-	if task.idempotencyMarker == nil || validateIdempotencyLocator(*task.idempotencyMarker) != nil {
+	if task.idempotencyMarker == nil || idempotencyrecord.ValidateIdempotencyLocator(*task.idempotencyMarker) != nil {
 		return HierarchyDeletionOperation{}, corruptHierarchyDeletion()
 	}
 	operationID := task.Params[TaskHierarchyDeletionOperationParam]

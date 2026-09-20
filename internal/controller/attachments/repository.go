@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -41,7 +42,7 @@ type attachMutationRepository interface {
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[attachrecord.Record],
 		string,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	CreateAttachWithTaskHookInputs(
 		context.Context,
@@ -51,7 +52,7 @@ type attachMutationRepository interface {
 		*etcd.BackingHookEncryptedInputs,
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	BeginAttachDetachWithTaskHookInputs(
 		context.Context,
@@ -60,7 +61,7 @@ type attachMutationRepository interface {
 		*etcd.BackingHookEncryptedInputs,
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	BeginAttachDetachWithTaskInitiationHookInputs(
 		context.Context,
@@ -69,7 +70,7 @@ type attachMutationRepository interface {
 		*etcd.BackingHookEncryptedInputs,
 		etcd.AttachTaskRenderInput,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 		etcd.TaskInitiation,
 	) (etcd.IdempotencyTransactionResult, error)
 }
@@ -177,7 +178,7 @@ func (repository *durableAttachMutationRepository) RenameAttachIdempotent(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	current etcdstore.Versioned[attachrecord.Record],
 	name string,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.attaches.RenameAttachIdempotent(ctx, environment, project, current, name, marker)
 }
@@ -190,7 +191,7 @@ func (repository *durableAttachMutationRepository) CreateAttachWithTaskHookInput
 	hookInputs *etcd.BackingHookEncryptedInputs,
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.attaches.CreateAttachWithTaskHookInputs(
 		ctx, scope, record, facts, hookInputs, renderInput, task, marker,
@@ -204,7 +205,7 @@ func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskHook
 	hookInputs *etcd.BackingHookEncryptedInputs,
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.attaches.BeginAttachDetachWithTaskHookInputs(
 		ctx, scope, current, hookInputs, renderInput, task, marker,
@@ -218,7 +219,7 @@ func (repository *durableAttachMutationRepository) BeginAttachDetachWithTaskInit
 	hookInputs *etcd.BackingHookEncryptedInputs,
 	renderInput etcd.AttachTaskRenderInput,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	initiation etcd.TaskInitiation,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.attaches.BeginAttachDetachWithTaskInitiationHookInputs(

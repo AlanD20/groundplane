@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"hash"
@@ -288,7 +289,7 @@ func loadBackupVolumeProjectionEvidence(
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()
 	}
 	environment, err := hierarchyrecord.DecodeEnvironment(headRead.Values[0].Value)
-	revisionID, headErr := decodeTaskReference(headRead.Values[1].Value)
+	revisionID, headErr := idempotencyrecord.DecodeTaskReference(headRead.Values[1].Value)
 	if err != nil || headErr != nil || environment.ID != environmentID ||
 		ids.Validate(ids.KindTask, revisionID) != nil {
 		return backupVolumeProjectionEvidence{}, recordcodec.CorruptRecord()

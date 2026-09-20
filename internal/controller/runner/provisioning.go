@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"net/http"
@@ -34,13 +35,13 @@ type provisioningRepository interface {
 		runnerallocation.RunnerAllocationConfig,
 		runnerrecord.RunnerDesiredRecord,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	RetryRunnerCreationWithTask(
 		context.Context,
 		string,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
@@ -95,35 +96,35 @@ func (service *ProvisioningService) CreateRunner(
 	ctx context.Context,
 	request apiTypes.RunnerCreateRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner creation context is required")
 	}
 	token, err := runnerRegistrationToken(request.RegistrationToken)
 	request.RegistrationToken = ""
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer token.clear()
 	desired, err := service.normalizeCreate(ctx, request)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	locator := runnerProvisioningLocator(desired, http.MethodPost, runnerCreateRoute, idempotencyKey)
 	evidence, err := service.protectCreateIntent(ctx, locator, desired)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer evidence.Destroy()
 	resolution, existing, err := service.coordinator.ResolveExisting(
 		ctx, service.idempotency, locator, evidence,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner creation replay is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner creation replay is invalid")
 		}
 		return cloneResponse(resolution.Response), nil
 	}
@@ -131,17 +132,17 @@ func (service *ProvisioningService) CreateRunner(
 	now := service.now().UTC()
 	task, err := newRunnerCreateTask(desired, idempotencyKey, now)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	response, marker, err := service.newTaskMarker(locator, evidence, task, now)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
 	key := TokenKey{TaskID: task.ID, Attempt: 1}
 	if err := service.broker.Stage(key, token); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	result, mutationErr := service.runners.CreateRunnerWithTask(
 		ctx, service.allocation, desired, task, marker,
@@ -154,56 +155,56 @@ func (service *ProvisioningService) RetryRunner(
 	runnerID string,
 	request apiTypes.RunnerRetryRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner retry context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner retry context is required")
 	}
 	if ids.Validate(ids.KindRunner, runnerID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Runner id is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Runner id is invalid")
 	}
 	token, err := runnerRegistrationToken(request.RegistrationToken)
 	request.RegistrationToken = ""
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer token.clear()
 	current, err := service.runners.GetRunner(ctx, runnerID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	locator := runnerProvisioningLocator(current.Record.Desired, http.MethodPost, runnerRetryRoute, idempotencyKey)
 	evidence, err := service.protectRetryIntent(ctx, locator, runnerID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer evidence.Destroy()
 	resolution, existing, err := service.coordinator.ResolveExisting(
 		ctx, service.idempotency, locator, evidence,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner retry replay is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner retry replay is invalid")
 		}
 		return cloneResponse(resolution.Response), nil
 	}
 	source, err := service.tasks.GetTask(ctx, current.Record.CreateTaskID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	now := service.now().UTC()
 	retry := newRunnerRetryTask(source.Record, now)
 	response, marker, err := service.newTaskMarker(locator, evidence, retry, now)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
 	key := TokenKey{TaskID: retry.ID, Attempt: 1}
 	if err := service.broker.Stage(key, token); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	result, mutationErr := service.runners.RetryRunnerCreationWithTask(
 		ctx, source.Record.ID, retry, marker,
@@ -257,19 +258,19 @@ func runnerProvisioningLocator(
 	method string,
 	route string,
 	key string,
-) etcd.IdempotencyLocator {
-	scopeKind := etcd.IdempotencyScopeTenant
+) idempotencyrecord.IdempotencyLocator {
+	scopeKind := idempotencyrecord.IdempotencyScopeTenant
 	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		scopeKind = etcd.IdempotencyScopeProject
+		scopeKind = idempotencyrecord.IdempotencyScopeProject
 	}
-	return etcd.IdempotencyLocator{
+	return idempotencyrecord.IdempotencyLocator{
 		ScopeKind: scopeKind, ScopeID: desired.OwnerID, Method: method, Route: route, Key: key,
 	}
 }
 
 func (service *ProvisioningService) protectCreateIntent(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	desired runnerrecord.RunnerDesiredRecord,
 ) (requestidempotency.ProtectedEvidence, error) {
 	labels := make([]requestidempotency.Value, len(desired.Labels))
@@ -299,7 +300,7 @@ func (service *ProvisioningService) protectCreateIntent(
 
 func (service *ProvisioningService) protectRetryIntent(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	runnerID string,
 ) (requestidempotency.ProtectedEvidence, error) {
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
@@ -317,35 +318,35 @@ func (service *ProvisioningService) protectRetryIntent(
 	return service.coordinator.ProtectIntent(ctx, version, digest)
 }
 
-func runnerIntentScope(locator etcd.IdempotencyLocator) requestidempotency.Scope {
+func runnerIntentScope(locator idempotencyrecord.IdempotencyLocator) requestidempotency.Scope {
 	kind := requestidempotency.ScopeTenant
-	if locator.ScopeKind == etcd.IdempotencyScopeProject {
+	if locator.ScopeKind == idempotencyrecord.IdempotencyScopeProject {
 		kind = requestidempotency.ScopeProject
 	}
 	return requestidempotency.Scope{Kind: kind, ID: locator.ScopeID}
 }
 
 func (service *ProvisioningService) newTaskMarker(
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence requestidempotency.ProtectedEvidence,
 	task etcd.TaskRecord,
 	now time.Time,
-) (etcd.IdempotencyResponse, etcd.IdempotencyMarker, error) {
+) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, etcd.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(body)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), body...),
 	}
 	durable, err := evidence.DurableRecord()
 	if err != nil {
 		clear(response.Body)
-		return etcd.IdempotencyResponse{}, etcd.IdempotencyMarker{}, err
+		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, err
 	}
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
@@ -354,13 +355,13 @@ func (service *ProvisioningService) newTaskMarker(
 
 func (service *ProvisioningService) resolvePublication(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence requestidempotency.ProtectedEvidence,
-	response etcd.IdempotencyResponse,
+	response idempotencyrecord.IdempotencyResponse,
 	result etcd.IdempotencyTransactionResult,
 	mutationErr error,
 	key TokenKey,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	var (
 		resolution requestidempotency.Resolution
 		err        error
@@ -368,7 +369,7 @@ func (service *ProvisioningService) resolvePublication(
 	if mutationErr != nil {
 		if !unknownMutationOutcome(mutationErr) {
 			service.broker.Drop(key)
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.coordinator.ResolveUnknown(
 			ctx, service.idempotency, locator, evidence, mutationErr,
@@ -377,7 +378,7 @@ func (service *ProvisioningService) resolvePublication(
 		resolution, err = service.coordinator.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -388,11 +389,11 @@ func (service *ProvisioningService) resolvePublication(
 		}
 		return cloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner publication resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner publication resolution is invalid")
 	}
 }
 
-func taskResponseOwnsToken(response etcd.IdempotencyResponse, taskID string) bool {
+func taskResponseOwnsToken(response idempotencyrecord.IdempotencyResponse, taskID string) bool {
 	if response.Status != http.StatusAccepted {
 		return false
 	}

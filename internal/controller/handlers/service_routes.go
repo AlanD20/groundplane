@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"log/slog"
 	"net/http"
@@ -26,12 +27,12 @@ type ServiceObserver interface {
 }
 
 type ServiceMutator interface {
-	CreateService(context.Context, apiTypes.ServiceCreate, string) (etcd.IdempotencyResponse, error)
-	EditService(context.Context, string, apiTypes.ServiceEdit, string) (etcd.IdempotencyResponse, error)
-	RemoveService(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	StartService(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	StopService(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	DestroyService(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	CreateService(context.Context, apiTypes.ServiceCreate, string) (idempotencyrecord.IdempotencyResponse, error)
+	EditService(context.Context, string, apiTypes.ServiceEdit, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	StartService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	StopService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	DestroyService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type serviceListInput struct {
@@ -260,7 +261,7 @@ func (s *Server) removeService(ctx context.Context, request *serviceRemoveInput)
 	return s.serviceMutationResponse(response), nil
 }
 
-func (s *Server) serviceMutationResponse(response etcd.IdempotencyResponse) *serviceMutationOutput {
+func (s *Server) serviceMutationResponse(response idempotencyrecord.IdempotencyResponse) *serviceMutationOutput {
 	return &serviceMutationOutput{
 		Status:      response.Status,
 		ContentType: response.ContentKind,

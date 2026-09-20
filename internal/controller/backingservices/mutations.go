@@ -2,6 +2,7 @@ package backingservices
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
@@ -9,9 +10,9 @@ import (
 )
 
 type backingServiceLifecycle interface {
-	StartService(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	StopService(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	DestroyService(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	StartService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	StopService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	DestroyService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type MutationService struct {
@@ -39,7 +40,7 @@ func (service *MutationService) CreateBackingService(
 	ctx context.Context,
 	input apiTypes.BackingServiceCreate,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.creations.CreateBackingService(ctx, input, idempotencyKey)
 }
 
@@ -47,10 +48,10 @@ func (service *MutationService) StartBackingService(
 	ctx context.Context,
 	projectID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	backing, err := service.resolve(ctx, projectID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.lifecycle.StartService(ctx, backing.ServiceID, idempotencyKey)
 }
@@ -59,10 +60,10 @@ func (service *MutationService) StopBackingService(
 	ctx context.Context,
 	projectID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	backing, err := service.resolve(ctx, projectID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.lifecycle.StopService(ctx, backing.ServiceID, idempotencyKey)
 }
@@ -71,10 +72,10 @@ func (service *MutationService) DestroyBackingService(
 	ctx context.Context,
 	projectID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	backing, err := service.resolve(ctx, projectID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.lifecycle.DestroyService(ctx, backing.ServiceID, idempotencyKey)
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
@@ -31,7 +32,7 @@ type connectorCreationRepository interface {
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		connectorrecord.Record,
 		connectorrecord.EncryptedCredentials,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
@@ -43,15 +44,15 @@ type connectorCreationIdempotency interface {
 	Prepare(context.Context, string, apiTypes.ConnectorCreateRequest) (connectorCreationEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		connectorCreationEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	NewMarker(
 		connectorCreationEvidence,
-		etcd.IdempotencyLocator,
-		etcd.IdempotencyResponse,
+		idempotencyrecord.IdempotencyLocator,
+		idempotencyrecord.IdempotencyResponse,
 		time.Time,
-	) (etcd.IdempotencyMarker, error)
+	) (idempotencyrecord.IdempotencyMarker, error)
 	ResolveKnown(
 		context.Context,
 		connectorCreationEvidence,
@@ -59,7 +60,7 @@ type connectorCreationIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		connectorCreationEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -101,7 +102,7 @@ func (service *durableConnectorCreationIdempotency) Prepare(
 
 func (service *durableConnectorCreationIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence connectorCreationEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -109,16 +110,16 @@ func (service *durableConnectorCreationIdempotency) ResolveExisting(
 
 func (*durableConnectorCreationIdempotency) NewMarker(
 	evidence connectorCreationEvidence,
-	locator etcd.IdempotencyLocator,
-	response etcd.IdempotencyResponse,
+	locator idempotencyrecord.IdempotencyLocator,
+	response idempotencyrecord.IdempotencyResponse,
 	now time.Time,
-) (etcd.IdempotencyMarker, error) {
+) (idempotencyrecord.IdempotencyMarker, error) {
 	intent, err := evidence.candidate.DurableRecord()
 	if err != nil {
-		return etcd.IdempotencyMarker{}, err
+		return idempotencyrecord.IdempotencyMarker{}, err
 	}
 	defer clear(intent.Ciphertext)
-	return etcd.NewCompletedDirectIdempotencyMarker(locator, intent, response, now)
+	return idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, intent, response, now)
 }
 
 func (service *durableConnectorCreationIdempotency) ResolveKnown(
@@ -131,7 +132,7 @@ func (service *durableConnectorCreationIdempotency) ResolveKnown(
 
 func (service *durableConnectorCreationIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence connectorCreationEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -170,7 +171,7 @@ func (service *connectorCreationService) CreateConnector(
 	environmentID string,
 	input apiTypes.ConnectorCreateRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	resolution, err := service.resolveConnectorCreation(ctx, environmentID, input, idempotencyKey)
 	return resolution.Response, err
 }
@@ -197,7 +198,7 @@ func (service *connectorCreationService) createConnectorOnce(
 	ctx context.Context,
 	environmentID string,
 	input apiTypes.ConnectorCreateRequest,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence connectorCreationEvidence,
 ) (requestidempotency.Resolution, error) {
 	environment, err := service.repository.GetEnvironment(ctx, environmentID)
@@ -259,7 +260,7 @@ func (service *connectorCreationService) createConnectorOnce(
 		return requestidempotency.Resolution{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusCreated, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
@@ -289,7 +290,7 @@ func (service *connectorCreationService) createConnectorOnce(
 		return requestidempotency.Resolution{}, err
 	}
 	if resolution.Kind == requestidempotency.ResolutionApplied {
-		resolution.Response = etcd.IdempotencyResponse{
+		resolution.Response = idempotencyrecord.IdempotencyResponse{
 			Status: response.Status, ContentKind: response.ContentKind,
 			Body: append([]byte(nil), response.Body...),
 		}
@@ -297,9 +298,9 @@ func (service *connectorCreationService) createConnectorOnce(
 	return resolution, nil
 }
 
-func connectorCreationLocator(environmentID string, key string) etcd.IdempotencyLocator {
-	return etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+func connectorCreationLocator(environmentID string, key string) idempotencyrecord.IdempotencyLocator {
+	return idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environmentID,
 		Method: http.MethodPost, Route: "/api/v1/connectors", Key: key,
 	}
 }
@@ -400,7 +401,7 @@ func (repository *durableConnectorCreationRepository) CreateConnectorIdempotent(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record connectorrecord.Record,
 	credentials connectorrecord.EncryptedCredentials,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.connectors.CreateConnectorIdempotent(
 		ctx,

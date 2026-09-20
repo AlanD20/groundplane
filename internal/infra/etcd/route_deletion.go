@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 
@@ -22,7 +23,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	tombstone DeletionTombstoneRecord,
 	intent RouteRemovalIntent,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := validateRouteHierarchy(ctx, environment, project, target, route.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -56,9 +57,9 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 			"Route deletion Task, intent, and tombstone do not match",
 		)
 	}
-	wantReplayTarget := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetRoute, ID: route.Record.Desired.ID}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetRoute, ID: route.Record.Desired.ID}
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
@@ -92,7 +93,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	configuration, err := prepareConfigurationTaskPublication(
@@ -119,7 +120,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -246,7 +247,7 @@ func classifyRouteDeletionStartConflict(
 			return errs.New(errs.KindInternal, "Route deletion compare evidence is incomplete")
 		}
 		if values[2] != nil {
-			activeTaskID, err := decodeTaskReference(values[2].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[2].Value)
 			if err != nil {
 				return err
 			}

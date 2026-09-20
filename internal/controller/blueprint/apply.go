@@ -23,6 +23,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -102,7 +103,7 @@ func (service *Service) ApplyBlueprint(
 	bundle core.BlueprintBundle,
 	expectedRevision string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.applyBlueprint(ctx, environmentID, environmentID, bundle, expectedRevision, idempotencyKey, false)
 }
 
@@ -112,9 +113,9 @@ func (service *Service) ApplyComponentBlueprint(
 	componentID string,
 	bundle core.BlueprintBundle,
 	expectedRevision, idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ids.Validate(ids.KindComponent, componentID) != nil || expectedRevision == "" {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Component id or Blueprint revision is invalid",
 		)
@@ -130,15 +131,15 @@ func (service *Service) applyBlueprint(
 	expectedRevision string,
 	idempotencyKey string,
 	preserveRoutes bool,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint context is required")
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Environment id is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Environment id is invalid")
 	}
 	if err := bundle.Validate(); err != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Blueprint bundle is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Blueprint bundle is invalid")
 	}
 	for attempt := 0; attempt < maximumEnvironmentBlueprintAttempts; attempt++ {
 		response, err := service.applyBlueprintOnce(
@@ -155,10 +156,10 @@ func (service *Service) applyBlueprint(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumEnvironmentBlueprintAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint retry bound was not enforced")
 }
 
 func (service *Service) applyBlueprintOnce(
@@ -169,27 +170,27 @@ func (service *Service) applyBlueprintOnce(
 	expectedRevision string,
 	idempotencyKey string,
 	preserveRoutes bool,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := service.idempotency.Prepare(ctx, desiredrevision.IntentAddress{
 		Method: http.MethodPut, Route: environmentBlueprintRoute,
 		Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
 		Path:  []requestidempotency.PathBinding{{Name: "id", Value: environmentID}},
 	}, bundle)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.Durable.Ciphertext)
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environmentID,
 		Method: http.MethodPut, Route: environmentBlueprintRoute, Key: idempotencyKey,
 	}
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Environment Blueprint replay resolution is invalid",
 			)
@@ -199,7 +200,7 @@ func (service *Service) applyBlueprintOnce(
 
 	baseline, err := service.loadApplyBaseline(ctx, environmentID, expectedRevision)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	environment, project, tenant := baseline.environment, baseline.project, baseline.tenant
 	taskOwner := baseline.taskOwner
@@ -210,7 +211,7 @@ func (service *Service) applyBlueprintOnce(
 
 	preflight, err := service.prepareApplyPreflight(ctx, environmentID, bundle, baseline, preserveRoutes)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	bundle, parsed := preflight.bundle, preflight.parsed
 	currentAttaches, attachReadRevision := preflight.currentAttaches, preflight.attachReadRevision
@@ -221,27 +222,27 @@ func (service *Service) applyBlueprintOnce(
 			EnvironmentID: environmentID, CandidateTaskID: candidateTaskID,
 			Locator: locator, Intent: evidence.Durable, BaselineHeadRevision: expectedHeadRevision,
 			SourceKind: etcd.EnvironmentBlueprintSourceApply,
-			MatchExistingIntent: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
+			MatchExistingIntent: func(ctx context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
 				return service.idempotency.MatchesStaged(ctx, evidence, existing)
 			},
 			RenderGeneration: generation, CreatedAt: candidateCreatedAt,
 		})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	allocator, err := desiredrevision.NewBlueprintIdentityAllocator(claim)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	taskID := claim.TaskID
 	now := claim.CreatedAt
 	releaseMemberships, err := blueprintrelease.BuildNormalizedServiceMemberships(priorProject, parsed.Project)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	normalizedCompose, err := composerender.MarshalNormalizedEnvironmentProject(parsed.Project)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	runtimeFiles, err := blueprintparser.SelectRuntimeFiles(
 		parsed.Project,
@@ -249,7 +250,7 @@ func (service *Service) applyBlueprintOnce(
 		previousProjection.Record.RuntimeFiles,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	volumeSlugs, err := environmentBlueprintVolumeSlugs(
 		parsed.Project,
@@ -257,15 +258,15 @@ func (service *Service) applyBlueprintOnce(
 		hasProjection,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	changes, err := composeidentity.ReconcileOwned(parsed.Project, previous, allocator.New)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if len(changes.RemovedServiceIDs) != 0 || len(changes.RemovedNetworkIDs) != 0 ||
 		len(changes.RemovedVolumeIDs) != 0 {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindResourceInUse,
 			"Blueprint omits an existing owned resource; remove it explicitly before apply",
 		)
@@ -283,19 +284,19 @@ func (service *Service) applyBlueprintOnce(
 		zoneOwnerID,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	currentZones, err := service.listBlueprintZones(ctx, environmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	zoneChanges, err := prepareEnvironmentBlueprintZoneChanges(environmentID, desiredZones, currentZones)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	currentServices, err := service.listBlueprintServices(ctx, environmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	serviceExtensions, err := preserveEnvironmentBlueprintServiceExtensions(
 		parsed.ServiceExtensions,
@@ -304,7 +305,7 @@ func (service *Service) applyBlueprintOnce(
 		previousProjection.Record.ServiceExtensions,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	desiredServices, err := taskplanning.ProjectServiceProjection(
 		parsed.Project,
@@ -312,27 +313,27 @@ func (service *Service) applyBlueprintOnce(
 		serviceExtensions,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	serviceChanges, err := blueprintrelease.PrepareServiceChanges(
 		environmentID, desiredServices, currentServices,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	currentEntries, err := service.listBlueprintEntries(ctx, environmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	pinnedEntries, err := entry.BlueprintProjection(currentEntries)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	reconciledEntries, err := taskplanning.ReconcileBlueprintEntries(
 		environmentID, parsed.Extensions.Entries, pinnedEntries, allocator.Named,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	reconciledScripts, scriptPublication, err := service.prepareApplyScripts(
 		ctx, environmentID, claim.RevisionID, parsed.Extensions.Scripts, desiredServices,
@@ -340,7 +341,7 @@ func (service *Service) applyBlueprintOnce(
 		allocator.Named,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer scriptPublication.Clear()
 	serviceNames := make(map[string]string, len(desiredServices))
@@ -349,7 +350,7 @@ func (service *Service) applyBlueprintOnce(
 	}
 	effectiveReleaseGroups, err := service.releaseGroups.AuthoringSpecs(ctx, environmentID, serviceNames)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	for name, spec := range parsed.Extensions.ReleaseGroups {
 		effectiveReleaseGroups[name] = spec
@@ -362,15 +363,15 @@ func (service *Service) applyBlueprintOnce(
 		func() string { return allocator.New(ids.KindReleaseGroup) },
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	reconciledRoutes, routeChanges, err := service.prepareApplyRoutes(ctx, environmentID, &parsed, desiredServices, preserveRoutes, allocator.New)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	currentComponents, err := service.listBlueprintComponents(ctx, environmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	componentPreparation, pinnedComponents, effectiveComponents, err := service.prepareBlueprintComponents(
 		ctx,
@@ -383,14 +384,14 @@ func (service *Service) applyBlueprintOnce(
 		zoneChanges,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	preparedAttaches, err := service.prepareBlueprintAttaches(
 		ctx, environmentID, taskID, parsed.Extensions.Attachments, serviceChanges, currentAttaches,
 		allocator.Named, componentTaskPreparationIsZeroForBlueprint(componentPreparation), now,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer preparedAttaches.clear()
 	componentEnvironment := blueprintComponentEnvironment(
@@ -407,7 +408,7 @@ func (service *Service) applyBlueprintOnce(
 		service.componentCatalog,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	renderIdentities := environmentComponentComposeIdentities(changes.Current, componentProjection.Services)
 	entryProjection, err := composerender.ProjectEnvironmentEntries(
@@ -418,13 +419,13 @@ func (service *Service) applyBlueprintOnce(
 		reconciledEntries.Current,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	entryRemovals, err := entryoperations.PlanEntryRemovals(
 		environmentID, reconciledEntries.Removed, reconciledEntries.Current, renderIdentities.Services,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	entryProjection.Materializations = append(entryProjection.Materializations, entryRemovals...)
 	componentProjection.Project = entryProjection.Project
@@ -433,11 +434,11 @@ func (service *Service) applyBlueprintOnce(
 		componentProjection.Project, environmentID, attachZones, attachServices, preparedAttaches.effective,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	volumeMounts, err := environmentBlueprintVolumeMounts(componentProjection.Project, renderIdentities)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	planID := allocator.Named(ids.KindPlan, "execution-plan")
 	artifactID := allocator.Named(ids.KindConfig, "compose-artifact")
@@ -450,21 +451,21 @@ func (service *Service) applyBlueprintOnce(
 		RetainedComponentRuntime: componentPreparation.AppliedComponentRuntime(),
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	artifact, err = service.blueprintReleases.PrepareRuntimeArtifact(workloads, artifact, serviceChanges)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	artifactValue, err := (proto.MarshalOptions{Deterministic: true}).Marshal(artifact)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	entryGeneration := service.entryGeneration.WithFactResolver(preparedAttaches.facts)
 	if err := service.prepareBlueprintEntryValues(
 		ctx, entryGeneration, project.Record.ID, environmentID, reconciledEntries, now,
 	); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	materializations, materializationSteps, err := service.environmentComponentMaterializations(
 		ctx,
@@ -480,7 +481,7 @@ func (service *Service) applyBlueprintOnce(
 		reconciledEntries.Current,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	componentSteps, _, err := taskplanning.BuildEnvironmentComponentTaskContribution(
 		taskplanning.EnvironmentComponentTaskContributionInput{
@@ -496,7 +497,7 @@ func (service *Service) applyBlueprintOnce(
 		},
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	steps := append([]*agentpb.ExecutionStep(nil), materializationSteps...)
 	stepRecords := make([]etcd.TaskStepRecord, 0, len(materializationSteps)+4)
@@ -508,7 +509,7 @@ func (service *Service) applyBlueprintOnce(
 	if len(managedVolumeIDs) != 0 {
 		intentDigest, decodeErr := hex.DecodeString(evidence.Durable.CiphertextDigest)
 		if decodeErr != nil || len(intentDigest) != sha256.Size {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Blueprint protected intent digest is invalid",
 			)
@@ -530,14 +531,14 @@ func (service *Service) applyBlueprintOnce(
 		taskID, desiredrevision.TaskTimeoutSeconds, allocator.Named,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clearBlueprintAttachProcedureSteps(attachSteps)
 	steps = append(steps, attachSteps...)
 	stepRecords = append(stepRecords, attachStepRecords...)
 	dependencyPlans, err := buildEnvironmentDependencyPlans(renderIdentities.Services, serviceExtensions)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	revision := desiredrevision.BlueprintRevision(environmentID, taskID, now, bundle)
 	projection := desiredrevision.ComposeProjection(
@@ -564,7 +565,7 @@ func (service *Service) applyBlueprintOnce(
 		projection,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	topologyZones, topologyServices, topologyRoutes := environmentBlueprintTopologyProjection(
 		zoneChanges, serviceChanges, routeChanges,
@@ -577,7 +578,7 @@ func (service *Service) applyBlueprintOnce(
 		projection, preparedAttaches, allocator.Named, now,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer backupPreparation.Clear()
 	projection.Backup = backup
@@ -585,7 +586,7 @@ func (service *Service) applyBlueprintOnce(
 		Claim: claim, Blueprint: revision, Projection: projection,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	params := map[string]string{
 		etcd.EnvironmentDesiredRevisionParam:           taskID,
@@ -621,7 +622,7 @@ func (service *Service) applyBlueprintOnce(
 		AllocateNamed: allocator.Named, CreatedAt: now,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, desiredrevision.Abandon(ctx, service.repository, stagedPublication, err)
+		return idempotencyrecord.IdempotencyResponse{}, desiredrevision.Abandon(ctx, service.repository, stagedPublication, err)
 	}
 	task = preparedRelease.Task
 	abandonPrepared := func(cause error) error {
@@ -631,13 +632,13 @@ func (service *Service) applyBlueprintOnce(
 	}
 	requirementGate, err := service.prepareRequirementGate(ctx, task, requirements)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, abandonPrepared(err)
+		return idempotencyrecord.IdempotencyResponse{}, abandonPrepared(err)
 	}
 	componentPreparation, routeChanges, err = service.prepareRoutePublication(
 		componentEnvironment, pinnedComponents, componentPreparation, generation, routeChanges,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, abandonPrepared(err)
+		return idempotencyrecord.IdempotencyResponse{}, abandonPrepared(err)
 	}
 	return desiredrevision.Publish(ctx, service.repository, service.idempotency, desiredrevision.PublishInput{
 		Project: project, Environment: environment, EnvironmentPool: service.environmentPool,

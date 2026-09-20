@@ -6,6 +6,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
@@ -14,7 +15,7 @@ func (service *MutationService) DetachAttach(
 	ctx context.Context,
 	attachID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.detachAttach(ctx, attachID, idempotencyKey, nil)
 }
 
@@ -23,7 +24,7 @@ func (service *MutationService) DetachAttachWithInitiation(
 	attachID string,
 	idempotencyKey string,
 	initiation etcd.TaskInitiation,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	return service.detachAttach(ctx, attachID, idempotencyKey, &initiation)
 }
 
@@ -32,12 +33,12 @@ func (service *MutationService) detachAttach(
 	attachID string,
 	idempotencyKey string,
 	initiation *etcd.TaskInitiation,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach context is required")
 	}
 	if ids.Validate(ids.KindAttach, attachID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Attach id is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Attach id is invalid")
 	}
 	for attempt := 0; attempt < maximumAttachMutationTries; attempt++ {
 		response, err := service.detachAttachOnce(ctx, attachID, idempotencyKey, initiation)
@@ -46,10 +47,10 @@ func (service *MutationService) detachAttach(
 		}
 		kind, known := errs.KindOf(err)
 		if !known || kind != errs.KindStateConflict || attempt == maximumAttachMutationTries-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach retry bound was not enforced")
 }
 
 func (service *MutationService) detachAttachOnce(
@@ -57,54 +58,54 @@ func (service *MutationService) detachAttachOnce(
 	attachID string,
 	idempotencyKey string,
 	initiation *etcd.TaskInitiation,
-) (etcd.IdempotencyResponse, error) {
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetAttach, ID: attachID}
+) (idempotencyrecord.IdempotencyResponse, error) {
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetAttach, ID: attachID}
 	replayLocator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, attachDeletionRoute, idempotencyKey,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
 		evidence, prepareErr := service.idempotency.PrepareDetach(ctx, replayLocator.ScopeID, attachID)
 		if prepareErr != nil {
-			return etcd.IdempotencyResponse{}, prepareErr
+			return idempotencyrecord.IdempotencyResponse{}, prepareErr
 		}
 		defer clear(evidence.durable.Ciphertext)
 		resolution, exists, resolveErr := service.idempotency.ResolveExisting(ctx, replayLocator, evidence)
 		if resolveErr != nil {
-			return etcd.IdempotencyResponse{}, resolveErr
+			return idempotencyrecord.IdempotencyResponse{}, resolveErr
 		}
 		if !exists || resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach replay index is inconsistent")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach replay index is inconsistent")
 		}
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 
 	current, err := service.repository.GetAttach(ctx, attachID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	evidence, err := service.idempotency.PrepareDetach(ctx, current.Record.EnvironmentID, attachID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: current.Record.EnvironmentID,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: current.Record.EnvironmentID,
 		Method: http.MethodDelete, Route: attachDeletionRoute, Key: idempotencyKey,
 	}
 	if replay, exists, resolveErr := service.idempotency.ResolveExisting(ctx, locator, evidence); resolveErr != nil {
-		return etcd.IdempotencyResponse{}, resolveErr
+		return idempotencyrecord.IdempotencyResponse{}, resolveErr
 	} else if exists {
 		if replay.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach replay resolution is invalid")
 		}
 		return requestidempotency.CloneResponse(replay.Response), nil
 	}
 	consumer, err := service.repository.GetService(ctx, current.Record.ServiceID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	credentialOwnerID := ""
 	if !current.Record.OwnsCredential() {
@@ -114,17 +115,17 @@ func (service *MutationService) detachAttachOnce(
 		ctx, consumer, current.Record.BackingServiceID, credentialOwnerID, current.Record.GrantAttachIDs,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	runtime, err := service.runtime.CaptureEntryMutationRuntime(ctx, scope.ComposeProjection)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	now := service.now().UTC()
 	taskID := ids.New(ids.KindTask)
 	detaching, err := attachrecord.BeginAttachDetaching(current.Record, taskID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	detachHook := current.Record.HookBundle && scope.BackingService.Record.Desired.Hooks != nil &&
 		scope.BackingService.Record.Desired.Hooks.Detach != nil
@@ -139,7 +140,7 @@ func (service *MutationService) detachAttachOnce(
 		idempotencyKey, now,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if detachHook {
 		task.TimeoutSeconds = max(
@@ -153,13 +154,13 @@ func (service *MutationService) detachAttachOnce(
 			ctx, task.OperationID, scope.BackingProject.Record.ID, *scope.BackingService.Record.Desired.Hooks,
 		)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		if hookInputs != nil {
 			defer clear(hookInputs.Ciphertext)
 			task, err = etcd.BindBackingHookTaskInputs(task, scope.BackingProject.Record.ID, *hookInputs)
 			if err != nil {
-				return etcd.IdempotencyResponse{}, err
+				return idempotencyrecord.IdempotencyResponse{}, err
 			}
 		}
 	}
@@ -169,18 +170,18 @@ func (service *MutationService) detachAttachOnce(
 	}
 	renderInput, err := buildAttachTaskRenderInput(scope, runtime, detaching, currentAttaches, task, artifactID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	draft := current
 	draft.Record = detaching
 	prepared, err := service.plans.SealDraft(ctx, draft, renderInput, task, nil, nil, hookInputs)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task.PlanHash, renderInput.RuntimePreparation = prepared.PlanHash, &prepared
 	response, marker, err := newAttachMutationResponse(locator, evidence.durable, task, &target)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	var result etcd.IdempotencyTransactionResult
 	var detachErr error

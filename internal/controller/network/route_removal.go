@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"math"
@@ -46,27 +47,27 @@ type routeRemovalRepository interface {
 		etcd.DeletionTombstoneRecord,
 		etcd.RouteRemovalIntent,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type routeRemovalEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type routeRemovalIdempotency interface {
-	ResolveReplayLocator(context.Context, etcd.IdempotencyReplayTarget, string, string, string) (
-		etcd.IdempotencyLocator, bool, error,
+	ResolveReplayLocator(context.Context, idempotencyrecord.IdempotencyReplayTarget, string, string, string) (
+		idempotencyrecord.IdempotencyLocator, bool, error,
 	)
-	Prepare(context.Context, etcd.IdempotencyLocator, string) (routeRemovalEvidence, error)
-	ResolveExisting(context.Context, etcd.IdempotencyLocator, routeRemovalEvidence) (
+	Prepare(context.Context, idempotencyrecord.IdempotencyLocator, string) (routeRemovalEvidence, error)
+	ResolveExisting(context.Context, idempotencyrecord.IdempotencyLocator, routeRemovalEvidence) (
 		requestidempotency.Resolution, bool, error,
 	)
 	ResolveKnown(context.Context, routeRemovalEvidence, etcd.IdempotencyTransactionResult) (
 		requestidempotency.Resolution, error,
 	)
-	ResolveUnknown(context.Context, etcd.IdempotencyLocator, routeRemovalEvidence, error) (
+	ResolveUnknown(context.Context, idempotencyrecord.IdempotencyLocator, routeRemovalEvidence, error) (
 		requestidempotency.Resolution, error,
 	)
 }
@@ -78,20 +79,20 @@ type durableRouteRemovalIdempotency struct {
 
 func (service *durableRouteRemovalIdempotency) ResolveReplayLocator(
 	ctx context.Context,
-	target etcd.IdempotencyReplayTarget,
+	target idempotencyrecord.IdempotencyReplayTarget,
 	method string,
 	route string,
 	key string,
-) (etcd.IdempotencyLocator, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, bool, error) {
 	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
 }
 
 func (service *durableRouteRemovalIdempotency) Prepare(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	routeID string,
 ) (routeRemovalEvidence, error) {
-	if locator.ScopeKind != etcd.IdempotencyScopeEnvironment ||
+	if locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		ids.Validate(ids.KindEnvironment, locator.ScopeID) != nil {
 		return routeRemovalEvidence{}, errs.New(errs.KindInternal, "route removal replay scope is invalid")
 	}
@@ -120,7 +121,7 @@ func (service *durableRouteRemovalIdempotency) Prepare(
 
 func (service *durableRouteRemovalIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence routeRemovalEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -136,7 +137,7 @@ func (service *durableRouteRemovalIdempotency) ResolveKnown(
 
 func (service *durableRouteRemovalIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence routeRemovalEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -177,12 +178,12 @@ func (service *routeRemovalService) RemoveRoute(
 	ctx context.Context,
 	routeID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal context is required")
 	}
 	if ids.Validate(ids.KindRoute, routeID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"route removal requires a stable Route id",
 		)
@@ -194,23 +195,23 @@ func (service *routeRemovalService) RemoveRoute(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumRouteDeletionAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal retry bound was not enforced")
 }
 
 func (service *routeRemovalService) removeRouteOnce(
 	ctx context.Context,
 	routeID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetRoute, ID: routeID}
+) (idempotencyrecord.IdempotencyResponse, error) {
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetRoute, ID: routeID}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, routeDeletionRoute, idempotencyKey,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
 		return service.replayIndexedRemoval(ctx, routeID, locator)
@@ -218,10 +219,10 @@ func (service *routeRemovalService) removeRouteOnce(
 
 	current, err := service.repository.GetRoute(ctx, routeID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	locator = etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment,
+	locator = idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
 		ScopeID:   current.Record.EnvironmentID,
 		Method:    http.MethodDelete,
 		Route:     routeDeletionRoute,
@@ -229,12 +230,12 @@ func (service *routeRemovalService) removeRouteOnce(
 	}
 	evidence, err := service.idempotency.Prepare(ctx, locator, routeID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		return replayResponse(resolution)
@@ -242,23 +243,23 @@ func (service *routeRemovalService) removeRouteOnce(
 
 	environment, err := service.repository.GetEnvironment(ctx, current.Record.EnvironmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	targetService, err := service.repository.GetService(ctx, current.Record.Desired.TargetServiceID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	projection, hasProjection, err := service.repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	var projectionInput *etcdstore.Versioned[etcd.EnvironmentComposeProjection]
 	if hasProjection {
@@ -276,7 +277,7 @@ func (service *routeRemovalService) removeRouteOnce(
 		task.ID, environment.Record.ID, routeID, current.Revision, projectionInput, now,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	task.TimeoutSeconds = routeRemovalAgentTimeoutSeconds
 	preparation, err := service.plans.PrepareRouteRemovalTask(
@@ -290,14 +291,14 @@ func (service *routeRemovalService) removeRouteOnce(
 		},
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	intent, task = preparation.Intent, preparation.Task
 	if intent.Provider == nil {
 		task, err = prepareControllerRouteRemovalTask(task, intent)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if intent.CurrentProjection == nil {
 		projectionInput = nil
@@ -305,14 +306,14 @@ func (service *routeRemovalService) removeRouteOnce(
 
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
@@ -329,14 +330,14 @@ func (service *routeRemovalService) removeRouteOnce(
 	)
 	if mutationErr != nil {
 		if !isUnknownRemovalOutcome(mutationErr) {
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -344,26 +345,26 @@ func (service *routeRemovalService) removeRouteOnce(
 	case requestidempotency.ResolutionReplay:
 		return cloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal resolution is invalid")
 	}
 }
 
 func (service *routeRemovalService) replayIndexedRemoval(
 	ctx context.Context,
 	routeID string,
-	locator etcd.IdempotencyLocator,
-) (etcd.IdempotencyResponse, error) {
+	locator idempotencyrecord.IdempotencyLocator,
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := service.idempotency.Prepare(ctx, locator, routeID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal replay target is inconsistent")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal replay target is inconsistent")
 	}
 	return replayResponse(resolution)
 }
@@ -419,14 +420,14 @@ func controllerRouteRemovalPlanHash(intent etcd.RouteRemovalIntent) (string, err
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func replayResponse(resolution requestidempotency.Resolution) (etcd.IdempotencyResponse, error) {
+func replayResponse(resolution requestidempotency.Resolution) (idempotencyrecord.IdempotencyResponse, error) {
 	if resolution.Kind != requestidempotency.ResolutionReplay {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal replay resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal replay resolution is invalid")
 	}
 	return cloneResponse(resolution.Response), nil
 }
 
-func cloneResponse(response etcd.IdempotencyResponse) etcd.IdempotencyResponse {
+func cloneResponse(response idempotencyrecord.IdempotencyResponse) idempotencyrecord.IdempotencyResponse {
 	response.Body = append([]byte(nil), response.Body...)
 	return response
 }

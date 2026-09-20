@@ -8,6 +8,7 @@ import (
 	"errors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"sort"
@@ -39,7 +40,7 @@ type entryCreationRepository interface {
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		entryrecord.Record,
 		etcd.EntryValueGeneration,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
@@ -56,15 +57,15 @@ type entryCreationGenerator interface {
 
 type entryCreationEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type entryCreationIdempotency interface {
 	Prepare(context.Context, string, core.EnvEntry) (entryCreationEvidence, error)
-	MatchesStaged(context.Context, entryCreationEvidence, etcd.ProtectedIntentRecord) (bool, error)
+	MatchesStaged(context.Context, entryCreationEvidence, idempotencyrecord.ProtectedIntentRecord) (bool, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		entryCreationEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -74,7 +75,7 @@ type entryCreationIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		entryCreationEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -83,7 +84,7 @@ type entryCreationIdempotency interface {
 func (service *durableEntryCreationIdempotency) MatchesStaged(
 	ctx context.Context,
 	evidence entryCreationEvidence,
-	existing etcd.ProtectedIntentRecord,
+	existing idempotencyrecord.ProtectedIntentRecord,
 ) (bool, error) {
 	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
 }
@@ -142,7 +143,7 @@ func (service *durableEntryCreationIdempotency) Prepare(
 
 func (service *durableEntryCreationIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence entryCreationEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -158,7 +159,7 @@ func (service *durableEntryCreationIdempotency) ResolveKnown(
 
 func (service *durableEntryCreationIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence entryCreationEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -189,9 +190,9 @@ func (service *entryCreationService) CreateEntry(
 	ctx context.Context,
 	input apiTypes.EntryCreateRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation context is required")
 	}
 	for attempt := 0; attempt < maximumEntryCreationAttempts; attempt++ {
 		response, err := service.createEntryOnce(ctx, input, idempotencyKey)
@@ -200,37 +201,37 @@ func (service *entryCreationService) CreateEntry(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumEntryCreationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation retry bound was not enforced")
 }
 
 func (service *entryCreationService) createEntryOnce(
 	ctx context.Context,
 	input apiTypes.EntryCreateRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	entry, err := prepareEntryCreation(input)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	evidence, err := service.idempotency.Prepare(ctx, input.EnvironmentID, entry)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: input.EnvironmentID,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: input.EnvironmentID,
 		Method: http.MethodPost, Route: entryCreationRoute, Key: idempotencyKey,
 	}
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Entry creation replay resolution is invalid",
 			)
@@ -240,14 +241,14 @@ func (service *entryCreationService) createEntryOnce(
 
 	environment, err := service.repository.GetEnvironment(ctx, input.EnvironmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if err := service.validateExposure(ctx, input.EnvironmentID, entry.Exposure); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	now := service.now().UTC()
 	generationID := ids.New(ids.KindConfig)
@@ -260,7 +261,7 @@ func (service *entryCreationService) createEntryOnce(
 		now,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer entrygeneration.ClearEntryValueGeneration(&generation)
 	persisted := entry
@@ -269,19 +270,19 @@ func (service *entryCreationService) createEntryOnce(
 	}
 	record, err := entryrecord.NewRecord(environment.Record.ID, persisted, generationID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	responseBody, err := json.Marshal(entryCreationResponse(persisted))
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusCreated, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, now)
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, now)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -290,14 +291,14 @@ func (service *entryCreationService) createEntryOnce(
 	)
 	if createErr != nil {
 		if !isUnknownEntryCreationOutcome(createErr) {
-			return etcd.IdempotencyResponse{}, createErr
+			return idempotencyrecord.IdempotencyResponse{}, createErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, createErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -305,7 +306,7 @@ func (service *entryCreationService) createEntryOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation resolution is invalid")
 	}
 }
 
@@ -583,7 +584,7 @@ func (repository *durableEntryCreationRepository) CreateEntryIdempotent(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
 	generation etcd.EntryValueGeneration,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.entries.CreateEntryIdempotent(ctx, environment, project, record, generation, marker)
 }

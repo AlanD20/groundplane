@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -152,7 +153,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	if retainUntil.After(now) {
 		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
-	indexedTaskID, err := decodeTaskReference(retentionEntry.Value)
+	indexedTaskID, err := idempotencyrecord.DecodeTaskReference(retentionEntry.Value)
 	if err != nil || indexedTaskID != taskID {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
@@ -184,7 +185,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	if stop {
 		return etcdstore.Versioned[taskPruneIntent]{ReadRevision: page.ReadRevision}, false, nil
 	}
-	markerKey, err := idempotencyMarkerKey(*task.idempotencyMarker)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(*task.idempotencyMarker)
 	if err != nil {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
@@ -260,7 +261,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	activeOperationCondition := etcdstore.Condition{Key: taskActiveOperationKey(task.OperationID)}
 	if companions.Values[1] != nil {
-		activeTaskID, decodeErr := decodeTaskReference(companions.Values[1].Value)
+		activeTaskID, decodeErr := idempotencyrecord.DecodeTaskReference(companions.Values[1].Value)
 		if decodeErr != nil {
 			return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 		}
@@ -273,7 +274,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	if companions.Values[2] == nil || companions.Values[3] != nil {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
-	historyTaskID, err := decodeTaskReference(companions.Values[2].Value)
+	historyTaskID, err := idempotencyrecord.DecodeTaskReference(companions.Values[2].Value)
 	if err != nil || historyTaskID != task.ID {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}

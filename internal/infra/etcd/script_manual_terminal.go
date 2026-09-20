@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -47,7 +48,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	if err != nil || !manualScriptRootMatches(execution, root) {
 		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
 	}
-	activeTaskID, err := decodeTaskReference(read.Values[1].Value)
+	activeTaskID, err := idempotencyrecord.DecodeTaskReference(read.Values[1].Value)
 	if err != nil || activeTaskID != task.ID {
 		return scriptTerminalSourceRelease{}, false, corruptTaskAssignment()
 	}

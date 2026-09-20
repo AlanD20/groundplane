@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,7 +11,7 @@ import (
 	"strings"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	etcdreleasegroup "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroup"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,21 +24,21 @@ type ReleaseGroupReader interface {
 }
 
 type ReleaseGroupMutator interface {
-	AddReleaseGroup(context.Context, apiTypes.ReleaseGroupAddRequest, string) (etcd.IdempotencyResponse, error)
+	AddReleaseGroup(context.Context, apiTypes.ReleaseGroupAddRequest, string) (idempotencyrecord.IdempotencyResponse, error)
 	EditReleaseGroup(
 		context.Context,
 		string,
 		apiTypes.ReleaseGroupEditRequest,
 		string,
-	) (etcd.IdempotencyResponse, error)
-	RemoveReleaseGroup(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveReleaseGroup(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type ReleaseOperator interface {
-	DeployService(context.Context, string, domain.ServiceDeployInput, string) (etcd.IdempotencyResponse, error)
-	RollbackService(context.Context, string, domain.ServiceRollbackInput, string) (etcd.IdempotencyResponse, error)
-	DeployReleaseGroup(context.Context, string, domain.GroupDeployInput, string) (etcd.IdempotencyResponse, error)
-	RollbackReleaseGroup(context.Context, string, domain.GroupRollbackInput, string) (etcd.IdempotencyResponse, error)
+	DeployService(context.Context, string, domain.ServiceDeployInput, string) (idempotencyrecord.IdempotencyResponse, error)
+	RollbackService(context.Context, string, domain.ServiceRollbackInput, string) (idempotencyrecord.IdempotencyResponse, error)
+	DeployReleaseGroup(context.Context, string, domain.GroupDeployInput, string) (idempotencyrecord.IdempotencyResponse, error)
+	RollbackReleaseGroup(context.Context, string, domain.GroupRollbackInput, string) (idempotencyrecord.IdempotencyResponse, error)
 	PreviewReleaseGroupRollback(
 		context.Context,
 		string,
@@ -368,7 +369,7 @@ func (s *Server) writeReleaseGroupProblem(ctx huma.Context, detail string) {
 	}
 }
 
-func (s *Server) releaseGroupMutationResponse(response etcd.IdempotencyResponse) *releaseGroupMutationOutput {
+func (s *Server) releaseGroupMutationResponse(response idempotencyrecord.IdempotencyResponse) *releaseGroupMutationOutput {
 	return &releaseGroupMutationOutput{
 		Status: response.Status, ContentType: response.ContentKind,
 		Body: func(ctx huma.Context) {

@@ -5,6 +5,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
@@ -26,7 +27,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	tombstone DeletionTombstoneRecord,
 	intent ConnectorRemovalIntent,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateConnectorHierarchy(ctx, environment, project, current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -112,7 +113,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	tombstoneValue, err := encodeDeletionTombstone(tombstone)
@@ -130,7 +131,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -199,7 +200,7 @@ func validateConnectorDeletionEnvelope(
 	tombstone DeletionTombstoneRecord,
 	intent ConnectorRemovalIntent,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) error {
 	if err := validateDeletionTombstone(tombstone); err != nil {
 		return err
@@ -225,16 +226,16 @@ func validateConnectorDeletionEnvelope(
 			"connector deletion task, tombstone, and intent do not match",
 		)
 	}
-	wantReplayTarget := IdempotencyReplayTarget{
-		Kind: IdempotencyReplayTargetConnector,
+	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetConnector,
 		ID:   connector.ID,
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != connector.EnvironmentID || marker.Locator.Method != http.MethodDelete ||
 		marker.Locator.Route != connectorDeletionRoute || marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplayTarget || marker.Response.Status != http.StatusAccepted ||
-		!validTaskResponse(marker.Response, task.ID) ||
+		!idempotencyrecord.ValidTaskResponse(marker.Response, task.ID) ||
 		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) ||
 		!marker.TerminalAt.IsZero() || !marker.RetainUntil.IsZero() {
 		return errs.New(
@@ -242,7 +243,7 @@ func validateConnectorDeletionEnvelope(
 			"connector deletion marker does not match its task",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return err
 	}
 	return nil
@@ -378,7 +379,7 @@ func (evidence connectorDeletionEvidence) classifier() idempotencyPlanClassifier
 			return errs.New(errs.KindInternal, "connector deletion compare evidence is incomplete")
 		}
 		if values[evidence.active] != nil {
-			activeTaskID, err := decodeTaskReference(values[evidence.active].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[evidence.active].Value)
 			if err != nil {
 				return err
 			}

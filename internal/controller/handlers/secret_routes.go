@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"io"
@@ -17,7 +18,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -34,11 +35,11 @@ type SecretMutator interface {
 		context.Context,
 		apiTypes.SecretCreateRequest,
 		string,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type SecretDeleter interface {
-	DeleteSecret(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	DeleteSecret(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type secretCreateInput struct {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"log/slog"
@@ -14,7 +15,6 @@ import (
 	"strconv"
 	"unicode/utf8"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -22,9 +22,9 @@ import (
 
 type AttachMutator interface {
 	ListAttaches(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[attachrecord.Record], error)
-	CreateAttach(context.Context, apiTypes.AttachRequest, string) (etcd.IdempotencyResponse, error)
-	DetachAttach(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	RenameAttach(context.Context, string, apiTypes.AttachRenameRequest, string) (etcd.IdempotencyResponse, error)
+	CreateAttach(context.Context, apiTypes.AttachRequest, string) (idempotencyrecord.IdempotencyResponse, error)
+	DetachAttach(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	RenameAttach(context.Context, string, apiTypes.AttachRenameRequest, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type attachCreateInput struct {
@@ -303,7 +303,7 @@ func decodeAttachStringList(decoder *json.Decoder, member string) ([]string, err
 }
 
 func (s *Server) attachMutationResponse(
-	response etcd.IdempotencyResponse,
+	response idempotencyrecord.IdempotencyResponse,
 	action string,
 ) *attachMutationOutput {
 	return &attachMutationOutput{

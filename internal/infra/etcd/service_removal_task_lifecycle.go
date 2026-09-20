@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -142,14 +143,14 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		intent.Claim,
 		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
 		intent.CandidateProjection,
-		IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
+		idempotencyrecord.IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
 		intent.ExpectedHeadRevision,
 	)
 	if err != nil {
 		clearRouteTaskChange(change)
 		return routeTaskChange{}, err
 	}
-	headReference, err := encodeTaskReference(intent.Claim.RevisionID)
+	headReference, err := idempotencyrecord.EncodeTaskReference(intent.Claim.RevisionID)
 	if err != nil {
 		clear(publication.publishedDescriptor)
 		clearRouteTaskChange(change)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
@@ -22,7 +23,7 @@ const (
 
 type Resolution struct {
 	Kind     ResolutionKind
-	Response infraetcd.IdempotencyResponse
+	Response idempotencyrecord.IdempotencyResponse
 }
 
 func (resolution Resolution) String() string {
@@ -32,7 +33,7 @@ func (resolution Resolution) String() string {
 func (resolution Resolution) GoString() string { return resolution.String() }
 
 type ProtectedEvidence struct {
-	record infraetcd.ProtectedIntentRecord
+	record idempotencyrecord.ProtectedIntentRecord
 }
 
 // Destroy zeroizes the transient protected intent once publication or replay
@@ -52,7 +53,7 @@ type Coordinator struct {
 // EvidenceRepository is the consumer-owned read seam used to classify a
 // durable idempotency marker without depending on a concrete repository.
 type EvidenceRepository interface {
-	Read(context.Context, infraetcd.IdempotencyLocator) (*infraetcd.IdempotencyEvidence, error)
+	Read(context.Context, idempotencyrecord.IdempotencyLocator) (*idempotencyrecord.IdempotencyEvidence, error)
 }
 
 func NewCoordinator(protector *secretvalue.Protector) (*Coordinator, error) {
@@ -79,7 +80,7 @@ func (coordinator *Coordinator) ProtectIntent(
 	}
 	metadata := envelope.Metadata()
 	ciphertext := envelope.Ciphertext()
-	return ProtectedEvidence{record: infraetcd.ProtectedIntentRecord{
+	return ProtectedEvidence{record: idempotencyrecord.ProtectedIntentRecord{
 		EnvelopeVersion:  uint8(metadata.Version),
 		Cipher:           string(metadata.Cipher),
 		DigestAlgorithm:  string(metadata.Digest.Algorithm),
@@ -88,9 +89,9 @@ func (coordinator *Coordinator) ProtectIntent(
 	}}, nil
 }
 
-func (evidence ProtectedEvidence) DurableRecord() (infraetcd.ProtectedIntentRecord, error) {
+func (evidence ProtectedEvidence) DurableRecord() (idempotencyrecord.ProtectedIntentRecord, error) {
 	if _, err := restoreProtectedIntent(evidence.record); err != nil {
-		return infraetcd.ProtectedIntentRecord{}, err
+		return idempotencyrecord.ProtectedIntentRecord{}, err
 	}
 	result := evidence.record
 	result.Ciphertext = append([]byte(nil), evidence.record.Ciphertext...)
@@ -102,7 +103,7 @@ func (evidence ProtectedEvidence) DurableRecord() (infraetcd.ProtectedIntentReco
 func (coordinator *Coordinator) MatchesDurable(
 	ctx context.Context,
 	candidate ProtectedEvidence,
-	existing infraetcd.ProtectedIntentRecord,
+	existing idempotencyrecord.ProtectedIntentRecord,
 ) (bool, error) {
 	if coordinator == nil || coordinator.protector == nil {
 		return false, internalError("coordinator is not initialized")
@@ -149,7 +150,7 @@ func (coordinator *Coordinator) ResolveKnown(
 func (coordinator *Coordinator) ResolveExisting(
 	ctx context.Context,
 	repository EvidenceRepository,
-	locator infraetcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	candidate ProtectedEvidence,
 ) (Resolution, bool, error) {
 	if ctx == nil || repository == nil {
@@ -177,7 +178,7 @@ func (coordinator *Coordinator) ResolveExisting(
 func (coordinator *Coordinator) ResolveMarker(
 	ctx context.Context,
 	candidate ProtectedEvidence,
-	marker infraetcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (Resolution, error) {
 	if ctx == nil {
 		return Resolution{}, internalError("marker-outcome evidence is incomplete")
@@ -192,7 +193,7 @@ func (coordinator *Coordinator) ResolveMarker(
 func (coordinator *Coordinator) ResolveOperationRootExisting(
 	ctx context.Context,
 	repository EvidenceRepository,
-	locator infraetcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	candidate ProtectedEvidence,
 ) (Resolution, bool, error) {
 	if ctx == nil || repository == nil {
@@ -220,7 +221,7 @@ func (coordinator *Coordinator) ResolveOperationRootExisting(
 func (coordinator *Coordinator) ResolveUnknown(
 	ctx context.Context,
 	repository EvidenceRepository,
-	locator infraetcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	candidate ProtectedEvidence,
 	original error,
 ) (Resolution, error) {
@@ -257,7 +258,7 @@ func (coordinator *Coordinator) ResolveUnknown(
 	return coordinator.classifyMarker(ctx, candidate, marker)
 }
 
-func clearProtectedMarker(marker infraetcd.IdempotencyMarker) {
+func clearProtectedMarker(marker idempotencyrecord.IdempotencyMarker) {
 	clear(marker.Intent.Ciphertext)
 	clear(marker.Response.Body)
 }
@@ -273,7 +274,7 @@ func eligibleUnknownOutcome(err error) bool {
 func (coordinator *Coordinator) classifyMarker(
 	ctx context.Context,
 	candidate ProtectedEvidence,
-	marker infraetcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (Resolution, error) {
 	if coordinator == nil || coordinator.protector == nil {
 		return Resolution{}, internalError("coordinator is not initialized")
@@ -293,12 +294,12 @@ func (coordinator *Coordinator) classifyMarker(
 	if !matched {
 		return Resolution{}, errs.New(errs.KindIdempotencyMismatch, "idempotency key was used for a different request")
 	}
-	if marker.Kind == infraetcd.IdempotencyMarkerTask && marker.State == infraetcd.IdempotencyMarkerPending {
+	if marker.Kind == idempotencyrecord.IdempotencyMarkerTask && marker.State == idempotencyrecord.IdempotencyMarkerPending {
 		return Resolution{}, errs.New(errs.KindIdempotencyInProgress, "the original task is still active")
 	}
 	return Resolution{
 		Kind: ResolutionReplay,
-		Response: infraetcd.IdempotencyResponse{
+		Response: idempotencyrecord.IdempotencyResponse{
 			Status: marker.Response.Status, ContentKind: marker.Response.ContentKind,
 			Body: append([]byte(nil), marker.Response.Body...),
 		},
@@ -308,7 +309,7 @@ func (coordinator *Coordinator) classifyMarker(
 func (coordinator *Coordinator) classifyOperationRootMarker(
 	ctx context.Context,
 	candidate ProtectedEvidence,
-	marker infraetcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (Resolution, error) {
 	resolution, err := coordinator.classifyMarker(ctx, candidate, marker)
 	if !errors.Is(err, errs.New(errs.KindIdempotencyInProgress, "")) {
@@ -316,14 +317,14 @@ func (coordinator *Coordinator) classifyOperationRootMarker(
 	}
 	return Resolution{
 		Kind: ResolutionReplay,
-		Response: infraetcd.IdempotencyResponse{
+		Response: idempotencyrecord.IdempotencyResponse{
 			Status: marker.Response.Status, ContentKind: marker.Response.ContentKind,
 			Body: append([]byte(nil), marker.Response.Body...),
 		},
 	}, nil
 }
 
-func restoreProtectedIntent(value infraetcd.ProtectedIntentRecord) (secretvalue.Envelope, error) {
+func restoreProtectedIntent(value idempotencyrecord.ProtectedIntentRecord) (secretvalue.Envelope, error) {
 	ciphertext := append([]byte(nil), value.Ciphertext...)
 	defer clear(ciphertext)
 	if len(ciphertext) > maximumProtectedCiphertextBytes {

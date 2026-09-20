@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
@@ -29,7 +30,7 @@ type serviceLifecycleRepository interface {
 		*etcd.ServiceLifecycleRenderInput,
 		*etcd.BackingHookEncryptedInputs,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
@@ -82,7 +83,7 @@ func (repository *durableServiceMutationRepository) BeginServiceLifecycleWithTas
 	renderInput *etcd.ServiceLifecycleRenderInput,
 	hookInputs *etcd.BackingHookEncryptedInputs,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.services.BeginServiceLifecycleWithTaskHookInputs(
 		ctx, tenant, project, environment, current, replacement, projection, renderInput, hookInputs, task, marker,

@@ -4,6 +4,7 @@ import (
 	"context"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -11,7 +12,7 @@ import (
 
 type attachMutationEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type attachMutationIdempotency interface {
@@ -20,7 +21,7 @@ type attachMutationIdempotency interface {
 	PrepareRename(context.Context, string, string, apiTypes.AttachRenameRequest) (attachMutationEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		attachMutationEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -30,17 +31,17 @@ type attachMutationIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		attachMutationEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
 	ResolveReplayLocator(
 		context.Context,
-		etcd.IdempotencyReplayTarget,
+		idempotencyrecord.IdempotencyReplayTarget,
 		string,
 		string,
 		string,
-	) (etcd.IdempotencyLocator, bool, error)
+	) (idempotencyrecord.IdempotencyLocator, bool, error)
 }
 
 type durableAttachMutationIdempotency struct {
@@ -148,7 +149,7 @@ func (service *durableAttachMutationIdempotency) protect(
 
 func (service *durableAttachMutationIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence attachMutationEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -164,7 +165,7 @@ func (service *durableAttachMutationIdempotency) ResolveKnown(
 
 func (service *durableAttachMutationIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence attachMutationEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -173,10 +174,10 @@ func (service *durableAttachMutationIdempotency) ResolveUnknown(
 
 func (service *durableAttachMutationIdempotency) ResolveReplayLocator(
 	ctx context.Context,
-	target etcd.IdempotencyReplayTarget,
+	target idempotencyrecord.IdempotencyReplayTarget,
 	method string,
 	route string,
 	key string,
-) (etcd.IdempotencyLocator, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, bool, error) {
 	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
 }

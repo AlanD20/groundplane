@@ -2,6 +2,7 @@ package volumeremoval
 
 import (
 	"crypto/sha256"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -78,10 +79,10 @@ func equalVolumeRemovalParams(left, right map[string]string) bool {
 	return true
 }
 
-func volumeRemovalRootLocator(runtime removalrecord.Runtime) etcd.IdempotencyLocator {
+func volumeRemovalRootLocator(runtime removalrecord.Runtime) idempotencyrecord.IdempotencyLocator {
 	locator := runtime.RootLocator
-	return etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeKind(locator.ScopeKind),
+	return idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeKind(locator.ScopeKind),
 		ScopeID:   locator.ScopeID, Method: locator.Method, Route: locator.Route, Key: locator.Key,
 	}
 }

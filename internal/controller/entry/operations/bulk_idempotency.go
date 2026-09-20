@@ -6,21 +6,22 @@ import (
 	"encoding/hex"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
 
 type entryBulkUpsertEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type entryBulkUpsertIdempotency interface {
 	Prepare(context.Context, entryBulkUpsertInput) (entryBulkUpsertEvidence, error)
-	MatchesStaged(context.Context, entryBulkUpsertEvidence, etcd.ProtectedIntentRecord) (bool, error)
+	MatchesStaged(context.Context, entryBulkUpsertEvidence, idempotencyrecord.ProtectedIntentRecord) (bool, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		entryBulkUpsertEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -30,7 +31,7 @@ type entryBulkUpsertIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		entryBulkUpsertEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -93,14 +94,14 @@ func (service *durableEntryBulkUpsertIdempotency) Prepare(
 func (service *durableEntryBulkUpsertIdempotency) MatchesStaged(
 	ctx context.Context,
 	evidence entryBulkUpsertEvidence,
-	existing etcd.ProtectedIntentRecord,
+	existing idempotencyrecord.ProtectedIntentRecord,
 ) (bool, error) {
 	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
 }
 
 func (service *durableEntryBulkUpsertIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence entryBulkUpsertEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -116,7 +117,7 @@ func (service *durableEntryBulkUpsertIdempotency) ResolveKnown(
 
 func (service *durableEntryBulkUpsertIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence entryBulkUpsertEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {

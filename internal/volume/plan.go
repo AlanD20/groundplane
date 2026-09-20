@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"sort"
 	"strings"
@@ -185,13 +186,13 @@ func volumeMutationResponse(
 	request volumeMutationRequest,
 	environment hierarchyrecord.EnvironmentRecord,
 	taskID string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if request.action == volumeMutationActionRemove {
 		value, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 		if err != nil {
-			return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+			return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 		}
-		return etcd.IdempotencyResponse{
+		return idempotencyrecord.IdempotencyResponse{
 			Status: http.StatusAccepted, ContentKind: "application/json", Body: value,
 		}, nil
 	}
@@ -220,7 +221,7 @@ func volumeMutationResponse(
 	}
 	value, err := json.Marshal(body)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return etcd.IdempotencyResponse{Status: status, ContentKind: "application/json", Body: value}, nil
+	return idempotencyrecord.IdempotencyResponse{Status: status, ContentKind: "application/json", Body: value}, nil
 }

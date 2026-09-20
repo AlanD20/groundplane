@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -14,7 +15,7 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 	retryTaskID string,
 	actor TaskActor,
 	provided *TaskInitiation,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	retry, err := cloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
 	if err != nil {
@@ -44,9 +45,9 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 			return IdempotencyTransactionResult{}, err
 		}
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != retry.ID || !marker.CreatedAt.Equal(retry.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) || validateIdempotencyMarker(marker) != nil {
+		!marker.UpdatedAt.Equal(marker.CreatedAt) || idempotencyrecord.ValidateIdempotencyMarker(marker) != nil {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"hierarchy Task retry marker is invalid",
@@ -64,7 +65,7 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(retry.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(retry.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -96,7 +97,7 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 			return errs.Newf(errs.KindTaskNotFound, "task not found: %s", source.Record.ID)
 		}
 		if values[3] != nil {
-			activeTaskID, decodeErr := decodeTaskReference(values[3].Value)
+			activeTaskID, decodeErr := idempotencyrecord.DecodeTaskReference(values[3].Value)
 			if decodeErr != nil {
 				return decodeErr
 			}

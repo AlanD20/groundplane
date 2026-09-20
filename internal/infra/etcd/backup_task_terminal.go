@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -138,14 +139,14 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
-	markerValue, err := encodeIdempotencyMarker(transitionedMarker)
+	markerValue, err := idempotencyrecord.EncodeIdempotencyMarker(transitionedMarker)
 	clear(transitionedMarker.Intent.Ciphertext)
 	clear(transitionedMarker.Response.Body)
 	if err != nil {
 		clear(terminalValue)
 		return backupTaskTerminalPlan{}, err
 	}
-	retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
+	retentionValue, err := json.Marshal(idempotencyrecord.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
 	if err != nil {
 		clear(terminalValue)
 		clear(markerValue)

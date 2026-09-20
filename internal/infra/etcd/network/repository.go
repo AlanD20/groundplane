@@ -8,6 +8,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -102,18 +103,18 @@ func NewRepository(
 
 func (repository *Repository) Read(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
-) (*etcd.IdempotencyEvidence, error) {
+	locator idempotencyrecord.IdempotencyLocator,
+) (*idempotencyrecord.IdempotencyEvidence, error) {
 	return repository.idempotency.Read(ctx, locator)
 }
 
 func (repository *Repository) ResolveReplayLocator(
 	ctx context.Context,
-	target etcd.IdempotencyReplayTarget,
+	target idempotencyrecord.IdempotencyReplayTarget,
 	method string,
 	route string,
 	key string,
-) (etcd.IdempotencyLocator, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, bool, error) {
 	return repository.idempotency.ResolveReplayLocator(ctx, target, method, route, key)
 }
 
@@ -170,7 +171,7 @@ func (repository *Repository) BeginZoneDeletionWithTask(
 	tombstone etcd.DeletionTombstoneRecord,
 	intent etcd.ZoneRemovalIntent,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.zones.BeginZoneDeletionWithTask(
 		ctx,
@@ -213,7 +214,7 @@ func (repository *Repository) BeginRouteMutationWithTask(
 	record routerecord.Record,
 	intent etcd.RouteMutationIntent,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.routes.BeginRouteMutationWithTask(
 		ctx, environment, project, target, current, record, intent, task, marker,
@@ -251,7 +252,7 @@ func (repository *Repository) BeginRouteDeletionWithTask(
 	tombstone etcd.DeletionTombstoneRecord,
 	intent etcd.RouteRemovalIntent,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.routes.BeginRouteDeletionWithTask(
 		ctx, environment, project, target, route, projection, tombstone, intent, task, marker,
@@ -311,7 +312,7 @@ func (repository *Repository) HandoffBackingZoneDeletion(
 	tombstone etcdstore.Versioned[etcd.DeletionTombstoneRecord],
 	intent etcd.ZoneRemovalIntent,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.zones.HandoffBackingZoneDeletion(ctx, zone, parentTaskID, tombstone, intent, task, marker)
 }

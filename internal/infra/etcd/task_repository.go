@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"math/rand/v2"
@@ -236,7 +237,7 @@ func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) e
 // TaskRetryScope is the immutable durable owner used to domain-separate a
 // human retry intent from the same idempotency key under another owner.
 type TaskRetryScope struct {
-	Kind IdempotencyScopeKind
+	Kind idempotencyrecord.IdempotencyScopeKind
 	ID   string
 }
 

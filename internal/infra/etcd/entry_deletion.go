@@ -4,6 +4,7 @@ import (
 	"context"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -17,7 +18,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	ctx context.Context, environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	entry etcdstore.Versioned[entryrecord.Record],
 	projection *etcdstore.Versioned[EnvironmentComposeProjection],
-	tombstone DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker IdempotencyMarker,
+	tombstone DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := validateEntryHierarchy(ctx, environment, project, entry.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -50,9 +51,9 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 			"entry deletion Task, intent, and tombstone do not match",
 		)
 	}
-	wantReplayTarget := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetEntry, ID: entry.Record.Entry.ID}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: entry.Record.Entry.ID}
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
@@ -70,7 +71,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	tombstoneValue, err := encodeDeletionTombstone(tombstone)
@@ -83,7 +84,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -250,7 +251,7 @@ func classifyEntryDeletionStartConflict(
 			return errs.New(errs.KindInternal, "entry deletion compare evidence is incomplete")
 		}
 		if values[2] != nil {
-			activeTaskID, err := decodeTaskReference(values[2].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[2].Value)
 			if err != nil {
 				return err
 			}

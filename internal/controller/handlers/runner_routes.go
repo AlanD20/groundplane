@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"net/http"
@@ -21,16 +22,16 @@ type RunnerReader interface {
 }
 
 type RunnerMutator interface {
-	RenameRunner(context.Context, string, apiTypes.RunnerEditRequest, string) (etcd.IdempotencyResponse, error)
+	RenameRunner(context.Context, string, apiTypes.RunnerEditRequest, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type RunnerRemover interface {
-	RemoveRunner(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	RemoveRunner(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type RunnerProvisioner interface {
-	CreateRunner(context.Context, apiTypes.RunnerCreateRequest, string) (etcd.IdempotencyResponse, error)
-	RetryRunner(context.Context, string, apiTypes.RunnerRetryRequest, string) (etcd.IdempotencyResponse, error)
+	CreateRunner(context.Context, apiTypes.RunnerCreateRequest, string) (idempotencyrecord.IdempotencyResponse, error)
+	RetryRunner(context.Context, string, apiTypes.RunnerRetryRequest, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type runnerListInput struct {

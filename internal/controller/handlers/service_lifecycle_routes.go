@@ -3,11 +3,11 @@ package handlers
 import (
 	"context"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"net/http"
 	"reflect"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -83,7 +83,7 @@ func serviceLifecycleMutation(
 	serviceID string,
 	idempotencyKey string,
 	action string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	switch action {
 	case "start":
 		return mutator.StartService(ctx, serviceID, idempotencyKey)
@@ -92,7 +92,7 @@ func serviceLifecycleMutation(
 	case "destroy":
 		return mutator.DestroyService(ctx, serviceID, idempotencyKey)
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle action is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle action is invalid")
 	}
 }
 

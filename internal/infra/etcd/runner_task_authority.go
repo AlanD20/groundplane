@@ -2,6 +2,7 @@ package etcd
 
 import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -49,29 +50,29 @@ func runnerTaskOwner(desired runnerrecord.RunnerDesiredRecord) (TaskOwner, error
 	return TenantProjectTaskOwner(desired.TenantID, desired.OwnerID)
 }
 
-func validateRunnerCreateMarker(desired runnerrecord.RunnerDesiredRecord, task TaskRecord, marker IdempotencyMarker) error {
+func validateRunnerCreateMarker(desired runnerrecord.RunnerDesiredRecord, task TaskRecord, marker idempotencyrecord.IdempotencyMarker) error {
 	return validateRunnerOperationMarker(desired, task, marker, http.MethodPost, "/runners", nil, true)
 }
 
-func validateRunnerRetryMarker(desired runnerrecord.RunnerDesiredRecord, task TaskRecord, marker IdempotencyMarker) error {
+func validateRunnerRetryMarker(desired runnerrecord.RunnerDesiredRecord, task TaskRecord, marker idempotencyrecord.IdempotencyMarker) error {
 	if err := validateRunnerRetryMarkerEnvelope(task, marker); err != nil {
 		return err
 	}
 	return validateRunnerMarkerScope(desired, marker)
 }
 
-func validateRunnerDeleteMarker(desired runnerrecord.RunnerDesiredRecord, task TaskRecord, marker IdempotencyMarker) error {
-	target := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetRunner, ID: desired.ID}
+func validateRunnerDeleteMarker(desired runnerrecord.RunnerDesiredRecord, task TaskRecord, marker idempotencyrecord.IdempotencyMarker) error {
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetRunner, ID: desired.ID}
 	return validateRunnerOperationMarker(desired, task, marker, http.MethodDelete, "/runners/{id}", &target, true)
 }
 
 func validateRunnerOperationMarker(
 	desired runnerrecord.RunnerDesiredRecord,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	method string,
 	route string,
-	replayTarget *IdempotencyReplayTarget,
+	replayTarget *idempotencyrecord.IdempotencyReplayTarget,
 	requireOperationKey bool,
 ) error {
 	if err := validateRunnerMarkerEnvelope(task, marker, method, route, replayTarget, requireOperationKey); err != nil {
@@ -80,8 +81,8 @@ func validateRunnerOperationMarker(
 	return validateRunnerMarkerScope(desired, marker)
 }
 
-func validateRunnerRetryMarkerEnvelope(task TaskRecord, marker IdempotencyMarker) error {
-	if marker.Locator.ScopeKind != IdempotencyScopeTenant && marker.Locator.ScopeKind != IdempotencyScopeProject {
+func validateRunnerRetryMarkerEnvelope(task TaskRecord, marker idempotencyrecord.IdempotencyMarker) error {
+	if marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeTenant && marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject {
 		return errs.New(errs.KindValidationFailed, "runner retry marker scope is invalid")
 	}
 	return validateRunnerMarkerEnvelope(task, marker, http.MethodPost, "/runners/{id}/retry", nil, false)
@@ -89,28 +90,28 @@ func validateRunnerRetryMarkerEnvelope(task TaskRecord, marker IdempotencyMarker
 
 func validateRunnerMarkerEnvelope(
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	method string,
 	route string,
-	replayTarget *IdempotencyReplayTarget,
+	replayTarget *idempotencyrecord.IdempotencyReplayTarget,
 	requireOperationKey bool,
 ) error {
 	if task.IdempotencyKey == "" || (requireOperationKey && task.IdempotencyKey != marker.Locator.Key) ||
-		marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+		marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.Method != method || marker.Locator.Route != route ||
-		!validTaskResponse(marker.Response, task.ID) ||
+		!idempotencyrecord.ValidTaskResponse(marker.Response, task.ID) ||
 		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) ||
 		!marker.TerminalAt.IsZero() || !marker.RetainUntil.IsZero() ||
 		!runnerReplayTargetsEqual(marker.ReplayTarget, replayTarget) {
 		return errs.New(errs.KindValidationFailed, "runner task marker does not match its task")
 	}
-	return validateIdempotencyMarker(marker)
+	return idempotencyrecord.ValidateIdempotencyMarker(marker)
 }
 
-func validateRunnerMarkerScope(desired runnerrecord.RunnerDesiredRecord, marker IdempotencyMarker) error {
-	scopeKind := IdempotencyScopeTenant
+func validateRunnerMarkerScope(desired runnerrecord.RunnerDesiredRecord, marker idempotencyrecord.IdempotencyMarker) error {
+	scopeKind := idempotencyrecord.IdempotencyScopeTenant
 	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		scopeKind = IdempotencyScopeProject
+		scopeKind = idempotencyrecord.IdempotencyScopeProject
 	}
 	if marker.Locator.ScopeKind != scopeKind || marker.Locator.ScopeID != desired.OwnerID {
 		return errs.New(errs.KindValidationFailed, "runner task marker does not match its owner-scoped task")
@@ -118,14 +119,14 @@ func validateRunnerMarkerScope(desired runnerrecord.RunnerDesiredRecord, marker 
 	return nil
 }
 
-func runnerReplayTargetsEqual(left *IdempotencyReplayTarget, right *IdempotencyReplayTarget) bool {
+func runnerReplayTargetsEqual(left *idempotencyrecord.IdempotencyReplayTarget, right *idempotencyrecord.IdempotencyReplayTarget) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
 	return *left == *right
 }
 
-func bindRunnerTaskMarker(task TaskRecord, marker IdempotencyMarker) TaskRecord {
+func bindRunnerTaskMarker(task TaskRecord, marker idempotencyrecord.IdempotencyMarker) TaskRecord {
 	task = cloneTaskRecord(task)
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
 	return task

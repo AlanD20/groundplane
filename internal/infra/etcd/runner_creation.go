@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
@@ -18,7 +19,7 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 	config runnerallocation.RunnerAllocationConfig,
 	desired runnerrecord.RunnerDesiredRecord,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -52,7 +53,7 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 	if existing != nil {
 		return IdempotencyTransactionResult{
 			kind: idempotencyTransactionExisting, revision: existing.modRevision,
-			marker: cloneIdempotencyMarker(existing.marker),
+			marker: idempotencyrecord.CloneIdempotencyMarker(existing.marker),
 		}, nil
 	}
 	parents, err := repository.resolveRunnerParents(ctx, desired)
@@ -154,7 +155,7 @@ func encodeRunnerCreateValues(
 		result.clear()
 		return runnerCreateValues{}, err
 	}
-	result.reference, err = encodeTaskReference(task.ID)
+	result.reference, err = idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		result.clear()
 		return runnerCreateValues{}, err
@@ -240,7 +241,7 @@ func (evidence runnerCreateEvidence) classifier() idempotencyPlanClassifier {
 			return errs.New(errs.KindInternal, "runner creation compare evidence is incomplete")
 		}
 		if values[evidence.active] != nil {
-			activeTaskID, err := decodeTaskReference(values[evidence.active].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[evidence.active].Value)
 			if err != nil {
 				return err
 			}

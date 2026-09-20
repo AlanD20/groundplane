@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"math"
 	"strings"
@@ -228,7 +229,7 @@ type TaskRecord struct {
 	StartedAt          *time.Time                    `json:"started_at,omitempty"`
 	FinishedAt         *time.Time                    `json:"finished_at,omitempty"`
 	RetainUntil        *time.Time                    `json:"retain_until,omitempty"`
-	idempotencyMarker  *IdempotencyLocator
+	idempotencyMarker  *idempotencyrecord.IdempotencyLocator
 
 	ComponentActionStepIDs          []string                        `json:"component_action_step_ids"`
 	ManagedComponentTeardownSources []ManagedComponentRuntimeSource `json:"managed_component_teardown_sources,omitempty"`
@@ -529,7 +530,7 @@ func validateTaskRecord(record TaskRecord) error {
 		return err
 	}
 	if record.idempotencyMarker != nil {
-		if err := validateIdempotencyLocator(*record.idempotencyMarker); err != nil {
+		if err := idempotencyrecord.ValidateIdempotencyLocator(*record.idempotencyMarker); err != nil {
 			return errs.New(errs.KindInternal, "task idempotency marker locator is invalid")
 		}
 	}
@@ -1008,7 +1009,7 @@ func cloneTaskTerminalAssignment(
 	return &cloned
 }
 
-func cloneIdempotencyLocator(locator *IdempotencyLocator) *IdempotencyLocator {
+func cloneIdempotencyLocator(locator *idempotencyrecord.IdempotencyLocator) *idempotencyrecord.IdempotencyLocator {
 	if locator == nil {
 		return nil
 	}

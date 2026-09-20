@@ -6,6 +6,7 @@ import (
 	"errors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 
@@ -53,7 +54,7 @@ type etcdRemovalState struct {
 
 type etcdRemovalEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 func (repository *EtcdRepository) InspectRemoval(
@@ -63,7 +64,7 @@ func (repository *EtcdRepository) InspectRemoval(
 	if repository == nil {
 		return RemovalInspection{}, errs.New(errs.KindInternal, "entry deletion persistence is not configured")
 	}
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetEntry, ID: request.EntryID}
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: request.EntryID}
 	locator, indexed, err := repository.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, entryDeletionRoute, request.IdempotencyKey,
 	)
@@ -103,7 +104,7 @@ func (repository *EtcdRepository) PublishRemoval(
 		return RemovalOutcome{}, errs.New(errs.KindInternal, "entry deletion persistence is not configured")
 	}
 	request := publication.Request
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetEntry, ID: request.EntryID}
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: request.EntryID}
 	locator, indexed, err := repository.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, entryDeletionRoute, request.IdempotencyKey,
 	)
@@ -173,12 +174,12 @@ func (repository *EtcdRepository) PublishRemoval(
 		return RemovalOutcome{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
 	}
@@ -309,19 +310,19 @@ func sameRemovalCandidate(left RemovalCandidate, right RemovalCandidate) bool {
 		left.Identity == right.Identity
 }
 
-func removalLocator(environmentID string, key string) etcd.IdempotencyLocator {
-	return etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+func removalLocator(environmentID string, key string) idempotencyrecord.IdempotencyLocator {
+	return idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environmentID,
 		Method: http.MethodDelete, Route: entryDeletionRoute, Key: key,
 	}
 }
 
 func (repository *EtcdRepository) prepareEvidence(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	entryID string,
 ) (etcdRemovalEvidence, error) {
-	if locator.ScopeKind != etcd.IdempotencyScopeEnvironment ||
+	if locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		ids.Validate(ids.KindEnvironment, locator.ScopeID) != nil {
 		return etcdRemovalEvidence{}, errs.New(errs.KindInternal, "entry deletion replay scope is invalid")
 	}
@@ -348,7 +349,7 @@ func (repository *EtcdRepository) prepareEvidence(
 
 func (repository *EtcdRepository) resolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	entryID string,
 ) (RemovalOutcome, bool, error) {
 	evidence, err := repository.prepareEvidence(ctx, locator, entryID)
@@ -369,7 +370,7 @@ func (repository *EtcdRepository) resolveExisting(
 	return outcome, true, err
 }
 
-func removalOutcome(response etcd.IdempotencyResponse) (RemovalOutcome, error) {
+func removalOutcome(response idempotencyrecord.IdempotencyResponse) (RemovalOutcome, error) {
 	if response.Status != http.StatusAccepted || response.ContentKind != "application/json" {
 		return RemovalOutcome{}, errs.New(errs.KindInternal, "entry deletion replay response is invalid")
 	}

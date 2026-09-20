@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"log/slog"
@@ -110,7 +111,7 @@ func (s *Server) abortTask(
 	return s.taskMutationResponse(response), nil
 }
 
-func (s *Server) taskMutationResponse(response etcd.IdempotencyResponse) *taskMutationOutput {
+func (s *Server) taskMutationResponse(response idempotencyrecord.IdempotencyResponse) *taskMutationOutput {
 	return &taskMutationOutput{
 		Status: response.Status, ContentType: response.ContentKind,
 		Body: func(ctx huma.Context) {

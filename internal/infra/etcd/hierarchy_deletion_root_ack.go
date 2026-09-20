@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 	"time"
@@ -182,14 +183,14 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-	markerValue, err := encodeIdempotencyMarker(preparedMarker)
+	markerValue, err := idempotencyrecord.EncodeIdempotencyMarker(preparedMarker)
 	clear(preparedMarker.Intent.Ciphertext)
 	clear(preparedMarker.Response.Body)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	defer clear(markerValue)
-	markerRetentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
+	markerRetentionValue, err := json.Marshal(idempotencyrecord.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, errs.Wrap(errs.KindInternal, err)
 	}

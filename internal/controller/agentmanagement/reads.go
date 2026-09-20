@@ -2,6 +2,7 @@ package agentmanagement
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
@@ -80,16 +81,16 @@ func (service *ReadService) UpdateAgentConfig(
 	id string,
 	config apiTypes.AgentConfig,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	body, err := service.health.UpdateConfig(ctx, id, localagent.Config{
 		PullIntervalSeconds: int32(config.PullIntervalSeconds),
 		MaxConcurrentTasks:  int32(config.MaxConcurrentTasks),
 		Labels:              copyAgentLabels(config.Labels),
 	}, idempotencyKey)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	return etcd.IdempotencyResponse{
+	return idempotencyrecord.IdempotencyResponse{
 		Status: 200, ContentKind: "application/json", Body: append([]byte(nil), body...),
 	}, nil
 }

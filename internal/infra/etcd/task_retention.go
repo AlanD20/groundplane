@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -19,7 +20,7 @@ func prepareTaskRetentionIndex(task TaskRecord) (string, []byte, error) {
 	if err != nil || taskID != task.ID || !retainUntil.Equal(*task.RetainUntil) {
 		return "", nil, errs.New(errs.KindInternal, "terminal Task retention key is invalid")
 	}
-	value, err := encodeTaskReference(task.ID)
+	value, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return "", nil, err
 	}
@@ -42,7 +43,7 @@ func (repository *TaskRepository) validateTaskRetentionReplay(
 	if result == nil || len(result.Values) != 1 || result.Values[0] == nil {
 		return errs.New(errs.KindStateConflict, "terminal Task retention index is missing")
 	}
-	taskID, err := decodeTaskReference(result.Values[0].Value)
+	taskID, err := idempotencyrecord.DecodeTaskReference(result.Values[0].Value)
 	if err != nil || taskID != task.ID {
 		return errs.New(errs.KindInternal, "terminal Task retention index is corrupt")
 	}

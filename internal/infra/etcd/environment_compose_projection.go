@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -233,7 +234,7 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
 	if head.Entry == nil {
 		return etcdstore.Versioned[EnvironmentComposeProjection]{ReadRevision: head.ReadRevision}, false, nil
 	}
-	revisionID, err := decodeTaskReference(head.Entry.Value)
+	revisionID, err := idempotencyrecord.DecodeTaskReference(head.Entry.Value)
 	if err != nil {
 		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
 	}
@@ -344,7 +345,7 @@ func (repository *HierarchyRepository) FindEnvironmentVolume(
 			if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 				return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, corruptEnvironmentComposeProjection()
 			}
-			revisionID, err := decodeTaskReference(entry.Value)
+			revisionID, err := idempotencyrecord.DecodeTaskReference(entry.Value)
 			if err != nil {
 				return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, corruptEnvironmentComposeProjection()
 			}

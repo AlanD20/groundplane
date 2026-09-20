@@ -5,33 +5,34 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
 
 type serviceLifecycleEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type serviceLifecycleIdempotency interface {
 	ResolveReplayLocator(
 		context.Context,
-		etcd.IdempotencyReplayTarget,
+		idempotencyrecord.IdempotencyReplayTarget,
 		string,
 		string,
 		string,
-	) (etcd.IdempotencyLocator, bool, error)
+	) (idempotencyrecord.IdempotencyLocator, bool, error)
 	Prepare(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		string,
 		etcd.TaskType,
 		string,
 	) (serviceLifecycleEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		serviceLifecycleEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -41,7 +42,7 @@ type serviceLifecycleIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		serviceLifecycleEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -64,22 +65,22 @@ func NewLifecycleIdempotency(
 
 func (service *durableServiceLifecycleIdempotency) ResolveReplayLocator(
 	ctx context.Context,
-	target etcd.IdempotencyReplayTarget,
+	target idempotencyrecord.IdempotencyReplayTarget,
 	method string,
 	route string,
 	key string,
-) (etcd.IdempotencyLocator, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, bool, error) {
 	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
 }
 
 func (service *durableServiceLifecycleIdempotency) Prepare(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	serviceID string,
 	taskType etcd.TaskType,
 	route string,
 ) (serviceLifecycleEvidence, error) {
-	if locator.ScopeKind != etcd.IdempotencyScopeEnvironment ||
+	if locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		ids.Validate(ids.KindEnvironment, locator.ScopeID) != nil {
 		return serviceLifecycleEvidence{}, errs.New(errs.KindInternal, "Service lifecycle replay scope is invalid")
 	}
@@ -111,7 +112,7 @@ func (service *durableServiceLifecycleIdempotency) Prepare(
 
 func (service *durableServiceLifecycleIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence serviceLifecycleEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -127,7 +128,7 @@ func (service *durableServiceLifecycleIdempotency) ResolveKnown(
 
 func (service *durableServiceLifecycleIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence serviceLifecycleEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {

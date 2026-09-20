@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"net/http"
@@ -40,7 +41,7 @@ type routeMutationRepository interface {
 		routerecord.Record,
 		etcd.RouteMutationIntent,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
@@ -67,7 +68,7 @@ type routeMutationTaskPlanner interface {
 
 type routeMutationEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type routeMutationIntent struct {
@@ -82,7 +83,7 @@ type routeMutationIdempotency interface {
 	Prepare(context.Context, routeMutationIntent) (routeMutationEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		routeMutationEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -92,7 +93,7 @@ type routeMutationIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		routeMutationEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -145,7 +146,7 @@ func (service *durableRouteMutationIdempotency) Prepare(
 
 func (service *durableRouteMutationIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence routeMutationEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -161,7 +162,7 @@ func (service *durableRouteMutationIdempotency) ResolveKnown(
 
 func (service *durableRouteMutationIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence routeMutationEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -200,9 +201,9 @@ func (service *routeMutationService) RemoveRoute(
 	ctx context.Context,
 	routeID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.deletions == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route deletion service is not configured")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route deletion service is not configured")
 	}
 	return service.deletions.RemoveRoute(ctx, routeID, idempotencyKey)
 }
@@ -211,15 +212,15 @@ func (service *routeMutationService) CreateRoute(
 	ctx context.Context,
 	input apiTypes.RouteCreate,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route creation context is required")
 	}
 	if input.Path == "" {
 		input.Path = "/"
 	}
 	if err := validateRouteCreationInput(input); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	intent := routeMutationIntent{
 		method: http.MethodPost, route: routeCreationRoute, environmentID: input.EnvironmentID,
@@ -242,10 +243,10 @@ func (service *routeMutationService) CreateRoute(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumRouteMutationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route creation retry bound was not enforced")
 }
 
 func (service *routeMutationService) createRouteOnce(
@@ -253,26 +254,26 @@ func (service *routeMutationService) createRouteOnce(
 	input apiTypes.RouteCreate,
 	idempotencyKey string,
 	intent routeMutationIntent,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := service.idempotency.Prepare(ctx, intent)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	locator := routeMutationLocator(intent, idempotencyKey)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		return routeReplayResponse(resolution)
 	}
 	environment, project, target, err := service.routeHierarchy(ctx, input.EnvironmentID, input.TargetServiceID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !core.ServiceExposesTCPPort(target.Record.Desired.Expose, input.TargetPort) {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Route target Service does not expose the requested TCP port",
 		)
@@ -283,18 +284,18 @@ func (service *routeMutationService) createRouteOnce(
 		TargetPort: input.TargetPort,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	preparation, err := service.prepareRouteMutationTask(
 		ctx, environment, project, record, nil, idempotencyKey,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	record = preparation.Intent.Route
 	response, marker, err := service.routeResponseMarker(locator, evidence, record, preparation.Task.ID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -309,15 +310,15 @@ func (service *routeMutationService) EditRoute(
 	routeID string,
 	input apiTypes.RouteEdit,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route edit context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route edit context is required")
 	}
 	if ids.Validate(ids.KindRoute, routeID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Route edit requires a stable Route id")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Route edit requires a stable Route id")
 	}
 	if input.Exposure != "public" && input.Exposure != "internal" {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Route exposure must be public or internal",
 		)
@@ -329,10 +330,10 @@ func (service *routeMutationService) EditRoute(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumRouteMutationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route edit retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route edit retry bound was not enforced")
 }
 
 func (service *routeMutationService) editRouteOnce(
@@ -340,21 +341,21 @@ func (service *routeMutationService) editRouteOnce(
 	routeID string,
 	input apiTypes.RouteEdit,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	current, err := service.repository.GetRoute(ctx, routeID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	intent := routeEditMutationIntent(routeID, current.Record.EnvironmentID, input)
 	evidence, err := service.idempotency.Prepare(ctx, intent)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	locator := routeMutationLocator(intent, idempotencyKey)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		return routeReplayResponse(resolution)
@@ -363,24 +364,24 @@ func (service *routeMutationService) editRouteOnce(
 		ctx, current.Record.EnvironmentID, current.Record.Desired.TargetServiceID,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	desired := current.Record.Desired
 	desired.Exposure = input.Exposure
 	replacement, err := routerecord.ReplaceDesired(current.Record, desired)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	preparation, err := service.prepareRouteMutationTask(
 		ctx, environment, project, replacement, &current, idempotencyKey,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	replacement = preparation.Intent.Route
 	response, marker, err := service.routeResponseMarker(locator, evidence, replacement, preparation.Task.ID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -527,41 +528,41 @@ func (service *routeMutationService) routeHierarchy(
 }
 
 func (service *routeMutationService) routeResponseMarker(
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence routeMutationEvidence,
 	record routerecord.Record,
 	taskID string,
-) (etcd.IdempotencyResponse, etcd.IdempotencyMarker, error) {
+) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {
 	body, err := json.Marshal(apiTypes.RouteTaskAccepted{Route: routeAPIResponse(record), TaskID: taskID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, etcd.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(body)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), body...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
 	if err != nil {
 		clear(response.Body)
-		return etcd.IdempotencyResponse{}, etcd.IdempotencyMarker{}, err
+		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, err
 	}
 	return response, marker, nil
 }
 
 func (service *routeMutationService) resolveRouteMutation(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence routeMutationEvidence,
 	result etcd.IdempotencyTransactionResult,
 	mutationErr error,
-	response etcd.IdempotencyResponse,
-) (etcd.IdempotencyResponse, error) {
+	response idempotencyrecord.IdempotencyResponse,
+) (idempotencyrecord.IdempotencyResponse, error) {
 	var resolution requestidempotency.Resolution
 	var err error
 	if mutationErr != nil {
 		if !isUnknownRouteMutationOutcome(mutationErr) {
 			clear(response.Body)
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
 	} else {
@@ -569,7 +570,7 @@ func (service *routeMutationService) resolveRouteMutation(
 	}
 	if err != nil {
 		clear(response.Body)
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -579,20 +580,20 @@ func (service *routeMutationService) resolveRouteMutation(
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
 		clear(response.Body)
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route mutation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route mutation resolution is invalid")
 	}
 }
 
-func routeMutationLocator(intent routeMutationIntent, idempotencyKey string) etcd.IdempotencyLocator {
-	return etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: intent.environmentID,
+func routeMutationLocator(intent routeMutationIntent, idempotencyKey string) idempotencyrecord.IdempotencyLocator {
+	return idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: intent.environmentID,
 		Method: intent.method, Route: intent.route, Key: idempotencyKey,
 	}
 }
 
-func routeReplayResponse(resolution requestidempotency.Resolution) (etcd.IdempotencyResponse, error) {
+func routeReplayResponse(resolution requestidempotency.Resolution) (idempotencyrecord.IdempotencyResponse, error) {
 	if resolution.Kind != requestidempotency.ResolutionReplay {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route replay resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route replay resolution is invalid")
 	}
 	return cloneIdempotencyResponse(resolution.Response), nil
 }

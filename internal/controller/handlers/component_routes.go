@@ -3,11 +3,11 @@ package handlers
 import (
 	"context"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"net/http"
 	"strconv"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -23,15 +23,15 @@ type ComponentReader interface {
 }
 
 type ComponentMutator interface {
-	EnableComponent(context.Context, string, apiTypes.ComponentEnableRequest, string) (etcd.IdempotencyResponse, error)
-	DisableComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	UpdateComponent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	EnableComponent(context.Context, string, apiTypes.ComponentEnableRequest, string) (idempotencyrecord.IdempotencyResponse, error)
+	DisableComponent(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	UpdateComponent(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 	SetComponentConfig(
 		context.Context,
 		string,
 		apiTypes.ComponentConfigMutationRequest,
 		string,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type componentListInput struct {
@@ -253,7 +253,7 @@ type componentMutationOutput struct {
 	Body        func(huma.Context)
 }
 
-func componentMutationResponse(response etcd.IdempotencyResponse) *componentMutationOutput {
+func componentMutationResponse(response idempotencyrecord.IdempotencyResponse) *componentMutationOutput {
 	return &componentMutationOutput{
 		Status:      response.Status,
 		ContentType: response.ContentKind,

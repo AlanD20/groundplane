@@ -5,6 +5,7 @@ package network
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -12,7 +13,7 @@ import (
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	corenetwork "github.com/AlanD20/groundplane/internal/core/network"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	networketcd "github.com/AlanD20/groundplane/internal/infra/etcd/network"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -33,11 +34,11 @@ type idempotencyEvidenceRepository interface {
 	requestidempotency.EvidenceRepository
 	ResolveReplayLocator(
 		context.Context,
-		etcd.IdempotencyReplayTarget,
+		idempotencyrecord.IdempotencyReplayTarget,
 		string,
 		string,
 		string,
-	) (etcd.IdempotencyLocator, bool, error)
+	) (idempotencyrecord.IdempotencyLocator, bool, error)
 }
 
 // NewEtcdService constructs the complete Network capability from its durable
@@ -280,7 +281,7 @@ func projectRoute(record routerecord.Record) corenetwork.Route {
 	}
 }
 
-func projectMutationResponse(response etcd.IdempotencyResponse) corenetwork.MutationResponse {
+func projectMutationResponse(response idempotencyrecord.IdempotencyResponse) corenetwork.MutationResponse {
 	return corenetwork.MutationResponse{
 		Status: response.Status, ContentKind: response.ContentKind, Body: append([]byte(nil), response.Body...),
 	}
@@ -313,7 +314,7 @@ func projectZoneRemovalImpact(impact apiTypes.ZoneRemovalImpact) corenetwork.Zon
 	return result
 }
 
-func cloneIdempotencyResponse(response etcd.IdempotencyResponse) etcd.IdempotencyResponse {
+func cloneIdempotencyResponse(response idempotencyrecord.IdempotencyResponse) idempotencyrecord.IdempotencyResponse {
 	response.Body = append([]byte(nil), response.Body...)
 	return response
 }

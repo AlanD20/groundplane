@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"io"
@@ -12,7 +13,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/scriptdefinition"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -24,10 +25,10 @@ type ScriptReader interface {
 }
 
 type ScriptMutator interface {
-	CreateScript(context.Context, apiTypes.ScriptCreate, string) (etcd.IdempotencyResponse, error)
-	EditScript(context.Context, string, apiTypes.ScriptEdit, string) (etcd.IdempotencyResponse, error)
-	RemoveScript(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	RunScript(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	CreateScript(context.Context, apiTypes.ScriptCreate, string) (idempotencyrecord.IdempotencyResponse, error)
+	EditScript(context.Context, string, apiTypes.ScriptEdit, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveScript(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	RunScript(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type scriptListInput struct {
@@ -225,7 +226,7 @@ func (s *Server) writeScriptProblem(ctx huma.Context, detail string) {
 	}
 }
 
-func (s *Server) scriptMutationResponse(response etcd.IdempotencyResponse) *scriptMutationOutput {
+func (s *Server) scriptMutationResponse(response idempotencyrecord.IdempotencyResponse) *scriptMutationOutput {
 	return &scriptMutationOutput{
 		Status: response.Status, ContentType: response.ContentKind,
 		Body: func(ctx huma.Context) {

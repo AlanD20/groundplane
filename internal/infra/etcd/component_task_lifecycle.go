@@ -5,6 +5,7 @@ import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -147,7 +148,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	if state.Values[0] != nil && ids.Validate(ids.KindTask, string(state.Values[0].Value)) != nil {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry ownership is corrupt")
 	}
-	headRevisionID, err := decodeTaskReference(state.Values[2].Value)
+	headRevisionID, err := idempotencyrecord.DecodeTaskReference(state.Values[2].Value)
 	if err != nil || headRevisionID != desiredRevisionID {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component retry Environment head changed")
 	}
@@ -491,7 +492,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		string(state.Values[0].Value) != task.ID {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate ownership changed")
 	}
-	headRevisionID, err := decodeTaskReference(state.Values[1].Value)
+	headRevisionID, err := idempotencyrecord.DecodeTaskReference(state.Values[1].Value)
 	if err != nil || headRevisionID != desiredRevisionID {
 		return componentTaskChange{}, errs.New(errs.KindStateConflict, "Component candidate Environment head changed")
 	}

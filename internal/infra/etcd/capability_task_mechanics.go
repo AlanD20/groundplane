@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -24,19 +25,23 @@ func IsCapabilityTerminalTaskStatus(status TaskStatus) bool        { return isTe
 func ValidateCapabilityVolumeComposeKey(key string) error          { return volumeidentity.ValidateKey(key) }
 func EncodeCapabilityTaskRecord(record TaskRecord) ([]byte, error) { return encodeTaskRecord(record) }
 func DecodeCapabilityTaskRecord(value []byte) (TaskRecord, error)  { return decodeTaskRecord(value) }
-func EncodeCapabilityTaskReference(taskID string) ([]byte, error)  { return encodeTaskReference(taskID) }
-func DecodeCapabilityTaskReference(value []byte) (string, error)   { return decodeTaskReference(value) }
+func EncodeCapabilityTaskReference(taskID string) ([]byte, error) {
+	return idempotencyrecord.EncodeTaskReference(taskID)
+}
+func DecodeCapabilityTaskReference(value []byte) (string, error) {
+	return idempotencyrecord.DecodeTaskReference(value)
+}
 func EncodeCapabilityTaskAssignment(record TaskAssignmentRecord) ([]byte, error) {
 	return encodeTaskAssignment(record)
 }
 func DecodeCapabilityTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 	return decodeTaskAssignment(value)
 }
-func DecodeCapabilityIdempotencyMarker(value []byte, locator IdempotencyLocator) (IdempotencyMarker, error) {
-	return decodeIdempotencyMarker(value, locator)
+func DecodeCapabilityIdempotencyMarker(value []byte, locator idempotencyrecord.IdempotencyLocator) (idempotencyrecord.IdempotencyMarker, error) {
+	return idempotencyrecord.DecodeIdempotencyMarker(value, locator)
 }
-func CapabilityIdempotencyMarkerKey(locator IdempotencyLocator) (string, error) {
-	return idempotencyMarkerKey(locator)
+func CapabilityIdempotencyMarkerKey(locator idempotencyrecord.IdempotencyLocator) (string, error) {
+	return idempotencyrecord.IdempotencyMarkerKey(locator)
 }
 func CapabilityTaskKey(taskID string) string { return taskKey(taskID) }
 func CapabilityTaskOperationIndexKey(operationID, taskID string) string {
@@ -60,8 +65,8 @@ func (s *store) TransactionSize(conditions []etcdstore.Condition, mutations []et
 	return s.transactionSize(conditions, mutations)
 }
 
-func EncodeCapabilityIdempotencyMarker(marker IdempotencyMarker) ([]byte, error) {
-	return encodeIdempotencyMarker(marker)
+func EncodeCapabilityIdempotencyMarker(marker idempotencyrecord.IdempotencyMarker) ([]byte, error) {
+	return idempotencyrecord.EncodeIdempotencyMarker(marker)
 }
 
 func CloneCapabilityRetryTask(source TaskRecord, id string, actor TaskActor, createdAt time.Time) (TaskRecord, error) {

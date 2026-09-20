@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -27,7 +28,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	desired core.Component,
 	task TaskRecord,
 	renderInput PlatformComponentTaskRenderInput,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -118,7 +119,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -161,20 +162,20 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func bindPlatformComponentTaskMarker(task TaskRecord, marker IdempotencyMarker) (TaskRecord, error) {
+func bindPlatformComponentTaskMarker(task TaskRecord, marker idempotencyrecord.IdempotencyMarker) (TaskRecord, error) {
 	task = cloneTaskRecord(task)
 	if task.IdempotencyKey == "" {
 		task.IdempotencyKey = marker.Locator.Key
 	}
-	if task.IdempotencyKey != marker.Locator.Key || marker.Kind != IdempotencyMarkerTask ||
-		marker.State != IdempotencyMarkerPending || marker.TaskID != task.ID ||
+	if task.IdempotencyKey != marker.Locator.Key || marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != task.ID ||
 		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return TaskRecord{}, errs.New(
 			errs.KindValidationFailed,
 			"platform Component Task marker does not match its Task",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return TaskRecord{}, err
 	}
 	task.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)

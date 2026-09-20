@@ -4,13 +4,14 @@ import (
 	"context"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
 
 type serviceMutationEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type serviceMutationIntent struct {
@@ -24,16 +25,16 @@ type serviceMutationIntent struct {
 type serviceMutationIdempotency interface {
 	ResolveReplayLocator(
 		context.Context,
-		etcd.IdempotencyReplayTarget,
+		idempotencyrecord.IdempotencyReplayTarget,
 		string,
 		string,
 		string,
-	) (etcd.IdempotencyLocator, bool, error)
+	) (idempotencyrecord.IdempotencyLocator, bool, error)
 	Prepare(context.Context, serviceMutationIntent) (serviceMutationEvidence, error)
-	MatchesStaged(context.Context, serviceMutationEvidence, etcd.ProtectedIntentRecord) (bool, error)
+	MatchesStaged(context.Context, serviceMutationEvidence, idempotencyrecord.ProtectedIntentRecord) (bool, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		serviceMutationEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -43,7 +44,7 @@ type serviceMutationIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		serviceMutationEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -56,18 +57,18 @@ type durableServiceMutationIdempotency struct {
 
 func (service *durableServiceMutationIdempotency) ResolveReplayLocator(
 	ctx context.Context,
-	target etcd.IdempotencyReplayTarget,
+	target idempotencyrecord.IdempotencyReplayTarget,
 	method string,
 	route string,
 	key string,
-) (etcd.IdempotencyLocator, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, bool, error) {
 	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
 }
 
 func (service *durableServiceMutationIdempotency) MatchesStaged(
 	ctx context.Context,
 	evidence serviceMutationEvidence,
-	existing etcd.ProtectedIntentRecord,
+	existing idempotencyrecord.ProtectedIntentRecord,
 ) (bool, error) {
 	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
 }
@@ -116,7 +117,7 @@ func (service *durableServiceMutationIdempotency) Prepare(
 
 func (service *durableServiceMutationIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence serviceMutationEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -132,7 +133,7 @@ func (service *durableServiceMutationIdempotency) ResolveKnown(
 
 func (service *durableServiceMutationIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence serviceMutationEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"sort"
 
@@ -21,14 +22,14 @@ const (
 
 type localAgentConfigEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type localAgentConfigIdempotency interface {
 	Prepare(context.Context, string, localagent.Config) (localAgentConfigEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		localAgentConfigEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -38,7 +39,7 @@ type localAgentConfigIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		localAgentConfigEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -108,7 +109,7 @@ func (service *durableLocalAgentConfigIdempotency) Prepare(
 
 func (service *durableLocalAgentConfigIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence localAgentConfigEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -124,7 +125,7 @@ func (service *durableLocalAgentConfigIdempotency) ResolveKnown(
 
 func (service *durableLocalAgentConfigIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence localAgentConfigEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -164,8 +165,8 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 		return localagent.ConfigUpdateResult{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopePlatform,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopePlatform,
 		ScopeID:   "-",
 		Method:    http.MethodPut,
 		Route:     localAgentConfigRoute,
@@ -208,10 +209,10 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 		return localagent.ConfigUpdateResult{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, adapter.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, adapter.now().UTC())
 	if err != nil {
 		return localagent.ConfigUpdateResult{}, err
 	}

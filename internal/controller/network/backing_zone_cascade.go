@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
@@ -48,7 +49,7 @@ type backingZoneCascadeRepository interface {
 		etcdstore.Versioned[etcd.DeletionTombstoneRecord],
 		etcd.ZoneRemovalIntent,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
@@ -58,7 +59,7 @@ type backingZoneCascadeDetaches interface {
 		string,
 		string,
 		etcd.TaskInitiation,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type backingZoneCascadeRetries interface {
@@ -67,7 +68,7 @@ type backingZoneCascadeRetries interface {
 		string,
 		string,
 		etcd.TaskInitiation,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type backingZoneCascadeService struct {
@@ -162,7 +163,7 @@ func (service *backingZoneCascadeService) advanceAttach(
 	parent etcd.TaskRecord,
 	attach attachrecord.Record,
 ) error {
-	var response etcd.IdempotencyResponse
+	var response idempotencyrecord.IdempotencyResponse
 	var err error
 	initiation, err := service.repository.GetSystemTaskInitiation(ctx, parent.ID)
 	if err != nil {
@@ -306,8 +307,8 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 		return "", err
 	}
 	key := cascadeIdempotencyKey("finalize", parent.ID, parent.Target)
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
 		ScopeID:   zone.Record.EnvironmentID,
 		Method:    http.MethodDelete,
 		Route:     zoneDeletionRoute,
@@ -328,11 +329,11 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 		return "", errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(body)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), body...),
 	}
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: evidence.durable, Response: response,
 		TaskID: child.ID, CreatedAt: now, UpdatedAt: now,
 	}
@@ -432,7 +433,7 @@ func cascadeIdempotencyKey(kind string, parentID string, targetID string) string
 	return hex.EncodeToString(digest[:])
 }
 
-func cascadeTaskID(response etcd.IdempotencyResponse) (string, error) {
+func cascadeTaskID(response idempotencyrecord.IdempotencyResponse) (string, error) {
 	if response.Status != http.StatusAccepted {
 		return "", errs.New(errs.KindInternal, "cascade child response status is invalid")
 	}

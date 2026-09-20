@@ -6,6 +6,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -421,7 +422,7 @@ func (repository *BackupPolicyRepository) SupplyBackupPolicyInitialKey(
 func (repository *BackupPolicyRepository) ReplaceBackupPolicyProtected(
 	ctx context.Context,
 	prepared PreparedBackupPolicyReplacement,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	return repository.replaceBackupPolicyProtected(ctx, prepared.candidate, marker)
 }

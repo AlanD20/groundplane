@@ -6,6 +6,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
@@ -88,7 +89,7 @@ func (plan *backupPruneTransactionPlan) clear() {
 func (plan backupPruneTransactionPlan) taskIdempotencyPlan(
 	record TaskRecord,
 	sealed *agentpb.ExecutionPlan,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	initiation TaskInitiation,
 ) (*idempotencyMutationPlan, error) {
 	if plan.authority == nil || plan.authority.taskType != TaskBackupPrune {
@@ -112,7 +113,7 @@ func (plan backupPruneTransactionPlan) taskRetryIdempotencyPlan(
 	source etcdstore.Versioned[TaskRecord],
 	retry TaskRecord,
 	sealed *agentpb.ExecutionPlan,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (*idempotencyMutationPlan, error) {
 	authority := backupTaskPublicationAuthority{}
 	if plan.authority != nil {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
@@ -43,28 +44,28 @@ type entryEditRepository interface {
 		core.EnvEntry,
 		string,
 		etcd.EntryValueGeneration,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type entryEditEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type entryEditIdempotency interface {
 	Prepare(context.Context, string, string, entryEditInput) (entryEditEvidence, error)
-	MatchesStaged(context.Context, entryEditEvidence, etcd.ProtectedIntentRecord) (bool, error)
+	MatchesStaged(context.Context, entryEditEvidence, idempotencyrecord.ProtectedIntentRecord) (bool, error)
 	ResolveReplayLocator(
 		context.Context,
-		etcd.IdempotencyReplayTarget,
+		idempotencyrecord.IdempotencyReplayTarget,
 		string,
 		string,
 		string,
-	) (etcd.IdempotencyLocator, bool, error)
+	) (idempotencyrecord.IdempotencyLocator, bool, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		entryEditEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -74,7 +75,7 @@ type entryEditIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		entryEditEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -83,7 +84,7 @@ type entryEditIdempotency interface {
 func (service *durableEntryEditIdempotency) MatchesStaged(
 	ctx context.Context,
 	evidence entryEditEvidence,
-	existing etcd.ProtectedIntentRecord,
+	existing idempotencyrecord.ProtectedIntentRecord,
 ) (bool, error) {
 	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
 }
@@ -137,17 +138,17 @@ func (service *durableEntryEditIdempotency) Prepare(
 
 func (service *durableEntryEditIdempotency) ResolveReplayLocator(
 	ctx context.Context,
-	target etcd.IdempotencyReplayTarget,
+	target idempotencyrecord.IdempotencyReplayTarget,
 	method string,
 	route string,
 	key string,
-) (etcd.IdempotencyLocator, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, bool, error) {
 	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
 }
 
 func (service *durableEntryEditIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence entryEditEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -163,7 +164,7 @@ func (service *durableEntryEditIdempotency) ResolveKnown(
 
 func (service *durableEntryEditIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence entryEditEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -204,22 +205,22 @@ func (service *entryEditService) EditEntry(
 	entryID string,
 	request apiTypes.EntryEditRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Entry edit context is required",
 		)
 	}
 	if ids.Validate(ids.KindEnvEntry, entryID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Entry edit requires a stable Entry id",
 		)
 	}
 	input, err := prepareEntryEditInput(request)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	for attempt := 0; attempt < maximumEntryEditAttempts; attempt++ {
 		response, err := service.editEntryOnce(ctx, entryID, input, idempotencyKey)
@@ -228,10 +229,10 @@ func (service *entryEditService) EditEntry(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumEntryEditAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
 		errs.KindInternal,
 		"Entry edit retry bound was not enforced",
 	)
@@ -242,8 +243,8 @@ func (service *entryEditService) editEntryOnce(
 	entryID string,
 	input entryEditInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetEntry, ID: entryID}
+) (idempotencyrecord.IdempotencyResponse, error) {
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: entryID}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx,
 		target,
@@ -252,17 +253,17 @@ func (service *entryEditService) editEntryOnce(
 		idempotencyKey,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
 		return service.replayEntryEdit(ctx, locator, entryID, input)
 	}
 	current, err := service.repository.GetEntry(ctx, entryID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	locator = etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment,
+	locator = idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
 		ScopeID:   current.Record.EnvironmentID,
 		Method:    http.MethodPatch,
 		Route:     entryEditRoute,
@@ -270,16 +271,16 @@ func (service *entryEditService) editEntryOnce(
 	}
 	evidence, err := service.idempotency.Prepare(ctx, locator.ScopeID, entryID, input)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Entry edit replay resolution is invalid",
 			)
@@ -291,18 +292,18 @@ func (service *entryEditService) editEntryOnce(
 	desired.Exposure = append([]string(nil), input.Exposure...)
 	environment, err := service.repository.GetEnvironment(ctx, current.Record.EnvironmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if err := service.validateExposure(
 		ctx,
 		current.Record.EnvironmentID,
 		desired.Exposure,
 	); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	now := service.now().UTC()
 	generationID := ids.New(ids.KindConfig)
@@ -310,7 +311,7 @@ func (service *entryEditService) editEntryOnce(
 		ctx, project.Record.ID, environment.Record.ID, desired, generationID, now,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer entrygeneration.ClearEntryValueGeneration(&generation)
 	persisted := desired
@@ -319,22 +320,22 @@ func (service *entryEditService) editEntryOnce(
 	}
 	responseBody, err := json.Marshal(entryCreationResponse(persisted))
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status:      http.StatusOK,
 		ContentKind: "application/json",
 		Body:        append([]byte(nil), responseBody...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
 		locator,
 		evidence.durable,
 		response,
 		now,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	marker.ReplayTarget = &target
 	defer clear(marker.Intent.Ciphertext)
@@ -351,14 +352,14 @@ func (service *entryEditService) editEntryOnce(
 	)
 	if mutationErr != nil {
 		if !isUnknownEntryCreationOutcome(mutationErr) {
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -366,7 +367,7 @@ func (service *entryEditService) editEntryOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Entry edit resolution is invalid",
 		)
@@ -375,21 +376,21 @@ func (service *entryEditService) editEntryOnce(
 
 func (service *entryEditService) replayEntryEdit(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	entryID string,
 	input entryEditInput,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := service.idempotency.Prepare(ctx, locator.ScopeID, entryID, input)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Entry edit replay index is inconsistent",
 		)
@@ -469,7 +470,7 @@ func (repository *durableEntryEditRepository) ReplaceEntryIdempotent(
 	desired core.EnvEntry,
 	generationID string,
 	generation etcd.EntryValueGeneration,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.entries.ReplaceEntryIdempotent(
 		ctx,

@@ -3,10 +3,10 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"log/slog"
 	"net/http"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -26,7 +26,7 @@ type BackupPolicyMutator interface {
 }
 
 type BackupRunMutator interface {
-	RunBackup(context.Context, string, string, ...int64) (etcd.IdempotencyResponse, error)
+	RunBackup(context.Context, string, string, ...int64) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type backupPolicyShowInput struct {

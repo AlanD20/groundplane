@@ -9,6 +9,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"sync"
@@ -664,7 +665,7 @@ func (publication *PreparedBackupRunPublication) Publish(
 	ctx context.Context,
 	task TaskRecord,
 	sealed *agentpb.ExecutionPlan,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if publication == nil || publication.state == nil {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -722,14 +723,14 @@ func (publication *PreparedBackupRunPublication) Clear() {
 // the existing marker, never the losing candidate's freshly allocated ids.
 func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	ctx context.Context,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	readRevision int64,
 	commitRevision int64,
 ) error {
 	var response struct {
 		TaskID string `json:"task_id"`
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.TaskID == "" ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.TaskID == "" ||
 		marker.Response.Status != 202 ||
 		json.Unmarshal(marker.Response.Body, &response) != nil ||
 		response.TaskID != marker.TaskID {
@@ -755,7 +756,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 		*task.idempotencyMarker != marker.Locator || task.Owner.EnvironmentID != marker.Locator.ScopeID {
 		return corruptBackupRuntimeRecord()
 	}
-	if marker.State != IdempotencyMarkerPending {
+	if marker.State != idempotencyrecord.IdempotencyMarkerPending {
 		return repository.validateTerminalBackupRunPublication(
 			ctx,
 			marker,
@@ -864,7 +865,7 @@ func (repository *BackupRuntimeRepository) validateRunningBackupRunPublication(
 // lock, or pending-marker records that the terminal transaction must remove.
 func (repository *BackupRuntimeRepository) validateTerminalBackupRunPublication(
 	ctx context.Context,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	task TaskRecord,
 	runValue *etcdstore.KeyValue,
 	taskValue *etcdstore.KeyValue,
@@ -875,9 +876,9 @@ func (repository *BackupRuntimeRepository) validateTerminalBackupRunPublication(
 		task.FinishedAt == nil || task.RetainUntil == nil ||
 		!marker.TerminalAt.Equal(*task.FinishedAt) ||
 		!marker.RetainUntil.Equal(*task.RetainUntil) ||
-		(marker.State == IdempotencyMarkerCompleted && task.Status != TaskStatusCompleted) ||
-		(marker.State == IdempotencyMarkerFailed && task.Status == TaskStatusCompleted) ||
-		(marker.State != IdempotencyMarkerCompleted && marker.State != IdempotencyMarkerFailed) {
+		(marker.State == idempotencyrecord.IdempotencyMarkerCompleted && task.Status != TaskStatusCompleted) ||
+		(marker.State == idempotencyrecord.IdempotencyMarkerFailed && task.Status == TaskStatusCompleted) ||
+		(marker.State != idempotencyrecord.IdempotencyMarkerCompleted && marker.State != idempotencyrecord.IdempotencyMarkerFailed) {
 		return corruptBackupRuntimeRecord()
 	}
 	if runValue != nil && !repository.exactTerminalBackupRunSubordinates(
@@ -907,7 +908,7 @@ func (repository *BackupRuntimeRepository) validateTerminalBackupRunPublication(
 // be atomic with the terminal marker and Task.
 func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 	ctx context.Context,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	task TaskRecord,
 	runValue *etcdstore.KeyValue,
 	readRevision int64,
@@ -933,11 +934,11 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 	if err != nil {
 		return false
 	}
-	markerKey, err := idempotencyMarkerKey(marker.Locator)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(marker.Locator)
 	if err != nil {
 		return false
 	}
-	markerRetentionKey, err := idempotencyRetentionKey(markerKey, marker.RetainUntil)
+	markerRetentionKey, err := idempotencyrecord.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
 	if err != nil {
 		return false
 	}
@@ -979,7 +980,7 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 		read.Values[1].Key != keys[1] || read.Values[1].ModRevision != publicationRevision {
 		return false
 	}
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return false
 	}
@@ -1004,9 +1005,9 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 		markerRetentionValue.ModRevision != terminalRevision {
 		return false
 	}
-	retainedTaskID, err := decodeTaskReference(taskRetentionValue.Value)
+	retainedTaskID, err := idempotencyrecord.DecodeTaskReference(taskRetentionValue.Value)
 	if err != nil || retainedTaskID != task.ID ||
-		decodeRetentionReference(markerRetentionValue.Value, markerKey) != nil {
+		idempotencyrecord.DecodeRetentionReference(markerRetentionValue.Value, markerKey) != nil {
 		return false
 	}
 	return repository.currentBackupRunConfigCompanions(
@@ -1063,7 +1064,7 @@ func (repository *BackupRuntimeRepository) exactBackupRunPublicationSubordinates
 	if string(read.Values[0].Value) != task.ID {
 		return false
 	}
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return false
 	}
@@ -1167,7 +1168,7 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 	if string(read.Values[0].Value) != task.ID {
 		return false
 	}
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return false
 	}

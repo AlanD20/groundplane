@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"slices"
 	"time"
@@ -54,14 +55,14 @@ func NewMutationService(
 
 func (service *MutationService) AddReleaseGroup(
 	ctx context.Context, request apiTypes.ReleaseGroupAddRequest, key string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	group, err := domain.New(domain.Input{
 		ID: ids.New(ids.KindReleaseGroup), EnvironmentID: request.EnvironmentID, Name: request.Name,
 		ServiceIDs: request.ServiceIDs, Order: request.Order, DefaultTag: request.Tag,
 		OnFailure: domain.OnFailure(request.OnFailure),
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	body := requestidempotency.JSONBody(releaseGroupAddIntent(request))
 	return service.apply(ctx, key, http.MethodPost, releaseGroupAddRoute, group.EnvironmentID, nil, group, body)
@@ -69,20 +70,20 @@ func (service *MutationService) AddReleaseGroup(
 
 func (service *MutationService) EditReleaseGroup(
 	ctx context.Context, groupID string, request apiTypes.ReleaseGroupEditRequest, key string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ids.Validate(ids.KindReleaseGroup, groupID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "release group id is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "release group id is invalid")
 	}
 	present := request.Name != nil || request.ServiceIDs != nil || request.Order != nil || request.Tag.Present ||
 		request.OnFailure != nil
 	if !present {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"release group edit requires at least one field",
 		)
 	}
 	body := requestidempotency.JSONBody(releaseGroupEditIntent(request))
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetReleaseGroup, ID: groupID}
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetReleaseGroup, ID: groupID}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx,
 		target,
@@ -91,14 +92,14 @@ func (service *MutationService) EditReleaseGroup(
 		key,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
 		return service.replay(ctx, locator, groupID, body)
 	}
 	current, err := service.groups.Get(ctx, groupID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	desired := domain.Desired{
 		Name: current.Group.Name, ServiceIDs: slices.Clone(current.Group.ServiceIDs), Order: slices.Clone(current.Group.Order),
@@ -128,7 +129,7 @@ func (service *MutationService) EditReleaseGroup(
 	}
 	replacement, err := domain.Replace(current.Group, desired)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.apply(
 		ctx,
@@ -144,11 +145,11 @@ func (service *MutationService) EditReleaseGroup(
 
 func (service *MutationService) RemoveReleaseGroup(
 	ctx context.Context, groupID string, key string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ids.Validate(ids.KindReleaseGroup, groupID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "release group id is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "release group id is invalid")
 	}
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetReleaseGroup, ID: groupID}
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetReleaseGroup, ID: groupID}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx,
 		target,
@@ -157,14 +158,14 @@ func (service *MutationService) RemoveReleaseGroup(
 		key,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
 		return service.replay(ctx, locator, groupID, requestidempotency.NoBody())
 	}
 	current, err := service.groups.Get(ctx, groupID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.apply(
 		ctx,
@@ -181,9 +182,9 @@ func (service *MutationService) RemoveReleaseGroup(
 func (service *MutationService) apply(
 	ctx context.Context, key, method, route, environmentID string,
 	current *etcdreleasegroup.Versioned, desired domain.Group, body requestidempotency.Body,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release group mutation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "release group mutation context is required")
 	}
 	path := []requestidempotency.PathBinding(nil)
 	if method != http.MethodPost {
@@ -194,20 +195,20 @@ func (service *MutationService) apply(
 		Path: path, Query: requestidempotency.Object(), Body: body,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer digest.Destroy()
 	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	durable, err := candidate.DurableRecord()
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(durable.Ciphertext)
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
 		ScopeID:   environmentID,
 		Method:    method,
 		Route:     route,
@@ -215,18 +216,18 @@ func (service *MutationService) apply(
 	}
 	resolution, existing, err := service.coordinator.ResolveExisting(ctx, service.idempotency, locator, candidate)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		return releaseGroupReplayResponse(resolution)
 	}
 	environment, err := service.hierarchy.GetEnvironment(ctx, environmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	project, err := service.hierarchy.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	var prepared etcd.ReleaseGroupPreparedMutation
 	if current == nil {
@@ -237,7 +238,7 @@ func (service *MutationService) apply(
 		prepared, err = service.tasks.PrepareReleaseGroupRemove(ctx, current.Group, current.Revision)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if method != http.MethodDelete {
 		status := http.StatusCreated
@@ -246,19 +247,19 @@ func (service *MutationService) apply(
 		}
 		responseBody, err := json.Marshal(releaseGroupAPIResponse(desired))
 		if err != nil {
-			return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+			return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 		}
-		response := etcd.IdempotencyResponse{Status: status, ContentKind: "application/json", Body: responseBody}
-		marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, durable, response, service.now().UTC())
+		response := idempotencyrecord.IdempotencyResponse{Status: status, ContentKind: "application/json", Body: responseBody}
+		marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, durable, response, service.now().UTC())
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
-		replayTarget := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetReleaseGroup, ID: desired.ID}
+		replayTarget := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetReleaseGroup, ID: desired.ID}
 		marker.ReplayTarget = &replayTarget
 		result, mutationErr := service.tasks.PublishReleaseGroupDirectMutation(ctx, prepared, marker)
 		if mutationErr != nil {
 			if !releaseGroupUnknownOutcome(mutationErr) {
-				return etcd.IdempotencyResponse{}, mutationErr
+				return idempotencyrecord.IdempotencyResponse{}, mutationErr
 			}
 			resolution, err = service.coordinator.ResolveUnknown(
 				ctx,
@@ -271,7 +272,7 @@ func (service *MutationService) apply(
 			resolution, err = service.coordinator.ResolveKnown(ctx, candidate, result)
 		}
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		if resolution.Kind == requestidempotency.ResolutionApplied {
 			return requestidempotency.CloneResponse(response), nil
@@ -280,7 +281,7 @@ func (service *MutationService) apply(
 	}
 	owner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	taskType := etcd.TaskCreate
 	if method == http.MethodPatch {
@@ -302,35 +303,35 @@ func (service *MutationService) apply(
 	}
 	task.PlanHash, err = releaseGroupMutationPlanHash(taskType, desired)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	responseBody, err := json.Marshal(
 		apiTypes.ReleaseGroupMutationAccepted{TaskID: task.ID, ReleaseGroupID: desired.ID},
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status:      http.StatusAccepted,
 		ContentKind: "application/json",
 		Body:        responseBody,
 	}
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetReleaseGroup, ID: desired.ID}
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending, Locator: locator,
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetReleaseGroup, ID: desired.ID}
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending, Locator: locator,
 		ReplayTarget: &target, Intent: durable, Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
 	result, mutationErr := service.tasks.PublishReleaseGroupMutation(ctx, environment, project, prepared, task, marker)
 	if mutationErr != nil {
 		if !releaseGroupUnknownOutcome(mutationErr) {
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.coordinator.ResolveUnknown(ctx, service.idempotency, locator, candidate, mutationErr)
 	} else {
 		resolution, err = service.coordinator.ResolveKnown(ctx, candidate, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if resolution.Kind == requestidempotency.ResolutionApplied {
 		return requestidempotency.CloneResponse(response), nil
@@ -347,8 +348,8 @@ func releaseGroupAPIResponse(group domain.Group) apiTypes.ReleaseGroup {
 }
 
 func (service *MutationService) replay(
-	ctx context.Context, locator etcd.IdempotencyLocator, groupID string, body requestidempotency.Body,
-) (etcd.IdempotencyResponse, error) {
+	ctx context.Context, locator idempotencyrecord.IdempotencyLocator, groupID string, body requestidempotency.Body,
+) (idempotencyrecord.IdempotencyResponse, error) {
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
 		Method: locator.Method, Route: locator.Route, Scope: requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: locator.ScopeID},
 		Path: []requestidempotency.PathBinding{
@@ -356,26 +357,26 @@ func (service *MutationService) replay(
 		}, Query: requestidempotency.Object(), Body: body,
 	})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer digest.Destroy()
 	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	resolution, existing, err := service.coordinator.ResolveExisting(ctx, service.idempotency, locator, candidate)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release group replay locator is inconsistent")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "release group replay locator is inconsistent")
 	}
 	return releaseGroupReplayResponse(resolution)
 }
 
-func releaseGroupReplayResponse(resolution requestidempotency.Resolution) (etcd.IdempotencyResponse, error) {
+func releaseGroupReplayResponse(resolution requestidempotency.Resolution) (idempotencyrecord.IdempotencyResponse, error) {
 	if resolution.Kind != requestidempotency.ResolutionReplay {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "release group replay resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "release group replay resolution is invalid")
 	}
 	return requestidempotency.CloneResponse(resolution.Response), nil
 }

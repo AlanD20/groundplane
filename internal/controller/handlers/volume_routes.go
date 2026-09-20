@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"log/slog"
@@ -39,9 +40,9 @@ type volumeImpactReader interface {
 // identity operations. The app owns publication and replay; the HTTP adapter
 // preserves its exact response bytes.
 type VolumeMutator interface {
-	CreateVolume(context.Context, apiTypes.VolumeCreate, string) (etcd.IdempotencyResponse, error)
-	EditVolume(context.Context, string, apiTypes.VolumeEdit, string) (etcd.IdempotencyResponse, error)
-	RemoveVolume(context.Context, string, string, string, string) (etcd.IdempotencyResponse, error)
+	CreateVolume(context.Context, apiTypes.VolumeCreate, string) (idempotencyrecord.IdempotencyResponse, error)
+	EditVolume(context.Context, string, apiTypes.VolumeEdit, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveVolume(context.Context, string, string, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type volumeListInput struct {
@@ -263,7 +264,7 @@ func (s *Server) removeVolume(ctx context.Context, request *volumeRemoveInput) (
 	return s.volumeMutationResponse(response, "remove"), nil
 }
 
-func (s *Server) volumeMutationResponse(response etcd.IdempotencyResponse, action string) *volumeMutationOutput {
+func (s *Server) volumeMutationResponse(response idempotencyrecord.IdempotencyResponse, action string) *volumeMutationOutput {
 	return &volumeMutationOutput{
 		Status: response.Status, ContentType: response.ContentKind,
 		Body: func(ctx huma.Context) {

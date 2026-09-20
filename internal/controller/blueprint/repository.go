@@ -9,6 +9,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -86,7 +87,7 @@ type environmentBlueprintRepository interface {
 		etcd.BlueprintReleasePublication,
 		etcd.BlueprintRequirementGate,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	ListScripts(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[scriptrecord.Record], error)
 	PrepareBlueprintScriptPublication(
@@ -295,7 +296,7 @@ func (repository *durableRepository) PublishEnvironmentBlueprintDesiredRevision(
 	releasePublication etcd.BlueprintReleasePublication,
 	requirementGate etcd.BlueprintRequirementGate,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.EnvironmentBlueprintRepository.PublishEnvironmentBlueprintDesiredRevision(
 		ctx, environmentPool, desiredNetworkPool, project, environment, expectedHeadRevision,

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/AlanD20/groundplane/internal/common/slug"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -147,7 +148,7 @@ func (s *Server) rejectRunnerEditQuery(ctx huma.Context, next func(huma.Context)
 	next(ctx)
 }
 
-func (s *Server) runnerMutationResponse(response etcd.IdempotencyResponse) *runnerMutationOutput {
+func (s *Server) runnerMutationResponse(response idempotencyrecord.IdempotencyResponse) *runnerMutationOutput {
 	return &runnerMutationOutput{
 		Status: response.Status, ContentType: response.ContentKind,
 		Body: func(ctx huma.Context) {

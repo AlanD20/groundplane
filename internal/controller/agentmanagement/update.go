@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"strconv"
 	"time"
@@ -32,14 +33,14 @@ type agentUpdateTargets interface {
 
 type agentUpdateEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type agentUpdateIdempotency interface {
 	Prepare(context.Context, string, string) (agentUpdateEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		agentUpdateEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -49,7 +50,7 @@ type agentUpdateIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		agentUpdateEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -102,7 +103,7 @@ func (service *durableAgentUpdateIdempotency) Prepare(
 
 func (service *durableAgentUpdateIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence agentUpdateEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -118,7 +119,7 @@ func (service *durableAgentUpdateIdempotency) ResolveKnown(
 
 func (service *durableAgentUpdateIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence agentUpdateEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -150,53 +151,53 @@ func (service *agentUpdateService) UpdateAgent(
 	agentID string,
 	image string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent update context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent update context is required")
 	}
 	if err := ids.Validate(ids.KindAgent, agentID); err != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Agent id is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Agent id is invalid")
 	}
 	if !imageref.IsDigestPinned(image) {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Agent update requires a digest-pinned image",
 		)
 	}
 	evidence, err := service.idempotency.Prepare(ctx, agentID, image)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopePlatform, ScopeID: "-",
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
 		Method: http.MethodPost, Route: agentUpdateRoute, Key: idempotencyKey,
 	}
 	existing, found, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if found {
 		if existing.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent update replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent update replay resolution is invalid")
 		}
 		return requestidempotency.CloneResponse(existing.Response), nil
 	}
 	health, err := service.targets.Health(ctx, agentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if health.Agent.ID != agentID {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Agent update target lookup returned another Agent",
 		)
 	}
 	if health.Agent.Phase != localagent.PhaseReady {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Agent is not ready for update")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Agent is not ready for update")
 	}
 	if health.Agent.Image == image {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Agent already runs the selected image")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Agent already runs the selected image")
 	}
 
 	now := service.now().UTC()
@@ -209,39 +210,39 @@ func (service *agentUpdateService) UpdateAgent(
 		idempotencyKey,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	result, createErr := service.tasks.CreateTask(ctx, task, etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	result, createErr := service.tasks.CreateTask(ctx, task, idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: evidence.durable,
 		Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	})
 	var resolution requestidempotency.Resolution
 	if createErr != nil {
 		if !isUnknownAgentUpdateOutcome(createErr) {
-			return etcd.IdempotencyResponse{}, createErr
+			return idempotencyrecord.IdempotencyResponse{}, createErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, createErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if resolution.Kind == requestidempotency.ResolutionReplay {
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent update resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent update resolution is invalid")
 	}
 	return requestidempotency.CloneResponse(response), nil
 }

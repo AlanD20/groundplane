@@ -4,6 +4,7 @@ import (
 	"context"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sort"
 	"strings"
@@ -30,20 +31,20 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	request etcd.EnvironmentServiceMutationRequest,
 	action etcd.EnvironmentServiceMutationAction,
 	status int,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence serviceMutationEvidence,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	tenant, err := service.repository.GetTenant(ctx, project.Record.TenantID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	head, hasHead, err := service.repository.GetEnvironmentBlueprintHead(ctx, environment.Record.ID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	projection, hasProjection, err := service.repository.GetEnvironmentComposeProjection(ctx, environment.Record.ID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	expectedHeadRevision, generation, err := controllerrevision.NextGeneration(
 		environment.Record.ID,
@@ -53,7 +54,7 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 		hasProjection,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	candidateRevisionID := ids.New(ids.KindTask)
 	if current == nil {
@@ -61,11 +62,11 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 		desired.ID = serviceStableIDFromRevision(ids.KindService, candidateRevisionID)
 		record, err = etcd.NewServiceRecord(environment.Record.ID, desired, "")
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		references, err = service.resolveServiceReferences(ctx, record)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
 	candidate, err := buildServiceDesiredProjection(
@@ -74,24 +75,24 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 		candidateRevisionID, generation,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	claim, err := service.claimServiceDesiredRevision(
 		ctx, candidate, candidateRevisionID, expectedHeadRevision, locator, evidence, service.now().UTC(),
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if current == nil && claim.RevisionID != candidateRevisionID {
 		desired := record.Desired
 		desired.ID = serviceStableIDFromRevision(ids.KindService, claim.RevisionID)
 		record, err = etcd.NewServiceRecord(environment.Record.ID, desired, "")
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		references, err = service.resolveServiceReferences(ctx, record)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
 	candidate, err = buildServiceDesiredProjection(
@@ -100,11 +101,11 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 		claim.RevisionID, generation,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	projectionEvidence, err := controllerrevision.PreflightProjection(candidate)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	audit := &etcd.EnvironmentServiceMutationAudit{
 		Action: action, BaseRevisionID: projection.Record.RevisionID,
@@ -114,13 +115,13 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 		Claim: claim, Mutation: &etcd.EnvironmentDesiredMutationAudit{Service: audit},
 		Projection: candidate, DependencyDigest: projectionEvidence.DependencyDigest,
 	}); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	response, marker, err := service.serviceResponseMarker(
 		locator, claim.Intent, record, status, claim.CreatedAt,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -147,7 +148,7 @@ func (service *serviceMutationService) claimServiceDesiredRevision(
 	projection etcd.EnvironmentComposeProjection,
 	candidateRevisionID string,
 	expectedHeadRevision int64,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence serviceMutationEvidence,
 	createdAt time.Time,
 ) (etcd.EnvironmentBlueprintStageClaim, error) {

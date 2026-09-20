@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,7 +15,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -30,7 +31,7 @@ type ProjectReader interface {
 }
 
 type ProjectMutator interface {
-	CreateProject(context.Context, hierarchy.CreateProjectInput, string) (etcd.IdempotencyResponse, error)
+	CreateProject(context.Context, hierarchy.CreateProjectInput, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type projectListInput struct {

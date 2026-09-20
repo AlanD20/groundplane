@@ -3,6 +3,7 @@ package secrets
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"unicode/utf8"
@@ -178,7 +179,7 @@ func (repository *durableSecretReadRepository) CreateSecretIdempotent(
 	owner etcd.SecretOwner,
 	record secretrecord.Record,
 	value secretrecord.EncryptedValue,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.secrets.CreateSecretIdempotent(ctx, owner, record, value, marker)
 }
@@ -189,7 +190,7 @@ func (repository *durableSecretReadRepository) BeginSecretDeletionWithTask(
 	current etcdstore.Versioned[secretrecord.Record],
 	tombstone etcd.DeletionTombstoneRecord,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.secrets.BeginSecretDeletionWithTask(ctx, owner, current, tombstone, task, marker)
 }

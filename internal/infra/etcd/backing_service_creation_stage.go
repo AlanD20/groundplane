@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -18,13 +19,13 @@ const backingServiceCreationStagePrefix = "/v1/staging/backing-services/"
 // backing Environment can enter the normal desired-revision staging protocol.
 // It deliberately contains no bootstrap plaintext or encrypted value.
 type BackingServiceCreationStage struct {
-	Locator       IdempotencyLocator `json:"locator"`
-	RequestSHA256 string             `json:"request_sha256"`
-	ProjectID     string             `json:"project_id"`
-	EnvironmentID string             `json:"environment_id"`
-	TaskID        string             `json:"task_id"`
-	CreatedAt     time.Time          `json:"created_at"`
-	Existing      bool               `json:"-"`
+	Locator       idempotencyrecord.IdempotencyLocator `json:"locator"`
+	RequestSHA256 string                               `json:"request_sha256"`
+	ProjectID     string                               `json:"project_id"`
+	EnvironmentID string                               `json:"environment_id"`
+	TaskID        string                               `json:"task_id"`
+	CreatedAt     time.Time                            `json:"created_at"`
+	Existing      bool                                 `json:"-"`
 }
 
 func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
@@ -88,7 +89,7 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 	}, nil
 }
 
-func backingServiceCreationStageKey(locator IdempotencyLocator) (string, error) {
+func backingServiceCreationStageKey(locator idempotencyrecord.IdempotencyLocator) (string, error) {
 	markerKey, err := CapabilityIdempotencyMarkerKey(locator)
 	if err != nil {
 		return "", err
@@ -109,7 +110,7 @@ func validateBackingServiceCreationStage(record BackingServiceCreationStage) err
 	if _, err := CapabilityIdempotencyMarkerKey(record.Locator); err != nil {
 		return err
 	}
-	if record.Locator.ScopeKind != IdempotencyScopePlatform || record.Locator.ScopeID != "-" {
+	if record.Locator.ScopeKind != idempotencyrecord.IdempotencyScopePlatform || record.Locator.ScopeID != "-" {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation stage scope is invalid")
 	}
 	digest, err := hex.DecodeString(record.RequestSHA256)

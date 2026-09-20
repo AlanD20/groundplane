@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -341,7 +342,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		tombstone.Phase != routeRemovalTombstonePhase(intent) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route deletion tombstone changed")
 	}
-	selectedRevisionID, err := decodeTaskReference(state.Values[2].Value)
+	selectedRevisionID, err := idempotencyrecord.DecodeTaskReference(state.Values[2].Value)
 	if err != nil || intent.CurrentProjection == nil || selectedRevisionID != intent.CurrentProjection.RevisionID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal selected projection changed")
 	}

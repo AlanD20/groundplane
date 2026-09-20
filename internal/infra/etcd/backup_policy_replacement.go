@@ -7,6 +7,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/http"
@@ -116,7 +117,7 @@ func (plan *backupPolicyReplacementPlan) compare(
 func (repository *BackupPolicyRepository) replaceBackupPolicyProtected(
 	ctx context.Context,
 	candidate backupPolicyReplacementCandidate,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateBackupPolicyReplacement(ctx, candidate, marker); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -152,7 +153,7 @@ func (repository *BackupPolicyRepository) replaceBackupPolicyProtected(
 func validateBackupPolicyReplacement(
 	ctx context.Context,
 	candidate backupPolicyReplacementCandidate,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) error {
 	if err := validatebackupPolicyReplacementCandidate(ctx, candidate); err != nil {
 		return err
@@ -162,22 +163,22 @@ func validateBackupPolicyReplacement(
 
 func validateBackupPolicyReplacementMarker(
 	candidate backupPolicyReplacementCandidate,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) error {
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != candidate.Replacement.EnvironmentID ||
 		marker.Locator.Method != http.MethodPut || marker.Locator.Route != backupPolicyReplacementRoute ||
 		marker.ReplayTarget != nil || marker.Response.Status != http.StatusOK ||
 		marker.Response.ContentKind != "application/json" || !json.Valid(marker.Response.Body) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || !marker.TerminalAt.Equal(marker.CreatedAt) ||
-		!marker.RetainUntil.Equal(marker.TerminalAt.Add(markerRetention)) {
+		!marker.RetainUntil.Equal(marker.TerminalAt.Add(idempotencyrecord.MarkerRetention)) {
 		return errs.New(
 			errs.KindValidationFailed,
 			"backup policy marker must be the retained completed response for its exact put operation",
 		)
 	}
-	return validateIdempotencyMarker(marker)
+	return idempotencyrecord.ValidateIdempotencyMarker(marker)
 }
 
 func validatebackupPolicyReplacementCandidate(
@@ -731,7 +732,7 @@ func prepareBackupPolicyReplacement(
 
 func backupPolicyReplacementOperationCount(
 	plan backupPolicyReplacementPlan,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) int {
 	count := len(plan.conditions) + len(plan.mutations) + 2
 	if marker.ReplayTarget != nil {

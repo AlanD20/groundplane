@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strconv"
 	"time"
@@ -131,7 +132,7 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 			"hierarchy deletion child lifecycle records disagree",
 		)
 	}
-	activeTaskID, err := decodeTaskReference(companions.Values[0].Value)
+	activeTaskID, err := idempotencyrecord.DecodeTaskReference(companions.Values[0].Value)
 	if err != nil || activeTaskID != task.ID {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(
 			errs.KindInternal,

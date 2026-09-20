@@ -6,6 +6,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -179,18 +180,18 @@ func (repository *EntryRepository) CreateEntryIdempotent(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
 	generation EntryValueGeneration,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateEntryHierarchy(ctx, environment, project, record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Entry creation marker must be a completed direct mutation",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	primaryValue, err := entryrecord.EncodeRecord(record)
@@ -381,7 +382,7 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 	desired core.EnvEntry,
 	valueGenerationID string,
 	generation EntryValueGeneration,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	replacement, err := entryrecord.ReplaceDesired(current.Record, desired, valueGenerationID)
 	if err != nil {
@@ -393,17 +394,17 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 	if err := validateEntryVersion(current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != current.Record.EnvironmentID ||
-		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != IdempotencyReplayTargetEntry ||
+		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetEntry ||
 		marker.ReplayTarget.ID != current.Record.Entry.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Entry edit marker must be a completed Environment-scoped direct mutation for the target Entry",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	primaryValue, err := entryrecord.EncodeRecord(replacement)

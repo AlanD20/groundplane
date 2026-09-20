@@ -2,6 +2,7 @@ package releaseoperation
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"strconv"
@@ -101,10 +102,10 @@ func (service *Service) DeployService(
 	serviceID string,
 	request domain.ServiceDeployInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	current, err := service.services.GetService(ctx, serviceID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	body := requestidempotency.JSONBody(requestidempotency.Object(
 		requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)},
@@ -119,17 +120,17 @@ func (service *Service) DeployService(
 		if replay != nil {
 			return *replay, nil
 		}
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer protected.Destroy()
 	defer clear(durable.Ciphertext)
 	scope, err := service.ledger.LoadPlanningScope(ctx, current.Record.EnvironmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	planning, err := service.ledger.LoadPlanningServices(ctx, scope, []string{serviceID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	selected, err := service.deployCandidate(
 		ctx,
@@ -140,7 +141,7 @@ func (service *Service) DeployService(
 		request.OnFailure,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.publish(ctx, scope, etcd.ReleaseDesiredService, serviceID, planning[0].Service.Revision,
 		"", []releaseCandidateInput{selected}, locator, durable, protected)
@@ -151,10 +152,10 @@ func (service *Service) RollbackService(
 	serviceID string,
 	request domain.ServiceRollbackInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	current, err := service.services.GetService(ctx, serviceID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	body := releaseRollbackRequestBody(request)
 	locator, protected, durable, replay, err := service.begin(
@@ -165,21 +166,21 @@ func (service *Service) RollbackService(
 		if replay != nil {
 			return *replay, nil
 		}
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer protected.Destroy()
 	defer clear(durable.Ciphertext)
 	scope, err := service.ledger.LoadPlanningScope(ctx, current.Record.EnvironmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	planning, err := service.ledger.LoadPlanningServices(ctx, scope, []string{serviceID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	selected, err := service.rollbackCandidate(ctx, scope, planning[0], request.Tag, "")
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.publish(ctx, scope, etcd.ReleaseDesiredService, serviceID, planning[0].Service.Revision,
 		"", []releaseCandidateInput{selected}, locator, durable, protected)
@@ -190,10 +191,10 @@ func (service *Service) DeployReleaseGroup(
 	groupID string,
 	request domain.GroupDeployInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	current, err := service.groups.Get(ctx, groupID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	body := requestidempotency.JSONBody(requestidempotency.Object(
 		requestidempotency.Field{Name: "tag", Value: requestidempotency.String(request.Tag)},
@@ -206,31 +207,31 @@ func (service *Service) DeployReleaseGroup(
 		if replay != nil {
 			return *replay, nil
 		}
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer protected.Destroy()
 	defer clear(durable.Ciphertext)
 	scope, err := service.ledger.LoadPlanningScope(ctx, current.Group.EnvironmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	group, err := service.groups.GetAtRevision(ctx, groupID, scope.ReadRevision)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	tag := request.Tag
 	if tag == "" {
 		tag = group.Group.DefaultTag
 	}
 	if tag == "" {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindReleaseGroupTagRequired,
 			"release group deploy requires a tag or group default",
 		)
 	}
 	planning, err := service.ledger.LoadPlanningServices(ctx, scope, group.Group.Order)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	candidates := make([]releaseCandidateInput, len(planning))
 	for index := range planning {
@@ -243,7 +244,7 @@ func (service *Service) DeployReleaseGroup(
 			domain.OnFailure(group.Group.OnFailure),
 		)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
 	return service.publish(ctx, scope, etcd.ReleaseDesiredGroup, groupID, group.Revision,
@@ -251,10 +252,10 @@ func (service *Service) DeployReleaseGroup(
 }
 
 func (service *Service) RollbackReleaseGroup(ctx context.Context, groupID string,
-	request domain.GroupRollbackInput, idempotencyKey string) (etcd.IdempotencyResponse, error) {
+	request domain.GroupRollbackInput, idempotencyKey string) (idempotencyrecord.IdempotencyResponse, error) {
 	current, err := service.groups.Get(ctx, groupID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	locator, protected, durable, replay, err := service.begin(
 		ctx, current.Group.EnvironmentID, http.MethodPost, releaseGroupRollbackRoute, groupID,
@@ -264,7 +265,7 @@ func (service *Service) RollbackReleaseGroup(ctx context.Context, groupID string
 		if replay != nil {
 			return *replay, nil
 		}
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer protected.Destroy()
 	defer clear(durable.Ciphertext)
@@ -276,7 +277,7 @@ func (service *Service) RollbackReleaseGroup(ctx context.Context, groupID string
 		request.PreviewRevision,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.publish(ctx, selection.scope, etcd.ReleaseDesiredGroup, groupID, selection.group.Revision,
 		groupID, selection.candidates, locator, durable, protected)
@@ -387,9 +388,9 @@ func (service *Service) begin(
 	targetID string,
 	key string,
 	body requestidempotency.Body,
-) (etcd.IdempotencyLocator, requestidempotency.ProtectedEvidence, etcd.ProtectedIntentRecord, *etcd.IdempotencyResponse, error) {
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+) (idempotencyrecord.IdempotencyLocator, requestidempotency.ProtectedEvidence, idempotencyrecord.ProtectedIntentRecord, *idempotencyrecord.IdempotencyResponse, error) {
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environmentID,
 		Method: method, Route: route, Key: key,
 	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
@@ -399,33 +400,33 @@ func (service *Service) begin(
 		Query: requestidempotency.Object(), Body: body,
 	})
 	if err != nil {
-		return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
+		return locator, requestidempotency.ProtectedEvidence{}, idempotencyrecord.ProtectedIntentRecord{}, nil, err
 	}
 	defer digest.Destroy()
 	protected, err := service.coordinator.ProtectIntent(ctx, version, digest)
 	if err != nil {
-		return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
+		return locator, requestidempotency.ProtectedEvidence{}, idempotencyrecord.ProtectedIntentRecord{}, nil, err
 	}
 	durable, err := protected.DurableRecord()
 	if err != nil {
 		protected.Destroy()
-		return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
+		return locator, requestidempotency.ProtectedEvidence{}, idempotencyrecord.ProtectedIntentRecord{}, nil, err
 	}
 	resolution, exists, err := service.coordinator.ResolveExisting(ctx, service.idempotency, locator, protected)
 	if err != nil {
 		clear(durable.Ciphertext)
 		protected.Destroy()
-		return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil, err
+		return locator, requestidempotency.ProtectedEvidence{}, idempotencyrecord.ProtectedIntentRecord{}, nil, err
 	}
 	if exists {
 		clear(durable.Ciphertext)
 		protected.Destroy()
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, nil,
+			return locator, requestidempotency.ProtectedEvidence{}, idempotencyrecord.ProtectedIntentRecord{}, nil,
 				errs.New(errs.KindInternal, "release idempotency resolution is invalid")
 		}
 		response := cloneIdempotencyResponse(resolution.Response)
-		return locator, requestidempotency.ProtectedEvidence{}, etcd.ProtectedIntentRecord{}, &response, nil
+		return locator, requestidempotency.ProtectedEvidence{}, idempotencyrecord.ProtectedIntentRecord{}, &response, nil
 	}
 	return locator, protected, durable, nil, nil
 }

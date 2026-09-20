@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"log/slog"
@@ -14,7 +15,6 @@ import (
 	"strconv"
 	"unicode/utf8"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -31,11 +31,11 @@ type ConnectorMutator interface {
 		string,
 		apiTypes.ConnectorCreateRequest,
 		string,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type ConnectorDeleter interface {
-	DeleteConnector(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	DeleteConnector(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type connectorCreateInput struct {

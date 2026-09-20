@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -29,7 +30,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	renderInput *ServiceLifecycleRenderInput,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	return repository.BeginServiceLifecycleWithTaskHookInputs(
 		ctx, &tenant, project, environment, current, replacement, projection, renderInput, nil, task, marker,
@@ -47,7 +48,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	renderInput *ServiceLifecycleRenderInput,
 	hookInputs *BackingHookEncryptedInputs,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, returnErr error) {
 	if err := validateServiceLifecycleHierarchy(tenant, project, environment, current); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -68,9 +69,9 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 			)
 		}
 	}
-	wantReplayTarget := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetService, ID: current.Record.Desired.ID}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetService, ID: current.Record.Desired.ID}
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
@@ -79,7 +80,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 			"Service lifecycle marker does not match its Task",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
@@ -130,7 +131,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -416,7 +417,7 @@ func classifyServiceLifecycleStartConflict(
 			return errs.New(errs.KindInternal, "Service lifecycle compare evidence is incomplete")
 		}
 		if values[2] != nil {
-			activeTaskID, err := decodeTaskReference(values[2].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[2].Value)
 			if err != nil {
 				return err
 			}

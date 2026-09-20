@@ -3,6 +3,7 @@ package controllerupgrade
 import (
 	"context"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"time"
 
@@ -27,43 +28,43 @@ func (service *Service) protect(ctx context.Context, release string) (requestide
 }
 
 func (service *Service) resolvePublication(
-	ctx context.Context, locator etcd.IdempotencyLocator, evidence requestidempotency.ProtectedEvidence,
-	result etcd.IdempotencyTransactionResult, publicationErr error, response etcd.IdempotencyResponse,
-) (etcd.IdempotencyResponse, error) {
+	ctx context.Context, locator idempotencyrecord.IdempotencyLocator, evidence requestidempotency.ProtectedEvidence,
+	result etcd.IdempotencyTransactionResult, publicationErr error, response idempotencyrecord.IdempotencyResponse,
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if publicationErr != nil {
 		if !errors.Is(publicationErr, context.DeadlineExceeded) &&
 			!errors.Is(publicationErr, errs.New(errs.KindStorageUnavailable, "")) {
-			return etcd.IdempotencyResponse{}, publicationErr
+			return idempotencyrecord.IdempotencyResponse{}, publicationErr
 		}
 		if err := ctx.Err(); err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		read, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		replay, found, err := service.intents.ResolveOperationRootExisting(read, service.evidence, locator, evidence)
 		if ctx.Err() != nil {
-			return etcd.IdempotencyResponse{}, ctx.Err()
+			return idempotencyrecord.IdempotencyResponse{}, ctx.Err()
 		}
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errs.New(errs.KindStorageUnavailable, "")) {
-				return etcd.IdempotencyResponse{}, publicationErr
+				return idempotencyrecord.IdempotencyResponse{}, publicationErr
 			}
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		if !found {
-			return etcd.IdempotencyResponse{}, publicationErr
+			return idempotencyrecord.IdempotencyResponse{}, publicationErr
 		}
 		return acceptedReplay(replay)
 	}
 	outcome, marker, conflict, err := result.Classify()
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch outcome {
 	case etcd.IdempotencyKnownApplied:
 		return copyResponse(response), nil
 	case etcd.IdempotencyKnownConflict:
-		return etcd.IdempotencyResponse{}, conflict
+		return idempotencyrecord.IdempotencyResponse{}, conflict
 	case etcd.IdempotencyKnownExisting:
 		// ResolveMarker authenticates the exact protected request before it
 		// reports InProgress. Only this immutable accepted native Task replays
@@ -75,22 +76,22 @@ func (service *Service) resolvePublication(
 		}
 		clear(accepted.Body)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		return acceptedReplay(replay)
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "native update publication outcome is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "native update publication outcome is invalid")
 	}
 }
 
-func acceptedReplay(resolution requestidempotency.Resolution) (etcd.IdempotencyResponse, error) {
+func acceptedReplay(resolution requestidempotency.Resolution) (idempotencyrecord.IdempotencyResponse, error) {
 	if resolution.Kind != requestidempotency.ResolutionReplay {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "native update replay is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "native update replay is invalid")
 	}
 	return copyResponse(resolution.Response), nil
 }
 
-func copyResponse(response etcd.IdempotencyResponse) etcd.IdempotencyResponse {
+func copyResponse(response idempotencyrecord.IdempotencyResponse) idempotencyrecord.IdempotencyResponse {
 	response.Body = append([]byte(nil), response.Body...)
 	return response
 }

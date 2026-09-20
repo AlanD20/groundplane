@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -23,7 +24,7 @@ func prepareRouteHeadPublication(
 	ctx context.Context,
 	store hierarchyStore,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	current *EnvironmentComposeProjection,
 	candidate EnvironmentComposeProjection,
 	audit EnvironmentDesiredMutationAudit,
@@ -155,7 +156,7 @@ func prepareRouteHeadPublication(
 		Type: etcdstore.MutationPut, Key: environmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID), Value: rootValue,
 	})
 	if publishHead {
-		reference, referenceErr := encodeTaskReference(task.ID)
+		reference, referenceErr := idempotencyrecord.EncodeTaskReference(task.ID)
 		if referenceErr != nil {
 			clearRouteHeadPublication(publication)
 			return routeHeadPublication{}, referenceErr
@@ -226,7 +227,7 @@ func prepareRouteHeadCandidate(
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
-	currentRevisionID, err := decodeTaskReference(state.Values[2].Value)
+	currentRevisionID, err := idempotencyrecord.DecodeTaskReference(state.Values[2].Value)
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
@@ -266,7 +267,7 @@ func prepareRouteHeadCandidate(
 	if err != nil {
 		return routeHeadPublication{}, err
 	}
-	reference, err := encodeTaskReference(candidate.RevisionID)
+	reference, err := idempotencyrecord.EncodeTaskReference(candidate.RevisionID)
 	if err != nil {
 		clear(descriptorValue)
 		return routeHeadPublication{}, err
@@ -343,7 +344,7 @@ func validateCompletedRouteHeadReplay(
 	if err != nil {
 		return err
 	}
-	headRevisionID, err := decodeTaskReference(state.Values[2].Value)
+	headRevisionID, err := idempotencyrecord.DecodeTaskReference(state.Values[2].Value)
 	if err != nil {
 		return err
 	}

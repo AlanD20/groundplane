@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
@@ -8,36 +9,36 @@ import (
 )
 
 type taskRecordData struct {
-	ID                 string                        `json:"id"`
-	OperationID        string                        `json:"operation_id"`
-	RetryOf            string                        `json:"retry_of,omitempty"`
-	IdempotencyKey     string                        `json:"idempotency_key,omitempty"`
-	Owner              TaskOwner                     `json:"owner"`
-	Actor              TaskActor                     `json:"actor"`
-	Executor           TaskExecutor                  `json:"executor"`
-	PlanID             string                        `json:"plan_id"`
-	PlanHash           string                        `json:"plan_hash,omitempty"`
-	RenderGeneration   int32                         `json:"render_generation"`
-	Type               TaskType                      `json:"type"`
-	Target             string                        `json:"target"`
-	Params             map[string]string             `json:"params,omitempty"`
-	Steps              []TaskStepRecord              `json:"steps,omitempty"`
-	Materializations   []TaskMaterializationRecord   `json:"materializations,omitempty"`
-	EntryRuntime       *EntryTaskRuntime             `json:"entry_runtime,omitempty"`
-	Configuration      *TaskConfiguration            `json:"configuration,omitempty"`
-	TimeoutSeconds     int64                         `json:"timeout_seconds"`
-	Status             TaskStatus                    `json:"status"`
-	Result             *taskResultData               `json:"result,omitempty"`
-	TerminalAssignment *TaskTerminalAssignmentRecord `json:"terminal_assignment,omitempty"`
-	NextEventSequence  uint64                        `json:"next_event_sequence"`
-	EventCount         uint32                        `json:"event_count"`
-	EventCheckpoints   []TaskEventCheckpoint         `json:"event_checkpoints,omitempty"`
-	CreatedAt          string                        `json:"created_at"`
-	UpdatedAt          string                        `json:"updated_at"`
-	StartedAt          string                        `json:"started_at,omitempty"`
-	FinishedAt         string                        `json:"finished_at,omitempty"`
-	RetainUntil        string                        `json:"retain_until,omitempty"`
-	IdempotencyMarker  *IdempotencyLocator           `json:"idempotency_marker,omitempty"`
+	ID                 string                                `json:"id"`
+	OperationID        string                                `json:"operation_id"`
+	RetryOf            string                                `json:"retry_of,omitempty"`
+	IdempotencyKey     string                                `json:"idempotency_key,omitempty"`
+	Owner              TaskOwner                             `json:"owner"`
+	Actor              TaskActor                             `json:"actor"`
+	Executor           TaskExecutor                          `json:"executor"`
+	PlanID             string                                `json:"plan_id"`
+	PlanHash           string                                `json:"plan_hash,omitempty"`
+	RenderGeneration   int32                                 `json:"render_generation"`
+	Type               TaskType                              `json:"type"`
+	Target             string                                `json:"target"`
+	Params             map[string]string                     `json:"params,omitempty"`
+	Steps              []TaskStepRecord                      `json:"steps,omitempty"`
+	Materializations   []TaskMaterializationRecord           `json:"materializations,omitempty"`
+	EntryRuntime       *EntryTaskRuntime                     `json:"entry_runtime,omitempty"`
+	Configuration      *TaskConfiguration                    `json:"configuration,omitempty"`
+	TimeoutSeconds     int64                                 `json:"timeout_seconds"`
+	Status             TaskStatus                            `json:"status"`
+	Result             *taskResultData                       `json:"result,omitempty"`
+	TerminalAssignment *TaskTerminalAssignmentRecord         `json:"terminal_assignment,omitempty"`
+	NextEventSequence  uint64                                `json:"next_event_sequence"`
+	EventCount         uint32                                `json:"event_count"`
+	EventCheckpoints   []TaskEventCheckpoint                 `json:"event_checkpoints,omitempty"`
+	CreatedAt          string                                `json:"created_at"`
+	UpdatedAt          string                                `json:"updated_at"`
+	StartedAt          string                                `json:"started_at,omitempty"`
+	FinishedAt         string                                `json:"finished_at,omitempty"`
+	RetainUntil        string                                `json:"retain_until,omitempty"`
+	IdempotencyMarker  *idempotencyrecord.IdempotencyLocator `json:"idempotency_marker,omitempty"`
 
 	ComponentActionStepIDs          []string                        `json:"component_action_step_ids"`
 	ManagedComponentTeardownSources []ManagedComponentRuntimeSource `json:"managed_component_teardown_sources,omitempty"`

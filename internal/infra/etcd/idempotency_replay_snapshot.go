@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -12,8 +13,8 @@ import (
 
 func (repository *IdempotencyRepository) Read(
 	ctx context.Context,
-	locator IdempotencyLocator,
-) (*IdempotencyEvidence, error) {
+	locator idempotencyrecord.IdempotencyLocator,
+) (*idempotencyrecord.IdempotencyEvidence, error) {
 	evidence, _, err := repository.ReadWithRevision(ctx, locator)
 	return evidence, err
 }
@@ -23,12 +24,12 @@ func (repository *IdempotencyRepository) Read(
 // revision without misclassifying an atomic publication race as corruption.
 func (repository *IdempotencyRepository) ReadWithRevision(
 	ctx context.Context,
-	locator IdempotencyLocator,
-) (*IdempotencyEvidence, int64, error) {
+	locator idempotencyrecord.IdempotencyLocator,
+) (*idempotencyrecord.IdempotencyEvidence, int64, error) {
 	if ctx == nil {
 		return nil, 0, errs.New(errs.KindInternal, "idempotency context is required")
 	}
-	key, err := idempotencyMarkerKey(locator)
+	key, err := idempotencyrecord.IdempotencyMarkerKey(locator)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -51,9 +52,9 @@ func (repository *IdempotencyRepository) ReadWithRevision(
 // combine a marker with a later task transition.
 func (repository *IdempotencyRepository) ReadAtRevision(
 	ctx context.Context,
-	locator IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	revision int64,
-) (*IdempotencyEvidence, error) {
+) (*idempotencyrecord.IdempotencyEvidence, error) {
 	if ctx == nil {
 		return nil, errs.New(errs.KindInternal, "idempotency context is required")
 	}
@@ -65,16 +66,16 @@ func (repository *IdempotencyRepository) ReadAtRevision(
 
 func (repository *IdempotencyRepository) readEvidenceAtRevision(
 	ctx context.Context,
-	locator IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	revision int64,
-) (*IdempotencyEvidence, error) {
-	if err := validateIdempotencyLocator(locator); err != nil {
+) (*idempotencyrecord.IdempotencyEvidence, error) {
+	if err := idempotencyrecord.ValidateIdempotencyLocator(locator); err != nil {
 		return nil, err
 	}
 	if revision <= 0 {
-		return nil, corruptIdempotencyMarker()
+		return nil, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	key, err := idempotencyMarkerKey(locator)
+	key, err := idempotencyrecord.IdempotencyMarkerKey(locator)
 	if err != nil {
 		return nil, err
 	}
@@ -83,29 +84,29 @@ func (repository *IdempotencyRepository) readEvidenceAtRevision(
 		return nil, err
 	}
 	if result == nil || result.ReadRevision != revision || len(result.Values) != 1 {
-		return nil, corruptIdempotencyMarker()
+		return nil, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	if result.Values[0] == nil {
 		return nil, nil
 	}
 	defer clear(result.Values[0].Value)
-	marker, err := decodeIdempotencyMarker(result.Values[0].Value, locator)
+	marker, err := idempotencyrecord.DecodeIdempotencyMarker(result.Values[0].Value, locator)
 	if err != nil {
 		return nil, err
 	}
 	if result.Values[0].ModRevision <= 0 {
-		return nil, corruptIdempotencyMarker()
+		return nil, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	return &IdempotencyEvidence{marker: marker, modRevision: result.Values[0].ModRevision}, nil
+	return &idempotencyrecord.IdempotencyEvidence{marker: marker, modRevision: result.Values[0].ModRevision}, nil
 }
 
 func (repository *IdempotencyRepository) ResolveReplayLocator(
 	ctx context.Context,
-	target IdempotencyReplayTarget,
+	target idempotencyrecord.IdempotencyReplayTarget,
 	method string,
 	route string,
 	key string,
-) (IdempotencyLocator, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, bool, error) {
 	locator, _, found, err := repository.ResolveReplayLocatorAtRevision(ctx, target, method, route, key)
 	return locator, found, err
 }
@@ -114,66 +115,66 @@ func (repository *IdempotencyRepository) ResolveReplayLocator(
 // the index's read revision. No target-primary fallback is permitted.
 func (repository *IdempotencyRepository) ResolveReplayLocatorAtRevision(
 	ctx context.Context,
-	target IdempotencyReplayTarget,
+	target idempotencyrecord.IdempotencyReplayTarget,
 	method string,
 	route string,
 	key string,
-) (IdempotencyLocator, int64, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, int64, bool, error) {
 	if ctx == nil {
-		return IdempotencyLocator{}, 0, false, errs.New(errs.KindInternal, "idempotency context is required")
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, errs.New(errs.KindInternal, "idempotency context is required")
 	}
-	targetKey, err := idempotencyReplayTargetKey(target, method, route, key)
+	targetKey, err := idempotencyrecord.IdempotencyReplayTargetKey(target, method, route, key)
 	if err != nil {
-		return IdempotencyLocator{}, 0, false, err
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, err
 	}
 	result, err := repository.store.Get(ctx, targetKey)
 	if err != nil {
-		return IdempotencyLocator{}, 0, false, err
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, err
 	}
 	if result == nil || result.ReadRevision <= 0 {
-		return IdempotencyLocator{}, 0, false, errs.New(
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, errs.New(
 			errs.KindInternal,
 			"idempotency replay lookup result is missing",
 		)
 	}
 	if result.Entry == nil {
-		return IdempotencyLocator{}, 0, false, nil
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, nil
 	}
 	defer clear(result.Entry.Value)
 	if result.Entry.Key != targetKey || result.Entry.ModRevision <= 0 {
-		return IdempotencyLocator{}, 0, false, corruptIdempotencyMarker()
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	var reference replayTargetReferenceJSON
+	var reference idempotencyrecord.ReplayTargetReferenceJSON
 	decoder := json.NewDecoder(bytes.NewReader(result.Entry.Value))
 	decoder.DisallowUnknownFields()
 	if recordcodec.RejectDuplicateFields(result.Entry.Value) != nil || decoder.Decode(&reference) != nil ||
 		recordcodec.RequireEOF(decoder) != nil || reference.Schema != 1 {
-		return IdempotencyLocator{}, 0, false, corruptIdempotencyMarker()
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	locator, err := parseIdempotencyMarkerKey(reference.MarkerKey)
+	locator, err := idempotencyrecord.ParseIdempotencyMarkerKey(reference.MarkerKey)
 	if err != nil || locator.Method != method || locator.Route != route || locator.Key != key {
-		return IdempotencyLocator{}, 0, false, corruptIdempotencyMarker()
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	markers, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{reference.MarkerKey}, Revision: result.ReadRevision,
 	})
 	if err != nil {
-		return IdempotencyLocator{}, 0, false, err
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, err
 	}
 	if markers == nil || markers.ReadRevision != result.ReadRevision || len(markers.Values) != 1 ||
 		markers.Values[0] == nil {
-		return IdempotencyLocator{}, 0, false, corruptIdempotencyMarker()
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer clear(markers.Values[0].Value)
-	marker, err := decodeIdempotencyMarker(markers.Values[0].Value, locator)
+	marker, err := idempotencyrecord.DecodeIdempotencyMarker(markers.Values[0].Value, locator)
 	if err != nil {
-		return IdempotencyLocator{}, 0, false, err
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
 	if marker.ReplayTarget == nil || *marker.ReplayTarget != target ||
-		decodeReplayTargetReference(result.Entry.Value, reference.MarkerKey) != nil {
-		return IdempotencyLocator{}, 0, false, corruptIdempotencyMarker()
+		idempotencyrecord.DecodeReplayTargetReference(result.Entry.Value, reference.MarkerKey) != nil {
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	return locator, result.ReadRevision, true, nil
 }
@@ -182,72 +183,72 @@ func (repository *IdempotencyRepository) ResolveReplayLocatorAtRevision(
 // one caller-selected MVCC snapshot.
 func (repository *IdempotencyRepository) ResolveReplayLocatorAtSnapshot(
 	ctx context.Context,
-	target IdempotencyReplayTarget,
+	target idempotencyrecord.IdempotencyReplayTarget,
 	method string,
 	route string,
 	key string,
 	revision int64,
-) (IdempotencyLocator, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, bool, error) {
 	if ctx == nil {
-		return IdempotencyLocator{}, false, errs.New(errs.KindInternal, "idempotency context is required")
+		return idempotencyrecord.IdempotencyLocator{}, false, errs.New(errs.KindInternal, "idempotency context is required")
 	}
 	if revision <= 0 {
-		return IdempotencyLocator{}, false, errs.New(errs.KindValidationFailed, "idempotency revision is invalid")
+		return idempotencyrecord.IdempotencyLocator{}, false, errs.New(errs.KindValidationFailed, "idempotency revision is invalid")
 	}
-	targetKey, err := idempotencyReplayTargetKey(target, method, route, key)
+	targetKey, err := idempotencyrecord.IdempotencyReplayTargetKey(target, method, route, key)
 	if err != nil {
-		return IdempotencyLocator{}, false, err
+		return idempotencyrecord.IdempotencyLocator{}, false, err
 	}
 	targets, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{targetKey}, Revision: revision})
 	if err != nil {
-		return IdempotencyLocator{}, false, err
+		return idempotencyrecord.IdempotencyLocator{}, false, err
 	}
 	if targets == nil || targets.ReadRevision != revision || len(targets.Values) != 1 {
-		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
+		return idempotencyrecord.IdempotencyLocator{}, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	if targets.Values[0] == nil {
-		return IdempotencyLocator{}, false, nil
+		return idempotencyrecord.IdempotencyLocator{}, false, nil
 	}
 	defer clear(targets.Values[0].Value)
 	if targets.Values[0].Key != targetKey || targets.Values[0].ModRevision <= 0 {
-		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
+		return idempotencyrecord.IdempotencyLocator{}, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	var reference replayTargetReferenceJSON
+	var reference idempotencyrecord.ReplayTargetReferenceJSON
 	decoder := json.NewDecoder(bytes.NewReader(targets.Values[0].Value))
 	decoder.DisallowUnknownFields()
 	if recordcodec.RejectDuplicateFields(targets.Values[0].Value) != nil || decoder.Decode(&reference) != nil ||
 		recordcodec.RequireEOF(decoder) != nil || reference.Schema != 1 {
-		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
+		return idempotencyrecord.IdempotencyLocator{}, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	locator, err := parseIdempotencyMarkerKey(reference.MarkerKey)
+	locator, err := idempotencyrecord.ParseIdempotencyMarkerKey(reference.MarkerKey)
 	if err != nil || locator.Method != method || locator.Route != route || locator.Key != key {
-		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
+		return idempotencyrecord.IdempotencyLocator{}, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	markers, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{reference.MarkerKey}, Revision: revision,
 	})
 	if err != nil {
-		return IdempotencyLocator{}, false, err
+		return idempotencyrecord.IdempotencyLocator{}, false, err
 	}
 	if markers == nil || markers.ReadRevision != revision || len(markers.Values) != 1 || markers.Values[0] == nil {
-		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
+		return idempotencyrecord.IdempotencyLocator{}, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer clear(markers.Values[0].Value)
-	marker, err := decodeIdempotencyMarker(markers.Values[0].Value, locator)
+	marker, err := idempotencyrecord.DecodeIdempotencyMarker(markers.Values[0].Value, locator)
 	if err != nil {
-		return IdempotencyLocator{}, false, err
+		return idempotencyrecord.IdempotencyLocator{}, false, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
 	if marker.ReplayTarget == nil || *marker.ReplayTarget != target ||
-		decodeReplayTargetReference(targets.Values[0].Value, reference.MarkerKey) != nil {
-		return IdempotencyLocator{}, false, corruptIdempotencyMarker()
+		idempotencyrecord.DecodeReplayTargetReference(targets.Values[0].Value, reference.MarkerKey) != nil {
+		return idempotencyrecord.IdempotencyLocator{}, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	return locator, true, nil
 }
 
 // Revision is the marker's durable MVCC revision.
-func (evidence *IdempotencyEvidence) Revision() int64 {
+func (evidence *idempotencyrecord.IdempotencyEvidence) Revision() int64 {
 	if evidence == nil {
 		return 0
 	}

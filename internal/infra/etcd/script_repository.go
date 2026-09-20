@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -58,7 +59,7 @@ func (repository *ScriptRepository) CreateScriptIdempotent(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	target etcdstore.Versioned[ServiceRecord],
 	record scriptrecord.Record,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateScriptMutationMarker(marker, record.EnvironmentID); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -280,7 +281,7 @@ func (repository *ScriptRepository) ReplaceDesiredIdempotent(
 	target etcdstore.Versioned[ServiceRecord],
 	current etcdstore.Versioned[scriptrecord.Record],
 	desired core.Script,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateScriptMutationMarker(marker, current.Record.EnvironmentID); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -435,15 +436,15 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 	return replacement, conditions, mutations, classify, nil
 }
 
-func validateScriptMutationMarker(marker IdempotencyMarker, environmentID string) error {
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != IdempotencyScopeEnvironment || marker.Locator.ScopeID != environmentID {
+func validateScriptMutationMarker(marker idempotencyrecord.IdempotencyMarker, environmentID string) error {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || marker.Locator.ScopeID != environmentID {
 		return errs.New(
 			errs.KindValidationFailed,
 			"Script mutation marker must be a completed Environment-scoped direct mutation",
 		)
 	}
-	return validateIdempotencyMarker(marker)
+	return idempotencyrecord.ValidateIdempotencyMarker(marker)
 }
 
 func scriptWriteConditions(

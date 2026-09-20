@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -101,7 +102,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 			"Entry removal desired publication authority changed",
 		)
 	}
-	baseID, err := decodeTaskReference(read.Values[0].Value)
+	baseID, err := idempotencyrecord.DecodeTaskReference(read.Values[0].Value)
 	if err != nil || baseID != desired.BaseRevisionID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal baseline head changed")
 	}
@@ -160,7 +161,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	reference, err := encodeTaskReference(desired.RevisionID)
+	reference, err := idempotencyrecord.EncodeTaskReference(desired.RevisionID)
 	if err != nil {
 		clear(descriptorValue)
 		return routeTaskChange{}, err

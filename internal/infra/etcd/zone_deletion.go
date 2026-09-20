@@ -4,6 +4,7 @@ import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -26,7 +27,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	tombstone DeletionTombstoneRecord,
 	intent ZoneRemovalIntent,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := validateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -78,9 +79,9 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 			"Zone deletion Task and tombstone do not match",
 		)
 	}
-	wantReplayTarget := IdempotencyReplayTarget{Kind: IdempotencyReplayTargetZone, ID: zone.Record.Desired.ID}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
-		marker.TaskID != task.ID || marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetZone, ID: zone.Record.Desired.ID}
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || marker.Locator != intent.Claim.Locator ||
@@ -117,7 +118,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
@@ -128,7 +129,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		ctx, intent.Claim,
 		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
 		intent.CandidateProjection,
-		IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
+		idempotencyrecord.IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
 		intent.DesiredHeadRevision,
 	)
 	if err != nil {
@@ -145,7 +146,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -264,7 +265,7 @@ func classifyZoneDeletionStartConflict(
 			return errs.New(errs.KindInternal, "Zone deletion compare evidence is incomplete")
 		}
 		if values[2] != nil {
-			activeTaskID, err := decodeTaskReference(values[2].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[2].Value)
 			if err != nil {
 				return err
 			}
@@ -324,7 +325,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	tombstone etcdstore.Versioned[DeletionTombstoneRecord],
 	intent ZoneRemovalIntent,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if tombstone.Revision <= 0 ||
 		recordcodec.ValidateID(ids.KindTask, parentTaskID) != nil {
@@ -356,9 +357,9 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	}
 	if task.Executor != TaskExecutorAgent || task.Type != TaskRemove || task.Target != zone.Record.Desired.ID ||
 		task.Status != TaskStatusPending ||
-		marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+		marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.ReplayTarget != nil ||
-		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != zone.Record.EnvironmentID ||
 		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -406,7 +407,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		)
 	}
 	currentIntent, err := decodeZoneRemovalIntent(parentResult.Values[1].Value)
-	headID, headErr := decodeTaskReference(parentResult.Values[3].Value)
+	headID, headErr := idempotencyrecord.DecodeTaskReference(parentResult.Values[3].Value)
 	applied, appliedErr := decodeEnvironmentComposeProjection(parentResult.Values[4].Value)
 	if err != nil || currentIntent.OperationID != intent.OperationID || currentIntent.ActiveTaskID != parentTaskID ||
 		currentIntent.Status != TaskStatusPending || string(parentResult.Values[2].Value) != parentTaskID ||
@@ -425,7 +426,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		ctx, intent.Claim,
 		EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
 		intent.CandidateProjection,
-		IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
+		idempotencyrecord.IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
 		intent.DesiredHeadRevision,
 	)
 	if err != nil {
@@ -440,7 +441,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	currentTombstone.TaskID = task.ID
@@ -455,7 +456,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

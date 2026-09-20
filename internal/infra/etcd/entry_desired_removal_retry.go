@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -34,7 +35,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 		string(read.Values[6].Value) != intent.EnvironmentID || read.Values[7] != nil {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal retry ownership changed")
 	}
-	baseID, err := decodeTaskReference(read.Values[0].Value)
+	baseID, err := idempotencyrecord.DecodeTaskReference(read.Values[0].Value)
 	if err != nil || baseID != desired.BaseRevisionID {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal retry desired head changed")
 	}

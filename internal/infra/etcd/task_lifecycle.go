@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -194,12 +195,12 @@ func corruptTaskAssignment() error {
 func (repository *TaskRepository) CreateTask(
 	ctx context.Context,
 	record TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != record.ID || !marker.CreatedAt.Equal(record.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || record.Status != TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -225,7 +226,7 @@ func (repository *TaskRepository) CreateTask(
 	if err := validateTaskRecord(record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 
@@ -234,7 +235,7 @@ func (repository *TaskRepository) CreateTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(record.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(record.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -274,7 +275,7 @@ func classifyTaskCreateConflict(operationID string) idempotencyPlanClassifier {
 			return errs.New(errs.KindInternal, "task creation compare evidence is incomplete")
 		}
 		if values[2] != nil {
-			activeTaskID, err := decodeTaskReference(values[2].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[2].Value)
 			if err != nil {
 				return err
 			}
@@ -304,7 +305,7 @@ func (repository *TaskRepository) RetryTask(
 	sourceTaskID string,
 	retryTaskID string,
 	actor TaskActor,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if actor != TaskActorOperator {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -320,7 +321,7 @@ func (repository *TaskRepository) RetryTaskWithInitiation(
 	sourceTaskID string,
 	retryTaskID string,
 	initiation TaskInitiation,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	return repository.retryTask(ctx, sourceTaskID, retryTaskID, initiation.actor, &initiation, marker)
 }
@@ -331,7 +332,7 @@ func (repository *TaskRepository) retryTask(
 	retryTaskID string,
 	actor TaskActor,
 	provided *TaskInitiation,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -383,7 +384,7 @@ func (repository *TaskRepository) retryTask(
 			return IdempotencyTransactionResult{}, err
 		}
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != retry.ID || !marker.CreatedAt.Equal(retry.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -391,7 +392,7 @@ func (repository *TaskRepository) retryTask(
 			"task retry marker does not match its Task",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	retry.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
@@ -411,7 +412,7 @@ func (repository *TaskRepository) retryTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(retry.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(retry.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -677,7 +678,7 @@ func classifyTaskRetryConflict(
 			return errs.Newf(errs.KindTaskNotFound, "task not found: %s", sourceTaskID)
 		}
 		if values[3] != nil {
-			activeTaskID, err := decodeTaskReference(values[3].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[3].Value)
 			if err != nil {
 				return err
 			}
@@ -782,7 +783,7 @@ func (repository *TaskRepository) claimNextTask(
 				"queued Task lifecycle records are inconsistent",
 			)
 		}
-		activeTaskID, err := decodeTaskReference(companions.Values[0].Value)
+		activeTaskID, err := idempotencyrecord.DecodeTaskReference(companions.Values[0].Value)
 		if err != nil || activeTaskID != task.ID {
 			return TaskAssignment{}, false, errs.New(
 				errs.KindInternal,
@@ -1024,7 +1025,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 			if err != nil {
 				return taskClaimCandidate{}, false, err
 			}
-			referencedTaskID, err := decodeTaskReference(queued.Value)
+			referencedTaskID, err := idempotencyrecord.DecodeTaskReference(queued.Value)
 			if err != nil || referencedTaskID != taskID {
 				return taskClaimCandidate{}, false, errs.New(
 					errs.KindInternal,
@@ -1928,14 +1929,14 @@ func (repository *TaskRepository) acknowledgeTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		markerValue, err := encodeIdempotencyMarker(transitionedMarker)
+		markerValue, err := idempotencyrecord.EncodeIdempotencyMarker(transitionedMarker)
 		clear(transitionedMarker.Intent.Ciphertext)
 		clear(transitionedMarker.Response.Body)
 		if err != nil {
 			clear(terminalValue)
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
+		retentionValue, err := json.Marshal(idempotencyrecord.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
 		if err != nil {
 			clear(terminalValue)
 			clear(markerValue)
@@ -3105,7 +3106,7 @@ func (repository *TaskRepository) AbortPendingTask(
 				"pending Task lifecycle records are inconsistent",
 			)
 		}
-		queuedTaskID, queueErr := decodeTaskReference(companions.Values[2].Value)
+		queuedTaskID, queueErr := idempotencyrecord.DecodeTaskReference(companions.Values[2].Value)
 		if queueErr != nil || queuedTaskID != taskID {
 			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindInternal,
@@ -3127,14 +3128,14 @@ func (repository *TaskRepository) AbortPendingTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		markerValue, err := encodeIdempotencyMarker(transitionedMarker)
+		markerValue, err := idempotencyrecord.EncodeIdempotencyMarker(transitionedMarker)
 		clear(transitionedMarker.Intent.Ciphertext)
 		clear(transitionedMarker.Response.Body)
 		if err != nil {
 			clear(terminalValue)
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
+		retentionValue, err := json.Marshal(idempotencyrecord.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
 		if err != nil {
 			clear(terminalValue)
 			clear(markerValue)
@@ -3756,7 +3757,7 @@ func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 		)
 	}
 	defer clearKeyValues(companions.Values)
-	queuedTaskID, err := decodeTaskReference(companions.Values[2].Value)
+	queuedTaskID, err := idempotencyrecord.DecodeTaskReference(companions.Values[2].Value)
 	if err != nil || queuedTaskID != task.ID ||
 		validateTaskLifecycleCompanions(task, companions.Values[0], companions.Values[1]) != nil {
 		return backupTaskTerminalPlan{}, errs.New(
@@ -3774,14 +3775,14 @@ func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
-	markerValue, err := encodeIdempotencyMarker(transitionedMarker)
+	markerValue, err := idempotencyrecord.EncodeIdempotencyMarker(transitionedMarker)
 	clear(transitionedMarker.Intent.Ciphertext)
 	clear(transitionedMarker.Response.Body)
 	if err != nil {
 		clear(terminalValue)
 		return backupTaskTerminalPlan{}, err
 	}
-	retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
+	retentionValue, err := json.Marshal(idempotencyrecord.RetentionReferenceJSON{Schema: 1, MarkerKey: markerKey})
 	if err != nil {
 		clear(terminalValue)
 		clear(markerValue)
@@ -3854,29 +3855,29 @@ func prepareTerminalTaskMarker(
 	task TaskRecord,
 	status TaskStatus,
 	terminalAt time.Time,
-) (IdempotencyMarker, string, string, error) {
+) (idempotencyrecord.IdempotencyMarker, string, string, error) {
 	if task.idempotencyMarker == nil {
-		return IdempotencyMarker{}, "", "", errs.New(
+		return idempotencyrecord.IdempotencyMarker{}, "", "", errs.New(
 			errs.KindInternal,
 			"task is missing its idempotency marker locator",
 		)
 	}
-	markerKey, err := idempotencyMarkerKey(*task.idempotencyMarker)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(*task.idempotencyMarker)
 	if err != nil {
-		return IdempotencyMarker{}, "", "", errs.New(errs.KindInternal, "task idempotency marker locator is corrupt")
+		return idempotencyrecord.IdempotencyMarker{}, "", "", errs.New(errs.KindInternal, "task idempotency marker locator is corrupt")
 	}
-	state := IdempotencyMarkerFailed
+	state := idempotencyrecord.IdempotencyMarkerFailed
 	if status == TaskStatusCompleted {
-		state = IdempotencyMarkerCompleted
+		state = idempotencyrecord.IdempotencyMarkerCompleted
 	}
-	marker := IdempotencyMarker{
-		Kind: IdempotencyMarkerTask, State: state, Locator: *task.idempotencyMarker,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: state, Locator: *task.idempotencyMarker,
 		TaskID: task.ID, UpdatedAt: terminalAt, TerminalAt: terminalAt,
-		RetainUntil: terminalAt.Add(markerRetention),
+		RetainUntil: terminalAt.Add(idempotencyrecord.MarkerRetention),
 	}
-	retentionKey, err := idempotencyRetentionKey(markerKey, marker.RetainUntil)
+	retentionKey, err := idempotencyrecord.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
 	if err != nil {
-		return IdempotencyMarker{}, "", "", err
+		return idempotencyrecord.IdempotencyMarker{}, "", "", err
 	}
 	return marker, markerKey, retentionKey, nil
 }

@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -19,7 +20,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	sources ScriptExecutionSources,
 	execution ScriptExecutionRecord,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (result IdempotencyTransactionResult, err error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return result, err
@@ -35,7 +36,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		!execution.ActiveReference || execution.SourceMembershipCount != 0 {
 		return result, errs.New(errs.KindValidationFailed, "new Script execution record is invalid")
 	}
-	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || task.ID != execution.CurrentTaskID ||
 		task.OperationID != execution.OperationID || len(task.Steps) != 1 || task.Steps[0].ID != execution.StepID {
@@ -61,7 +62,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return result, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return result, err
 	}
 	if existing, found, err := existingIdempotencyTransaction(ctx, repository.store, marker); err != nil || found {
@@ -137,7 +138,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return result, err
 	}
 	defer clear(taskValue)
-	taskReference, err := encodeTaskReference(task.ID)
+	taskReference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return result, err
 	}

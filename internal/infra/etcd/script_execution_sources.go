@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -411,7 +412,7 @@ func loadScriptExecutionDesiredProjection(
 	if err != nil {
 		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[EnvironmentComposeProjection]{}, err
 	}
-	headRevisionID, err := decodeTaskReference(headValue.Value)
+	headRevisionID, err := idempotencyrecord.DecodeTaskReference(headValue.Value)
 	if err != nil {
 		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, etcdstore.Versioned[EnvironmentComposeProjection]{},
 			corruptEnvironmentComposeProjection()

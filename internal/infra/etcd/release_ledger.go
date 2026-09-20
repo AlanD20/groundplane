@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"slices"
@@ -53,7 +54,7 @@ type ReleasePublicationEvidence struct {
 	EnvironmentEpochValue      []byte
 	FenceRevision              int64
 	Task                       TaskRecord
-	Marker                     IdempotencyMarker
+	Marker                     idempotencyrecord.IdempotencyMarker
 	Fence                      ReleaseFenceSet
 	Operation                  ReleaseOperationHead
 	CandidateReleaseDescriptor executionplan.CandidateReleaseDescriptor
@@ -206,7 +207,7 @@ func (ledger *ReleaseLedger) Publish(
 		return ReleasePublicationResult{}, err
 	}
 	defer clearReleaseHookPublicationFragment(hookFragment)
-	markerKey, err := idempotencyMarkerKey(evidence.Marker.Locator)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(evidence.Marker.Locator)
 	if err != nil {
 		return ReleasePublicationResult{}, err
 	}
@@ -214,7 +215,7 @@ func (ledger *ReleaseLedger) Publish(
 	if err != nil {
 		return ReleasePublicationResult{}, err
 	}
-	markerValue, err := encodeIdempotencyMarker(evidence.Marker)
+	markerValue, err := idempotencyrecord.EncodeIdempotencyMarker(evidence.Marker)
 	if err != nil {
 		return ReleasePublicationResult{}, err
 	}
@@ -362,7 +363,7 @@ func (ledger *ReleaseLedger) Publish(
 		)
 	}
 	if result.FailureReads[6] != nil {
-		existing, err := decodeIdempotencyMarker(result.FailureReads[6].Value, evidence.Marker.Locator)
+		existing, err := idempotencyrecord.DecodeIdempotencyMarker(result.FailureReads[6].Value, evidence.Marker.Locator)
 		if err != nil {
 			return ReleasePublicationResult{}, err
 		}
@@ -438,9 +439,9 @@ func validateReleasePublicationEvidence(value ReleasePublicationEvidence) error 
 		return err
 	}
 	if value.Task.OperationID != manifest.OperationID || value.Task.Owner.EnvironmentID != value.EnvironmentID ||
-		value.Marker.Kind != IdempotencyMarkerTask || value.Marker.State != IdempotencyMarkerPending ||
+		value.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask || value.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		value.Marker.TaskID != value.Task.ID || value.Marker.Response.Status != http.StatusAccepted ||
-		value.Marker.Locator.ScopeKind != IdempotencyScopeEnvironment || value.Marker.Locator.ScopeID != value.EnvironmentID {
+		value.Marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || value.Marker.Locator.ScopeID != value.EnvironmentID {
 		return errs.New(errs.KindValidationFailed, "release publication task or idempotency evidence is invalid")
 	}
 	if _, err := validateReleaseCandidateDescriptor(value.CandidateReleaseDescriptor, value.Task, manifest); err != nil {

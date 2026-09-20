@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -357,7 +358,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			if stored.Values[2] == nil || stored.Values[3] == nil {
 				return nil, nil, errs.New(errs.KindInternal, "environment deletion desired projection is incomplete")
 			}
-			revisionID, decodeErr := decodeTaskReference(stored.Values[2].Value)
+			revisionID, decodeErr := idempotencyrecord.DecodeTaskReference(stored.Values[2].Value)
 			projection, projectionErr := decodeEnvironmentComposeProjection(stored.Values[3].Value)
 			if decodeErr != nil || projectionErr != nil || projection.EnvironmentID != environment.ID ||
 				projection.RevisionID != revisionID {

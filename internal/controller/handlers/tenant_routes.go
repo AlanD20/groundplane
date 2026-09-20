@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,7 +15,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/controller/hierarchy"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -26,12 +27,12 @@ type TenantReader interface {
 }
 
 type TenantMutator interface {
-	CreateTenant(context.Context, hierarchy.CreateTenantInput, string) (etcd.IdempotencyResponse, error)
+	CreateTenant(context.Context, hierarchy.CreateTenantInput, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type TenantChanger interface {
-	EditTenant(context.Context, string, hierarchy.EditTenantInput, string) (etcd.IdempotencyResponse, error)
-	RenameTenant(context.Context, string, hierarchy.RenameTenantInput, string) (etcd.IdempotencyResponse, error)
+	EditTenant(context.Context, string, hierarchy.EditTenantInput, string) (idempotencyrecord.IdempotencyResponse, error)
+	RenameTenant(context.Context, string, hierarchy.RenameTenantInput, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type tenantListInput struct {
@@ -258,7 +259,7 @@ func (s *Server) renameTenant(ctx context.Context, request *tenantRenameInput) (
 }
 
 func (s *Server) tenantMutationResponse(
-	response etcd.IdempotencyResponse,
+	response idempotencyrecord.IdempotencyResponse,
 	action string,
 ) *tenantMutationOutput {
 	return &tenantMutationOutput{

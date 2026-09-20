@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"net/http"
@@ -37,7 +38,7 @@ type scriptMutationRepository interface {
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[etcd.ServiceRecord],
 		scriptrecord.Record,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	ReplaceDesiredIdempotent(
 		context.Context,
@@ -46,7 +47,7 @@ type scriptMutationRepository interface {
 		etcdstore.Versioned[etcd.ServiceRecord],
 		etcdstore.Versioned[scriptrecord.Record],
 		core.Script,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	LoadExecutionSources(context.Context, string) (etcd.ScriptExecutionSources, error)
 	PublishExecutionWithTask(
@@ -54,7 +55,7 @@ type scriptMutationRepository interface {
 		etcd.ScriptExecutionSources,
 		etcd.ScriptExecutionRecord,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
@@ -91,7 +92,7 @@ func (repository *durableScriptMutationRepository) PublishExecutionWithTask(
 	sources etcd.ScriptExecutionSources,
 	execution etcd.ScriptExecutionRecord,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.scripts.PublishExecutionWithTask(ctx, sources, execution, task, marker)
 }
@@ -126,7 +127,7 @@ func (repository *durableScriptMutationRepository) CreateScriptIdempotent(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	target etcdstore.Versioned[etcd.ServiceRecord],
 	record scriptrecord.Record,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.scripts.CreateScriptIdempotent(ctx, environment, project, target, record, marker)
 }
@@ -138,14 +139,14 @@ func (repository *durableScriptMutationRepository) ReplaceDesiredIdempotent(
 	target etcdstore.Versioned[etcd.ServiceRecord],
 	current etcdstore.Versioned[scriptrecord.Record],
 	desired core.Script,
-	marker etcd.IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return repository.scripts.ReplaceDesiredIdempotent(ctx, environment, project, target, current, desired, marker)
 }
 
 type scriptMutationEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type scriptMutationIntent struct {
@@ -160,13 +161,13 @@ type scriptMutationIntent struct {
 type scriptMutationIdempotency interface {
 	Prepare(context.Context, scriptMutationIntent) (scriptMutationEvidence, error)
 	ResolveExisting(
-		context.Context, etcd.IdempotencyLocator, scriptMutationEvidence,
+		context.Context, idempotencyrecord.IdempotencyLocator, scriptMutationEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
 		context.Context, scriptMutationEvidence, etcd.IdempotencyTransactionResult,
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
-		context.Context, etcd.IdempotencyLocator, scriptMutationEvidence, error,
+		context.Context, idempotencyrecord.IdempotencyLocator, scriptMutationEvidence, error,
 	) (requestidempotency.Resolution, error)
 }
 
@@ -216,7 +217,7 @@ func (service *durableScriptMutationIdempotency) Prepare(
 
 func (service *durableScriptMutationIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence scriptMutationEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -232,7 +233,7 @@ func (service *durableScriptMutationIdempotency) ResolveKnown(
 
 func (service *durableScriptMutationIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence scriptMutationEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -265,9 +266,9 @@ func (service *scriptMutationService) RemoveScript(
 	ctx context.Context,
 	scriptID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.deletions == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script deletion service is not configured")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script deletion service is not configured")
 	}
 	return service.deletions.RemoveScript(ctx, scriptID, idempotencyKey)
 }
@@ -276,12 +277,12 @@ func (service *scriptMutationService) CreateScript(
 	ctx context.Context,
 	input apiTypes.ScriptCreate,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script creation context is required")
 	}
 	if err := scriptdefinition.ValidateCreation(input); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	intent := scriptMutationIntent{
 		method: http.MethodPost, route: scriptCreationRoute, environmentID: input.EnvironmentID,
@@ -294,10 +295,10 @@ func (service *scriptMutationService) CreateScript(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumScriptMutationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script creation retry bound was not enforced")
 }
 
 func (service *scriptMutationService) createScriptOnce(
@@ -305,23 +306,23 @@ func (service *scriptMutationService) createScriptOnce(
 	input apiTypes.ScriptCreate,
 	idempotencyKey string,
 	intent scriptMutationIntent,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := service.idempotency.Prepare(ctx, intent)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	locator := scriptMutationLocator(intent, idempotencyKey)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		return scriptReplayResponse(resolution)
 	}
 	environment, project, target, err := service.scriptHierarchy(ctx, input.EnvironmentID, input.ServiceID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	record, err := scriptrecord.NewRecord(
 		input.EnvironmentID,
@@ -329,11 +330,11 @@ func (service *scriptMutationService) createScriptOnce(
 		scriptdefinition.CreateDesired(input, ids.New(ids.KindScript), target.Record.Desired.Name),
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	response, marker, err := service.scriptResponseMarker(locator, evidence, record, http.StatusCreated)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -348,18 +349,18 @@ func (service *scriptMutationService) EditScript(
 	scriptID string,
 	input apiTypes.ScriptEdit,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script edit context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script edit context is required")
 	}
 	if ids.Validate(ids.KindScript, scriptID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindValidationFailed,
 			"Script edit requires a stable Script id",
 		)
 	}
 	if err := scriptdefinition.ValidateEdit(input); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	for attempt := 0; attempt < maximumScriptMutationAttempts; attempt++ {
 		response, err := service.editScriptOnce(ctx, scriptID, input, idempotencyKey)
@@ -368,10 +369,10 @@ func (service *scriptMutationService) EditScript(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumScriptMutationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script edit retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script edit retry bound was not enforced")
 }
 
 func (service *scriptMutationService) editScriptOnce(
@@ -379,21 +380,21 @@ func (service *scriptMutationService) editScriptOnce(
 	scriptID string,
 	input apiTypes.ScriptEdit,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	current, err := service.repository.GetScript(ctx, scriptID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	intent := scriptEditMutationIntent(scriptID, current.Record.EnvironmentID, input)
 	evidence, err := service.idempotency.Prepare(ctx, intent)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	locator := scriptMutationLocator(intent, idempotencyKey)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		return scriptReplayResponse(resolution)
@@ -402,16 +403,16 @@ func (service *scriptMutationService) editScriptOnce(
 		ctx, current.Record.EnvironmentID, current.Record.ServiceID,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	desired := scriptdefinition.EditDesired(current.Record.Desired, target.Record.Desired.Name, input)
 	replacement, err := scriptrecord.ReplaceDesired(current.Record, desired)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	response, marker, err := service.scriptResponseMarker(locator, evidence, replacement, http.StatusOK)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
@@ -462,41 +463,41 @@ func (service *scriptMutationService) scriptHierarchy(
 }
 
 func (service *scriptMutationService) scriptResponseMarker(
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence scriptMutationEvidence,
 	record scriptrecord.Record,
 	status int,
-) (etcd.IdempotencyResponse, etcd.IdempotencyMarker, error) {
+) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {
 	body, err := json.Marshal(scriptdefinition.Response(record))
 	if err != nil {
-		return etcd.IdempotencyResponse{}, etcd.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(body)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: status, ContentKind: "application/json", Body: append([]byte(nil), body...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
 	if err != nil {
 		clear(response.Body)
-		return etcd.IdempotencyResponse{}, etcd.IdempotencyMarker{}, err
+		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, err
 	}
 	return response, marker, nil
 }
 
 func (service *scriptMutationService) resolveScriptMutation(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence scriptMutationEvidence,
 	result etcd.IdempotencyTransactionResult,
 	mutationErr error,
-	response etcd.IdempotencyResponse,
-) (etcd.IdempotencyResponse, error) {
+	response idempotencyrecord.IdempotencyResponse,
+) (idempotencyrecord.IdempotencyResponse, error) {
 	var resolution requestidempotency.Resolution
 	var err error
 	if mutationErr != nil {
 		if !isUnknownScriptMutationOutcome(mutationErr) {
 			clear(response.Body)
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
 	} else {
@@ -504,7 +505,7 @@ func (service *scriptMutationService) resolveScriptMutation(
 	}
 	if err != nil {
 		clear(response.Body)
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -514,20 +515,20 @@ func (service *scriptMutationService) resolveScriptMutation(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
 		clear(response.Body)
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script mutation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script mutation resolution is invalid")
 	}
 }
 
-func scriptMutationLocator(intent scriptMutationIntent, idempotencyKey string) etcd.IdempotencyLocator {
-	return etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: intent.environmentID,
+func scriptMutationLocator(intent scriptMutationIntent, idempotencyKey string) idempotencyrecord.IdempotencyLocator {
+	return idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: intent.environmentID,
 		Method: intent.method, Route: intent.route, Key: idempotencyKey,
 	}
 }
 
-func scriptReplayResponse(resolution requestidempotency.Resolution) (etcd.IdempotencyResponse, error) {
+func scriptReplayResponse(resolution requestidempotency.Resolution) (idempotencyrecord.IdempotencyResponse, error) {
 	if resolution.Kind != requestidempotency.ResolutionReplay {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script replay resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script replay resolution is invalid")
 	}
 	return requestidempotency.CloneResponse(resolution.Response), nil
 }

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
@@ -343,7 +344,7 @@ func (repository *LocalAgentRepository) UpdateConfigIdempotent(
 	ctx context.Context,
 	current etcdstore.Versioned[LocalAgentRecord],
 	config LocalAgentConfig,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (etcdstore.Versioned[LocalAgentRecord], IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
@@ -352,8 +353,8 @@ func (repository *LocalAgentRepository) UpdateConfigIdempotent(
 		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision ||
-		current.Record.ID == "" || marker.Kind != IdempotencyMarkerDirect ||
-		marker.State != IdempotencyMarkerCompleted || marker.Locator.ScopeKind != IdempotencyScopePlatform ||
+		current.Record.ID == "" || marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopePlatform ||
 		marker.Locator.ScopeID != "-" || marker.Locator.Method != "PUT" ||
 		marker.Locator.Route != "/agents/{id}/config" {
 		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, errs.New(
@@ -361,7 +362,7 @@ func (repository *LocalAgentRepository) UpdateConfigIdempotent(
 			"local Agent config mutation identity is invalid",
 		)
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)

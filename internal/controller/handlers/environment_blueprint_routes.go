@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"net/http"
 	"reflect"
@@ -10,7 +11,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -26,7 +27,7 @@ type EnvironmentBlueprintService interface {
 		core.BlueprintBundle,
 		string,
 	) (apiTypes.EnvironmentBlueprintValidation, error)
-	ApplyBlueprint(context.Context, string, core.BlueprintBundle, string, string) (etcd.IdempotencyResponse, error)
+	ApplyBlueprint(context.Context, string, core.BlueprintBundle, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type environmentBlueprintApplyInput struct {

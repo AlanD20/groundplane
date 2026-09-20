@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -25,7 +26,7 @@ func prepareAttachTaskPlanReference(task TaskRecord) (string, []byte, bool, erro
 	if ids.Validate(ids.KindPlan, task.PlanID) != nil {
 		return "", nil, false, errs.New(errs.KindInternal, "Attach Task plan id is invalid")
 	}
-	value, err := encodeTaskReference(task.ID)
+	value, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return "", nil, false, err
 	}
@@ -41,7 +42,7 @@ func decodeAttachTaskPlanReference(key string, value []byte, planID string) (str
 	if strings.Contains(taskID, "/") || ids.Validate(ids.KindTask, taskID) != nil {
 		return "", corruptAttachTaskRenderInput()
 	}
-	referencedTaskID, err := decodeTaskReference(value)
+	referencedTaskID, err := idempotencyrecord.DecodeTaskReference(value)
 	if err != nil || referencedTaskID != taskID || key != attachTaskPlanReferenceKey(planID, taskID) {
 		return "", corruptAttachTaskRenderInput()
 	}

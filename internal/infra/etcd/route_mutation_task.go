@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"net/http"
@@ -24,7 +25,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	record routerecord.Record,
 	intent RouteMutationIntent,
 	task TaskRecord,
-	directMarker IdempotencyMarker,
+	directMarker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -139,7 +140,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -220,26 +221,26 @@ func routeHeadTargetConditions(conditions []etcdstore.Condition, target etcdstor
 	return append(conditions, target), nil
 }
 
-func validateRouteTaskAcceptanceMarker(marker IdempotencyMarker, environmentID string) error {
-	if marker.Kind != IdempotencyMarkerDirect || marker.State != IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != IdempotencyScopeEnvironment || marker.Locator.ScopeID != environmentID {
+func validateRouteTaskAcceptanceMarker(marker idempotencyrecord.IdempotencyMarker, environmentID string) error {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || marker.Locator.ScopeID != environmentID {
 		return errs.New(errs.KindValidationFailed, "Route Task acceptance marker is invalid")
 	}
-	return validateIdempotencyMarker(marker)
+	return idempotencyrecord.ValidateIdempotencyMarker(marker)
 }
 
-func routeMutationTaskMarker(directMarker IdempotencyMarker, task TaskRecord) IdempotencyMarker {
+func routeMutationTaskMarker(directMarker idempotencyrecord.IdempotencyMarker, task TaskRecord) idempotencyrecord.IdempotencyMarker {
 	body, _ := json.Marshal(struct {
 		TaskID string `json:"task_id"`
 	}{TaskID: task.ID})
-	return IdempotencyMarker{
-		Kind: IdempotencyMarkerTask, State: IdempotencyMarkerPending,
-		Locator: IdempotencyLocator{
+	return idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
+		Locator: idempotencyrecord.IdempotencyLocator{
 			ScopeKind: directMarker.Locator.ScopeKind, ScopeID: directMarker.Locator.ScopeID,
 			Method: http.MethodPost, Route: "/routes/{id}/reconcile", Key: task.ID,
 		},
 		Intent: directMarker.Intent,
-		Response: IdempotencyResponse{
+		Response: idempotencyrecord.IdempotencyResponse{
 			Status: http.StatusAccepted, ContentKind: "application/json", Body: body,
 		},
 		TaskID: task.ID, CreatedAt: task.CreatedAt, UpdatedAt: task.CreatedAt,
@@ -250,32 +251,32 @@ func applyRouteMutationTaskMarkers(
 	ctx context.Context,
 	store idempotencyRepositoryStore,
 	plan *idempotencyMutationPlan,
-	taskMarker IdempotencyMarker,
-	directMarker IdempotencyMarker,
+	taskMarker idempotencyrecord.IdempotencyMarker,
+	directMarker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if plan == nil || plan.markerKind != IdempotencyMarkerTask {
+	if plan == nil || plan.markerKind != idempotencyrecord.IdempotencyMarkerTask {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindInternal, "Route mutation Task plan is invalid")
 	}
-	if err := validateIdempotencyMarker(taskMarker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(taskMarker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(directMarker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(directMarker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	taskKeyValue, err := idempotencyMarkerKey(taskMarker.Locator)
+	taskKeyValue, err := idempotencyrecord.IdempotencyMarkerKey(taskMarker.Locator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	directKeyValue, err := idempotencyMarkerKey(directMarker.Locator)
+	directKeyValue, err := idempotencyrecord.IdempotencyMarkerKey(directMarker.Locator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	taskValue, err := encodeIdempotencyMarker(taskMarker)
+	taskValue, err := idempotencyrecord.EncodeIdempotencyMarker(taskMarker)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	directValue, err := encodeIdempotencyMarker(directMarker)
+	directValue, err := idempotencyrecord.EncodeIdempotencyMarker(directMarker)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -295,11 +296,11 @@ func applyRouteMutationTaskMarkers(
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: directKeyValue, Value: directValue},
 	)
 	if !directMarker.RetainUntil.IsZero() {
-		retentionKey, err := idempotencyRetentionKey(directKeyValue, directMarker.RetainUntil)
+		retentionKey, err := idempotencyrecord.IdempotencyRetentionKey(directKeyValue, directMarker.RetainUntil)
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
-		retentionValue, err := json.Marshal(retentionReferenceJSON{Schema: 1, MarkerKey: directKeyValue})
+		retentionValue, err := json.Marshal(idempotencyrecord.RetentionReferenceJSON{Schema: 1, MarkerKey: directKeyValue})
 		if err != nil {
 			return IdempotencyTransactionResult{}, errs.Wrap(errs.KindInternal, err)
 		}

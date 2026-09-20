@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -15,7 +16,7 @@ type backupRunPublicationPlan struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
 	record     BackupRunRecord
-	replay     func(context.Context, IdempotencyMarker, int64, int64) error
+	replay     func(context.Context, idempotencyrecord.IdempotencyMarker, int64, int64) error
 }
 
 func (plan backupRunPublicationPlan) composeTransaction(
@@ -57,7 +58,7 @@ func (plan *backupRunPublicationPlan) clear() {
 func (plan backupRunPublicationPlan) taskIdempotencyPlan(
 	record TaskRecord,
 	sealed *agentpb.ExecutionPlan,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	initiation TaskInitiation,
 ) (*idempotencyMutationPlan, error) {
 	idempotencyPlan, err := prepareBackupTaskIdempotencyPlan(
@@ -103,7 +104,7 @@ func prepareBackupTaskIdempotencyPlan(
 	domainMutations []etcdstore.Mutation,
 	record TaskRecord,
 	sealed *agentpb.ExecutionPlan,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	initiation TaskInitiation,
 ) (*idempotencyMutationPlan, error) {
 	if record.ID != authority.taskID || record.OperationID != authority.operationID ||
@@ -111,9 +112,9 @@ func prepareBackupTaskIdempotencyPlan(
 		record.Owner.EnvironmentID != authority.environmentID ||
 		record.Type != authority.taskType || record.Target != authority.environmentID ||
 		record.Executor != TaskExecutorAgent || record.Status != TaskStatusPending ||
-		!record.CreatedAt.Equal(authority.createdAt) || marker.Kind != IdempotencyMarkerTask ||
-		marker.State != IdempotencyMarkerPending || marker.TaskID != record.ID ||
-		marker.Locator.ScopeKind != IdempotencyScopeEnvironment ||
+		!record.CreatedAt.Equal(authority.createdAt) || marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != record.ID ||
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != authority.environmentID ||
 		!marker.CreatedAt.Equal(record.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return nil, errs.New(
@@ -129,7 +130,7 @@ func prepareBackupTaskIdempotencyPlan(
 		record.IdempotencyKey = marker.Locator.Key
 	}
 	record.idempotencyMarker = cloneIdempotencyLocator(&marker.Locator)
-	if validateTaskRecord(record) != nil || validateIdempotencyMarker(marker) != nil ||
+	if validateTaskRecord(record) != nil || idempotencyrecord.ValidateIdempotencyMarker(marker) != nil ||
 		validateTaskInitiation(record, initiation, true) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "backup Task publication is invalid")
 	}
@@ -138,7 +139,7 @@ func prepareBackupTaskIdempotencyPlan(
 		return nil, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(record.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(record.ID)
 	if err != nil {
 		return nil, err
 	}

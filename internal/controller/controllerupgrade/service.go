@@ -3,6 +3,7 @@ package controllerupgrade
 import (
 	"context"
 	"encoding/json"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"math"
 	"net/http"
@@ -32,7 +33,7 @@ type AgentInventory interface {
 	ListHealth(context.Context) ([]localagent.Health, error)
 }
 type UpdateTaskStore interface {
-	CreateTask(context.Context, etcd.TaskRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	CreateTask(context.Context, etcd.TaskRecord, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
 	LatestControllerUpdate(context.Context) (etcdstore.Versioned[etcd.TaskRecord], bool, error)
 }
 
@@ -74,50 +75,50 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 		process: dependencies.ProcessDigest, bootstrapImage: dependencies.BootstrapAgentImage, now: time.Now}, nil
 }
 
-func (service *Service) UpdateController(ctx context.Context, release, key string) (etcd.IdempotencyResponse, error) {
+func (service *Service) UpdateController(ctx context.Context, release, key string) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "controller update context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "controller update context is required")
 	}
 	id := upgrade.Digest(release)
 	if !id.Valid() {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "controller release digest is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "controller release digest is invalid")
 	}
 	evidence, err := service.protect(ctx, release)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer evidence.Destroy()
-	locator := etcd.IdempotencyLocator{ScopeKind: etcd.IdempotencyScopePlatform, ScopeID: "-",
+	locator := idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
 		Method: http.MethodPost, Route: UpdateRoute, Key: key}
 	existing, found, err := service.intents.ResolveOperationRootExisting(ctx, service.evidence, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if found {
 		return acceptedReplay(existing)
 	}
 	input, err := service.freeze(ctx, id)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	now := service.now().UTC()
 	task, err := NewTask(now, key, input)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	raw, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(raw)
-	response := etcd.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: raw}
+	response := idempotencyrecord.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: raw}
 	intent, err := evidence.DurableRecord()
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(intent.Ciphertext)
-	result, err := service.tasks.CreateTask(ctx, task, etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending, Locator: locator,
+	result, err := service.tasks.CreateTask(ctx, task, idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending, Locator: locator,
 		Intent: intent, Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	})
 	return service.resolvePublication(ctx, locator, evidence, result, err, response)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"log/slog"
 	"net/http"
@@ -13,7 +14,7 @@ import (
 	"unicode/utf8"
 
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -24,7 +25,7 @@ type EnvironmentMutator interface {
 		context.Context,
 		environmentcapability.CreateEnvironmentInput,
 		string,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type environmentListInput struct {
@@ -356,7 +357,7 @@ func environmentReadResponse(result environmentcapability.Environment) apiTypes.
 }
 
 func (s *Server) environmentMutationResponse(
-	response etcd.IdempotencyResponse,
+	response idempotencyrecord.IdempotencyResponse,
 	action string,
 ) *environmentMutationOutput {
 	return &environmentMutationOutput{

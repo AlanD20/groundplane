@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"net/netip"
@@ -26,9 +27,9 @@ const (
 type environmentChangeRepository interface {
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	MutateEnvironmentIdempotent(context.Context, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		hierarchyrecord.EnvironmentRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+		hierarchyrecord.EnvironmentRecord, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
 	ReplaceEnvironmentPoolIdempotent(context.Context, netip.Prefix, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		hierarchyrecord.EnvironmentRecord, etcd.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+		hierarchyrecord.EnvironmentRecord, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
 }
 
 // environmentCapacityRepository supplies the fixed revision used to seal a
@@ -39,17 +40,17 @@ type environmentCapacityRepository interface {
 
 type environmentChangeEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type environmentChangeIdempotency interface {
 	PrepareEdit(context.Context, string, EditEnvironmentInput) (environmentChangeEvidence, error)
 	PrepareRename(context.Context, string, RenameEnvironmentInput) (environmentChangeEvidence, error)
-	ResolveExisting(context.Context, etcd.IdempotencyLocator,
+	ResolveExisting(context.Context, idempotencyrecord.IdempotencyLocator,
 		environmentChangeEvidence) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(context.Context, environmentChangeEvidence,
 		etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error)
-	ResolveUnknown(context.Context, etcd.IdempotencyLocator,
+	ResolveUnknown(context.Context, idempotencyrecord.IdempotencyLocator,
 		environmentChangeEvidence, error) (requestidempotency.Resolution, error)
 }
 
@@ -118,7 +119,7 @@ func (service *durableEnvironmentChangeIdempotency) prepare(
 
 func (service *durableEnvironmentChangeIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence environmentChangeEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -134,7 +135,7 @@ func (service *durableEnvironmentChangeIdempotency) ResolveKnown(
 
 func (service *durableEnvironmentChangeIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence environmentChangeEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -172,9 +173,9 @@ func (service *environmentChangeService) EditEnvironment(
 	id string,
 	input EditEnvironmentInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if err := ValidateEnvironmentEditInput(input); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.changeEnvironment(
 		ctx, id, http.MethodPatch, environmentEditRoute, idempotencyKey,
@@ -194,7 +195,7 @@ func (service *environmentChangeService) EditEnvironment(
 			ctx context.Context,
 			current etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 			replacement hierarchyrecord.EnvironmentRecord,
-			marker etcd.IdempotencyMarker,
+			marker idempotencyrecord.IdempotencyMarker,
 		) (etcd.IdempotencyTransactionResult, error) {
 			return service.repository.ReplaceEnvironmentPoolIdempotent(
 				ctx, service.environmentPool, current, replacement, marker,
@@ -208,9 +209,9 @@ func (service *environmentChangeService) RenameEnvironment(
 	id string,
 	input RenameEnvironmentInput,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if err := ValidateEnvironmentRenameInput(input); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	return service.changeEnvironment(
 		ctx, id, http.MethodPost, environmentRenameRoute, idempotencyKey,
@@ -234,7 +235,7 @@ type environmentChangeMutation func(
 	context.Context,
 	etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	hierarchyrecord.EnvironmentRecord,
-	etcd.IdempotencyMarker,
+	idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error)
 
 func (service *environmentChangeService) changeEnvironment(
@@ -246,12 +247,12 @@ func (service *environmentChangeService) changeEnvironment(
 	prepare func(context.Context) (environmentChangeEvidence, error),
 	change func(hierarchyrecord.EnvironmentRecord) (hierarchyrecord.EnvironmentRecord, error),
 	mutate environmentChangeMutation,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment change context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment change context is required")
 	}
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: id,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: id,
 		Method: method, Route: route, Key: idempotencyKey,
 	}
 	for attempt := 0; attempt < maximumEnvironmentMutationAttempts; attempt++ {
@@ -261,10 +262,10 @@ func (service *environmentChangeService) changeEnvironment(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumEnvironmentMutationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
 		errs.KindInternal,
 		"Environment change retry bound was not enforced",
 	)
@@ -273,23 +274,23 @@ func (service *environmentChangeService) changeEnvironment(
 func (service *environmentChangeService) changeEnvironmentOnce(
 	ctx context.Context,
 	id string,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	prepare func(context.Context) (environmentChangeEvidence, error),
 	change func(hierarchyrecord.EnvironmentRecord) (hierarchyrecord.EnvironmentRecord, error),
 	mutate environmentChangeMutation,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := prepare(ctx)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Environment change replay resolution is invalid",
 			)
@@ -298,47 +299,47 @@ func (service *environmentChangeService) changeEnvironmentOnce(
 	}
 	current, err := service.repository.GetEnvironment(ctx, id)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	replacement, err := change(current.Record)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	subnets, err := service.capacity.ListZoneSubnetReservationsAtRevision(ctx, id, current.ReadRevision)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	capacity, err := ProjectNetworkCapacity(replacement.NetworkPool, subnets)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	responseBody, err := json.Marshal(environmentAPI(replacement, capacity))
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := etcd.NewCompletedDirectIdempotencyMarker(
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
 		locator, evidence.durable, response, service.now().UTC(),
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
 	result, mutationErr := mutate(ctx, current, replacement, marker)
 	if mutationErr != nil {
 		if !isUnknownEnvironmentChangeOutcome(mutationErr) {
-			return etcd.IdempotencyResponse{}, mutationErr
+			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, mutationErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -346,7 +347,7 @@ func (service *environmentChangeService) changeEnvironmentOnce(
 	case requestidempotency.ResolutionReplay:
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Environment change resolution is invalid",
 		)

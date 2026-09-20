@@ -3,13 +3,13 @@ package handlers
 import (
 	"context"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"io"
 	"log/slog"
 	"net/http"
 	"reflect"
 	"strconv"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
@@ -21,13 +21,13 @@ type AgentReader interface {
 	ListAgents(context.Context) ([]apiTypes.Agent, error)
 	GetAgent(context.Context, string) (apiTypes.Agent, error)
 	GetAgentConfig(context.Context, string) (apiTypes.AgentConfig, error)
-	UpdateAgentConfig(context.Context, string, apiTypes.AgentConfig, string) (etcd.IdempotencyResponse, error)
+	UpdateAgentConfig(context.Context, string, apiTypes.AgentConfig, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type AgentMutator interface {
-	EnrollAgent(context.Context, string) (etcd.IdempotencyResponse, error)
-	UpdateAgent(context.Context, string, string, string) (etcd.IdempotencyResponse, error)
-	RemoveAgent(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	EnrollAgent(context.Context, string) (idempotencyrecord.IdempotencyResponse, error)
+	UpdateAgent(context.Context, string, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	RemoveAgent(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type agentListInput struct {
@@ -241,7 +241,7 @@ func (s *Server) replaceAgentConfig(
 	return s.agentMutationResponse(response, "config replacement"), nil
 }
 
-func (s *Server) agentMutationResponse(response etcd.IdempotencyResponse, action string) *agentMutationOutput {
+func (s *Server) agentMutationResponse(response idempotencyrecord.IdempotencyResponse, action string) *agentMutationOutput {
 	return &agentMutationOutput{
 		Status: response.Status, ContentType: response.ContentKind,
 		Body: func(ctx huma.Context) {

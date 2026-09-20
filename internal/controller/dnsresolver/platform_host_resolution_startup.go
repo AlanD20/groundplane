@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"net/http"
 	"time"
@@ -89,14 +90,14 @@ func EnsurePlatformResolverTask(
 		return errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
-		Locator: etcd.IdempotencyLocator{
-			ScopeKind: etcd.IdempotencyScopePlatform, ScopeID: "-", Method: http.MethodPost,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
+		Locator: idempotencyrecord.IdempotencyLocator{
+			ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-", Method: http.MethodPost,
 			Route: platformComponentUpdateRoute, Key: task.IdempotencyKey,
 		},
 		Intent: intent.durable,
-		Response: etcd.IdempotencyResponse{
+		Response: idempotencyrecord.IdempotencyResponse{
 			Status: http.StatusAccepted, ContentKind: "application/json", Body: responseBody,
 		},
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,

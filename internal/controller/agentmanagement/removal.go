@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"time"
 
@@ -28,14 +29,14 @@ type agentRemovalTargets interface {
 
 type agentRemovalEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type agentRemovalIdempotency interface {
 	Prepare(context.Context, string) (agentRemovalEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		agentRemovalEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -45,7 +46,7 @@ type agentRemovalIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		agentRemovalEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -95,7 +96,7 @@ func (service *durableAgentRemovalIdempotency) Prepare(
 
 func (service *durableAgentRemovalIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence agentRemovalEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -111,7 +112,7 @@ func (service *durableAgentRemovalIdempotency) ResolveKnown(
 
 func (service *durableAgentRemovalIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence agentRemovalEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -140,20 +141,20 @@ func (service *agentRemovalService) RemoveAgent(
 	ctx context.Context,
 	agentID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent removal context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent removal context is required")
 	}
 	if err := ids.Validate(ids.KindAgent, agentID); err != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Agent id is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Agent id is invalid")
 	}
 	evidence, err := service.idempotency.Prepare(ctx, agentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopePlatform,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopePlatform,
 		ScopeID:   "-",
 		Method:    http.MethodDelete,
 		Route:     agentRemovalRoute,
@@ -161,20 +162,20 @@ func (service *agentRemovalService) RemoveAgent(
 	}
 	existing, found, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if found {
 		if existing.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent removal replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent removal replay resolution is invalid")
 		}
 		return requestidempotency.CloneResponse(existing.Response), nil
 	}
 	health, err := service.targets.Health(ctx, agentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if health.Agent.ID != agentID {
-		return etcd.IdempotencyResponse{}, errs.New(
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
 			errs.KindInternal,
 			"Agent removal target lookup returned another Agent",
 		)
@@ -182,39 +183,39 @@ func (service *agentRemovalService) RemoveAgent(
 	now := service.now().UTC()
 	task, err := newAgentRemovalTask(now, agentID, idempotencyKey)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	result, createErr := service.tasks.CreateTask(ctx, task, etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	result, createErr := service.tasks.CreateTask(ctx, task, idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: evidence.durable,
 		Response: response, TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	})
 	var resolution requestidempotency.Resolution
 	if createErr != nil {
 		if !isUnknownAgentRemovalOutcome(createErr) {
-			return etcd.IdempotencyResponse{}, createErr
+			return idempotencyrecord.IdempotencyResponse{}, createErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, createErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if resolution.Kind == requestidempotency.ResolutionReplay {
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent removal resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent removal resolution is invalid")
 	}
 	return requestidempotency.CloneResponse(response), nil
 }

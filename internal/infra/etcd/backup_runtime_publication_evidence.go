@@ -6,6 +6,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
@@ -370,7 +371,7 @@ func validateBackupVolumePublicationEvidence(
 		return errs.New(errs.KindStateConflict, "volume backup publication evidence changed")
 	}
 	environment, environmentErr := hierarchyrecord.DecodeEnvironment(values[0].Value)
-	revisionID, headErr := decodeTaskReference(values[1].Value)
+	revisionID, headErr := idempotencyrecord.DecodeTaskReference(values[1].Value)
 	seal, sealErr := decodeEnvironmentBlueprintSeal(values[2].Value)
 	if environmentErr != nil || headErr != nil || sealErr != nil {
 		return corruptBackupRuntimeRecord()

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
@@ -252,7 +253,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	current etcdstore.Versioned[runnerrecord.RunnerRecord],
 	tombstone DeletionTombstoneRecord,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -336,7 +337,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateIdempotencyMarker(marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	taskValue, err := encodeTaskRecord(task)
@@ -344,7 +345,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	reference, err := encodeTaskReference(task.ID)
+	reference, err := idempotencyrecord.EncodeTaskReference(task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -414,7 +415,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 			return errs.New(errs.KindInternal, "runner removal compare evidence is incomplete")
 		}
 		if values[2] != nil {
-			activeTaskID, decodeErr := decodeTaskReference(values[2].Value)
+			activeTaskID, decodeErr := idempotencyrecord.DecodeTaskReference(values[2].Value)
 			if decodeErr != nil {
 				return decodeErr
 			}

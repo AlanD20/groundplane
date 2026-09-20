@@ -4,28 +4,29 @@ import (
 	"context"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 )
 
 type entryDesiredRemovalEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type entryDesiredRemovalIdempotency interface {
 	Prepare(context.Context, string, string) (entryDesiredRemovalEvidence, error)
 	ResolveReplayLocator(
 		context.Context,
-		etcd.IdempotencyReplayTarget,
+		idempotencyrecord.IdempotencyReplayTarget,
 		string,
 		string,
 		string,
-	) (etcd.IdempotencyLocator, bool, error)
-	MatchesStaged(context.Context, entryDesiredRemovalEvidence, etcd.ProtectedIntentRecord) (bool, error)
+	) (idempotencyrecord.IdempotencyLocator, bool, error)
+	MatchesStaged(context.Context, entryDesiredRemovalEvidence, idempotencyrecord.ProtectedIntentRecord) (bool, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		entryDesiredRemovalEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -35,7 +36,7 @@ type entryDesiredRemovalIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		entryDesiredRemovalEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -84,25 +85,25 @@ func (service *durableEntryDesiredRemovalIdempotency) Prepare(
 
 func (service *durableEntryDesiredRemovalIdempotency) ResolveReplayLocator(
 	ctx context.Context,
-	target etcd.IdempotencyReplayTarget,
+	target idempotencyrecord.IdempotencyReplayTarget,
 	method string,
 	route string,
 	key string,
-) (etcd.IdempotencyLocator, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, bool, error) {
 	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
 }
 
 func (service *durableEntryDesiredRemovalIdempotency) MatchesStaged(
 	ctx context.Context,
 	evidence entryDesiredRemovalEvidence,
-	existing etcd.ProtectedIntentRecord,
+	existing idempotencyrecord.ProtectedIntentRecord,
 ) (bool, error) {
 	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
 }
 
 func (service *durableEntryDesiredRemovalIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence entryDesiredRemovalEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -118,7 +119,7 @@ func (service *durableEntryDesiredRemovalIdempotency) ResolveKnown(
 
 func (service *durableEntryDesiredRemovalIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence entryDesiredRemovalEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {

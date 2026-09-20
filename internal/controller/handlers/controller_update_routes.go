@@ -2,17 +2,18 @@ package handlers
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/jcs"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/danielgtaylor/huma/v2"
 )
 
 type ControllerUpdater interface {
-	UpdateController(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	UpdateController(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type controllerUpdateInput struct {

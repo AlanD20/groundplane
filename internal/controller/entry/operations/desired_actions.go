@@ -6,6 +6,7 @@ import (
 	entrycontroller "github.com/AlanD20/groundplane/internal/controller/entry"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -15,38 +16,38 @@ func (service *entryDesiredMutationService) CreateEntry(
 	ctx context.Context,
 	input apiTypes.EntryCreateRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation context is required")
 	}
 	desired, err := prepareEntryCreation(input)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	for attempt := 0; attempt < maximumEntryCreationAttempts; attempt++ {
 		evidence, err := service.creation.Prepare(ctx, input.EnvironmentID, desired)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		request := entryDesiredMutationRequest{
 			action: entryDesiredMutationCreate, environmentID: input.EnvironmentID,
 			desired: desired, idempotencyKey: idempotencyKey, status: http.StatusCreated,
-			locator: etcd.IdempotencyLocator{
-				ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: input.EnvironmentID,
+			locator: idempotencyrecord.IdempotencyLocator{
+				ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: input.EnvironmentID,
 				Method: http.MethodPost, Route: entryCreationRoute, Key: idempotencyKey,
 			},
 			evidence: entryDesiredEvidence{
 				durable: evidence.durable,
-				resolveExisting: func(ctx context.Context, locator etcd.IdempotencyLocator) (requestidempotency.Resolution, bool, error) {
+				resolveExisting: func(ctx context.Context, locator idempotencyrecord.IdempotencyLocator) (requestidempotency.Resolution, bool, error) {
 					return service.creation.ResolveExisting(ctx, locator, evidence)
 				},
-				matchesStaged: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
+				matchesStaged: func(ctx context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
 					return service.creation.MatchesStaged(ctx, evidence, existing)
 				},
 				resolveKnown: func(ctx context.Context, result etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error) {
 					return service.creation.ResolveKnown(ctx, evidence, result)
 				},
-				resolveUnknown: func(ctx context.Context, locator etcd.IdempotencyLocator, original error) (requestidempotency.Resolution, error) {
+				resolveUnknown: func(ctx context.Context, locator idempotencyrecord.IdempotencyLocator, original error) (requestidempotency.Resolution, error) {
 					return service.creation.ResolveUnknown(ctx, locator, evidence, original)
 				},
 			},
@@ -58,10 +59,10 @@ func (service *entryDesiredMutationService) CreateEntry(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumEntryCreationAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation retry bound was not enforced")
 }
 
 func (service *entryDesiredMutationService) EditEntry(
@@ -69,15 +70,15 @@ func (service *entryDesiredMutationService) EditEntry(
 	entryID string,
 	input apiTypes.EntryEditRequest,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil || ids.Validate(ids.KindEnvEntry, entryID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Entry edit requires a stable Entry id")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Entry edit requires a stable Entry id")
 	}
 	prepared, err := prepareEntryEditInput(input)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetEntry, ID: entryID}
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: entryID}
 	locator, indexed, err := service.edit.ResolveReplayLocator(
 		ctx,
 		target,
@@ -86,45 +87,45 @@ func (service *entryDesiredMutationService) EditEntry(
 		idempotencyKey,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
 		return service.replayEntryDesiredEdit(ctx, locator, entryID, prepared)
 	}
 	environmentID, current, err := service.resolveCurrentEntry(ctx, entryID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	desired := current.Entry
 	desired.Source = prepared.Source
 	desired.Exposure = append([]string(nil), prepared.Exposure...)
 	if err := desired.Validate(); err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	for attempt := 0; attempt < maximumEntryEditAttempts; attempt++ {
 		evidence, err := service.edit.Prepare(ctx, environmentID, entryID, prepared)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		request := entryDesiredMutationRequest{
 			action: entryDesiredMutationEdit, environmentID: environmentID, entryID: entryID,
 			desired: desired, idempotencyKey: idempotencyKey, status: http.StatusOK,
-			locator: etcd.IdempotencyLocator{
-				ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+			locator: idempotencyrecord.IdempotencyLocator{
+				ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environmentID,
 				Method: http.MethodPatch, Route: entryEditRoute, Key: idempotencyKey,
 			},
 			evidence: entryDesiredEvidence{
 				durable: evidence.durable,
-				resolveExisting: func(ctx context.Context, locator etcd.IdempotencyLocator) (requestidempotency.Resolution, bool, error) {
+				resolveExisting: func(ctx context.Context, locator idempotencyrecord.IdempotencyLocator) (requestidempotency.Resolution, bool, error) {
 					return service.edit.ResolveExisting(ctx, locator, evidence)
 				},
-				matchesStaged: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
+				matchesStaged: func(ctx context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
 					return service.edit.MatchesStaged(ctx, evidence, existing)
 				},
 				resolveKnown: func(ctx context.Context, result etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error) {
 					return service.edit.ResolveKnown(ctx, evidence, result)
 				},
-				resolveUnknown: func(ctx context.Context, locator etcd.IdempotencyLocator, original error) (requestidempotency.Resolution, error) {
+				resolveUnknown: func(ctx context.Context, locator idempotencyrecord.IdempotencyLocator, original error) (requestidempotency.Resolution, error) {
 					return service.edit.ResolveUnknown(ctx, locator, evidence, original)
 				},
 			},
@@ -136,10 +137,10 @@ func (service *entryDesiredMutationService) EditEntry(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumEntryEditAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry edit retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry edit retry bound was not enforced")
 }
 
 func (service *entryDesiredMutationService) RemoveEntry(
@@ -151,7 +152,7 @@ func (service *entryDesiredMutationService) RemoveEntry(
 			errs.KindValidationFailed, "Entry removal requires a stable Entry id",
 		)
 	}
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetEntry, ID: request.EntryID}
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: request.EntryID}
 	locator, indexed, err := service.removal.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, entryEditRoute, request.IdempotencyKey,
 	)
@@ -188,22 +189,22 @@ func (service *entryDesiredMutationService) RemoveEntry(
 		mutation := entryDesiredMutationRequest{
 			action: entryDesiredMutationRemove, environmentID: environmentID, entryID: request.EntryID,
 			desired: current.Entry, idempotencyKey: request.IdempotencyKey, status: http.StatusAccepted,
-			locator: etcd.IdempotencyLocator{
-				ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+			locator: idempotencyrecord.IdempotencyLocator{
+				ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: environmentID,
 				Method: http.MethodDelete, Route: entryEditRoute, Key: request.IdempotencyKey,
 			},
 			evidence: entryDesiredEvidence{
 				durable: evidence.durable,
-				resolveExisting: func(ctx context.Context, locator etcd.IdempotencyLocator) (requestidempotency.Resolution, bool, error) {
+				resolveExisting: func(ctx context.Context, locator idempotencyrecord.IdempotencyLocator) (requestidempotency.Resolution, bool, error) {
 					return service.removal.ResolveExisting(ctx, locator, evidence)
 				},
-				matchesStaged: func(ctx context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
+				matchesStaged: func(ctx context.Context, existing idempotencyrecord.ProtectedIntentRecord) (bool, error) {
 					return service.removal.MatchesStaged(ctx, evidence, existing)
 				},
 				resolveKnown: func(ctx context.Context, result etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error) {
 					return service.removal.ResolveKnown(ctx, evidence, result)
 				},
-				resolveUnknown: func(ctx context.Context, locator etcd.IdempotencyLocator, original error) (requestidempotency.Resolution, error) {
+				resolveUnknown: func(ctx context.Context, locator idempotencyrecord.IdempotencyLocator, original error) (requestidempotency.Resolution, error) {
 					return service.removal.ResolveUnknown(ctx, locator, evidence, original)
 				},
 			},
@@ -223,21 +224,21 @@ func (service *entryDesiredMutationService) RemoveEntry(
 
 func (service *entryDesiredMutationService) replayEntryDesiredEdit(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	entryID string,
 	input entryEditInput,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := service.edit.Prepare(ctx, locator.ScopeID, entryID, input)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.edit.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry edit replay resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry edit replay resolution is invalid")
 	}
 	return requestidempotency.CloneResponse(resolution.Response), nil
 }

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"log/slog"
 	"net/http"
@@ -19,10 +20,10 @@ type BackingServiceReader interface {
 }
 
 type BackingServiceMutator interface {
-	CreateBackingService(context.Context, apiTypes.BackingServiceCreate, string) (etcd.IdempotencyResponse, error)
-	StartBackingService(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	StopBackingService(context.Context, string, string) (etcd.IdempotencyResponse, error)
-	DestroyBackingService(context.Context, string, string) (etcd.IdempotencyResponse, error)
+	CreateBackingService(context.Context, apiTypes.BackingServiceCreate, string) (idempotencyrecord.IdempotencyResponse, error)
+	StartBackingService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	StopBackingService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	DestroyBackingService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type backingServiceListInput struct {
@@ -160,7 +161,7 @@ func (s *Server) destroyBackingService(
 func (s *Server) mutateBackingService(
 	ctx context.Context,
 	request *backingServiceActionInput,
-	mutate func(context.Context, string, string) (etcd.IdempotencyResponse, error),
+	mutate func(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error),
 ) (*backingServiceMutationOutput, error) {
 	if s.backingServiceMutations == nil || mutate == nil {
 		return nil, errs.New(errs.KindInternal, "Backing-service mutator is not configured")

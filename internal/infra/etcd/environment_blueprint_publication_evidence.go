@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"time"
 
@@ -21,7 +22,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	revision EnvironmentDesiredRevisionIdentity,
 	projection EnvironmentComposeProjection,
 	task TaskRecord,
-	marker IdempotencyMarker,
+	marker idempotencyrecord.IdempotencyMarker,
 	expectedHeadRevision int64,
 ) (environmentBlueprintPublicationEvidence, error) {
 	digest, err := EnvironmentBlueprintDependencyDigest(projection)
@@ -109,7 +110,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	}, nil
 }
 
-func sameBlueprintProtectedIntent(left, right ProtectedIntentRecord) bool {
+func sameBlueprintProtectedIntent(left, right idempotencyrecord.ProtectedIntentRecord) bool {
 	return left.EnvelopeVersion == right.EnvelopeVersion && left.Cipher == right.Cipher &&
 		left.DigestAlgorithm == right.DigestAlgorithm && left.CiphertextDigest == right.CiphertextDigest &&
 		bytes.Equal(left.Ciphertext, right.Ciphertext)
@@ -261,7 +262,7 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 	if headResult.Values[0] == nil {
 		return etcdstore.Versioned[EnvironmentComposeProjection]{ReadRevision: headResult.ReadRevision}, false, nil
 	}
-	revisionID, err := decodeTaskReference(headResult.Values[0].Value)
+	revisionID, err := idempotencyrecord.DecodeTaskReference(headResult.Values[0].Value)
 	if err != nil {
 		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, corruptEnvironmentComposeProjection()
 	}
@@ -341,8 +342,8 @@ func validateBlueprintTransaction(
 	return nil
 }
 
-func protectedBlueprintIntentDigest(intent ProtectedIntentRecord) ([sha256.Size]byte, error) {
-	if err := validateProtectedIntent(intent); err != nil {
+func protectedBlueprintIntentDigest(intent idempotencyrecord.ProtectedIntentRecord) ([sha256.Size]byte, error) {
+	if err := idempotencyrecord.ValidateProtectedIntent(intent); err != nil {
 		return [sha256.Size]byte{}, err
 	}
 	decoded, err := hex.DecodeString(intent.CiphertextDigest)

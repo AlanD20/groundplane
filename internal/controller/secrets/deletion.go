@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
@@ -35,27 +36,27 @@ type secretDeletionRepository interface {
 		etcdstore.Versioned[secretrecord.Record],
 		etcd.DeletionTombstoneRecord,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 }
 
 type secretDeletionEvidence struct {
 	candidate requestidempotency.ProtectedEvidence
-	durable   etcd.ProtectedIntentRecord
+	durable   idempotencyrecord.ProtectedIntentRecord
 }
 
 type secretDeletionIdempotency interface {
 	ResolveReplayLocator(
 		context.Context,
-		etcd.IdempotencyReplayTarget,
+		idempotencyrecord.IdempotencyReplayTarget,
 		string,
 		string,
 		string,
-	) (etcd.IdempotencyLocator, bool, error)
-	Prepare(context.Context, etcd.IdempotencyLocator, string) (secretDeletionEvidence, error)
+	) (idempotencyrecord.IdempotencyLocator, bool, error)
+	Prepare(context.Context, idempotencyrecord.IdempotencyLocator, string) (secretDeletionEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		secretDeletionEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	ResolveKnown(
@@ -65,7 +66,7 @@ type secretDeletionIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		secretDeletionEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -88,23 +89,23 @@ func NewDeletionIdempotency(
 
 func (service *durableSecretDeletionIdempotency) ResolveReplayLocator(
 	ctx context.Context,
-	target etcd.IdempotencyReplayTarget,
+	target idempotencyrecord.IdempotencyReplayTarget,
 	method string,
 	route string,
 	key string,
-) (etcd.IdempotencyLocator, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, bool, error) {
 	return service.repository.ResolveReplayLocator(ctx, target, method, route, key)
 }
 
 func (service *durableSecretDeletionIdempotency) Prepare(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	secretID string,
 ) (secretDeletionEvidence, error) {
 	scope := requestidempotency.Scope{Kind: requestidempotency.ScopePlatform}
-	if locator.ScopeKind == etcd.IdempotencyScopeProject {
+	if locator.ScopeKind == idempotencyrecord.IdempotencyScopeProject {
 		scope = requestidempotency.Scope{Kind: requestidempotency.ScopeProject, ID: locator.ScopeID}
-	} else if locator.ScopeKind != etcd.IdempotencyScopePlatform || locator.ScopeID != "-" {
+	} else if locator.ScopeKind != idempotencyrecord.IdempotencyScopePlatform || locator.ScopeID != "-" {
 		return secretDeletionEvidence{}, errs.New(errs.KindInternal, "Secret deletion replay scope is invalid")
 	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
@@ -129,7 +130,7 @@ func (service *durableSecretDeletionIdempotency) Prepare(
 
 func (service *durableSecretDeletionIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence secretDeletionEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -145,7 +146,7 @@ func (service *durableSecretDeletionIdempotency) ResolveKnown(
 
 func (service *durableSecretDeletionIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence secretDeletionEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -172,12 +173,12 @@ func (service *secretDeletionService) DeleteSecret(
 	ctx context.Context,
 	secretID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Secret deletion context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Secret deletion context is required")
 	}
 	if ids.Validate(ids.KindSecret, secretID) != nil {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Secret id is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Secret id is invalid")
 	}
 	for attempt := 0; attempt < maximumSecretDeletionAttempts; attempt++ {
 		response, err := service.deleteSecretOnce(ctx, secretID, idempotencyKey)
@@ -186,36 +187,36 @@ func (service *secretDeletionService) DeleteSecret(
 		}
 		kind, ok := errs.KindOf(err)
 		if !ok || kind != errs.KindStateConflict || attempt == maximumSecretDeletionAttempts-1 {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Secret deletion retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Secret deletion retry bound was not enforced")
 }
 
 func (service *secretDeletionService) deleteSecretOnce(
 	ctx context.Context,
 	secretID string,
 	idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
-	target := etcd.IdempotencyReplayTarget{Kind: etcd.IdempotencyReplayTargetSecret, ID: secretID}
+) (idempotencyrecord.IdempotencyResponse, error) {
+	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetSecret, ID: secretID}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, secretDeletionRoute, idempotencyKey,
 	)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if indexed {
 		evidence, err := service.idempotency.Prepare(ctx, locator, secretID)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		defer clear(evidence.durable.Ciphertext)
 		resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Secret deletion replay target is inconsistent",
 			)
@@ -225,34 +226,34 @@ func (service *secretDeletionService) deleteSecretOnce(
 
 	current, err := service.repository.GetSecret(ctx, secretID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	owner := etcd.PlatformSecretOwner()
-	locator = etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopePlatform, ScopeID: "-",
+	locator = idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
 		Method: http.MethodDelete, Route: secretDeletionRoute, Key: idempotencyKey,
 	}
 	if current.Record.Secret.Scope == core.SecretScopeProject {
 		project, err := service.repository.GetProject(ctx, current.Record.Secret.ProjectID)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 		owner = etcd.ProjectSecretOwner(project)
-		locator.ScopeKind = etcd.IdempotencyScopeProject
+		locator.ScopeKind = idempotencyrecord.IdempotencyScopeProject
 		locator.ScopeID = project.Record.ID
 	}
 	evidence, err := service.idempotency.Prepare(ctx, locator, secretID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(evidence.durable.Ciphertext)
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return etcd.IdempotencyResponse{}, errs.New(
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
 				errs.KindInternal,
 				"Secret deletion replay resolution is invalid",
 			)
@@ -264,7 +265,7 @@ func (service *secretDeletionService) deleteSecretOnce(
 	if owner.Project != nil {
 		taskOwner, err = etcd.ProjectTaskOwner(owner.Project.Record)
 		if err != nil {
-			return etcd.IdempotencyResponse{}, err
+			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
 	now := service.now().UTC()
@@ -280,19 +281,19 @@ func (service *secretDeletionService) deleteSecretOnce(
 	}
 	task.PlanHash, err = secretDeletionPlanHash(secretID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	responseBody, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(responseBody)
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, ReplayTarget: &target, Intent: evidence.durable, Response: response,
 		TaskID: task.ID, CreatedAt: now, UpdatedAt: now,
 	}
@@ -306,14 +307,14 @@ func (service *secretDeletionService) deleteSecretOnce(
 	)
 	if deleteErr != nil {
 		if !isUnknownSecretDeletionOutcome(deleteErr) {
-			return etcd.IdempotencyResponse{}, deleteErr
+			return idempotencyrecord.IdempotencyResponse{}, deleteErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, deleteErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, result)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	switch resolution.Kind {
 	case requestidempotency.ResolutionApplied:
@@ -321,7 +322,7 @@ func (service *secretDeletionService) deleteSecretOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Secret deletion resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Secret deletion resolution is invalid")
 	}
 }
 

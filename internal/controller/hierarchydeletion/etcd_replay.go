@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
@@ -42,7 +43,7 @@ func (repository *EtcdRepository) resolveReplay(
 	ctx context.Context,
 	request DeleteRequest,
 	protected requestidempotency.ProtectedEvidence,
-	expected *etcdinfra.IdempotencyLocator,
+	expected *idempotencyrecord.IdempotencyLocator,
 	mustFind bool,
 ) (BeginResult, bool, error) {
 	intent := idempotencyIntent(request.TargetKind, request.TargetID)
@@ -67,7 +68,7 @@ func (repository *EtcdRepository) replayAtRevision(
 	ctx context.Context,
 	request DeleteRequest,
 	protected requestidempotency.ProtectedEvidence,
-	locator etcdinfra.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	revision int64,
 ) (BeginResult, error) {
 	evidence, err := repository.idempotency.ReadAtRevision(ctx, locator, revision)
@@ -100,7 +101,7 @@ func (repository *EtcdRepository) resolveReplayAfterMiss(
 	ctx context.Context,
 	request DeleteRequest,
 	protected requestidempotency.ProtectedEvidence,
-	expected etcdinfra.IdempotencyLocator,
+	expected idempotencyrecord.IdempotencyLocator,
 ) (BeginResult, bool, error) {
 	evidence, revision, err := repository.idempotency.ReadWithRevision(ctx, expected)
 	if err != nil {
@@ -170,10 +171,10 @@ func (repository *EtcdRepository) lookupReplay(
 	intent IdempotencyIntent,
 	targetID string,
 	key string,
-) (etcdinfra.IdempotencyLocator, int64, bool, error) {
+) (idempotencyrecord.IdempotencyLocator, int64, bool, error) {
 	replayTarget, err := replayTargetForIntent(intent, targetID)
 	if err != nil {
-		return etcdinfra.IdempotencyLocator{}, 0, false, err
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, err
 	}
 	return repository.idempotency.ResolveReplayLocatorAtRevision(
 		ctx, replayTarget, intent.Method, intent.RouteTemplate, key,
@@ -188,10 +189,10 @@ func isUnknownBeginError(err error) bool {
 func (repository *EtcdRepository) protectBegin(
 	ctx context.Context,
 	begin BeginDeletion,
-) (requestidempotency.ProtectedEvidence, etcdinfra.IdempotencyMarker, error) {
+) (requestidempotency.ProtectedEvidence, idempotencyrecord.IdempotencyMarker, error) {
 	replayTarget, err := replayTargetForIntent(begin.IdempotencyIntent, begin.TargetID)
 	if err != nil {
-		return requestidempotency.ProtectedEvidence{}, etcdinfra.IdempotencyMarker{}, err
+		return requestidempotency.ProtectedEvidence{}, idempotencyrecord.IdempotencyMarker{}, err
 	}
 	scopeKind := idempotencyScopeKind(begin.IdempotencyIntent.ScopeKind)
 	scopeID := begin.IdempotencyIntent.ScopeID
@@ -211,16 +212,16 @@ func (repository *EtcdRepository) protectBegin(
 	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, intent)
 	if err != nil {
-		return requestidempotency.ProtectedEvidence{}, etcdinfra.IdempotencyMarker{}, err
+		return requestidempotency.ProtectedEvidence{}, idempotencyrecord.IdempotencyMarker{}, err
 	}
 	protected, err := repository.coordinator.ProtectIntent(ctx, version, digest)
 	if err != nil {
-		return requestidempotency.ProtectedEvidence{}, etcdinfra.IdempotencyMarker{}, err
+		return requestidempotency.ProtectedEvidence{}, idempotencyrecord.IdempotencyMarker{}, err
 	}
 	durable, err := protected.DurableRecord()
 	if err != nil {
 		protected.Destroy()
-		return requestidempotency.ProtectedEvidence{}, etcdinfra.IdempotencyMarker{}, err
+		return requestidempotency.ProtectedEvidence{}, idempotencyrecord.IdempotencyMarker{}, err
 	}
 	body, err := json.Marshal(struct {
 		TaskID string `json:"task_id"`
@@ -228,14 +229,14 @@ func (repository *EtcdRepository) protectBegin(
 	if err != nil {
 		protected.Destroy()
 		clear(durable.Ciphertext)
-		return requestidempotency.ProtectedEvidence{}, etcdinfra.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
+		return requestidempotency.ProtectedEvidence{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
 	}
-	marker := etcdinfra.IdempotencyMarker{
-		Kind: etcdinfra.IdempotencyMarkerTask, State: etcdinfra.IdempotencyMarkerPending,
-		Locator: etcdinfra.IdempotencyLocator{ScopeKind: etcdinfra.IdempotencyScopeKind(scopeKind), ScopeID: scopeID,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
+		Locator: idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopeKind(scopeKind), ScopeID: scopeID,
 			Method: begin.IdempotencyIntent.Method, Route: begin.IdempotencyIntent.RouteTemplate, Key: begin.IdempotencyKey},
 		ReplayTarget: &replayTarget, Intent: durable,
-		Response: etcdinfra.IdempotencyResponse{
+		Response: idempotencyrecord.IdempotencyResponse{
 			Status:      http.StatusAccepted,
 			ContentKind: "application/json",
 			Body:        body,
@@ -266,7 +267,7 @@ func (repository *EtcdRepository) replayedBeginAtRevision(
 	revision int64,
 	markerTaskID string,
 	request DeleteRequest,
-	locator etcdinfra.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 ) (BeginResult, error) {
 	if resolution.Kind != requestidempotency.ResolutionReplay || resolution.Response.Status != http.StatusAccepted ||
 		revision <= 0 ||
@@ -304,18 +305,18 @@ func (repository *EtcdRepository) replayedBeginAtRevision(
 	return BeginResult{Operation: converted, Existing: true}, nil
 }
 
-func replayScopeMatches(locator etcdinfra.IdempotencyLocator, operation etcdinfra.HierarchyDeletionOperation) bool {
+func replayScopeMatches(locator idempotencyrecord.IdempotencyLocator, operation etcdinfra.HierarchyDeletionOperation) bool {
 	owner := operation.Owner
 	if owner.WorkspaceType == etcdinfra.TaskWorkspacePlatform {
-		return locator.ScopeKind == etcdinfra.IdempotencyScopePlatform && locator.ScopeID == "-"
+		return locator.ScopeKind == idempotencyrecord.IdempotencyScopePlatform && locator.ScopeID == "-"
 	}
 	if owner.WorkspaceType != etcdinfra.TaskWorkspaceTenant || owner.TenantID == "" {
 		return false
 	}
 	if owner.EnvironmentID != "" {
-		return locator.ScopeKind == etcdinfra.IdempotencyScopeProject && locator.ScopeID == owner.ProjectID
+		return locator.ScopeKind == idempotencyrecord.IdempotencyScopeProject && locator.ScopeID == owner.ProjectID
 	}
-	return locator.ScopeKind == etcdinfra.IdempotencyScopeTenant && locator.ScopeID == owner.TenantID
+	return locator.ScopeKind == idempotencyrecord.IdempotencyScopeTenant && locator.ScopeID == owner.TenantID
 }
 
 func idempotencyScopeKind(target TargetKind) requestidempotency.ScopeKind {
@@ -333,22 +334,22 @@ func idempotencyScopeKind(target TargetKind) requestidempotency.ScopeKind {
 	}
 }
 
-func domainScopeKind(scope etcdinfra.IdempotencyScopeKind) (TargetKind, error) {
+func domainScopeKind(scope idempotencyrecord.IdempotencyScopeKind) (TargetKind, error) {
 	switch scope {
-	case etcdinfra.IdempotencyScopePlatform:
+	case idempotencyrecord.IdempotencyScopePlatform:
 		return TargetBackingService, nil
-	case etcdinfra.IdempotencyScopeTenant:
+	case idempotencyrecord.IdempotencyScopeTenant:
 		return TargetTenant, nil
-	case etcdinfra.IdempotencyScopeProject:
+	case idempotencyrecord.IdempotencyScopeProject:
 		return TargetProject, nil
-	case etcdinfra.IdempotencyScopeEnvironment:
+	case idempotencyrecord.IdempotencyScopeEnvironment:
 		return TargetEnvironment, nil
 	default:
 		return "", errs.New(errs.KindInternal, "hierarchy deletion replay scope is invalid")
 	}
 }
 
-func domainScopeFromMarker(locator etcdinfra.IdempotencyLocator) (TargetKind, string, error) {
+func domainScopeFromMarker(locator idempotencyrecord.IdempotencyLocator) (TargetKind, string, error) {
 	scope, err := domainScopeKind(locator.ScopeKind)
 	if err != nil {
 		return "", "", err
@@ -362,20 +363,20 @@ func domainScopeFromMarker(locator etcdinfra.IdempotencyLocator) (TargetKind, st
 	return scope, locator.ScopeID, nil
 }
 
-func replayTargetForIntent(intent IdempotencyIntent, targetID string) (etcdinfra.IdempotencyReplayTarget, error) {
-	var kind etcdinfra.IdempotencyReplayTargetKind
+func replayTargetForIntent(intent IdempotencyIntent, targetID string) (idempotencyrecord.IdempotencyReplayTarget, error) {
+	var kind idempotencyrecord.IdempotencyReplayTargetKind
 	switch intent.RouteTemplate {
 	case TenantDeleteRoute:
-		kind = etcdinfra.IdempotencyReplayTargetTenant
+		kind = idempotencyrecord.IdempotencyReplayTargetTenant
 	case ProjectDeleteRoute:
-		kind = etcdinfra.IdempotencyReplayTargetProject
+		kind = idempotencyrecord.IdempotencyReplayTargetProject
 	case EnvironmentDeleteRoute:
-		kind = etcdinfra.IdempotencyReplayTargetEnvironment
+		kind = idempotencyrecord.IdempotencyReplayTargetEnvironment
 	default:
-		return etcdinfra.IdempotencyReplayTarget{}, errs.New(
+		return idempotencyrecord.IdempotencyReplayTarget{}, errs.New(
 			errs.KindValidationFailed,
 			"hierarchy deletion replay route is invalid",
 		)
 	}
-	return etcdinfra.IdempotencyReplayTarget{Kind: kind, ID: targetID}, nil
+	return idempotencyrecord.IdempotencyReplayTarget{Kind: kind, ID: targetID}, nil
 }

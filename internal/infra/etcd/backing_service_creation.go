@@ -6,6 +6,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -38,7 +39,7 @@ type BackingServiceCreation struct {
 	Projection   EnvironmentComposeProjection
 	Task         TaskRecord
 	HookInputs   *BackingHookEncryptedInputs
-	Marker       IdempotencyMarker
+	Marker       idempotencyrecord.IdempotencyMarker
 }
 
 // PublishBackingServiceWithTask atomically creates one backing facade and
@@ -146,7 +147,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(taskValue)
-	taskReference, err := encodeTaskReference(creation.Task.ID)
+	taskReference, err := idempotencyrecord.EncodeTaskReference(creation.Task.ID)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -466,9 +467,9 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		creation.Task.Params[TaskBackingServiceVolumeDirectoryParam] != creation.Environment.VolumeDir {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation Task is invalid")
 	}
-	if creation.Marker.Kind != IdempotencyMarkerTask || creation.Marker.State != IdempotencyMarkerPending ||
+	if creation.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask || creation.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		creation.Marker.TaskID != creation.Task.ID ||
-		creation.Marker.Locator.ScopeKind != IdempotencyScopePlatform || creation.Marker.Locator.ScopeID != "-" ||
+		creation.Marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopePlatform || creation.Marker.Locator.ScopeID != "-" ||
 		!creation.Marker.CreatedAt.Equal(creation.Task.CreatedAt) ||
 		!creation.Marker.UpdatedAt.Equal(creation.Marker.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation marker is invalid")
@@ -476,7 +477,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	if err := validateTaskRecord(creation.Task); err != nil {
 		return err
 	}
-	if err := validateIdempotencyMarker(creation.Marker); err != nil {
+	if err := idempotencyrecord.ValidateIdempotencyMarker(creation.Marker); err != nil {
 		return err
 	}
 	return nil
@@ -586,7 +587,7 @@ func classifyBackingServiceCreation(
 			return errs.New(errs.KindInternal, "Backing-service creation compare evidence is incomplete")
 		}
 		if values[operationTaskCondition] != nil {
-			activeTaskID, err := decodeTaskReference(values[operationTaskCondition].Value)
+			activeTaskID, err := idempotencyrecord.DecodeTaskReference(values[operationTaskCondition].Value)
 			if err != nil {
 				return err
 			}

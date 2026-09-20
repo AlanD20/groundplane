@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"time"
 
@@ -35,7 +36,7 @@ type Repository interface {
 		context.Context,
 		etcd.PreparedBackupKeyRotation,
 		etcd.TaskRecord,
-		etcd.IdempotencyMarker,
+		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
 	GetBackupKey(context.Context, string) (etcd.VersionedBackupKey, bool, error)
 	ApplyBackupKeyRotation(context.Context, string) error
@@ -45,16 +46,16 @@ type backupKeyRotationIdempotency interface {
 	Prepare(context.Context, string) (requestidempotency.ProtectedEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		requestidempotency.ProtectedEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	NewMarker(
 		requestidempotency.ProtectedEvidence,
-		etcd.IdempotencyLocator,
-		etcd.IdempotencyResponse,
+		idempotencyrecord.IdempotencyLocator,
+		idempotencyrecord.IdempotencyResponse,
 		string,
 		time.Time,
-	) (etcd.IdempotencyMarker, error)
+	) (idempotencyrecord.IdempotencyMarker, error)
 	ResolveKnown(
 		context.Context,
 		requestidempotency.ProtectedEvidence,
@@ -62,7 +63,7 @@ type backupKeyRotationIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		requestidempotency.ProtectedEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -103,7 +104,7 @@ func (service *durableBackupKeyRotationIdempotency) Prepare(
 
 func (service *durableBackupKeyRotationIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence requestidempotency.ProtectedEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence)
@@ -111,14 +112,14 @@ func (service *durableBackupKeyRotationIdempotency) ResolveExisting(
 
 func (*durableBackupKeyRotationIdempotency) NewMarker(
 	evidence requestidempotency.ProtectedEvidence,
-	locator etcd.IdempotencyLocator,
-	response etcd.IdempotencyResponse,
+	locator idempotencyrecord.IdempotencyLocator,
+	response idempotencyrecord.IdempotencyResponse,
 	taskID string,
 	now time.Time,
-) (etcd.IdempotencyMarker, error) {
+) (idempotencyrecord.IdempotencyMarker, error) {
 	intent, err := evidence.DurableRecord()
 	if err != nil {
-		return etcd.IdempotencyMarker{}, err
+		return idempotencyrecord.IdempotencyMarker{}, err
 	}
 	defer clear(intent.Ciphertext)
 	return newPendingRotationMarker(intent, locator, response, taskID, now), nil
@@ -134,7 +135,7 @@ func (service *durableBackupKeyRotationIdempotency) ResolveKnown(
 
 func (service *durableBackupKeyRotationIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence requestidempotency.ProtectedEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
@@ -185,13 +186,13 @@ func newService(
 func (service *Service) RotateBackupKey(
 	ctx context.Context,
 	environmentID, idempotencyKey string,
-) (etcd.IdempotencyResponse, error) {
+) (idempotencyrecord.IdempotencyResponse, error) {
 	evidence, err := service.idempotency.Prepare(ctx, environmentID)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	locator := etcd.IdempotencyLocator{
-		ScopeKind: etcd.IdempotencyScopeEnvironment,
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment,
 		ScopeID:   environmentID,
 		Method:    http.MethodPost,
 		Route:     backupKeyRotationRoute,
@@ -199,7 +200,7 @@ func (service *Service) RotateBackupKey(
 	}
 	resolution, existing, err := service.idempotency.ResolveExisting(ctx, locator, evidence)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if existing {
 		defer clear(resolution.Response.Body)
@@ -208,7 +209,7 @@ func (service *Service) RotateBackupKey(
 	now := service.now().UTC()
 	material, err := service.keys.Create(ctx)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(material.Ciphertext)
 	taskID, operationID, planID := ids.New(ids.KindTask), ids.New(ids.KindOperation), ids.New(ids.KindPlan)
@@ -216,7 +217,7 @@ func (service *Service) RotateBackupKey(
 		EnvironmentID: environmentID, TaskID: taskID, OperationID: operationID, PlanID: planID, CreatedAt: now,
 	}, material)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer prepared.Clear()
 	task := etcd.TaskRecord{
@@ -228,9 +229,9 @@ func (service *Service) RotateBackupKey(
 	}
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: taskID})
 	if err != nil {
-		return etcd.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	response := etcd.IdempotencyResponse{
+	response := idempotencyrecord.IdempotencyResponse{
 		Status:      http.StatusAccepted,
 		ContentKind: "application/json",
 		Body:        append([]byte(nil), body...),
@@ -238,21 +239,21 @@ func (service *Service) RotateBackupKey(
 	defer clear(response.Body)
 	marker, err := service.idempotency.NewMarker(evidence, locator, response, taskID, now)
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
 	transaction, publishErr := service.repository.PublishBackupKeyRotation(ctx, prepared, task, marker)
 	if publishErr != nil {
 		if !isUnknownBackupKeyPublicationOutcome(publishErr) {
-			return etcd.IdempotencyResponse{}, publishErr
+			return idempotencyrecord.IdempotencyResponse{}, publishErr
 		}
 		resolution, err = service.idempotency.ResolveUnknown(ctx, locator, evidence, publishErr)
 	} else {
 		resolution, err = service.idempotency.ResolveKnown(ctx, evidence, transaction)
 	}
 	if err != nil {
-		return etcd.IdempotencyResponse{}, err
+		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(resolution.Response.Body)
 	if resolution.Kind == requestidempotency.ResolutionApplied {
@@ -261,7 +262,7 @@ func (service *Service) RotateBackupKey(
 	if resolution.Kind == requestidempotency.ResolutionReplay {
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
-	return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "backup key rotation resolution is invalid")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "backup key rotation resolution is invalid")
 }
 
 func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error {
@@ -305,14 +306,14 @@ func (service *Service) ExportBackupKey(ctx context.Context, environmentID strin
 }
 
 func newPendingRotationMarker(
-	intent etcd.ProtectedIntentRecord,
-	locator etcd.IdempotencyLocator,
-	response etcd.IdempotencyResponse,
+	intent idempotencyrecord.ProtectedIntentRecord,
+	locator idempotencyrecord.IdempotencyLocator,
+	response idempotencyrecord.IdempotencyResponse,
 	taskID string,
 	now time.Time,
-) etcd.IdempotencyMarker {
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+) idempotencyrecord.IdempotencyMarker {
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: intent, Response: cloneIdempotencyResponse(response),
 		TaskID: taskID, CreatedAt: now, UpdatedAt: now,
 	}
@@ -330,7 +331,7 @@ func isUnknownBackupKeyPublicationOutcome(err error) bool {
 
 var _ backupKeyRotationIdempotency = (*durableBackupKeyRotationIdempotency)(nil)
 
-func cloneIdempotencyResponse(response etcd.IdempotencyResponse) etcd.IdempotencyResponse {
+func cloneIdempotencyResponse(response idempotencyrecord.IdempotencyResponse) idempotencyrecord.IdempotencyResponse {
 	response.Body = append([]byte(nil), response.Body...)
 	return response
 }

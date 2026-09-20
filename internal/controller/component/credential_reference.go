@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -24,7 +25,7 @@ type credentialSecrets interface {
 }
 
 type credentialCreator interface {
-	CreateSecret(context.Context, apiTypes.SecretCreateRequest, string) (etcd.IdempotencyResponse, error)
+	CreateSecret(context.Context, apiTypes.SecretCreateRequest, string) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type OpaqueSecretReferenceInput struct {

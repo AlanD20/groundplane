@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
@@ -64,13 +65,13 @@ func taskOwnerRetryScope(owner TaskOwner) (TaskRetryScope, error) {
 	}
 	switch {
 	case owner.EnvironmentID != "":
-		return TaskRetryScope{Kind: IdempotencyScopeEnvironment, ID: owner.EnvironmentID}, nil
+		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopeEnvironment, ID: owner.EnvironmentID}, nil
 	case owner.ProjectID != "":
-		return TaskRetryScope{Kind: IdempotencyScopeProject, ID: owner.ProjectID}, nil
+		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopeProject, ID: owner.ProjectID}, nil
 	case owner.WorkspaceType == TaskWorkspaceTenant:
-		return TaskRetryScope{Kind: IdempotencyScopeTenant, ID: owner.TenantID}, nil
+		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopeTenant, ID: owner.TenantID}, nil
 	default:
-		return TaskRetryScope{Kind: IdempotencyScopePlatform, ID: "-"}, nil
+		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopePlatform, ID: "-"}, nil
 	}
 }
 

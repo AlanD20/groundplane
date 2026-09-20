@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"log/slog"
 	"time"
 
@@ -19,7 +20,7 @@ type ScheduledBackupRunner interface {
 		time.Time,
 		time.Time,
 		...int64,
-	) (etcd.IdempotencyResponse, error)
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 // BackupScheduleRepository is the Controller-owned durable scheduling seam.

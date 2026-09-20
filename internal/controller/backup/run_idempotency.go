@@ -4,6 +4,7 @@ import (
 	"context"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
 	"time"
@@ -16,16 +17,16 @@ type backupRunIdempotency interface {
 	Prepare(context.Context, string, string) (backupRunEvidence, error)
 	ResolveExisting(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		backupRunEvidence,
 	) (requestidempotency.Resolution, bool, error)
 	NewMarker(
 		backupRunEvidence,
-		etcd.IdempotencyLocator,
-		etcd.IdempotencyResponse,
+		idempotencyrecord.IdempotencyLocator,
+		idempotencyrecord.IdempotencyResponse,
 		string,
 		time.Time,
-	) (etcd.IdempotencyMarker, error)
+	) (idempotencyrecord.IdempotencyMarker, error)
 	ResolveKnown(
 		context.Context,
 		backupRunEvidence,
@@ -33,7 +34,7 @@ type backupRunIdempotency interface {
 	) (requestidempotency.Resolution, error)
 	ResolveUnknown(
 		context.Context,
-		etcd.IdempotencyLocator,
+		idempotencyrecord.IdempotencyLocator,
 		backupRunEvidence,
 		error,
 	) (requestidempotency.Resolution, error)
@@ -87,7 +88,7 @@ func (service *durableBackupRunIdempotency) Prepare(
 
 func (service *durableBackupRunIdempotency) ResolveExisting(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence backupRunEvidence,
 ) (requestidempotency.Resolution, bool, error) {
 	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
@@ -95,17 +96,17 @@ func (service *durableBackupRunIdempotency) ResolveExisting(
 
 func (service *durableBackupRunIdempotency) NewMarker(
 	evidence backupRunEvidence,
-	locator etcd.IdempotencyLocator,
-	response etcd.IdempotencyResponse,
+	locator idempotencyrecord.IdempotencyLocator,
+	response idempotencyrecord.IdempotencyResponse,
 	taskID string,
 	now time.Time,
-) (etcd.IdempotencyMarker, error) {
+) (idempotencyrecord.IdempotencyMarker, error) {
 	intent, err := evidence.candidate.DurableRecord()
 	if err != nil {
-		return etcd.IdempotencyMarker{}, err
+		return idempotencyrecord.IdempotencyMarker{}, err
 	}
-	marker := etcd.IdempotencyMarker{
-		Kind: etcd.IdempotencyMarkerTask, State: etcd.IdempotencyMarkerPending,
+	marker := idempotencyrecord.IdempotencyMarker{
+		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: locator, Intent: intent, Response: response,
 		TaskID: taskID, CreatedAt: now, UpdatedAt: now,
 	}
@@ -124,7 +125,7 @@ func (service *durableBackupRunIdempotency) ResolveKnown(
 
 func (service *durableBackupRunIdempotency) ResolveUnknown(
 	ctx context.Context,
-	locator etcd.IdempotencyLocator,
+	locator idempotencyrecord.IdempotencyLocator,
 	evidence backupRunEvidence,
 	original error,
 ) (requestidempotency.Resolution, error) {
