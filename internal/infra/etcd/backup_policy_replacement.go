@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -17,14 +18,14 @@ import (
 // backupPolicyInitialKey is an application-sealed era-1 age identity. The
 // repository treats the ciphertext as opaque and never receives plaintext.
 type backupPolicyInitialKey struct {
-	Record    BackupKeyRecord
-	Encrypted BackupKeyEncryptedValue
+	Record    backuppolicy.BackupKeyRecord
+	Encrypted backuppolicy.BackupKeyEncryptedValue
 }
 
 // backupPolicySourceEvidence binds one ordered policy source to the exact
 // durable target revision that was validated by the application.
 type backupPolicySourceEvidence struct {
-	Source           Versioned[BackupSourceRecord]
+	Source           Versioned[backuppolicy.BackupSourceRecord]
 	EnvironmentIndex *etcdstore.KeyValue
 	IdentityIndex    *etcdstore.KeyValue
 	Attach           *Versioned[attachrecord.Record]
@@ -49,8 +50,8 @@ type backupPolicyReplacementCandidate struct {
 	NextCoordination    EnvironmentCoordinationRecord
 	NextRunAt           time.Time
 	ScheduleSealed      bool
-	Current             *Versioned[BackupPolicyRecord]
-	Replacement         BackupPolicyRecord
+	Current             *Versioned[backuppolicy.BackupPolicyRecord]
+	Replacement         backuppolicy.BackupPolicyRecord
 	Sources             []backupPolicySourceEvidence
 	Connector           *Versioned[connectorrecord.Record]
 	ConnectorOwnerIndex *etcdstore.KeyValue
@@ -195,7 +196,7 @@ func validatebackupPolicyReplacementCandidate(
 	if err := validateEnvironmentMutationEpochRecord(candidate.MutationEpoch.Record); err != nil {
 		return err
 	}
-	if err := validateBackupPolicyRecord(candidate.Replacement); err != nil {
+	if err := backuppolicy.ValidateBackupPolicyRecord(candidate.Replacement); err != nil {
 		return err
 	}
 	if !validReplacementRevision(candidate.Environment.Revision, candidate.Environment.ReadRevision) ||
@@ -225,7 +226,7 @@ func validatebackupPolicyReplacementCandidate(
 		}
 	}
 	if candidate.Current != nil {
-		if err := validateBackupPolicyRecord(candidate.Current.Record); err != nil {
+		if err := backuppolicy.ValidateBackupPolicyRecord(candidate.Current.Record); err != nil {
 			return err
 		}
 		if !validReplacementRevision(candidate.Current.Revision, candidate.Current.ReadRevision) ||
@@ -243,7 +244,7 @@ func validatebackupPolicyReplacementCandidate(
 	identities := make(map[sourceIdentity]struct{}, len(candidate.Sources))
 	for index := range candidate.Sources {
 		source := candidate.Sources[index].Source
-		if err := validateBackupSourceRecord(source.Record); err != nil {
+		if err := backuppolicy.ValidateBackupSourceRecord(source.Record); err != nil {
 			return err
 		}
 		if !validReplacementRevision(source.Revision, source.ReadRevision) ||
@@ -355,7 +356,7 @@ func validatebackupPolicySourceEvidence(
 	wantSourceID string,
 	evidence backupPolicySourceEvidence,
 ) error {
-	if err := validateBackupSourceRecord(evidence.Source.Record); err != nil {
+	if err := backuppolicy.ValidateBackupSourceRecord(evidence.Source.Record); err != nil {
 		return err
 	}
 	if !validReplacementRevision(evidence.Source.Revision, evidence.Source.ReadRevision) ||
@@ -364,11 +365,11 @@ func validatebackupPolicySourceEvidence(
 	}
 	if !validBackupPolicyIndex(
 		evidence.EnvironmentIndex,
-		backupSourceEnvironmentKey(environmentID, evidence.Source.Record.ID),
+		backuppolicy.BackupSourceEnvironmentKey(environmentID, evidence.Source.Record.ID),
 		evidence.Source.Record.ID,
 	) || !validBackupPolicyIndex(
 		evidence.IdentityIndex,
-		backupSourceIdentityKey(environmentID, evidence.Source.Record.Kind, evidence.Source.Record.TargetID),
+		backuppolicy.BackupSourceIdentityKey(environmentID, evidence.Source.Record.Kind, evidence.Source.Record.TargetID),
 		evidence.Source.Record.ID,
 	) {
 		return recordcodec.CorruptRecord()
@@ -431,10 +432,10 @@ func validateBackupPolicyKeyEvidence(candidate backupPolicyReplacementCandidate)
 	if candidate.InitialKey == nil {
 		return nil
 	}
-	if err := validateBackupKeyRecord(candidate.InitialKey.Record); err != nil {
+	if err := backuppolicy.ValidateBackupKeyRecord(candidate.InitialKey.Record); err != nil {
 		return err
 	}
-	if err := validateBackupKeyEncryptedValue(candidate.InitialKey.Encrypted); err != nil {
+	if err := backuppolicy.ValidateBackupKeyEncryptedValue(candidate.InitialKey.Encrypted); err != nil {
 		return err
 	}
 	if candidate.InitialKey.Record.EnvironmentID != candidate.Replacement.EnvironmentID ||
@@ -481,7 +482,7 @@ func validateBackupPolicyConnectorReferences(candidate backupPolicyReplacementCa
 			return errs.New(errs.KindValidationFailed, "backup policy connector reference order is invalid")
 		}
 		if want.present {
-			if evidence.Entry == nil || evidence.Entry.Key != backupPolicyConnectorReferenceKey(
+			if evidence.Entry == nil || evidence.Entry.Key != backuppolicy.BackupPolicyConnectorReferenceKey(
 				want.connectorID,
 				environmentID,
 			) || evidence.Entry.ModRevision <= 0 || string(evidence.Entry.Value) != environmentID {
@@ -497,7 +498,7 @@ func validateBackupPolicyConnectorReferences(candidate backupPolicyReplacementCa
 func prepareBackupPolicyReplacement(
 	candidate backupPolicyReplacementCandidate,
 ) (backupPolicyReplacementPlan, error) {
-	policyValue, err := encodeBackupPolicyRecord(candidate.Replacement)
+	policyValue, err := backuppolicy.EncodeBackupPolicyRecord(candidate.Replacement)
 	if err != nil {
 		return backupPolicyReplacementPlan{}, err
 	}
@@ -510,7 +511,7 @@ func prepareBackupPolicyReplacement(
 		conditions: make([]etcdstore.Condition, 0, 18+len(candidate.Sources)*3),
 		mutations: []etcdstore.Mutation{
 			{
-				Type: etcdstore.MutationPut, Key: backupPolicyKey(candidate.Replacement.EnvironmentID), Value: policyValue,
+				Type: etcdstore.MutationPut, Key: backuppolicy.BackupPolicyKey(candidate.Replacement.EnvironmentID), Value: policyValue,
 			},
 			{
 				Type: etcdstore.MutationPut, Key: environmentCoordinationKey(candidate.Replacement.EnvironmentID),
@@ -526,7 +527,7 @@ func prepareBackupPolicyReplacement(
 	plan.compare(
 		backupPolicyComparePolicy,
 		candidate.Replacement.EnvironmentID,
-		backupPolicyKey(candidate.Replacement.EnvironmentID),
+		backuppolicy.BackupPolicyKey(candidate.Replacement.EnvironmentID),
 		policyRevision,
 	)
 	plan.compare(
@@ -572,7 +573,7 @@ func prepareBackupPolicyReplacement(
 		plan.compare(
 			backupPolicyCompareSource,
 			source.Source.Record.ID,
-			backupSourceKey(source.Source.Record.ID),
+			backuppolicy.BackupSourceKey(source.Source.Record.ID),
 			source.Source.Revision,
 		)
 		plan.compare(
@@ -654,7 +655,7 @@ func prepareBackupPolicyReplacement(
 		plan.compare(
 			backupPolicyCompareConnectorReference,
 			reference.ConnectorID,
-			backupPolicyConnectorReferenceKey(reference.ConnectorID, candidate.Replacement.EnvironmentID),
+			backuppolicy.BackupPolicyConnectorReferenceKey(reference.ConnectorID, candidate.Replacement.EnvironmentID),
 			revision,
 		)
 	}
@@ -669,13 +670,13 @@ func prepareBackupPolicyReplacement(
 	if oldConnectorID != "" && oldConnectorID != newConnectorID {
 		plan.mutations = append(plan.mutations, etcdstore.Mutation{
 			Type: etcdstore.MutationDelete,
-			Key:  backupPolicyConnectorReferenceKey(oldConnectorID, candidate.Replacement.EnvironmentID),
+			Key:  backuppolicy.BackupPolicyConnectorReferenceKey(oldConnectorID, candidate.Replacement.EnvironmentID),
 		})
 	}
 	if newConnectorID != "" && newConnectorID != oldConnectorID {
 		plan.mutations = append(plan.mutations, etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
-			Key:   backupPolicyConnectorReferenceKey(newConnectorID, candidate.Replacement.EnvironmentID),
+			Key:   backuppolicy.BackupPolicyConnectorReferenceKey(newConnectorID, candidate.Replacement.EnvironmentID),
 			Value: []byte(candidate.Replacement.EnvironmentID),
 		})
 	}
@@ -688,13 +689,13 @@ func prepareBackupPolicyReplacement(
 	plan.compare(
 		backupPolicyCompareKey,
 		candidate.Replacement.EnvironmentID,
-		backupKeyKey(candidate.Replacement.EnvironmentID),
+		backuppolicy.BackupKeyKey(candidate.Replacement.EnvironmentID),
 		keyRecordRevision,
 	)
 	plan.compare(
 		backupPolicyCompareKey,
 		candidate.Replacement.EnvironmentID,
-		backupKeyValueKey(candidate.Replacement.EnvironmentID),
+		backuppolicy.BackupKeyValueKey(candidate.Replacement.EnvironmentID),
 		keyValueRevision,
 	)
 	if candidate.InitialKey != nil {
@@ -704,12 +705,12 @@ func prepareBackupPolicyReplacement(
 		}
 		initial.Encrypted.Ciphertext = append([]byte(nil), candidate.InitialKey.Encrypted.Ciphertext...)
 		defer clear(initial.Encrypted.Ciphertext)
-		recordValue, encodeErr := encodeBackupKeyRecord(initial.Record)
+		recordValue, encodeErr := backuppolicy.EncodeBackupKeyRecord(initial.Record)
 		if encodeErr != nil {
 			clearMutationValues(plan.mutations)
 			return backupPolicyReplacementPlan{}, encodeErr
 		}
-		encryptedValue, encodeErr := encodeBackupKeyEncryptedValue(initial.Encrypted)
+		encryptedValue, encodeErr := backuppolicy.EncodeBackupKeyEncryptedValue(initial.Encrypted)
 		if encodeErr != nil {
 			clear(recordValue)
 			clearMutationValues(plan.mutations)
@@ -717,10 +718,10 @@ func prepareBackupPolicyReplacement(
 		}
 		plan.mutations = append(
 			plan.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupKeyKey(candidate.Replacement.EnvironmentID), Value: recordValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupKeyKey(candidate.Replacement.EnvironmentID), Value: recordValue},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   backupKeyValueKey(candidate.Replacement.EnvironmentID),
+				Key:   backuppolicy.BackupKeyValueKey(candidate.Replacement.EnvironmentID),
 				Value: encryptedValue,
 			},
 		)

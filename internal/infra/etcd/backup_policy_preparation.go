@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -19,8 +20,7 @@ import (
 // The worst case is an enabled Connector move that creates era 1 and selects
 // only Attach/Volume sources: 24 fixed operations plus 6 per source.
 const (
-	MaximumBackupPolicySources       = 12
-	MaximumBackupPolicyKeep    int64 = 9_007_199_254_740_991
+	MaximumBackupPolicySources = 12
 )
 
 // BackupPolicySourceSelection is the stable-id form accepted by the human API
@@ -138,7 +138,7 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 		)
 	}
 
-	resolved := make([]Versioned[BackupSourceRecord], len(input.Sources))
+	resolved := make([]Versioned[backuppolicy.BackupSourceRecord], len(input.Sources))
 	for index, source := range input.Sources {
 		if err := repository.validateBackupPolicySelectionTarget(ctx, input.EnvironmentID, source); err != nil {
 			return PreparedBackupPolicyReplacement{}, err
@@ -229,11 +229,11 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		hierarchyrecord.EnvironmentKey(input.EnvironmentID),
 		hierarchyrecord.ProjectKey(projectID),
-		backupPolicyKey(input.EnvironmentID),
+		backuppolicy.BackupPolicyKey(input.EnvironmentID),
 		hierarchyrecord.EnvironmentMutationEpochKey(input.EnvironmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(input.EnvironmentID),
-		backupKeyKey(input.EnvironmentID),
-		backupKeyValueKey(input.EnvironmentID),
+		backuppolicy.BackupKeyKey(input.EnvironmentID),
+		backuppolicy.BackupKeyValueKey(input.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetEnvironment), input.EnvironmentID),
 		deletionTombstoneKey(string(DeletionTargetProject), projectID),
 		deletionTombstoneKey(string(DeletionTargetTenant), tenantID),
@@ -309,7 +309,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 		MutationEpoch: Versioned[EnvironmentMutationEpochRecord]{
 			Record: epoch, Revision: result.Values[3].ModRevision, ReadRevision: result.ReadRevision,
 		},
-		Replacement: BackupPolicyRecord{
+		Replacement: backuppolicy.BackupPolicyRecord{
 			EnvironmentID: input.EnvironmentID,
 			Enabled:       input.Enabled,
 			Frequency:     input.Frequency,
@@ -322,11 +322,11 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 		Sources: make([]backupPolicySourceEvidence, len(input.Sources)),
 	}
 	if result.Values[2] != nil {
-		current, decodeErr := decodeBackupPolicyRecord(result.Values[2].Value)
+		current, decodeErr := backuppolicy.DecodeBackupPolicyRecord(result.Values[2].Value)
 		if decodeErr != nil || current.EnvironmentID != input.EnvironmentID {
 			return backupPolicyReplacementCandidate{}, false, recordcodec.CorruptRecord()
 		}
-		candidate.Current = &Versioned[BackupPolicyRecord]{
+		candidate.Current = &Versioned[backuppolicy.BackupPolicyRecord]{
 			Record: current, Revision: result.Values[2].ModRevision, ReadRevision: result.ReadRevision,
 		}
 	}
@@ -366,11 +366,11 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 	}
 	keyFound := result.Values[5] != nil
 	if keyFound {
-		record, decodeErr := decodeBackupKeyRecord(result.Values[5].Value)
+		record, decodeErr := backuppolicy.DecodeBackupKeyRecord(result.Values[5].Value)
 		if decodeErr != nil {
 			return backupPolicyReplacementCandidate{}, false, corruptBackupKey()
 		}
-		encrypted, decodeErr := decodeBackupKeyEncryptedValue(result.Values[6].Value)
+		encrypted, decodeErr := backuppolicy.DecodeBackupKeyEncryptedValue(result.Values[6].Value)
 		if decodeErr != nil || record.EnvironmentID != input.EnvironmentID ||
 			encrypted.EnvironmentID != input.EnvironmentID || record.KeyEra != encrypted.KeyEra {
 			clear(encrypted.Ciphertext)
@@ -465,7 +465,7 @@ func validateBackupPolicyReplacementInput(
 	configured := input.Frequency != "" || input.Keep != 0 || input.Encryption != "" ||
 		input.ConnectorID != "" || len(input.Sources) != 0
 	if input.Enabled || configured {
-		if input.Frequency == "" || input.Keep <= 0 || input.Keep > MaximumBackupPolicyKeep ||
+		if input.Frequency == "" || input.Keep <= 0 || input.Keep > backuppolicy.MaximumBackupPolicyKeep ||
 			(input.Encryption != "age" && input.Encryption != "none") ||
 			input.Enabled && (len(input.Sources) == 0 || input.ConnectorID == "") {
 			return errs.New(errs.KindValidationFailed, "configured backup policy is incomplete")
@@ -482,14 +482,14 @@ func validateBackupPolicyReplacementInput(
 		targetID string
 	}]struct{}, len(input.Sources))
 	for _, source := range input.Sources {
-		probe := BackupSourceRecord{
+		probe := backuppolicy.BackupSourceRecord{
 			ID:            ids.New(ids.KindBackupSource),
 			EnvironmentID: input.EnvironmentID,
 			Kind:          source.Kind,
 			TargetID:      source.TargetID,
 			CreatedAt:     time.Now().UTC(),
 		}
-		if err := validateBackupSourceRecord(probe); err != nil {
+		if err := backuppolicy.ValidateBackupSourceRecord(probe); err != nil {
 			return err
 		}
 		identity := struct {
@@ -574,14 +574,14 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 
 func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 	ctx context.Context,
-	expected Versioned[BackupSourceRecord],
+	expected Versioned[backuppolicy.BackupSourceRecord],
 	revision int64,
 ) (backupPolicySourceEvidence, error) {
 	record := expected.Record
 	keys := []string{
-		backupSourceKey(record.ID),
-		backupSourceEnvironmentKey(record.EnvironmentID, record.ID),
-		backupSourceIdentityKey(record.EnvironmentID, record.Kind, record.TargetID),
+		backuppolicy.BackupSourceKey(record.ID),
+		backuppolicy.BackupSourceEnvironmentKey(record.EnvironmentID, record.ID),
+		backuppolicy.BackupSourceIdentityKey(record.EnvironmentID, record.Kind, record.TargetID),
 	}
 	if record.Kind == core.BackupSourceAttach {
 		keys = append(keys, attachrecord.AttachKey(record.TargetID), attachrecord.AttachOwnerKey(record.EnvironmentID, record.TargetID))
@@ -594,14 +594,14 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 		result.Values[1] == nil || result.Values[2] == nil {
 		return backupPolicySourceEvidence{}, recordcodec.CorruptRecord()
 	}
-	current, err := decodeBackupSourceRecord(result.Values[0].Value)
+	current, err := backuppolicy.DecodeBackupSourceRecord(result.Values[0].Value)
 	if err != nil || current.ID != record.ID || current.EnvironmentID != record.EnvironmentID ||
 		current.Kind != record.Kind || current.TargetID != record.TargetID ||
 		string(result.Values[1].Value) != record.ID || string(result.Values[2].Value) != record.ID {
 		return backupPolicySourceEvidence{}, recordcodec.CorruptRecord()
 	}
 	evidence := backupPolicySourceEvidence{
-		Source: Versioned[BackupSourceRecord]{
+		Source: Versioned[backuppolicy.BackupSourceRecord]{
 			Record: current, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
 		},
 		EnvironmentIndex: cloneBackupPolicyEvidenceKeyValue(result.Values[1]),
@@ -695,7 +695,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorReferences(
 	for index, connectorID := range connectorIDs {
 		result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
-				backupPolicyConnectorReferenceKey(connectorID, candidate.Replacement.EnvironmentID),
+				backuppolicy.BackupPolicyConnectorReferenceKey(connectorID, candidate.Replacement.EnvironmentID),
 			},
 			Revision: revision,
 		})
@@ -722,24 +722,24 @@ func newbackupPolicyInitialKey(
 		return nil, errs.New(errs.KindValidationFailed, "initial age key material is required")
 	}
 	initial := &backupPolicyInitialKey{
-		Record: BackupKeyRecord{
+		Record: backuppolicy.BackupKeyRecord{
 			EnvironmentID: environmentID,
 			Recipient:     material.Recipient,
 			KeyEra:        1,
 			CreatedAt:     now,
 			RotatedAt:     now,
 		},
-		Encrypted: BackupKeyEncryptedValue{
+		Encrypted: backuppolicy.BackupKeyEncryptedValue{
 			EnvironmentID: environmentID,
 			KeyEra:        1,
 			Ciphertext:    append([]byte(nil), material.Ciphertext...),
 		},
 	}
-	if err := validateBackupKeyRecord(initial.Record); err != nil {
+	if err := backuppolicy.ValidateBackupKeyRecord(initial.Record); err != nil {
 		clear(initial.Encrypted.Ciphertext)
 		return nil, err
 	}
-	if err := validateBackupKeyEncryptedValue(initial.Encrypted); err != nil {
+	if err := backuppolicy.ValidateBackupKeyEncryptedValue(initial.Encrypted); err != nil {
 		clear(initial.Encrypted.Ciphertext)
 		return nil, err
 	}

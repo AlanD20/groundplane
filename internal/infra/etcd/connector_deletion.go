@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -62,7 +63,7 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		connectorrecord.CredentialValueKey(connector.ID),
 		deletionTombstoneKey(string(DeletionTargetConnector), connector.ID),
 		connectorRemovalIntentKey(task.ID),
-		backupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID),
+		backuppolicy.BackupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID),
 	}
 	fence, fixed, err := repository.loadConnectorMutationFence(
 		ctx,
@@ -255,7 +256,7 @@ func requireConnectorReferencePrefixesEmpty(
 	revision int64,
 ) ([]etcdstore.Condition, error) {
 	prefixes := []string{
-		backupPolicyConnectorReferencePrefix(connectorID),
+		backuppolicy.BackupPolicyConnectorReferencePrefix(connectorID),
 		backupRecoveryPointConnectorPrefix + connectorID + "/",
 		backupOrphanConnectorPrefix + connectorID + "/",
 	}
@@ -286,7 +287,7 @@ func classifyConnectorReference(
 ) error {
 	switch index {
 	case 0:
-		expectedKey := backupPolicyConnectorReferenceKey(connectorID, environmentID)
+		expectedKey := backuppolicy.BackupPolicyConnectorReferenceKey(connectorID, environmentID)
 		if value.Key != expectedKey || string(value.Value) != environmentID {
 			return errs.New(errs.KindInternal, "connector reference prefix is corrupt")
 		}
@@ -362,7 +363,7 @@ func newConnectorDeletionEvidence(
 			},
 			{Key: deletionTombstoneKey(string(DeletionTargetConnector), connector.ID)},
 			{Key: connectorRemovalIntentKey(task.ID)},
-			{Key: backupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID)},
+			{Key: backuppolicy.BackupPolicyConnectorReferenceKey(connector.ID, connector.EnvironmentID)},
 		},
 	}
 	evidence.conditions = append(evidence.conditions, referenceConditions...)

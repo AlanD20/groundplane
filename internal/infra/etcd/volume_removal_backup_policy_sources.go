@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
@@ -14,7 +15,7 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 	if len(policy.SourceIDs) != 0 {
 		keys := make([]string, len(policy.SourceIDs))
 		for index, sourceID := range policy.SourceIDs {
-			keys[index] = backupSourceKey(sourceID)
+			keys[index] = backuppolicy.BackupSourceKey(sourceID)
 		}
 		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 		if err != nil {
@@ -28,7 +29,7 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 			if value == nil {
 				return corruptBackupRuntimeRecord()
 			}
-			source, err := decodeBackupSourceRecord(value.Value)
+			source, err := backuppolicy.DecodeBackupSourceRecord(value.Value)
 			if err != nil || source.ID != policy.SourceIDs[index] || source.EnvironmentID != state.environmentID {
 				return corruptBackupRuntimeRecord()
 			}
@@ -39,12 +40,12 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 	keys := make([]string, 0, len(state.sources)*2+1)
 	values := make([]string, 0, len(state.sources)*2+1)
 	for _, source := range state.sources {
-		keys = append(keys, backupSourceEnvironmentKey(state.environmentID, source.ID),
-			backupSourceIdentityKey(state.environmentID, source.Kind, source.TargetID))
+		keys = append(keys, backuppolicy.BackupSourceEnvironmentKey(state.environmentID, source.ID),
+			backuppolicy.BackupSourceIdentityKey(state.environmentID, source.Kind, source.TargetID))
 		values = append(values, source.ID, source.ID)
 	}
 	if policy.ConnectorID != "" {
-		keys = append(keys, backupPolicyConnectorReferenceKey(policy.ConnectorID, state.environmentID))
+		keys = append(keys, backuppolicy.BackupPolicyConnectorReferenceKey(policy.ConnectorID, state.environmentID))
 		expected := ""
 		if policy.Enabled {
 			expected = state.environmentID

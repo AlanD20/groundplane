@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -504,7 +505,7 @@ func backupRunExternalConditions(
 		allowed[connectorrecord.CredentialValueKey(run.ConnectorID)] = struct{}{}
 	}
 	for _, source := range run.Sources {
-		allowed[backupSourceKey(source.SourceID)] = struct{}{}
+		allowed[backuppolicy.BackupSourceKey(source.SourceID)] = struct{}{}
 		if source.Snapshot.Postgres != nil {
 			allowed[environmentBlueprintHeadKey(source.Snapshot.Postgres.BackingEnvironmentID)] = struct{}{}
 		}
@@ -1427,7 +1428,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 		}
 		policyRead, err := repository.readFixedKeys(
 			ctx,
-			[]string{backupPolicyKey(run.EnvironmentID)},
+			[]string{backuppolicy.BackupPolicyKey(run.EnvironmentID)},
 			fixedRevision,
 		)
 		if err != nil {
@@ -1437,7 +1438,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 		if policyRead.Values[0] == nil || policyRead.Values[0].ModRevision != run.PolicyRevision {
 			return nil, nil, errs.New(errs.KindStateConflict, "backup policy snapshot changed")
 		}
-		policy, decodeErr := decodeBackupPolicyRecord(policyRead.Values[0].Value)
+		policy, decodeErr := backuppolicy.DecodeBackupPolicyRecord(policyRead.Values[0].Value)
 		if decodeErr != nil {
 			return nil, nil, corruptBackupRuntimeRecord()
 		}
@@ -1451,13 +1452,13 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			!slices.Equal(policy.SourceIDs, sourceIDs) {
 			return nil, nil, errs.New(errs.KindStateConflict, "backup policy snapshot changed")
 		}
-		if err := addCondition(backupPolicyKey(run.EnvironmentID), run.PolicyRevision); err != nil {
+		if err := addCondition(backuppolicy.BackupPolicyKey(run.EnvironmentID), run.PolicyRevision); err != nil {
 			return nil, nil, err
 		}
 	}
 	if run.Encryption == BackupRuntimeEncryptionAge {
 		keyRead, readErr := repository.readFixedKeys(ctx, []string{
-			backupKeyKey(run.EnvironmentID), backupKeyValueKey(run.EnvironmentID),
+			backuppolicy.BackupKeyKey(run.EnvironmentID), backuppolicy.BackupKeyValueKey(run.EnvironmentID),
 		}, fixedRevision)
 		if readErr != nil {
 			return nil, nil, readErr
@@ -1468,8 +1469,8 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			keyRead.Values[1].ModRevision != run.BackupKeyValueRevision {
 			return nil, nil, errs.New(errs.KindStateConflict, "backup key snapshot changed")
 		}
-		keyRecord, decodeErr := decodeBackupKeyRecord(keyRead.Values[0].Value)
-		keyValue, valueErr := decodeBackupKeyEncryptedValue(keyRead.Values[1].Value)
+		keyRecord, decodeErr := backuppolicy.DecodeBackupKeyRecord(keyRead.Values[0].Value)
+		keyValue, valueErr := backuppolicy.DecodeBackupKeyEncryptedValue(keyRead.Values[1].Value)
 		defer clear(keyValue.Ciphertext)
 		if decodeErr != nil || valueErr != nil || keyRecord.EnvironmentID != run.EnvironmentID ||
 			keyValue.EnvironmentID != run.EnvironmentID || keyRecord.KeyEra != run.KeyEra ||
@@ -1477,13 +1478,13 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			return nil, nil, errs.New(errs.KindStateConflict, "backup key snapshot changed")
 		}
 		if err := addCondition(
-			backupKeyKey(run.EnvironmentID),
+			backuppolicy.BackupKeyKey(run.EnvironmentID),
 			run.BackupKeyRecordRevision,
 		); err != nil {
 			return nil, nil, err
 		}
 		if err := addCondition(
-			backupKeyValueKey(run.EnvironmentID),
+			backuppolicy.BackupKeyValueKey(run.EnvironmentID),
 			run.BackupKeyValueRevision,
 		); err != nil {
 			return nil, nil, err
@@ -1492,7 +1493,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 	for _, source := range run.Sources {
 		sourceRead, readErr := repository.readFixedKeys(
 			ctx,
-			[]string{backupSourceKey(source.SourceID)},
+			[]string{backuppolicy.BackupSourceKey(source.SourceID)},
 			fixedRevision,
 		)
 		if readErr != nil {
@@ -1505,7 +1506,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			clearBackupRuntimeMutations(mutations)
 			return nil, nil, errs.New(errs.KindStateConflict, "backup source snapshot changed")
 		}
-		storedSource, decodeErr := decodeBackupSourceRecord(sourceRead.Values[0].Value)
+		storedSource, decodeErr := backuppolicy.DecodeBackupSourceRecord(sourceRead.Values[0].Value)
 		clearKeyValues(sourceRead.Values)
 		if decodeErr != nil || storedSource.ID != source.SourceID ||
 			storedSource.EnvironmentID != run.EnvironmentID ||
@@ -1518,7 +1519,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			return nil, nil, errs.New(errs.KindStateConflict, "backup source snapshot changed")
 		}
 		if err := addCondition(
-			backupSourceKey(source.SourceID),
+			backuppolicy.BackupSourceKey(source.SourceID),
 			source.SourceRevision,
 		); err != nil {
 			clearBackupRuntimeMutations(mutations)
@@ -1706,7 +1707,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 }
 
 func checkedBackupRuntimeRetentionKeep(keep int64) (int64, error) {
-	if keep <= 0 || keep > MaximumBackupPolicyKeep {
+	if keep <= 0 || keep > backuppolicy.MaximumBackupPolicyKeep {
 		return 0, corruptBackupRuntimeRecord()
 	}
 	return keep, nil

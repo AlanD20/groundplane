@@ -3,6 +3,7 @@ package blueprint
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -32,8 +33,8 @@ type environmentBlueprintBackupKeyFactory interface {
 }
 
 type environmentBlueprintBackupPolicySnapshot struct {
-	policy         etcd.BackupPolicyRecord
-	sources        []etcd.BackupSourceRecord
+	policy         backuppolicy.BackupPolicyRecord
+	sources        []backuppolicy.BackupSourceRecord
 	connectorName  string
 	connectorFound bool
 	found          bool

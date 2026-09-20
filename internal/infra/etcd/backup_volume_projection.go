@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -87,7 +88,7 @@ func (repository *BackupRuntimeRepository) ResolveVolumeRemovalImpactAtRevision(
 		)
 	}
 	policyRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{backupPolicyKey(environmentID)}, Revision: revision,
+		Keys: []string{backuppolicy.BackupPolicyKey(environmentID)}, Revision: revision,
 	})
 	if err != nil {
 		return BackupVolumeRemovalImpact{}, err
@@ -99,7 +100,7 @@ func (repository *BackupRuntimeRepository) ResolveVolumeRemovalImpactAtRevision(
 	selected := make(map[string]struct{})
 	impact := BackupVolumeRemovalImpact{}
 	if policyRead.Values[0] != nil {
-		policy, decodeErr := decodeBackupPolicyRecord(policyRead.Values[0].Value)
+		policy, decodeErr := backuppolicy.DecodeBackupPolicyRecord(policyRead.Values[0].Value)
 		if decodeErr != nil || policy.EnvironmentID != environmentID {
 			return BackupVolumeRemovalImpact{}, corruptBackupRuntimeRecord()
 		}
@@ -125,7 +126,7 @@ func (repository *BackupRuntimeRepository) ResolveVolumeRemovalImpactAtRevision(
 			return BackupVolumeRemovalImpact{}, pointErr
 		}
 		sourceRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{backupSourceKey(sourceID)}, Revision: revision,
+			Keys: []string{backuppolicy.BackupSourceKey(sourceID)}, Revision: revision,
 		})
 		if readErr != nil {
 			return BackupVolumeRemovalImpact{}, readErr
@@ -151,7 +152,7 @@ func (repository *BackupRuntimeRepository) backupVolumeSourceIDsAtRevision(
 	volumeID string,
 	revision int64,
 ) ([]string, error) {
-	prefix := backupSourceEnvironmentPrefix(environmentID)
+	prefix := backuppolicy.BackupSourceEnvironmentPrefix(environmentID)
 	start := ""
 	result := make([]string, 0)
 	for {
@@ -168,7 +169,7 @@ func (repository *BackupRuntimeRepository) backupVolumeSourceIDsAtRevision(
 			sourceID := string(index.Value)
 			start = index.Key
 			read, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-				Keys: []string{backupSourceKey(sourceID)}, Revision: revision,
+				Keys: []string{backuppolicy.BackupSourceKey(sourceID)}, Revision: revision,
 			})
 			clear(index.Value)
 			if readErr != nil {
@@ -177,7 +178,7 @@ func (repository *BackupRuntimeRepository) backupVolumeSourceIDsAtRevision(
 			if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
 				return nil, corruptBackupRuntimeRecord()
 			}
-			source, decodeErr := decodeBackupSourceRecord(read.Values[0].Value)
+			source, decodeErr := backuppolicy.DecodeBackupSourceRecord(read.Values[0].Value)
 			clearKeyValues(read.Values)
 			if decodeErr != nil || source.ID != sourceID || source.EnvironmentID != environmentID {
 				return nil, corruptBackupRuntimeRecord()

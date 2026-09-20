@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"strings"
@@ -18,7 +19,7 @@ const backupDueRetention = 90 * 24 * time.Hour
 // the single Controller scheduler pass.
 type BackupScheduleCandidate struct {
 	EnvironmentID  string
-	Policy         BackupPolicyRecord
+	Policy         backuppolicy.BackupPolicyRecord
 	PolicyRevision int64
 	Err            error
 }
@@ -49,7 +50,7 @@ func (repository *BackupRuntimeRepository) ListBackupScheduleCandidates(
 	start := ""
 	for {
 		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: backupPolicyPrefix, StartExclusive: start,
+			Prefix: backuppolicy.PolicyPrefix, StartExclusive: start,
 			Limit: maximumBackupRuntimeListLimit,
 		})
 		if err != nil {
@@ -59,11 +60,11 @@ func (repository *BackupRuntimeRepository) ListBackupScheduleCandidates(
 			return nil, errs.New(errs.KindInternal, "backup policy schedule range is incomplete")
 		}
 		for _, value := range page.Values {
-			environmentID := strings.TrimPrefix(value.Key, backupPolicyPrefix)
+			environmentID := strings.TrimPrefix(value.Key, backuppolicy.PolicyPrefix)
 			candidate := BackupScheduleCandidate{
 				EnvironmentID: environmentID, PolicyRevision: value.ModRevision,
 			}
-			policy, decodeErr := decodeBackupPolicyRecord(value.Value)
+			policy, decodeErr := backuppolicy.DecodeBackupPolicyRecord(value.Value)
 			clear(value.Value)
 			if ids.Validate(ids.KindEnvironment, environmentID) != nil || decodeErr != nil ||
 				policy.EnvironmentID != environmentID {
@@ -102,7 +103,7 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 		return BackupScheduleEvaluation{}, errs.New(errs.KindValidationFailed, "backup schedule clock is invalid")
 	}
 	keys := []string{
-		backupPolicyKey(environmentID),
+		backuppolicy.BackupPolicyKey(environmentID),
 		environmentCoordinationKey(environmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(environmentID),
 	}
@@ -114,7 +115,7 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 		return BackupScheduleEvaluation{}, errs.New(errs.KindStateConflict, "backup schedule is not initialized")
 	}
 	defer clearKeyValues(read.Values)
-	policy, err := decodeBackupPolicyRecord(read.Values[0].Value)
+	policy, err := backuppolicy.DecodeBackupPolicyRecord(read.Values[0].Value)
 	if err != nil || !policy.Enabled {
 		return BackupScheduleEvaluation{}, errs.New(errs.KindStateConflict, "backup policy is disabled or invalid")
 	}
@@ -197,7 +198,7 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 		return errs.New(errs.KindValidationFailed, "backup overlap evaluation is invalid")
 	}
 	keys := []string{
-		backupPolicyKey(evaluation.EnvironmentID),
+		backuppolicy.BackupPolicyKey(evaluation.EnvironmentID),
 		environmentCoordinationKey(evaluation.EnvironmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(evaluation.EnvironmentID),
 	}
@@ -286,7 +287,7 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 	if record.ScheduledAt == nil || record.Initiator != BackupRunInitiatorSchedule {
 		return nil, nil, errs.New(errs.KindValidationFailed, "scheduled backup publication metadata is missing")
 	}
-	keys := []string{backupPolicyKey(record.EnvironmentID), environmentCoordinationKey(record.EnvironmentID)}
+	keys := []string{backuppolicy.BackupPolicyKey(record.EnvironmentID), environmentCoordinationKey(record.EnvironmentID)}
 	dueKey, err := backupDueOutcomeKey(record.EnvironmentID, record.PolicyRevision, *record.ScheduledAt)
 	if err != nil {
 		return nil, nil, err
@@ -313,7 +314,7 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 	if read.Values[2] != nil {
 		return nil, nil, errs.New(errs.KindStateConflict, "backup scheduled occurrence already has an outcome")
 	}
-	policy, err := decodeBackupPolicyRecord(read.Values[0].Value)
+	policy, err := backuppolicy.DecodeBackupPolicyRecord(read.Values[0].Value)
 	if err != nil || !policy.Enabled || policy.EnvironmentID != record.EnvironmentID ||
 		read.Values[0].ModRevision != record.PolicyRevision {
 		return nil, nil, errs.New(errs.KindStateConflict, "backup scheduled policy changed")

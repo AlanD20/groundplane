@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 )
@@ -33,7 +34,7 @@ func validateBackupKeyRotationRecord(record BackupKeyRotationRecord) error {
 		return invalidBackupRuntimeRecord("backup key rotation is invalid")
 	}
 	if record.State == BackupKeyRotationPrepared && (len(record.NextEncryptedIdentity) == 0 ||
-		len(record.NextEncryptedIdentity) > maximumBackupKeyCiphertextLen) {
+		len(record.NextEncryptedIdentity) > backuppolicy.MaximumKeyCiphertextLen) {
 		return invalidBackupRuntimeRecord(
 			"prepared backup key rotation requires a wrapped identity",
 		)

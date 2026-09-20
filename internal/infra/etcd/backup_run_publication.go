@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -99,7 +100,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	}
 	anchorKeys := []string{
 		hierarchyrecord.EnvironmentKey(input.EnvironmentID),
-		backupPolicyKey(input.EnvironmentID),
+		backuppolicy.BackupPolicyKey(input.EnvironmentID),
 	}
 	var anchor *etcdstore.GetManyResult
 	var err error
@@ -120,7 +121,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	}
 	fixedRevision := anchor.ReadRevision
 	environment, environmentErr := hierarchyrecord.DecodeEnvironment(anchor.Values[0].Value)
-	policy, policyErr := decodeBackupPolicyRecord(anchor.Values[1].Value)
+	policy, policyErr := backuppolicy.DecodeBackupPolicyRecord(anchor.Values[1].Value)
 	if environmentErr != nil || policyErr != nil || environment.ID != input.EnvironmentID ||
 		policy.EnvironmentID != input.EnvironmentID {
 		return PreparedManualBackupRun{}, corruptBackupRuntimeRecord()
@@ -192,7 +193,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 	}
 	sourceKeys := make([]string, len(policy.SourceIDs))
 	for index, sourceID := range policy.SourceIDs {
-		sourceKeys[index] = backupSourceKey(sourceID)
+		sourceKeys[index] = backuppolicy.BackupSourceKey(sourceID)
 	}
 	sourceRead, err := repository.readFixedKeys(ctx, sourceKeys, fixedRevision)
 	if err != nil {
@@ -207,7 +208,7 @@ func (repository *BackupRuntimeRepository) PrepareManualBackupRun(
 				"backup source is unavailable",
 			)
 		}
-		source, decodeErr := decodeBackupSourceRecord(value.Value)
+		source, decodeErr := backuppolicy.DecodeBackupSourceRecord(value.Value)
 		if decodeErr != nil || source.ID != policy.SourceIDs[index] ||
 			source.EnvironmentID != input.EnvironmentID {
 			return PreparedManualBackupRun{}, corruptBackupRuntimeRecord()
@@ -344,7 +345,7 @@ func (repository *BackupRuntimeRepository) manualBackupKey(
 		return errs.New(errs.KindStateConflict, "backup encryption strategy is unsupported")
 	}
 	read, err := repository.readFixedKeys(ctx, []string{
-		backupKeyKey(run.EnvironmentID), backupKeyValueKey(run.EnvironmentID),
+		backuppolicy.BackupKeyKey(run.EnvironmentID), backuppolicy.BackupKeyValueKey(run.EnvironmentID),
 	}, fixedRevision)
 	if err != nil {
 		return err
@@ -353,8 +354,8 @@ func (repository *BackupRuntimeRepository) manualBackupKey(
 	if read.Values[0] == nil || read.Values[1] == nil {
 		return errs.New(errs.KindStateConflict, "backup age key is unavailable")
 	}
-	record, recordErr := decodeBackupKeyRecord(read.Values[0].Value)
-	value, valueErr := decodeBackupKeyEncryptedValue(read.Values[1].Value)
+	record, recordErr := backuppolicy.DecodeBackupKeyRecord(read.Values[0].Value)
+	value, valueErr := backuppolicy.DecodeBackupKeyEncryptedValue(read.Values[1].Value)
 	defer clear(value.Ciphertext)
 	if recordErr != nil || valueErr != nil || record.EnvironmentID != run.EnvironmentID ||
 		value.EnvironmentID != run.EnvironmentID || record.KeyEra != value.KeyEra {
@@ -370,7 +371,7 @@ func (repository *BackupRuntimeRepository) manualBackupKey(
 func (repository *BackupRuntimeRepository) prepareManualBackupSource(
 	ctx context.Context,
 	run BackupRunRecord,
-	source BackupSourceRecord,
+	source backuppolicy.BackupSourceRecord,
 	sourceRevision int64,
 	ordinal uint32,
 	fixedRevision int64,

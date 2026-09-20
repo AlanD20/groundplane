@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -46,7 +47,7 @@ type BackupSecretResolutionEvidence struct {
 	DispatchRevision    int64
 	Point               *BackupRecoveryPointRecord
 	Prune               *BackupRecoveryPointPruneRecord
-	Source              BackupSourceRecord
+	Source              backuppolicy.BackupSourceRecord
 	SourceRevision      int64
 	Credentials         connectorrecord.EncryptedCredentials
 	HasCredentials      bool
@@ -446,7 +447,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 	if evidence.Run != nil {
 		environmentID = evidence.Run.EnvironmentID
 		for _, source := range evidence.Run.Sources {
-			position := dynamic.add(backupSourceKey(source.SourceID))
+			position := dynamic.add(backuppolicy.BackupSourceKey(source.SourceID))
 			sourceIDs[source.SourceID] = position
 			dynamic.sources[source.SourceID] = position
 		}
@@ -461,7 +462,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 			if index < len(plan.Steps) {
 				prune := plan.Steps[index].GetBackupArtifactPrune()
 				if prune != nil {
-					sourcePosition := dynamic.add(backupSourceKey(prune.SourceId))
+					sourcePosition := dynamic.add(backuppolicy.BackupSourceKey(prune.SourceId))
 					sourceIDs[prune.SourceId] = sourcePosition
 					dynamic.sources[prune.SourceId] = sourcePosition
 					connectorPosition := dynamic.add(connectorrecord.RecordKey(prune.ConnectorId))
@@ -652,7 +653,7 @@ func (reader *BackupSecretResolutionReader) decodeSourceDynamicEvidence(
 	if value == nil || value.ModRevision != source.SourceRevision {
 		return errs.New(errs.KindStateConflict, "backup source evidence changed")
 	}
-	stored, err := decodeBackupSourceRecord(value.Value)
+	stored, err := backuppolicy.DecodeBackupSourceRecord(value.Value)
 	if err != nil || stored.ID != source.SourceID || stored.EnvironmentID != evidence.Run.EnvironmentID ||
 		string(stored.Kind) != string(source.Kind) || stored.TargetID != source.TargetID {
 		return errs.New(errs.KindStateConflict, "backup source evidence changed")
@@ -781,7 +782,7 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 		if sourceValue == nil || environmentValue == nil || connectorValue == nil {
 			return errs.New(errs.KindStateConflict, "backup prune authority evidence is unavailable")
 		}
-		source, sourceErr := decodeBackupSourceRecord(sourceValue.Value)
+		source, sourceErr := backuppolicy.DecodeBackupSourceRecord(sourceValue.Value)
 		environment, environmentErr := hierarchyrecord.DecodeEnvironment(environmentValue.Value)
 		connector, connectorErr := connectorrecord.DecodeRecord(connectorValue.Value)
 		if sourceErr != nil {
@@ -843,11 +844,11 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 	return errs.New(errs.KindStateConflict, "backup prune point is not in its dispatch")
 }
 
-func mustDecodeBackupSource(value *etcdstore.KeyValue) BackupSourceRecord {
+func mustDecodeBackupSource(value *etcdstore.KeyValue) backuppolicy.BackupSourceRecord {
 	if value == nil {
-		return BackupSourceRecord{}
+		return backuppolicy.BackupSourceRecord{}
 	}
-	record, _ := decodeBackupSourceRecord(value.Value)
+	record, _ := backuppolicy.DecodeBackupSourceRecord(value.Value)
 	return record
 }
 

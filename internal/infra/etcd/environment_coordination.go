@@ -3,6 +3,7 @@ package etcd
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
@@ -125,8 +126,8 @@ func equalEnvironmentCoordinationRecord(left, right EnvironmentCoordinationRecor
 		leftState.UpdatedAt.Equal(rightState.UpdatedAt)
 }
 
-func backupPolicyScheduleDigest(policy BackupPolicyRecord) (string, error) {
-	if err := validateBackupPolicyRecord(policy); err != nil {
+func backupPolicyScheduleDigest(policy backuppolicy.BackupPolicyRecord) (string, error) {
+	if err := backuppolicy.ValidateBackupPolicyRecord(policy); err != nil {
 		return "", err
 	}
 	if !validEnvironmentCoordinationInstant(policy.UpdatedAt) {
@@ -137,7 +138,7 @@ func backupPolicyScheduleDigest(policy BackupPolicyRecord) (string, error) {
 	}
 	// encodeBackupPolicyRecord is the sole canonical durable policy encoding;
 	// hashing that value binds schedule state to every persisted policy field.
-	value, err := encodeBackupPolicyRecord(policy)
+	value, err := backuppolicy.EncodeBackupPolicyRecord(policy)
 	if err != nil {
 		return "", err
 	}
@@ -152,13 +153,13 @@ func backupPolicyScheduleDigest(policy BackupPolicyRecord) (string, error) {
 // changes seed a new cadence; same-frequency replacement carries EnabledAt.
 func replaceEnvironmentCoordinationSchedule(
 	current EnvironmentCoordinationRecord,
-	replacement BackupPolicyRecord,
+	replacement backuppolicy.BackupPolicyRecord,
 	now time.Time,
 ) (EnvironmentCoordinationRecord, time.Time, error) {
 	if err := validateEnvironmentCoordinationRecord(current); err != nil {
 		return EnvironmentCoordinationRecord{}, time.Time{}, err
 	}
-	if err := validateBackupPolicyRecord(replacement); err != nil {
+	if err := backuppolicy.ValidateBackupPolicyRecord(replacement); err != nil {
 		return EnvironmentCoordinationRecord{}, time.Time{}, err
 	}
 	if replacement.EnvironmentID != current.EnvironmentID || !validEnvironmentCoordinationInstant(now.UTC()) {

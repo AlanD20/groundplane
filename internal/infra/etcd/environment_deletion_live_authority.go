@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -98,9 +99,9 @@ func environmentDeletionLiveAuthorityKeys(environmentID string) []string {
 		environmentCoordinationKey(environmentID),
 		componentTaskActiveEnvironmentKey(environmentID),
 		removalrecord.EnvironmentLockKey(environmentID),
-		backupPolicyKey(environmentID),
-		backupKeyKey(environmentID),
-		backupKeyValueKey(environmentID),
+		backuppolicy.BackupPolicyKey(environmentID),
+		backuppolicy.BackupKeyKey(environmentID),
+		backuppolicy.BackupKeyValueKey(environmentID),
 	}
 }
 
@@ -113,7 +114,7 @@ func environmentDeletionLiveAuthorityPrefixes(environmentID string, operationID 
 		componentrecord.EnvironmentOwnerPrefix(environmentID),
 		connectorEnvironmentPrefix(environmentID),
 		environmentReleaseGroupOwnerPrefix + environmentID + "/",
-		backupSourceEnvironmentPrefix(environmentID),
+		backuppolicy.BackupSourceEnvironmentPrefix(environmentID),
 		backupScheduleCursorPrefix + environmentID + "/",
 		backupDueOutcomePrefix + environmentID + "/",
 		backupRecoveryPointEnvironmentPrefix + environmentID + "/",

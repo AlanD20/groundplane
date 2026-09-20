@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 )
@@ -61,7 +62,7 @@ func validateBackupOrphanRecord(record BackupOrphanRecord) error {
 		recordcodec.ValidateID(ids.KindOperation, record.Reconciliation.OperationID) != nil ||
 		record.Reconciliation.PolicyRevision <= 0 ||
 		record.Reconciliation.RetentionKeep <= 0 ||
-		record.Reconciliation.RetentionKeep > MaximumBackupPolicyKeep ||
+		record.Reconciliation.RetentionKeep > backuppolicy.MaximumBackupPolicyKeep ||
 		(record.State != BackupOrphanInspect && record.State != BackupOrphanDelete) ||
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) ||
 		record.CreatedAt.Before(record.Point.CreatedAt) {
@@ -75,7 +76,7 @@ func validateBackupRetentionSweepRecord(record BackupRetentionSweepRecord) error
 		recordcodec.ValidateID(
 			ids.KindRecoveryPoint,
 			record.TriggerRecoveryPointID,
-		) != nil || record.Keep <= 0 || record.Keep > MaximumBackupPolicyKeep ||
+		) != nil || record.Keep <= 0 || record.Keep > backuppolicy.MaximumBackupPolicyKeep ||
 		record.Revision <= 0 || !validBackupRetentionState(record.State) ||
 		!validBackupRuntimeLifecycle(record.CreatedAt, record.UpdatedAt) {
 		return invalidBackupRuntimeRecord("backup retention sweep is invalid")

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -14,8 +15,8 @@ import (
 // authoring view. ConnectorFound distinguishes a deleted retained Connector
 // from an unconfigured policy without exposing the stable id in authored YAML.
 type EnvironmentBlueprintBackupPolicySnapshot struct {
-	Policy         BackupPolicyRecord
-	Sources        []BackupSourceRecord
+	Policy         backuppolicy.BackupPolicyRecord
+	Sources        []backuppolicy.BackupSourceRecord
 	ConnectorName  string
 	ConnectorFound bool
 	Found          bool
@@ -35,7 +36,7 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 		)
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{backupPolicyKey(environmentID)}, Revision: revision,
+		Keys: []string{backuppolicy.BackupPolicyKey(environmentID)}, Revision: revision,
 	})
 	if err != nil {
 		return EnvironmentBlueprintBackupPolicySnapshot{}, err
@@ -49,13 +50,13 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 	if base.Values[0] == nil {
 		return EnvironmentBlueprintBackupPolicySnapshot{}, nil
 	}
-	policy, err := decodeBackupPolicyRecord(base.Values[0].Value)
+	policy, err := backuppolicy.DecodeBackupPolicyRecord(base.Values[0].Value)
 	if err != nil || policy.EnvironmentID != environmentID {
 		return EnvironmentBlueprintBackupPolicySnapshot{}, recordcodec.CorruptRecord()
 	}
 	keys := make([]string, 0, len(policy.SourceIDs)*3+2)
 	for _, sourceID := range policy.SourceIDs {
-		keys = append(keys, backupSourceKey(sourceID), backupSourceEnvironmentKey(environmentID, sourceID))
+		keys = append(keys, backuppolicy.BackupSourceKey(sourceID), backuppolicy.BackupSourceEnvironmentKey(environmentID, sourceID))
 	}
 	if policy.ConnectorID != "" {
 		keys = append(
@@ -78,7 +79,7 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 	}
 	defer clearKeyValues(support.Values)
 	snapshot := EnvironmentBlueprintBackupPolicySnapshot{
-		Policy: policy, Sources: make([]BackupSourceRecord, len(policy.SourceIDs)), Found: true,
+		Policy: policy, Sources: make([]backuppolicy.BackupSourceRecord, len(policy.SourceIDs)), Found: true,
 	}
 	offset := 0
 	selections := make([]BackupPolicySourceSelection, len(policy.SourceIDs))
@@ -88,7 +89,7 @@ func (repository *BackupPolicyRepository) GetEnvironmentBlueprintBackupPolicySna
 		if primary == nil || owner == nil || string(owner.Value) != sourceID {
 			return EnvironmentBlueprintBackupPolicySnapshot{}, recordcodec.CorruptRecord()
 		}
-		source, decodeErr := decodeBackupSourceRecord(primary.Value)
+		source, decodeErr := backuppolicy.DecodeBackupSourceRecord(primary.Value)
 		if decodeErr != nil || source.ID != sourceID || source.EnvironmentID != environmentID {
 			return EnvironmentBlueprintBackupPolicySnapshot{}, recordcodec.CorruptRecord()
 		}

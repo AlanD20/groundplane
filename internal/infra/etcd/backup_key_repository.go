@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 
@@ -13,8 +14,8 @@ import (
 // at one fixed MVCC view while preserving their independent compare revisions.
 // The caller owns Encrypted.Ciphertext and must clear it.
 type VersionedBackupKey struct {
-	Record            BackupKeyRecord
-	Encrypted         BackupKeyEncryptedValue
+	Record            backuppolicy.BackupKeyRecord
+	Encrypted         backuppolicy.BackupKeyEncryptedValue
 	RecordRevision    int64
 	EncryptedRevision int64
 	ReadRevision      int64
@@ -31,8 +32,8 @@ func (repository *BackupPolicyRepository) GetBackupKey(
 		return VersionedBackupKey{}, false, err
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		backupKeyKey(environmentID),
-		backupKeyValueKey(environmentID),
+		backuppolicy.BackupKeyKey(environmentID),
+		backuppolicy.BackupKeyValueKey(environmentID),
 	}})
 	if err != nil {
 		return VersionedBackupKey{}, false, err
@@ -49,11 +50,11 @@ func (repository *BackupPolicyRepository) GetBackupKey(
 	if result.Values[0] == nil || result.Values[1] == nil {
 		return VersionedBackupKey{}, false, corruptBackupKey()
 	}
-	record, err := decodeBackupKeyRecord(result.Values[0].Value)
+	record, err := backuppolicy.DecodeBackupKeyRecord(result.Values[0].Value)
 	if err != nil {
 		return VersionedBackupKey{}, false, corruptBackupKey()
 	}
-	encrypted, err := decodeBackupKeyEncryptedValue(result.Values[1].Value)
+	encrypted, err := backuppolicy.DecodeBackupKeyEncryptedValue(result.Values[1].Value)
 	if err != nil {
 		return VersionedBackupKey{}, false, corruptBackupKey()
 	}
@@ -70,10 +71,10 @@ func (repository *BackupPolicyRepository) GetBackupKey(
 }
 
 func validateVersionedBackupKey(key VersionedBackupKey) error {
-	if err := validateBackupKeyRecord(key.Record); err != nil {
+	if err := backuppolicy.ValidateBackupKeyRecord(key.Record); err != nil {
 		return err
 	}
-	if err := validateBackupKeyEncryptedValue(key.Encrypted); err != nil {
+	if err := backuppolicy.ValidateBackupKeyEncryptedValue(key.Encrypted); err != nil {
 		return err
 	}
 	if key.Record.EnvironmentID != key.Encrypted.EnvironmentID || key.Record.KeyEra != key.Encrypted.KeyEra ||

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -415,9 +416,9 @@ func environmentDeletionBackupAuthorityPresent(
 ) (bool, error) {
 	direct, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			backupPolicyKey(environmentID),
-			backupKeyKey(environmentID),
-			backupKeyValueKey(environmentID),
+			backuppolicy.BackupPolicyKey(environmentID),
+			backuppolicy.BackupKeyKey(environmentID),
+			backuppolicy.BackupKeyValueKey(environmentID),
 		},
 		Revision: revision,
 	})
@@ -446,7 +447,7 @@ func environmentDeletionBackupAuthorityPresent(
 		return true, nil
 	}
 	prefixes := []string{
-		backupSourceEnvironmentPrefix(environmentID),
+		backuppolicy.BackupSourceEnvironmentPrefix(environmentID),
 		connectorEnvironmentPrefix(environmentID),
 		backupScheduleCursorPrefix + environmentID + "/",
 		backupDueOutcomePrefix + environmentID + "/",

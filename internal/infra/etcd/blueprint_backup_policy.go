@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"sync"
@@ -13,7 +14,7 @@ import (
 )
 
 type blueprintBackupPolicySourceEvidence struct {
-	record           BackupSourceRecord
+	record           backuppolicy.BackupSourceRecord
 	primary          *etcdstore.KeyValue
 	environmentIndex *etcdstore.KeyValue
 	identityIndex    *etcdstore.KeyValue
@@ -182,7 +183,7 @@ func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolic
 			ID: source.record.ID, Kind: source.record.Kind, TargetID: source.record.TargetID,
 		}
 	}
-	state.candidate.Replacement = BackupPolicyRecord{
+	state.candidate.Replacement = backuppolicy.BackupPolicyRecord{
 		EnvironmentID: input.EnvironmentID, Enabled: input.Enabled, Frequency: input.Frequency,
 		Keep: input.Keep, Encryption: input.Encryption, ConnectorID: connectorID,
 		SourceIDs: sourceIDs, UpdatedAt: input.CreatedAt,

@@ -1,4 +1,4 @@
-package etcd
+package backuppolicy
 
 import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	backupPolicyPrefix            = "/v1/records/backup-policies/"
+	MaximumBackupPolicyKeep int64 = 9_007_199_254_740_991
+	PolicyPrefix                  = "/v1/records/backup-policies/"
 	backupSourcePrefix            = "/v1/records/backup-sources/"
 	backupKeyPrefix               = "/v1/records/backup-keys/"
 	backupKeyValuePrefix          = "/v1/secret-values/backup-keys/"
-	maximumBackupKeyCiphertextLen = 64 * 1024
+	MaximumKeyCiphertextLen       = 64 * 1024
 )
 
 // BackupPolicyRecord is the Environment singleton. Source metadata remains in
@@ -61,23 +62,23 @@ type BackupKeyEncryptedValue struct {
 	Ciphertext    []byte `json:"ciphertext"`
 }
 
-func backupPolicyKey(environmentID string) string {
-	return backupPolicyPrefix + environmentID
+func BackupPolicyKey(environmentID string) string {
+	return PolicyPrefix + environmentID
 }
 
-func backupSourceKey(sourceID string) string {
+func BackupSourceKey(sourceID string) string {
 	return backupSourcePrefix + sourceID
 }
 
-func backupSourceEnvironmentPrefix(environmentID string) string {
+func BackupSourceEnvironmentPrefix(environmentID string) string {
 	return "/v1/indexes/backup-sources/by-environment/" + environmentID + "/"
 }
 
-func backupSourceEnvironmentKey(environmentID string, sourceID string) string {
-	return backupSourceEnvironmentPrefix(environmentID) + sourceID
+func BackupSourceEnvironmentKey(environmentID string, sourceID string) string {
+	return BackupSourceEnvironmentPrefix(environmentID) + sourceID
 }
 
-func backupSourceIdentityKey(
+func BackupSourceIdentityKey(
 	environmentID string,
 	kind core.BackupSourceKind,
 	targetID string,
@@ -86,27 +87,27 @@ func backupSourceIdentityKey(
 		string(kind) + "/" + targetID
 }
 
-func backupPolicyConnectorReferencePrefix(connectorID string) string {
+func BackupPolicyConnectorReferencePrefix(connectorID string) string {
 	return "/v1/indexes/backup-policies/by-connector/" + connectorID + "/"
 }
 
-func backupPolicyConnectorReferenceKey(connectorID string, environmentID string) string {
-	return backupPolicyConnectorReferencePrefix(connectorID) + environmentID
+func BackupPolicyConnectorReferenceKey(connectorID string, environmentID string) string {
+	return BackupPolicyConnectorReferencePrefix(connectorID) + environmentID
 }
 
-func backupKeyKey(environmentID string) string {
+func BackupKeyKey(environmentID string) string {
 	return backupKeyPrefix + environmentID
 }
 
-func backupKeyValueKey(environmentID string) string {
+func BackupKeyValueKey(environmentID string) string {
 	return backupKeyValuePrefix + environmentID
 }
 
-func validateBackupPolicyRecord(record BackupPolicyRecord) error {
+func ValidateBackupPolicyRecord(record BackupPolicyRecord) error {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
-	if !validUTCInstant(record.UpdatedAt) {
+	if !ValidUTCInstant(record.UpdatedAt) {
 		return errs.New(errs.KindValidationFailed, "backup policy update time is invalid")
 	}
 	if !utf8.ValidString(record.Frequency) || strings.TrimSpace(record.Frequency) != record.Frequency {
@@ -144,7 +145,7 @@ func validateBackupPolicyRecord(record BackupPolicyRecord) error {
 	return nil
 }
 
-func validateBackupSourceRecord(record BackupSourceRecord) error {
+func ValidateBackupSourceRecord(record BackupSourceRecord) error {
 	if err := recordcodec.ValidateID(ids.KindBackupSource, record.ID); err != nil {
 		return err
 	}
@@ -167,13 +168,13 @@ func validateBackupSourceRecord(record BackupSourceRecord) error {
 	default:
 		return errs.New(errs.KindValidationFailed, "backup source kind is invalid")
 	}
-	if !validUTCInstant(record.CreatedAt) {
+	if !ValidUTCInstant(record.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "backup source creation time is invalid")
 	}
 	return nil
 }
 
-func validateBackupKeyRecord(record BackupKeyRecord) error {
+func ValidateBackupKeyRecord(record BackupKeyRecord) error {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}
@@ -181,94 +182,94 @@ func validateBackupKeyRecord(record BackupKeyRecord) error {
 	if err != nil || recipient.String() != record.Recipient {
 		return errs.New(errs.KindValidationFailed, "backup key recipient is invalid")
 	}
-	if record.KeyEra <= 0 || !validUTCInstant(record.CreatedAt) || !validUTCInstant(record.RotatedAt) ||
+	if record.KeyEra <= 0 || !ValidUTCInstant(record.CreatedAt) || !ValidUTCInstant(record.RotatedAt) ||
 		record.RotatedAt.Before(record.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "backup key lifecycle is invalid")
 	}
 	return nil
 }
 
-func validateBackupKeyEncryptedValue(value BackupKeyEncryptedValue) error {
+func ValidateBackupKeyEncryptedValue(value BackupKeyEncryptedValue) error {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, value.EnvironmentID); err != nil {
 		return err
 	}
-	if value.KeyEra <= 0 || len(value.Ciphertext) == 0 || len(value.Ciphertext) > maximumBackupKeyCiphertextLen {
+	if value.KeyEra <= 0 || len(value.Ciphertext) == 0 || len(value.Ciphertext) > MaximumKeyCiphertextLen {
 		return errs.New(errs.KindValidationFailed, "encrypted Backup key value is invalid")
 	}
 	return nil
 }
 
-func validUTCInstant(value time.Time) bool {
+func ValidUTCInstant(value time.Time) bool {
 	return !value.IsZero() && value.Equal(value.UTC())
 }
 
-func encodeBackupPolicyRecord(record BackupPolicyRecord) ([]byte, error) {
-	if err := validateBackupPolicyRecord(record); err != nil {
+func EncodeBackupPolicyRecord(record BackupPolicyRecord) ([]byte, error) {
+	if err := ValidateBackupPolicyRecord(record); err != nil {
 		return nil, err
 	}
 	return recordcodec.Encode("backup-policy", record)
 }
 
-func decodeBackupPolicyRecord(value []byte) (BackupPolicyRecord, error) {
+func DecodeBackupPolicyRecord(value []byte) (BackupPolicyRecord, error) {
 	record, err := recordcodec.Decode[BackupPolicyRecord](value, "backup-policy")
 	if err != nil {
 		return BackupPolicyRecord{}, err
 	}
-	if err := validateBackupPolicyRecord(record); err != nil {
+	if err := ValidateBackupPolicyRecord(record); err != nil {
 		return BackupPolicyRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
 
-func encodeBackupSourceRecord(record BackupSourceRecord) ([]byte, error) {
-	if err := validateBackupSourceRecord(record); err != nil {
+func EncodeBackupSourceRecord(record BackupSourceRecord) ([]byte, error) {
+	if err := ValidateBackupSourceRecord(record); err != nil {
 		return nil, err
 	}
 	return recordcodec.Encode("backup-source", record)
 }
 
-func decodeBackupSourceRecord(value []byte) (BackupSourceRecord, error) {
+func DecodeBackupSourceRecord(value []byte) (BackupSourceRecord, error) {
 	record, err := recordcodec.Decode[BackupSourceRecord](value, "backup-source")
 	if err != nil {
 		return BackupSourceRecord{}, err
 	}
-	if err := validateBackupSourceRecord(record); err != nil {
+	if err := ValidateBackupSourceRecord(record); err != nil {
 		return BackupSourceRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
 
-func encodeBackupKeyRecord(record BackupKeyRecord) ([]byte, error) {
-	if err := validateBackupKeyRecord(record); err != nil {
+func EncodeBackupKeyRecord(record BackupKeyRecord) ([]byte, error) {
+	if err := ValidateBackupKeyRecord(record); err != nil {
 		return nil, err
 	}
 	return recordcodec.Encode("backup-key", record)
 }
 
-func decodeBackupKeyRecord(value []byte) (BackupKeyRecord, error) {
+func DecodeBackupKeyRecord(value []byte) (BackupKeyRecord, error) {
 	record, err := recordcodec.Decode[BackupKeyRecord](value, "backup-key")
 	if err != nil {
 		return BackupKeyRecord{}, err
 	}
-	if err := validateBackupKeyRecord(record); err != nil {
+	if err := ValidateBackupKeyRecord(record); err != nil {
 		return BackupKeyRecord{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
 }
 
-func encodeBackupKeyEncryptedValue(value BackupKeyEncryptedValue) ([]byte, error) {
-	if err := validateBackupKeyEncryptedValue(value); err != nil {
+func EncodeBackupKeyEncryptedValue(value BackupKeyEncryptedValue) ([]byte, error) {
+	if err := ValidateBackupKeyEncryptedValue(value); err != nil {
 		return nil, err
 	}
 	return recordcodec.Encode("backup-key-value", value)
 }
 
-func decodeBackupKeyEncryptedValue(value []byte) (BackupKeyEncryptedValue, error) {
+func DecodeBackupKeyEncryptedValue(value []byte) (BackupKeyEncryptedValue, error) {
 	record, err := recordcodec.Decode[BackupKeyEncryptedValue](value, "backup-key-value")
 	if err != nil {
 		return BackupKeyEncryptedValue{}, err
 	}
-	if err := validateBackupKeyEncryptedValue(record); err != nil {
+	if err := ValidateBackupKeyEncryptedValue(record); err != nil {
 		clear(record.Ciphertext)
 		return BackupKeyEncryptedValue{}, recordcodec.CorruptRecord()
 	}

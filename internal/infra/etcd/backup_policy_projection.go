@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -52,9 +53,9 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		hierarchyrecord.EnvironmentKey(environmentID),
-		backupPolicyKey(environmentID),
-		backupKeyKey(environmentID),
-		backupKeyValueKey(environmentID),
+		backuppolicy.BackupPolicyKey(environmentID),
+		backuppolicy.BackupKeyKey(environmentID),
+		backuppolicy.BackupKeyValueKey(environmentID),
 		environmentCoordinationKey(environmentID),
 	}})
 	if err != nil {
@@ -71,9 +72,9 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 	}
 
-	var policy *BackupPolicyRecord
+	var policy *backuppolicy.BackupPolicyRecord
 	if base.Values[1] != nil {
-		decoded, decodeErr := decodeBackupPolicyRecord(base.Values[1].Value)
+		decoded, decodeErr := backuppolicy.DecodeBackupPolicyRecord(base.Values[1].Value)
 		if decodeErr != nil || decoded.EnvironmentID != environmentID {
 			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
@@ -101,19 +102,19 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 	if policy != nil {
 		for _, sourceID := range policy.SourceIDs {
 			keys = append(keys,
-				backupSourceKey(sourceID),
-				backupSourceEnvironmentKey(environmentID, sourceID),
+				backuppolicy.BackupSourceKey(sourceID),
+				backuppolicy.BackupSourceEnvironmentKey(environmentID, sourceID),
 			)
 		}
 		if policy.Enabled {
 			keys = append(keys,
 				connectorrecord.RecordKey(policy.ConnectorID),
 				connectorEnvironmentKey(environmentID, policy.ConnectorID),
-				backupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID),
+				backuppolicy.BackupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID),
 				deletionTombstoneKey(string(DeletionTargetConnector), policy.ConnectorID),
 			)
 		} else if policy.ConnectorID != "" {
-			keys = append(keys, backupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID))
+			keys = append(keys, backuppolicy.BackupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID))
 		}
 	}
 	support, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: base.ReadRevision})
@@ -188,11 +189,11 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 		primary := support.Values[offset]
 		owner := support.Values[offset+1]
 		offset += 2
-		if primary == nil || owner == nil || owner.Key != backupSourceEnvironmentKey(environmentID, sourceID) ||
+		if primary == nil || owner == nil || owner.Key != backuppolicy.BackupSourceEnvironmentKey(environmentID, sourceID) ||
 			string(owner.Value) != sourceID {
 			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
-		source, decodeErr := decodeBackupSourceRecord(primary.Value)
+		source, decodeErr := backuppolicy.DecodeBackupSourceRecord(primary.Value)
 		if decodeErr != nil || source.ID != sourceID || source.EnvironmentID != environmentID {
 			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
@@ -204,7 +205,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
 		seen[identity] = struct{}{}
-		identityKeys = append(identityKeys, backupSourceIdentityKey(environmentID, source.Kind, source.TargetID))
+		identityKeys = append(identityKeys, backuppolicy.BackupSourceIdentityKey(environmentID, source.Kind, source.TargetID))
 		if source.Kind == core.BackupSourceConfig && policy.Encryption != "age" {
 			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
@@ -244,7 +245,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 			connector.Connector.EnvironmentID != environmentID ||
 			ownerIndex.Key != connectorEnvironmentKey(environmentID, policy.ConnectorID) ||
 			string(ownerIndex.Value) != policy.ConnectorID ||
-			reference.Key != backupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID) ||
+			reference.Key != backuppolicy.BackupPolicyConnectorReferenceKey(policy.ConnectorID, environmentID) ||
 			string(reference.Value) != environmentID {
 			return BackupPolicyProjection{}, connectorrecord.CorruptRecord()
 		}
@@ -274,18 +275,18 @@ func decodeBackupPolicyProjectionKey(
 	environmentID string,
 	recordValue *etcdstore.KeyValue,
 	encryptedValue *etcdstore.KeyValue,
-) (*BackupKeyRecord, error) {
+) (*backuppolicy.BackupKeyRecord, error) {
 	if recordValue == nil && encryptedValue == nil {
 		return nil, nil
 	}
 	if recordValue == nil || encryptedValue == nil {
 		return nil, corruptBackupKey()
 	}
-	record, err := decodeBackupKeyRecord(recordValue.Value)
+	record, err := backuppolicy.DecodeBackupKeyRecord(recordValue.Value)
 	if err != nil {
 		return nil, corruptBackupKey()
 	}
-	encrypted, err := decodeBackupKeyEncryptedValue(encryptedValue.Value)
+	encrypted, err := backuppolicy.DecodeBackupKeyEncryptedValue(encryptedValue.Value)
 	if err != nil {
 		return nil, corruptBackupKey()
 	}

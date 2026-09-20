@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -2149,7 +2150,7 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 			return nil, corruptBackupRuntimeRecord()
 		}
 		fixed, err := repository.readFixedKeys(ctx, []string{
-			backupSourceKey(point.SourceID),
+			backuppolicy.BackupSourceKey(point.SourceID),
 			hierarchyrecord.EnvironmentKey(point.EnvironmentID),
 			connectorrecord.RecordKey(point.ConnectorID),
 		}, readRevision)
@@ -2160,7 +2161,7 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 			clearKeyValues(fixed.Values)
 			return nil, errs.New(errs.KindStateConflict, "backup prune plan evidence is missing")
 		}
-		source, sourceErr := decodeBackupSourceRecord(fixed.Values[0].Value)
+		source, sourceErr := backuppolicy.DecodeBackupSourceRecord(fixed.Values[0].Value)
 		environment, environmentErr := hierarchyrecord.DecodeEnvironment(fixed.Values[1].Value)
 		connector, connectorErr := connectorrecord.DecodeRecord(fixed.Values[2].Value)
 		if sourceErr != nil || environmentErr != nil || connectorErr != nil ||

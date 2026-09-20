@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
 	"time"
@@ -114,7 +115,7 @@ func validateBackupRunRecord(record BackupRunRecord) error {
 			ids.KindConnector,
 			record.ConnectorID,
 		) != nil || record.PolicyRevision <= 0 || record.RetentionKeep <= 0 ||
-		record.RetentionKeep > MaximumBackupPolicyKeep ||
+		record.RetentionKeep > backuppolicy.MaximumBackupPolicyKeep ||
 		record.ConnectorRevision <= 0 || record.ConnectorCredentialsRevision < 0 ||
 		(record.ConnectorHasDirectCredentials != (record.ConnectorCredentialsRevision > 0)) ||
 		!validBackupRunState(
