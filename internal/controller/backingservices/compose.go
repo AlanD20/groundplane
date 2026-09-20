@@ -1,13 +1,14 @@
 package backingservices
 
 import (
+	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"path/filepath"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/adapters"
 	"github.com/AlanD20/groundplane/internal/common/backingendpoint"
-	"github.com/AlanD20/groundplane/internal/controller"
+
 	"github.com/AlanD20/groundplane/internal/core"
 
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -44,7 +45,7 @@ func backingComposeProject(
 		project.Volumes = composetypes.Volumes{volume.Key: {}}
 	}
 	if spec.HasEnvironment() {
-		environmentFile := controller.EnvFileName(environment.ID)
+		environmentFile := environmentfile.EnvFileName(environment.ID)
 		service.EnvFiles = []composetypes.EnvFile{
 			{Path: filepath.Join(environment.VolumeDir, filepath.FromSlash(environmentFile)), Required: true},
 		}

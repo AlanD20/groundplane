@@ -1,6 +1,7 @@
 package controller
 
 import (
+	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"path"
 	"path/filepath"
@@ -177,7 +178,7 @@ func ProjectEnvironmentEntries(
 			"all-services Environment Entries contain a duplicate key",
 		)
 	}
-	canonicalDestination := EnvFileName(environmentID)
+	canonicalDestination := environmentfile.EnvFileName(environmentID)
 	materializations = append(materializations, EnvironmentEntryMaterialization{
 		Destination: canonicalDestination,
 		OutputKind:  etcd.TaskMaterializationOutputGeneratedEnvironment,
@@ -210,7 +211,7 @@ func ProjectEnvironmentEntries(
 				"service Environment Entries contain a duplicate key",
 			)
 		}
-		destination := ServiceEnvFileName(environmentID, serviceName)
+		destination := environmentfile.ServiceEnvFileName(environmentID, serviceName)
 		materializations = append(materializations, EnvironmentEntryMaterialization{
 			Destination: destination, ServiceID: serviceIDs[serviceName], ServiceName: serviceName,
 			OutputKind: etcd.TaskMaterializationOutputGeneratedEnvironment,

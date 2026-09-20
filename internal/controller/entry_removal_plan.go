@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"math"
 	"sort"
@@ -470,7 +471,7 @@ func entryRemovalEnvironmentTemplate(
 		Mode: uint32(entrymaterialization.ModePrivate),
 	}
 	if scope == "all" {
-		reference.Destination = EnvFileName(intent.EnvironmentID)
+		reference.Destination = environmentfile.EnvFileName(intent.EnvironmentID)
 	} else {
 		services, err := entryRemovalEnvironmentServiceIdentities(*intent.CandidateProjection)
 		if err != nil {
@@ -489,7 +490,7 @@ func entryRemovalEnvironmentTemplate(
 				"entry removal exposure Service is absent from its pinned projection",
 			)
 		}
-		reference.Destination = ServiceEnvFileName(intent.EnvironmentID, scope)
+		reference.Destination = environmentfile.ServiceEnvFileName(intent.EnvironmentID, scope)
 	}
 	values := make([]etcd.TaskGeneratedEnvironmentEntryReference, 0)
 	for _, record := range intent.CandidateProjection.Entries {

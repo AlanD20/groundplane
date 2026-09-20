@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/hex"
+	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	"math"
 	"path/filepath"
 	"runtime"
@@ -251,7 +252,7 @@ func projectEnvironmentComponentService(
 	if len(definition.SecretEnvironment) == 0 {
 		return projected, nil, nil
 	}
-	destination := ServiceEnvFileName(environment.ID, definition.Name)
+	destination := environmentfile.ServiceEnvFileName(environment.ID, definition.Name)
 	if entrymaterialization.ValidateDesiredDestination(destination) != nil {
 		return composetypes.ServiceConfig{}, nil, errs.New(
 			errs.KindInternal,

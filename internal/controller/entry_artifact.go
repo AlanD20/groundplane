@@ -2,6 +2,7 @@ package controller
 
 import (
 	"crypto/sha256"
+	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"path"
@@ -151,7 +152,7 @@ func mutateEnvironmentEntryArtifact(
 		service := services.Content[index+1]
 		if err := rewriteEntryArtifactEnvironmentFiles(
 			service, managedEnvPaths,
-			filepath.Join(owned.GetAuthorizedVolumeDir(), filepath.FromSlash(EnvFileName(projection.EnvironmentID))),
+			filepath.Join(owned.GetAuthorizedVolumeDir(), filepath.FromSlash(environmentfile.EnvFileName(projection.EnvironmentID))),
 			entryArtifactServiceEnvironmentPath(
 				owned.GetAuthorizedVolumeDir(), projection.EnvironmentID, name, runtimeTargets, serviceEnvironment,
 			),
@@ -221,10 +222,10 @@ func entryArtifactManagedEnvironmentPaths(
 	services []ComposeResourceIdentity,
 ) map[string]struct{} {
 	result := map[string]struct{}{
-		filepath.Join(volumeDir, filepath.FromSlash(EnvFileName(environmentID))): {},
+		filepath.Join(volumeDir, filepath.FromSlash(environmentfile.EnvFileName(environmentID))): {},
 	}
 	for _, service := range services {
-		result[filepath.Join(volumeDir, filepath.FromSlash(ServiceEnvFileName(environmentID, service.Name)))] = struct{}{}
+		result[filepath.Join(volumeDir, filepath.FromSlash(environmentfile.ServiceEnvFileName(environmentID, service.Name)))] = struct{}{}
 	}
 	return result
 }
@@ -279,7 +280,7 @@ func entryArtifactServiceEnvironmentPath(
 		for _, candidate := range runtimeTargets[logicalName] {
 			if candidate == runtimeName {
 				return filepath.Join(
-					volumeDir, filepath.FromSlash(ServiceEnvFileName(environmentID, logicalName)),
+					volumeDir, filepath.FromSlash(environmentfile.ServiceEnvFileName(environmentID, logicalName)),
 				)
 			}
 		}

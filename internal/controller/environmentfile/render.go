@@ -1,9 +1,6 @@
-// renderer.go is the ONE render path: desired state -> Compose /
-// Corefile / Caddyfile / env files, validated before reload. Every
-// consumer (a tenant deploy, the Router component, CoreDNS's static
-// entries) goes through this single, well-tested path — see
-// architecture.md, "Unified paths that scale".
-package controller
+// Package environmentfile owns generated environment-file paths and pure
+// Compose dotenv rendering from resolved Entry values.
+package environmentfile
 
 import (
 	"bytes"

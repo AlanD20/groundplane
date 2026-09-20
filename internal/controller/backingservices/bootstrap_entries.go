@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
@@ -215,7 +216,7 @@ func backingEnvironmentMaterialization(
 		}
 	}
 	sort.Slice(references, func(left, right int) bool { return references[left].Name < references[right].Name })
-	content, err := controller.RenderEnvFile(desired, resolved)
+	content, err := environmentfile.RenderEnvFile(desired, resolved)
 	if err != nil {
 		return etcd.TaskMaterializationRecord{}, nil, err
 	}

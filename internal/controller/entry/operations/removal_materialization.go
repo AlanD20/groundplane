@@ -1,6 +1,7 @@
 package operations
 
 import (
+	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"sort"
 
@@ -67,7 +68,7 @@ func PlanEntryRemovals(
 			if _, retained := nextScopes[scope]; retained {
 				continue
 			}
-			destination := controller.ServiceEnvFileName(environmentID, scope)
+			destination := environmentfile.ServiceEnvFileName(environmentID, scope)
 			if _, duplicate := seen[destination]; duplicate {
 				continue
 			}
