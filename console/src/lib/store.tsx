@@ -1,5 +1,14 @@
 "use client";
 import {
+  useTaskJournal,
+  type TaskJournalStoreState,
+  type TaskJournalActions,
+} from "@/features/task/use-task-journal";
+import {
+  useTaskEventStreams,
+  type TaskEventActions,
+} from "@/features/task/use-task-event-streams";
+import {
   createAgentActions,
   useAgentRefresh,
   useAgentLoading,
@@ -80,16 +89,7 @@ import {
   type ConnectorState,
   type ConnectorActions,
 } from "@/features/connectors/use-connector-store";
-import {
-  emptyTaskJournal,
-  taskJournalKey,
-  taskJournalQuery,
-  taskFromAPI,
-  parseTaskEvent,
-  requireTaskId,
-  type TaskPageResponse,
-  type TaskEventResponse,
-} from "@/features/task/journal-model";
+import { emptyTaskJournal, requireTaskId } from "@/features/task/journal-model";
 import { controllerRequest, waitForRequest } from "./controller-json-request";
 import { useBackupStore } from "@/features/backup/use-backup-store";
 import {
@@ -118,14 +118,10 @@ import {
 } from "./transient-logs";
 import { useControllerPlatform } from "@/features/platform-controller/use-controller-platform";
 import type {
-  ActivityEntry,
   EnvFile,
   Environment,
   Project,
   Service,
-  TaskJournalScope,
-  TaskJournalState,
-  TaskJournalSurface,
   Tenant,
   PlatformInfra,
 } from "./types";
@@ -180,6 +176,7 @@ type TaskAbortResponse =
 type State = ReusableSecretState &
   ConnectorState &
   RunnerState &
+  TaskJournalStoreState &
   ComponentState &
   AgentState & {
     // UI preference: typed confirmation before revealing a secret value
@@ -194,8 +191,6 @@ type State = ReusableSecretState &
     backingProjects: Project[];
     backingProjectsLoading: boolean;
     backingProjectError: string | null;
-    activity: ActivityEntry[];
-    taskJournals: Record<string, TaskJournalState>;
     platform: PlatformInfra;
   };
 
@@ -261,6 +256,8 @@ type StoreContext = State &
   ProjectActions &
   BackingServiceActions &
   AgentActions &
+  TaskJournalActions &
+  TaskEventActions &
   ComponentActions &
   ComponentRefreshActions &
   ReturnType<typeof useControllerPlatform> &
@@ -290,16 +287,6 @@ type StoreContext = State &
       projectSlug: string,
       envName: string,
     ) => Environment | undefined;
-    getTaskJournal: (scope: TaskJournalScope) => TaskJournalState;
-    loadTaskJournal: (
-      surface: TaskJournalSurface,
-      scope: TaskJournalScope,
-      cursor?: string,
-    ) => Promise<void>;
-    getTaskJournalDetail: (
-      taskId: string,
-      signal?: AbortSignal,
-    ) => Promise<ActivityEntry>;
     getEnvironmentDeletionFailure: (
       environmentId: string,
     ) => EnvironmentDeletionFailure | null;
@@ -330,11 +317,6 @@ type StoreContext = State &
     renameEnvironment: (envId: string, name: string) => Promise<Environment>;
     getTask: (taskId: string, signal?: AbortSignal) => Promise<TaskResponse>;
     abortTask: (taskId: string) => Promise<void>;
-    watchTaskEvents: (
-      taskId: string,
-      onEvent: (event: TaskEventResponse) => void,
-      onMalformed: (message: string) => void,
-    ) => () => void;
     deleteEnvironment: (envId: string) => Promise<string>;
   };
 
@@ -348,9 +330,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const providerActive = useRef(true);
   const environmentTaskControllers = useRef(new Set<AbortController>());
   const [state, setState] = useState<State>(seed);
-  const taskEventSources = useRef(new Set<EventSource>());
+  const { watchTaskEvents, closeTaskStreams } = useTaskEventStreams();
   const environmentMutationIntents = useRef(loadEnvironmentMutationIntents());
-  const taskJournalEpochs = useRef(new Map<string, number>());
 
   const update = useCallback((fn: (draft: State) => void) => {
     if (!providerActive.current) return;
@@ -498,8 +479,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(
     () => () => {
-      for (const source of taskEventSources.current) source.close();
-      taskEventSources.current.clear();
+      closeTaskStreams();
       for (const controller of environmentTaskControllers.current)
         controller.abort();
       environmentTaskControllers.current.clear();
@@ -769,58 +749,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const { actions: connectorActions, reconcileConnectorRemoval } =
     useConnectorStore(state, update, connectorEnvironmentIds);
 
-  const loadTaskJournal = useCallback<StoreContext["loadTaskJournal"]>(
-    async (surface, scope, cursor) => {
-      const key = taskJournalKey(scope);
-      const epoch = (taskJournalEpochs.current.get(key) ?? 0) + 1;
-      taskJournalEpochs.current.set(key, epoch);
-      update((draft) => {
-        const journal = draft.taskJournals[key] ?? emptyTaskJournal();
-        journal.loadError = null;
-        journal.failedCursor = null;
-        journal.loading = !cursor;
-        journal.loadingMore = !!cursor;
-        draft.taskJournals[key] = journal;
-      });
-      try {
-        const page = await controllerRequest<TaskPageResponse>(
-          `/${surface}?${taskJournalQuery(scope, cursor)}`,
-          200,
-        );
-        const entries = (page.items ?? []).map(taskFromAPI);
-        if (taskJournalEpochs.current.get(key) !== epoch) return;
-        update((draft) => {
-          const journal = draft.taskJournals[key] ?? emptyTaskJournal();
-          journal.entries = cursor ? [...journal.entries, ...entries] : entries;
-          journal.nextCursor = page.next_cursor ?? null;
-          journal.loaded = true;
-          journal.loading = false;
-          journal.loadingMore = false;
-          journal.loadError = null;
-          journal.failedCursor = null;
-          draft.taskJournals[key] = journal;
-        });
-      } catch (error) {
-        if (taskJournalEpochs.current.get(key) !== epoch) return;
-        update((draft) => {
-          const journal = draft.taskJournals[key] ?? emptyTaskJournal();
-          journal.loaded = true;
-          journal.loading = false;
-          journal.loadingMore = false;
-          journal.loadError =
-            error instanceof Error ? error.message : "Unable to load Tasks";
-          journal.failedCursor = cursor ?? null;
-          draft.taskJournals[key] = journal;
-        });
-        throw error;
-      }
-    },
-    [update],
-  );
-
-  useEffect(() => {
-    void loadTaskJournal("tasks", { kind: "all" }).catch(() => undefined);
-  }, [loadTaskJournal]);
+  const taskJournalActions = useTaskJournal(state, update);
 
   const value = useMemo<StoreContext>(() => {
     return {
@@ -869,20 +798,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           )
           ?.environments?.find((environment) => environment.name === envName);
       },
-      getTaskJournal: (scope) =>
-        state.taskJournals[taskJournalKey(scope)] ?? emptyTaskJournal(),
-      loadTaskJournal,
-      getTaskJournalDetail: async (taskId, signal) =>
-        taskFromAPI(
-          await controllerRequest<TaskResponse>(
-            `/tasks/${encodeURIComponent(taskId)}`,
-            200,
-            { signal },
-          ),
-        ),
       getEnvironmentDeletionFailure,
       refreshEnvironmentDeletion,
       isEnvironmentDeletionPending,
+      ...taskJournalActions,
       retryTask: (taskId) =>
         retryResourceRemoval(taskId) ??
         controllerRequest<TaskRetryResponse>(
@@ -1180,25 +1099,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           throw error;
         }
       },
-      watchTaskEvents: (taskId, onEvent, onMalformed) => {
-        const source = new EventSource(
-          `/api/v1/tasks/${encodeURIComponent(taskId)}/events`,
-        );
-        taskEventSources.current.add(source);
-        const close = () => {
-          source.close();
-          taskEventSources.current.delete(source);
-        };
-        source.onmessage = (message) => {
-          try {
-            onEvent(parseTaskEvent(message.data));
-          } catch {
-            close();
-            onMalformed("Task event stream returned malformed data");
-          }
-        };
-        return close;
-      },
+      watchTaskEvents,
       getTask: async (taskId, signal) => {
         const task = pendingResourceRemovals.current.has(taskId)
           ? await waitForRequest(requestResourceRemovalTask(taskId), signal)
@@ -1291,7 +1192,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     controllerPlatform,
     backupStore,
     update,
-    loadTaskJournal,
+    taskJournalActions,
+    watchTaskEvents,
     refreshPlatformComponents,
     refreshComponentConfig,
     refreshEnvironmentComponents,
