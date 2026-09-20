@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	scriptruntime "github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	"github.com/AlanD20/groundplane/internal/componentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
@@ -57,7 +58,7 @@ type ownedEnvironmentDirectoryHelper interface {
 }
 
 type ownedMaterializationHelper interface {
-	agent.MaterializationHelper
+	filematerialization.Helper
 	io.Closer
 }
 
@@ -153,7 +154,7 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 		return nil, preferAgentComposeCleanup(err,
 			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()))
 	}
-	materializer, err := agent.NewMaterializationRuntime(materializerHelper, componentFiles)
+	materializer, err := filematerialization.New(materializerHelper, componentFiles)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(err,
 			errors.Join(managedConfigs.Close(), materializerHelper.Close(), directoryHelper.Close(), resources.Close()))

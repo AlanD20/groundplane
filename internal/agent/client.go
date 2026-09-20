@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"io"
 	"log/slog"
@@ -66,7 +67,7 @@ type Client struct {
 	workersDone            <-chan struct{}
 	compose                *ComposeRuntime
 	environmentDirectories *directoryruntime.Runtime
-	materializer           *MaterializationRuntime
+	materializer           *filematerialization.Runtime
 	componentActions       ComponentActionRuntime
 	hostResolution         HostResolutionRuntime
 	scriptRuntime          ScriptRuntime
@@ -162,7 +163,7 @@ func NewClientWithRuntimes(
 	logger *slog.Logger,
 	compose *ComposeRuntime,
 	environmentDirectories *directoryruntime.Runtime,
-	materializer *MaterializationRuntime,
+	materializer *filematerialization.Runtime,
 ) (*Client, error) {
 	if compose == nil || environmentDirectories == nil || materializer == nil {
 		return nil, errs.New(errs.KindValidationFailed, "agent: execution runtimes are required")
@@ -185,7 +186,7 @@ func NewClientWithLogReader(
 	logger *slog.Logger,
 	compose *ComposeRuntime,
 	environmentDirectories *directoryruntime.Runtime,
-	materializer *MaterializationRuntime,
+	materializer *filematerialization.Runtime,
 	logReader agentprotocol.LogReader,
 ) (*Client, error) {
 	if logReader == nil {

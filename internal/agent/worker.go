@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"log/slog"
@@ -52,12 +53,12 @@ type WorkerPool struct {
 	executeStep            func(context.Context, *agentpb.ExecutionStep) error
 	compose                *ComposeRuntime
 	environmentDirectories *directoryruntime.Runtime
-	materializer           *MaterializationRuntime
+	materializer           *filematerialization.Runtime
 	adapter                *backingadapter.Runtime
 	componentActions       ComponentActionRuntime
 	hostResolution         HostResolutionRuntime
 	scriptRuntime          ScriptRuntime
-	materializations       *materializationInbox
+	materializations       *filematerialization.Inbox
 	managedConfigs         *managedConfigInbox
 	backupSecrets          *backupSecretSlotInbox
 	backupCheckpoints      *backupCheckpointInbox
@@ -81,7 +82,7 @@ func NewWorkerPool(size int, volumeRoot string, taskRunner runner.Runner, logger
 		work:                   make(chan *taskReservation, size),
 		outputs:                make(chan WorkerOutput, size),
 		reservations:           make(map[string]*taskReservation, size),
-		materializations:       newMaterializationInbox(),
+		materializations:       filematerialization.NewInbox(),
 		managedConfigs:         newManagedConfigInbox(),
 		backupSecrets:          newBackupSecretSlotInbox(),
 		backupCheckpoints:      newBackupCheckpointInbox(),
@@ -102,7 +103,7 @@ func NewWorkerPoolWithRuntimes(
 	logger *slog.Logger,
 	compose *ComposeRuntime,
 	environmentDirectories *directoryruntime.Runtime,
-	materializer *MaterializationRuntime,
+	materializer *filematerialization.Runtime,
 ) *WorkerPool {
 	pool := NewWorkerPool(size, volumeRoot, taskRunner, logger)
 	pool.compose = compose

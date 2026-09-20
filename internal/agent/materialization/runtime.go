@@ -1,69 +1,68 @@
-package agent
+package materialization
 
 import (
 	"context"
 	"errors"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
-	"io"
-
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/infra/docker/materializerrunner"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"io"
 )
 
-type MaterializationHelper interface {
+type Helper interface {
 	Run(context.Context, materializerrunner.Request) error
 }
 
-type MaterializationRuntime struct {
-	helper         MaterializationHelper
+type Runtime struct {
+	helper         Helper
 	componentFiles ComponentFileValidator
 }
 
-func NewMaterializationRuntime(
-	helper MaterializationHelper,
+func New(
+	helper Helper,
 	componentFiles ComponentFileValidator,
-) (*MaterializationRuntime, error) {
+) (*Runtime, error) {
 	if helper == nil {
 		return nil, errs.New(errs.KindValidationFailed, "agent: materialization helper is required")
 	}
-	return &MaterializationRuntime{helper: helper, componentFiles: componentFiles}, nil
+	return &Runtime{helper: helper, componentFiles: componentFiles}, nil
 }
 
-func (runtime *MaterializationRuntime) executeStep(
+func (runtime *Runtime) ExecuteStep(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-	payload materializationPayload,
+	payload Payload,
 ) error {
 	return runtime.runStep(ctx, assignment, step, payload, false)
 }
 
-func (runtime *MaterializationRuntime) verifyStep(
+func (runtime *Runtime) VerifyStep(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-	payload materializationPayload,
+	payload Payload,
 ) error {
 	return runtime.runStep(ctx, assignment, step, payload, true)
 }
 
-func (runtime *MaterializationRuntime) runStep(
+func (runtime *Runtime) runStep(
 	ctx context.Context,
 	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
-	payload materializationPayload,
+	payload Payload,
 	verifyOnly bool,
 ) error {
 	if runtime == nil || runtime.helper == nil || payload.Source == nil {
-		return closeMaterializationSource(payload.Source, "agent: materialization runtime is not configured")
+		return CloseSourceWithError(payload.Source, "agent: materialization runtime is not configured")
 	}
 	materialization := step.GetMaterializeFile()
 	artifact := taskassignment.ComposeArtifact(assignment.Plan, materialization.GetArtifactId())
 	if materialization == nil || artifact == nil || payload.Header.TaskID() != assignment.TaskID ||
 		payload.Header.StepID() != step.GetStepId() {
-		return closeMaterializationSource(payload.Source, "agent: materialization runtime input is invalid")
+		return CloseSourceWithError(payload.Source, "agent: materialization runtime input is invalid")
 	}
 	var err error
 	if step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE &&
@@ -108,14 +107,4 @@ func (runtime *MaterializationRuntime) runStep(
 		return errs.Wrap(errs.KindInternal, err)
 	}
 	return nil
-}
-
-func closeMaterializationSource(source io.ReadCloser, message string) error {
-	if source == nil {
-		return errs.New(errs.KindInternal, message)
-	}
-	if err := source.Close(); err != nil {
-		return errs.Wrap(errs.KindInternal, errors.Join(errs.New(errs.KindInternal, message), err))
-	}
-	return errs.New(errs.KindInternal, message)
 }

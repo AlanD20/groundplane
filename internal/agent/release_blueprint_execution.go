@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
+	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,9 +23,9 @@ func (p *WorkerPool) executeBlueprintReleaseSetup(
 			return composeStepResult{}, err
 		}
 		if p.materializer == nil {
-			return composeStepResult{}, closeMaterializationSource(payload.Source, "agent: materialization runtime is not configured")
+			return composeStepResult{}, filematerialization.CloseSourceWithError(payload.Source, "agent: materialization runtime is not configured")
 		}
-		return composeStepResult{}, p.materializer.executeStep(ctx, assignment, step, payload)
+		return composeStepResult{}, p.materializer.ExecuteStep(ctx, assignment, step, payload)
 	case *agentpb.ExecutionStep_AdapterProcedure:
 		result, err := p.adapter.ExecuteStep(ctx, step)
 		return composeStepResult{ExitCode: result.ExitCode}, err

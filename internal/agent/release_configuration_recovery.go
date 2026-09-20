@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"slices"
 	"time"
@@ -215,26 +216,26 @@ func (p *WorkerPool) executeReleaseConfigurationStep(
 		return composeStepResult{ReconciliationRequired: true}, err
 	}
 	if step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_RECOVERY_PROBE {
-		err = p.materializer.verifyStep(ctx, assignment, step, payload)
+		err = p.materializer.VerifyStep(ctx, assignment, step, payload)
 		if errors.Is(err, errs.New(errs.KindStateConflict, "")) {
 			return composeStepResult{RestorationRequired: true}, nil
 		}
 		return composeStepResult{ReconciliationRequired: err != nil}, err
 	}
 	if step.GetPolicy() != agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
-		return composeStepResult{ReconciliationRequired: true}, closeMaterializationSource(
+		return composeStepResult{ReconciliationRequired: true}, filematerialization.CloseSourceWithError(
 			payload.Source,
 			"agent: configuration recovery selected a forward materialization",
 		)
 	}
-	if err := p.materializer.executeStep(ctx, assignment, step, payload); err != nil {
+	if err := p.materializer.ExecuteStep(ctx, assignment, step, payload); err != nil {
 		return composeStepResult{ReconciliationRequired: true}, err
 	}
 	proof, err := p.materializations.Take(ctx, assignment.TaskID, step.GetStepId())
 	if err != nil {
 		return composeStepResult{ReconciliationRequired: true}, err
 	}
-	if err := p.materializer.verifyStep(ctx, assignment, step, proof); err != nil {
+	if err := p.materializer.VerifyStep(ctx, assignment, step, proof); err != nil {
 		return composeStepResult{ReconciliationRequired: true}, err
 	}
 	return composeStepResult{}, nil

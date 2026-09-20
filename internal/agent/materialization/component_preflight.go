@@ -1,18 +1,17 @@
-package agent
+package materialization
 
 import (
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
-	"io"
-
-	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
+	"io"
 )
 
 // ComponentFileValidator runs only the compiled recipe selected by the sealed
@@ -21,9 +20,9 @@ type ComponentFileValidator interface {
 	ValidateComponentFile(context.Context, componentsdk.ActionEnvelope, string, []byte) error
 }
 
-func (runtime *MaterializationRuntime) preflightComponentFile(
-	ctx context.Context, assignment taskassignment.Assignment, step *agentpb.ExecutionStep, payload materializationPayload,
-) (materializationPayload, error) {
+func (runtime *Runtime) preflightComponentFile(
+	ctx context.Context, assignment taskassignment.Assignment, step *agentpb.ExecutionStep, payload Payload,
+) (Payload, error) {
 	var selected *agentpb.ExecutionStep
 	for _, candidate := range assignment.Plan.GetSteps() {
 		action := candidate.GetComponentApply()
@@ -31,7 +30,7 @@ func (runtime *MaterializationRuntime) preflightComponentFile(
 			continue
 		}
 		if selected != nil {
-			return materializationPayload{}, closeMaterializationSource(
+			return Payload{}, CloseSourceWithError(
 				payload.Source,
 				"agent: Component file action is duplicated",
 			)
@@ -50,34 +49,34 @@ func (runtime *MaterializationRuntime) preflightComponentFile(
 		header.ServiceName() != "" || header.UID() != 0 || header.GID() != 0 ||
 		header.Mode() != entrymaterialization.ModeReadOnly ||
 		!bytes.Equal(action.GetArtifactDigest(), digest[:]) {
-		return materializationPayload{}, closeMaterializationSource(
+		return Payload{}, CloseSourceWithError(
 			payload.Source,
 			"agent: Component file preflight authority is invalid",
 		)
 	}
 	envelope, err := componentaction.DecodeComponentAction(action)
 	if err != nil {
-		return materializationPayload{}, errs.Wrap(errs.KindValidationFailed, errors.Join(err, payload.Source.Close()))
+		return Payload{}, errs.Wrap(errs.KindValidationFailed, errors.Join(err, payload.Source.Close()))
 	}
 	content, readErr := io.ReadAll(io.LimitReader(payload.Source, int64(entrymaterialization.MaximumContentBytes)+1))
 	if err := errors.Join(readErr, payload.Source.Close()); err != nil {
 		clear(content)
-		return materializationPayload{}, errs.Wrap(errs.KindInternal, err)
+		return Payload{}, errs.Wrap(errs.KindInternal, err)
 	}
 	if uint64(len(content)) != header.Length() || sha256.Sum256(content) != digest {
 		clear(content)
-		return materializationPayload{}, errs.New(
+		return Payload{}, errs.New(
 			errs.KindValidationFailed,
 			"agent: Component preflight content differs from the sealed file",
 		)
 	}
 	if err := runtime.componentFiles.ValidateComponentFile(ctx, envelope, header.Destination(), content); err != nil {
 		clear(content)
-		return materializationPayload{}, err
+		return Payload{}, err
 	}
 	if ctx.Err() != nil || sha256.Sum256(content) != digest {
 		clear(content)
-		return materializationPayload{}, errs.New(
+		return Payload{}, errs.New(
 			errs.KindValidationFailed,
 			"agent: Component preflight content or execution authority changed",
 		)

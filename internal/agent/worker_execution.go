@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
 	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
+	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -49,7 +50,7 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 		)
 		attemptedSteps = append(attemptedSteps, step)
 		if step.GetMaterializeFile() != nil {
-			var payload materializationPayload
+			var payload filematerialization.Payload
 			payload, err = p.materializations.Take(
 				stepCtx,
 				reservation.assignment.TaskID,
@@ -57,9 +58,9 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			)
 			if err == nil {
 				if p.materializer == nil {
-					err = closeMaterializationSource(payload.Source, "agent: materialization runtime is not configured")
+					err = filematerialization.CloseSourceWithError(payload.Source, "agent: materialization runtime is not configured")
 				} else {
-					err = p.materializer.executeStep(stepCtx, reservation.assignment, step, payload)
+					err = p.materializer.ExecuteStep(stepCtx, reservation.assignment, step, payload)
 				}
 			}
 		} else if step.GetAdapterProcedure() != nil {
