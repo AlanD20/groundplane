@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
@@ -60,7 +61,7 @@ func projectPinnedEnvironmentComponents(
 	}
 	componentRecords := make([]core.Component, len(projection.Components))
 	for index, record := range projection.Components {
-		componentRecords[index], err = etcd.ProjectComponentRecord(record)
+		componentRecords[index], err = componentrecord.ProjectRecord(record)
 		if err != nil {
 			return EnvironmentComponentComposeProjection{}, err
 		}

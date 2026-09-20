@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -140,7 +141,7 @@ func (repository *TaskRepository) prepareReleaseGroupMemberEvidence(
 }
 
 func releaseGroupTargetsGeneratedService(
-	components []ComponentRecord,
+	components []componentrecord.Record,
 	serviceID string,
 	environmentID string,
 ) bool {

@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"reflect"
@@ -67,7 +68,7 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 	})
 	for _, candidate := range preparation.Intent.Candidates {
 		publication.conditions = append(publication.conditions, etcdstore.Condition{
-			Key:         componentKey(candidate.Current.Desired.ID),
+			Key:         componentrecord.RecordKey(candidate.Current.Desired.ID),
 			ModRevision: candidate.CurrentRevision,
 		})
 	}

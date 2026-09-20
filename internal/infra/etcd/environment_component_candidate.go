@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -19,7 +20,7 @@ import (
 // deliberately rejected on Candidate because preparation owns address
 // allocation and health remains observed state.
 type EnvironmentComponentCandidateInput struct {
-	Current   Versioned[ComponentRecord]
+	Current   Versioned[componentrecord.Record]
 	Candidate core.Component
 }
 
@@ -235,7 +236,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	keys := make([]string, 0, 1+len(ordered)+len(zones))
 	keys = append(keys, componentTaskActiveEnvironmentKey(environmentID))
 	for _, input := range ordered {
-		keys = append(keys, componentKey(input.Current.Record.Desired.ID))
+		keys = append(keys, componentrecord.RecordKey(input.Current.Record.Desired.ID))
 	}
 	for _, zoneID := range zones {
 		keys = append(keys, componentAddressRegistryKey(zoneID))
@@ -264,7 +265,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 				"active Component changed during preparation",
 			)
 		}
-		stored, decodeErr := decodeComponentRecord(value.Value)
+		stored, decodeErr := componentrecord.DecodeRecord(value.Value)
 		if decodeErr != nil {
 			return ComponentTaskPreparation{}, decodeErr
 		}
@@ -339,7 +340,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 			}
 		}
 		projected.Healthy = false
-		record, recordErr := NewComponentRecord(projected)
+		record, recordErr := componentrecord.NewRecord(projected)
 		if recordErr != nil {
 			return ComponentTaskPreparation{}, recordErr
 		}
@@ -454,7 +455,7 @@ func validateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 	}
 	wantZones := make(map[string]struct{})
 	for _, candidate := range preparation.Intent.Candidates {
-		for _, record := range []ComponentRecord{candidate.Current, candidate.Candidate} {
+		for _, record := range []componentrecord.Record{candidate.Current, candidate.Candidate} {
 			binding, present, err := componentTaskAddress(record)
 			if err != nil {
 				return err

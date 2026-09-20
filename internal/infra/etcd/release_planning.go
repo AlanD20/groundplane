@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -245,7 +246,7 @@ func (ledger *ReleaseLedger) LoadPlanningServices(
 	return result, nil
 }
 
-func releasePlanningTargetsGeneratedService(components []ComponentRecord, serviceID string) bool {
+func releasePlanningTargetsGeneratedService(components []componentrecord.Record, serviceID string) bool {
 	for _, component := range components {
 		for _, generatedServiceID := range component.Runtime.GeneratedServices {
 			if generatedServiceID == serviceID {

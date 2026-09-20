@@ -2,9 +2,10 @@ package component
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"gopkg.in/yaml.v3"
@@ -12,7 +13,7 @@ import (
 
 func (service *MutationService) environmentComponentConfig(
 	ctx context.Context,
-	desired etcd.ComponentDesiredRecord,
+	desired componentrecord.DesiredRecord,
 	input apiTypes.ComponentConfigMutationInput,
 	idempotencyKey string,
 ) (apiTypes.ComponentConfig, error) {

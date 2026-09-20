@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -224,7 +225,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func selectedByEnabledComponent(components []ComponentRecord, zoneID string) bool {
+func selectedByEnabledComponent(components []componentrecord.Record, zoneID string) bool {
 	for _, record := range components {
 		if !record.Desired.Enabled {
 			continue

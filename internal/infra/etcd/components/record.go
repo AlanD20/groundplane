@@ -1,4 +1,4 @@
-package etcd
+package components
 
 import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -12,18 +12,18 @@ import (
 )
 
 const (
-	componentPrefix        = "/v1/records/components/"
-	componentWriteFenceKey = "/v1/indexes/components/write-fence"
+	RecordPrefix  = "/v1/records/components/"
+	WriteFenceKey = "/v1/indexes/components/write-fence"
 )
 
-// ComponentRecord separates operator-authored desired state from generated
+// Record separates operator-authored desired state from generated
 // identity, address, and health owned by the Controller runtime.
-type ComponentRecord struct {
-	Desired ComponentDesiredRecord `json:"desired"`
-	Runtime ComponentRuntimeRecord `json:"runtime"`
+type Record struct {
+	Desired DesiredRecord `json:"desired"`
+	Runtime RuntimeRecord `json:"runtime"`
 }
 
-type ComponentDesiredRecord struct {
+type DesiredRecord struct {
 	ID      string               `json:"id"`
 	Owner   core.ComponentOwner  `json:"owner"`
 	OwnerID string               `json:"owner_id,omitempty"`
@@ -32,91 +32,91 @@ type ComponentDesiredRecord struct {
 	Config  core.ComponentConfig `json:"config,omitempty"`
 }
 
-type ComponentRuntimeRecord struct {
+type RuntimeRecord struct {
 	GeneratedServices []string `json:"generated_services,omitempty"`
 	PinnedIPv4        string   `json:"pinned_ipv4,omitempty"`
 	Healthy           bool     `json:"healthy"`
 }
 
-func NewComponentRecord(component core.Component) (ComponentRecord, error) {
+func NewRecord(component core.Component) (Record, error) {
 	desired, err := componentDesiredRecord(component)
 	if err != nil {
-		return ComponentRecord{}, err
+		return Record{}, err
 	}
-	record := ComponentRecord{
+	record := Record{
 		Desired: desired,
-		Runtime: ComponentRuntimeRecord{
+		Runtime: RuntimeRecord{
 			GeneratedServices: append([]string(nil), component.GeneratedServices...),
 			PinnedIPv4:        component.PinnedIPv4,
 			Healthy:           component.Healthy,
 		},
 	}
-	if err := validateComponentRecord(record); err != nil {
-		return ComponentRecord{}, err
+	if err := ValidateRecord(record); err != nil {
+		return Record{}, err
 	}
 	return record, nil
 }
 
-// ReplaceComponentDesired preserves every Controller-owned runtime field.
-func ReplaceComponentDesired(record ComponentRecord, desired core.Component) (ComponentRecord, error) {
-	if err := validateComponentRecord(record); err != nil {
-		return ComponentRecord{}, err
+// ReplaceDesired preserves every Controller-owned runtime field.
+func ReplaceDesired(record Record, desired core.Component) (Record, error) {
+	if err := ValidateRecord(record); err != nil {
+		return Record{}, err
 	}
-	projected, err := ProjectComponentRecord(record)
+	projected, err := ProjectRecord(record)
 	if err != nil {
-		return ComponentRecord{}, err
+		return Record{}, err
 	}
 	if !reflect.DeepEqual(desired.GeneratedServices, projected.GeneratedServices) ||
 		desired.PinnedIPv4 != projected.PinnedIPv4 || desired.Healthy != projected.Healthy {
-		return ComponentRecord{}, errs.New(
+		return Record{}, errs.New(
 			errs.KindValidationFailed,
 			"Component desired replacement changed Controller-owned runtime state",
 		)
 	}
 	nextDesired, err := componentDesiredRecord(desired)
 	if err != nil {
-		return ComponentRecord{}, err
+		return Record{}, err
 	}
 	if nextDesired.ID != record.Desired.ID || nextDesired.Owner != record.Desired.Owner ||
 		nextDesired.OwnerID != record.Desired.OwnerID || nextDesired.Kind != record.Desired.Kind {
-		return ComponentRecord{}, errs.New(
+		return Record{}, errs.New(
 			errs.KindValidationFailed,
 			"Component desired replacement changed stable identity, owner, or kind",
 		)
 	}
 	replacement := record
 	replacement.Desired = nextDesired
-	if err := validateComponentRecord(replacement); err != nil {
-		return ComponentRecord{}, err
+	if err := ValidateRecord(replacement); err != nil {
+		return Record{}, err
 	}
 	return replacement, nil
 }
 
-// SetComponentRuntime changes only Controller-owned generated and observed
+// SetRuntime changes only Controller-owned generated and observed
 // state while retaining the exact operator-authored desired configuration.
-func SetComponentRuntime(
-	record ComponentRecord,
+func SetRuntime(
+	record Record,
 	generatedServices []string,
 	pinnedIPv4 string,
 	healthy bool,
-) (ComponentRecord, error) {
-	if err := validateComponentRecord(record); err != nil {
-		return ComponentRecord{}, err
+) (Record, error) {
+	if err := ValidateRecord(record); err != nil {
+		return Record{}, err
 	}
 	replacement := record
-	replacement.Runtime = ComponentRuntimeRecord{
+	replacement.Runtime = RuntimeRecord{
 		GeneratedServices: append([]string(nil), generatedServices...),
 		PinnedIPv4:        pinnedIPv4,
 		Healthy:           healthy,
 	}
-	if err := validateComponentRecord(replacement); err != nil {
-		return ComponentRecord{}, err
+	if err := ValidateRecord(replacement); err != nil {
+		return Record{}, err
 	}
 	return replacement, nil
 }
 
-func ProjectComponentRecord(record ComponentRecord) (core.Component, error) {
-	if err := validateComponentRecord(record); err != nil {
+func ProjectRecord(record Record) (core.Component, error) {
+	if err := ValidateRecord(record); err != nil {
 		return core.Component{}, err
 	}
 	return core.Component{
@@ -129,33 +129,33 @@ func ProjectComponentRecord(record ComponentRecord) (core.Component, error) {
 	}, nil
 }
 
-func componentDesiredRecord(component core.Component) (ComponentDesiredRecord, error) {
-	return ComponentDesiredRecord{
+func componentDesiredRecord(component core.Component) (DesiredRecord, error) {
+	return DesiredRecord{
 		ID: component.ID, Owner: component.Owner, OwnerID: component.OwnerID,
 		Kind: component.Kind, Enabled: component.Enabled,
 		Config: core.CloneComponentConfig(component.Config),
 	}, nil
 }
 
-func componentKey(id string) string { return componentPrefix + id }
+func RecordKey(id string) string { return RecordPrefix + id }
 
-func componentWriteFenceMutation(authorityID string) etcdstore.Mutation {
-	return etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentWriteFenceKey, Value: []byte(authorityID)}
+func WriteFenceMutation(authorityID string) etcdstore.Mutation {
+	return etcdstore.Mutation{Type: etcdstore.MutationPut, Key: WriteFenceKey, Value: []byte(authorityID)}
 }
 
-func componentEnvironmentOwnerPrefix(environmentID string) string {
+func EnvironmentOwnerPrefix(environmentID string) string {
 	return "/v1/indexes/components/by-owner/environment/" + environmentID + "/"
 }
 
-func componentEnvironmentOwnerKey(environmentID string, componentID string) string {
-	return componentEnvironmentOwnerPrefix(environmentID) + componentID
+func EnvironmentOwnerKey(environmentID string, componentID string) string {
+	return EnvironmentOwnerPrefix(environmentID) + componentID
 }
 
-func componentEnvironmentKindKey(environmentID string, kind core.ComponentKind) string {
+func EnvironmentKindKey(environmentID string, kind core.ComponentKind) string {
 	return "/v1/indexes/components/by-kind/environment/" + environmentID + "/" + recordcodec.EncodeKeySegment(string(kind))
 }
 
-func validateComponentRecord(record ComponentRecord) error {
+func ValidateRecord(record Record) error {
 	if err := recordcodec.ValidateID(ids.KindComponent, record.Desired.ID); err != nil {
 		return err
 	}
@@ -175,7 +175,7 @@ func validateComponentRecord(record ComponentRecord) error {
 			return err
 		}
 	}
-	if _, err := componentSecretReferences(record); err != nil {
+	if _, err := SecretReferences(record); err != nil {
 		return err
 	}
 	seenServices := make(map[string]struct{}, len(record.Runtime.GeneratedServices))
@@ -197,20 +197,30 @@ func validateComponentRecord(record ComponentRecord) error {
 	return nil
 }
 
-func encodeComponentRecord(record ComponentRecord) ([]byte, error) {
-	if err := validateComponentRecord(record); err != nil {
+func EncodeRecord(record Record) ([]byte, error) {
+	if err := ValidateRecord(record); err != nil {
 		return nil, err
 	}
 	return recordcodec.Encode("component", record)
 }
 
-func decodeComponentRecord(value []byte) (ComponentRecord, error) {
-	record, err := recordcodec.Decode[ComponentRecord](value, "component")
+func DecodeRecord(value []byte) (Record, error) {
+	record, err := recordcodec.Decode[Record](value, "component")
 	if err != nil {
-		return ComponentRecord{}, err
+		return Record{}, err
 	}
-	if err := validateComponentRecord(record); err != nil {
-		return ComponentRecord{}, recordcodec.CorruptRecord()
+	if err := ValidateRecord(record); err != nil {
+		return Record{}, recordcodec.CorruptRecord()
 	}
 	return record, nil
+}
+
+func SecretReferences(record Record) ([]string, error) {
+	references := record.Desired.Config.SecretReferences()
+	for _, reference := range references {
+		if ids.Validate(ids.KindSecret, reference) != nil {
+			return nil, errs.New(errs.KindValidationFailed, "Component Secret reference is invalid")
+		}
+	}
+	return references, nil
 }

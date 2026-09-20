@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"net/netip"
 	"reflect"
@@ -17,9 +18,9 @@ const componentTaskIntentPrefix = "/v1/records/component-task-intents/"
 // ComponentTaskCandidate pins the exact active Component revision and the
 // replacement that one Agent Task is allowed to promote.
 type ComponentTaskCandidate struct {
-	CurrentRevision int64           `json:"current_revision"`
-	Current         ComponentRecord `json:"current"`
-	Candidate       ComponentRecord `json:"candidate"`
+	CurrentRevision int64                  `json:"current_revision"`
+	Current         componentrecord.Record `json:"current"`
+	Candidate       componentrecord.Record `json:"candidate"`
 }
 
 // ComponentTaskIntent is the private, task-owned staging record for one
@@ -129,8 +130,8 @@ func validateComponentTaskIntent(intent ComponentTaskIntent) error {
 	seenKinds := make(map[core.ComponentKind]struct{}, len(intent.Candidates))
 	previousID := ""
 	for _, candidate := range intent.Candidates {
-		if candidate.CurrentRevision <= 0 || validateComponentRecord(candidate.Current) != nil ||
-			validateComponentRecord(candidate.Candidate) != nil {
+		if candidate.CurrentRevision <= 0 || componentrecord.ValidateRecord(candidate.Current) != nil ||
+			componentrecord.ValidateRecord(candidate.Candidate) != nil {
 			return errs.New(errs.KindValidationFailed, "Component candidate record is invalid")
 		}
 		current := candidate.Current.Desired
@@ -173,7 +174,7 @@ type componentTaskAddressBinding struct {
 	address string
 }
 
-func componentTaskAddress(record ComponentRecord) (componentTaskAddressBinding, bool, error) {
+func componentTaskAddress(record componentrecord.Record) (componentTaskAddressBinding, bool, error) {
 	if record.Desired.Kind != core.ComponentKindIngressCaddy {
 		if record.Runtime.PinnedIPv4 != "" {
 			return componentTaskAddressBinding{}, false, errs.New(
@@ -250,7 +251,7 @@ func cloneComponentTaskCandidates(source []ComponentTaskCandidate) []ComponentTa
 	return clone
 }
 
-func cloneComponentTaskRecord(record ComponentRecord) ComponentRecord {
+func cloneComponentTaskRecord(record componentrecord.Record) componentrecord.Record {
 	clone := record
 	clone.Desired.Config = core.CloneComponentConfig(record.Desired.Config)
 	clone.Runtime.GeneratedServices = append([]string(nil), record.Runtime.GeneratedServices...)

@@ -2,6 +2,7 @@ package component
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"net/netip"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -12,9 +13,9 @@ import (
 )
 
 type readRepository interface {
-	GetComponent(context.Context, string) (etcd.Versioned[etcd.ComponentRecord], error)
-	ListEnvironmentComponents(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ComponentRecord], error)
-	ListPlatformComponents(context.Context, etcd.PageRequest) (etcd.Page[etcd.ComponentRecord], error)
+	GetComponent(context.Context, string) (etcd.Versioned[componentrecord.Record], error)
+	ListEnvironmentComponents(context.Context, string, etcd.PageRequest) (etcd.Page[componentrecord.Record], error)
+	ListPlatformComponents(context.Context, etcd.PageRequest) (etcd.Page[componentrecord.Record], error)
 }
 
 // ManagedConfigProjector is the consumer-owned port for deriving generic
@@ -41,7 +42,7 @@ func (service *ReadService) ListComponents(
 	platform bool,
 	kind string,
 ) ([]apiTypes.Component, error) {
-	var records etcd.Page[etcd.ComponentRecord]
+	var records etcd.Page[componentrecord.Record]
 	var err error
 	if platform {
 		records, err = service.repository.ListPlatformComponents(ctx, etcd.PageRequest{Limit: etcd.MaximumPageLimit})
@@ -87,7 +88,7 @@ func (service *ReadService) GetComponentConfig(
 	if err != nil {
 		return apiTypes.ComponentConfigResponse{}, err
 	}
-	component, err := etcd.ProjectComponentRecord(record.Record)
+	component, err := componentrecord.ProjectRecord(record.Record)
 	if err != nil {
 		return apiTypes.ComponentConfigResponse{}, err
 	}
@@ -125,8 +126,8 @@ func (service *ReadService) GetRouter(ctx context.Context, environmentID string)
 	return router, nil
 }
 
-func projectComponent(record etcd.ComponentRecord) (apiTypes.Component, error) {
-	component, err := etcd.ProjectComponentRecord(record)
+func projectComponent(record componentrecord.Record) (apiTypes.Component, error) {
+	component, err := componentrecord.ProjectRecord(record)
 	if err != nil {
 		return apiTypes.Component{}, err
 	}

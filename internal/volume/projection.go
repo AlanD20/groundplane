@@ -1,6 +1,7 @@
 package volume
 
 import (
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"sort"
@@ -193,7 +194,7 @@ func cloneVolumeMutationProjection(current etcd.EnvironmentComposeProjection) et
 		DesiredRoutes:          append([]etcd.EnvironmentRouteProjection(nil), current.DesiredRoutes...),
 		Volumes:                append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...),
 		VolumeMounts:           append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),
-		Components:             append([]etcd.ComponentRecord(nil), current.Components...),
+		Components:             append([]componentrecord.Record(nil), current.Components...),
 		Entries:                append([]entryrecord.Record(nil), current.Entries...),
 		Backup:                 etcd.CloneEnvironmentBlueprintBackupPolicy(current.Backup),
 		ServiceDependencyPlans: current.ServiceDependencyPlans.Clone(),

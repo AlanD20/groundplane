@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"net/http"
 	"net/netip"
 	"sort"
@@ -115,7 +116,7 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 			"Platform lifecycle is supported only for CoreDNS",
 		)
 	}
-	desired, err := etcd.ProjectComponentRecord(current.Record)
+	desired, err := componentrecord.ProjectRecord(current.Record)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
@@ -279,7 +280,7 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 			"Platform Component config is supported only for CoreDNS",
 		)
 	}
-	desired, err := etcd.ProjectComponentRecord(current.Record)
+	desired, err := componentrecord.ProjectRecord(current.Record)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}

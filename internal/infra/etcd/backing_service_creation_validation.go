@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -18,7 +19,7 @@ func validateBackingServiceAdapterCreationShape(service core.Service, custom boo
 	return nil
 }
 
-func validateBackingServiceComponents(components []ComponentRecord) error {
+func validateBackingServiceComponents(components []componentrecord.Record) error {
 	if len(components) != 0 {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation requires zero Environment Components")
 	}

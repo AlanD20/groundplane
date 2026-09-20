@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"sort"
@@ -225,7 +226,7 @@ func ordinaryEnvironmentServices(projection EnvironmentComposeProjection) []Envi
 	return result
 }
 
-func componentGeneratedService(components []ComponentRecord, serviceID string) bool {
+func componentGeneratedService(components []componentrecord.Record, serviceID string) bool {
 	for _, component := range components {
 		for _, generatedServiceID := range component.Runtime.GeneratedServices {
 			if generatedServiceID == serviceID {

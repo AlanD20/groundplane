@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -194,24 +195,24 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionComponent
 	ctx context.Context,
 	action HierarchyDeletionAction,
 ) (hierarchyDeletionControllerEffects, error) {
-	primary, err := repository.readHierarchyDeletionPrimary(ctx, componentKey(action.TargetID), action)
+	primary, err := repository.readHierarchyDeletionPrimary(ctx, componentrecord.RecordKey(action.TargetID), action)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	defer clear(primary.Value)
-	record, err := decodeComponentRecord(primary.Value)
+	record, err := componentrecord.DecodeRecord(primary.Value)
 	if err != nil || record.Desired.ID != action.TargetID {
 		return hierarchyDeletionControllerEffects{}, corruptHierarchyDeletion()
 	}
 	keys := []string{
-		componentEnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID),
-		componentEnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind),
+		componentrecord.EnvironmentOwnerKey(record.Desired.OwnerID, record.Desired.ID),
+		componentrecord.EnvironmentKindKey(record.Desired.OwnerID, record.Desired.Kind),
 	}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	effects.mutations = append(effects.mutations, componentWriteFenceMutation(action.TargetID))
+	effects.mutations = append(effects.mutations, componentrecord.WriteFenceMutation(action.TargetID))
 	return effects, nil
 }
 func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionZoneFinalizer(

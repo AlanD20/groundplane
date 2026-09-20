@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"slices"
@@ -349,7 +350,7 @@ func sameServiceRemovalComparableSlices[E comparable](left, right []E) bool {
 	return (left == nil) == (right == nil) && slices.Equal(left, right)
 }
 
-func sameServiceRemovalComponents(left, right []ComponentRecord) bool {
+func sameServiceRemovalComponents(left, right []componentrecord.Record) bool {
 	if (left == nil) != (right == nil) || len(left) != len(right) {
 		return false
 	}
@@ -384,7 +385,7 @@ func sameServiceRemovalDependencyPlan(left, right core.ServiceDependencyPhasePla
 		sameServiceRemovalComparableSlices(left.Edges, right.Edges)
 }
 
-func sameServiceRemovalComponentRecord(left, right ComponentRecord) bool {
+func sameServiceRemovalComponentRecord(left, right componentrecord.Record) bool {
 	return left.Desired.ID == right.Desired.ID && left.Desired.Owner == right.Desired.Owner &&
 		left.Desired.OwnerID == right.Desired.OwnerID && left.Desired.Kind == right.Desired.Kind &&
 		left.Desired.Enabled == right.Desired.Enabled &&

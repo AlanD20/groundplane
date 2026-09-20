@@ -3,6 +3,7 @@ package blueprint
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -113,8 +114,8 @@ func (service *Service) listBlueprintRoutes(
 func (service *Service) listBlueprintComponents(
 	ctx context.Context,
 	environmentID string,
-) ([]etcd.Versioned[etcd.ComponentRecord], error) {
-	componentRecords := []etcd.Versioned[etcd.ComponentRecord](nil)
+) ([]etcd.Versioned[componentrecord.Record], error) {
+	componentRecords := []etcd.Versioned[componentrecord.Record](nil)
 	cursor := ""
 	for {
 		page, err := service.repository.ListEnvironmentComponents(

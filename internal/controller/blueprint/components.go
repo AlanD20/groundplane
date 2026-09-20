@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -29,13 +30,13 @@ func (service *Service) prepareBlueprintComponents(
 	createdAt time.Time,
 	allocate func(ids.Kind) string,
 	specs map[string]core.ComponentSpec,
-	current []etcd.Versioned[etcd.ComponentRecord],
+	current []etcd.Versioned[componentrecord.Record],
 	zoneChanges []etcd.EnvironmentBlueprintZoneChange,
-) (etcd.ComponentTaskPreparation, []etcd.ComponentRecord, []core.Component, error) {
+) (etcd.ComponentTaskPreparation, []componentrecord.Record, []core.Component, error) {
 	currentComponents := make([]core.Component, len(current))
-	currentByID := make(map[string]etcd.Versioned[etcd.ComponentRecord], len(current))
+	currentByID := make(map[string]etcd.Versioned[componentrecord.Record], len(current))
 	for index, versioned := range current {
-		component, err := etcd.ProjectComponentRecord(versioned.Record)
+		component, err := componentrecord.ProjectRecord(versioned.Record)
 		if err != nil {
 			return etcd.ComponentTaskPreparation{}, nil, nil, err
 		}
@@ -79,9 +80,9 @@ func (service *Service) prepareBlueprintComponents(
 			return etcd.ComponentTaskPreparation{}, nil, nil, err
 		}
 	}
-	recordsByID := make(map[string]etcd.ComponentRecord, len(changes.Effective))
+	recordsByID := make(map[string]componentrecord.Record, len(changes.Effective))
 	for _, component := range changes.Effective {
-		record, recordErr := etcd.NewComponentRecord(component)
+		record, recordErr := componentrecord.NewRecord(component)
 		if recordErr != nil {
 			return etcd.ComponentTaskPreparation{}, nil, nil, recordErr
 		}
@@ -102,7 +103,7 @@ func (service *Service) prepareBlueprintComponents(
 		}
 		recordsByID[candidate.Candidate.Desired.ID] = candidate.Candidate
 	}
-	records := make([]etcd.ComponentRecord, 0, len(recordsByID))
+	records := make([]componentrecord.Record, 0, len(recordsByID))
 	for _, record := range recordsByID {
 		records = append(records, record)
 	}
@@ -111,7 +112,7 @@ func (service *Service) prepareBlueprintComponents(
 	})
 	effective := make([]core.Component, len(records))
 	for index, record := range records {
-		effective[index], err = etcd.ProjectComponentRecord(record)
+		effective[index], err = componentrecord.ProjectRecord(record)
 		if err != nil {
 			return etcd.ComponentTaskPreparation{}, nil, nil, err
 		}

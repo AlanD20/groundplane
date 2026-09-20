@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -22,7 +23,7 @@ func IsAutomaticReconcileTask(task TaskRecord) bool {
 // replacement and its Agent Task in the same protected idempotency transaction.
 func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	ctx context.Context,
-	current Versioned[ComponentRecord],
+	current Versioned[componentrecord.Record],
 	desired core.Component,
 	task TaskRecord,
 	renderInput PlatformComponentTaskRenderInput,
@@ -37,7 +38,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	if err := validateComponentVersion(current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	replacement, err := ReplaceComponentDesired(current.Record, desired)
+	replacement, err := componentrecord.ReplaceDesired(current.Record, desired)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -107,7 +108,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		)
 	}
 
-	componentValue, err := encodeComponentRecord(replacement)
+	componentValue, err := componentrecord.EncodeRecord(replacement)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -123,7 +124,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	}
 	defer clear(reference)
 	conditions := []etcdstore.Condition{
-		{Key: componentKey(current.Record.Desired.ID), ModRevision: current.Revision},
+		{Key: componentrecord.RecordKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{Key: platformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
 		{Key: platformComponentTaskRenderInputKey(task.PlanID)},
@@ -134,8 +135,8 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		{Key: platformComponentTaskActiveKey(replacement.Desired.ID)},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: componentKey(replacement.Desired.ID), Value: componentValue},
-		componentWriteFenceMutation(replacement.Desired.ID),
+		{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(replacement.Desired.ID), Value: componentValue},
+		componentrecord.WriteFenceMutation(replacement.Desired.ID),
 		{Type: etcdstore.MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderInputValue},
 		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
 		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
@@ -196,7 +197,7 @@ func requireAppliedPlatformComponentTask(result IdempotencyTransactionResult) er
 	return nil
 }
 
-func PlatformComponentDesiredDigest(record ComponentRecord) (string, error) {
+func PlatformComponentDesiredDigest(record componentrecord.Record) (string, error) {
 	if err := validatePlatformComponentRecord(record); err != nil {
 		return "", err
 	}
@@ -209,7 +210,7 @@ func PlatformComponentDesiredDigest(record ComponentRecord) (string, error) {
 }
 
 func classifyPlatformComponentTaskConflict(
-	current Versioned[ComponentRecord],
+	current Versioned[componentrecord.Record],
 	indexes *etcdstore.GetManyResult,
 	operationID string,
 ) idempotencyPlanClassifier {

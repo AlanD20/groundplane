@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"net/http"
 	"net/netip"
@@ -38,7 +39,7 @@ type environmentCreationRepository interface {
 		etcd.Versioned[hierarchyrecord.ProjectRecord],
 		etcd.Versioned[etcd.EnvironmentPoolRegistry],
 		hierarchyrecord.EnvironmentRecord,
-		[]etcd.ComponentRecord,
+		[]componentrecord.Record,
 		etcd.TaskRecord,
 		etcd.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -313,13 +314,13 @@ func (service *environmentCreationService) createEnvironmentOnce(
 	return cloneIdempotencyResponse(response), nil
 }
 
-func newInitialEnvironmentComponents(environmentID string) ([]etcd.ComponentRecord, error) {
-	components := make([]etcd.ComponentRecord, 0, 2)
+func newInitialEnvironmentComponents(environmentID string) ([]componentrecord.Record, error) {
+	components := make([]componentrecord.Record, 0, 2)
 	for _, kind := range []core.ComponentKind{
 		core.ComponentKindIngressCaddy,
 		core.ComponentKindEdgeCloudflare,
 	} {
-		record, err := etcd.NewComponentRecord(core.Component{
+		record, err := componentrecord.NewRecord(core.Component{
 			ID:      ids.New(ids.KindComponent),
 			Owner:   core.ComponentOwnerEnvironment,
 			OwnerID: environmentID,

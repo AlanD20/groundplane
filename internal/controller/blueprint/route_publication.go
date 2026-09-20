@@ -4,10 +4,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 )
 
-func (service *Service) prepareRoutePublication(componentEnvironment core.Environment, pinnedComponents []etcd.ComponentRecord, componentPreparation etcd.ComponentTaskPreparation, generation uint64, routeChanges []etcd.EnvironmentBlueprintRouteChange) (etcd.ComponentTaskPreparation, []etcd.EnvironmentBlueprintRouteChange, error) {
+func (service *Service) prepareRoutePublication(componentEnvironment core.Environment, pinnedComponents []componentrecord.Record, componentPreparation etcd.ComponentTaskPreparation, generation uint64, routeChanges []etcd.EnvironmentBlueprintRouteChange) (etcd.ComponentTaskPreparation, []etcd.EnvironmentBlueprintRouteChange, error) {
 	routeProvider, routeProjection, err := controller.ResolveComponentTaskRouteProvider(
 		service.componentCatalog,
 		componentEnvironment,

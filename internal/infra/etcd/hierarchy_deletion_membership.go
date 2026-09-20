@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -318,8 +319,8 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 		{
 			targetKind:    "component",
 			actionKind:    HierarchyDeletionComponentRemove,
-			ownerPrefix:   componentEnvironmentOwnerPrefix,
-			primaryKey:    componentKey,
+			ownerPrefix:   componentrecord.EnvironmentOwnerPrefix,
+			primaryKey:    componentrecord.RecordKey,
 			stableIDKind:  ids.KindComponent,
 			validateOwner: validateHierarchyDeletionComponentOwner,
 			controller:    true,

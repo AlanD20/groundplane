@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"io"
 	"net/netip"
 
@@ -32,7 +33,7 @@ type ComponentExecutionRepository interface {
 		context.Context,
 		string,
 	) (etcd.Versioned[etcd.PlatformComponentTaskRenderInput], error)
-	GetComponent(context.Context, string) (etcd.Versioned[etcd.ComponentRecord], error)
+	GetComponent(context.Context, string) (etcd.Versioned[componentrecord.Record], error)
 	GetHostResolverBaseline(context.Context) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error)
 }
 

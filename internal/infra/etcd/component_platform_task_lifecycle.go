@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/hex"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
@@ -18,7 +19,7 @@ type platformComponentTaskChange struct {
 	conditions  []etcdstore.Condition
 	mutations   []etcdstore.Mutation
 	values      [][]byte
-	promoted    *ComponentRecord
+	promoted    *componentrecord.Record
 	observation *ComponentObservationRecord
 }
 
@@ -34,7 +35,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 		return platformComponentTaskChange{}, nil
 	}
 	stateKeys := []string{
-		componentKey(task.Target),
+		componentrecord.RecordKey(task.Target),
 		platformComponentTaskRenderInputKey(task.PlanID),
 		platformComponentTaskActiveKey(task.Target),
 		componentObservationKey(task.Target),
@@ -51,7 +52,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	}
 	componentValue := state.Values[0]
 	renderInputValue := state.Values[1]
-	component, err := decodeComponentRecord(componentValue.Value)
+	component, err := componentrecord.DecodeRecord(componentValue.Value)
 	if err != nil {
 		return platformComponentTaskChange{}, err
 	}
@@ -88,7 +89,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	change := platformComponentTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: componentKey(task.Target), ModRevision: componentValue.ModRevision},
+			{Key: componentrecord.RecordKey(task.Target), ModRevision: componentValue.ModRevision},
 			{Key: platformComponentTaskRenderInputKey(task.PlanID), ModRevision: renderInputValue.ModRevision},
 		},
 	}
@@ -152,7 +153,7 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	if component.Desired.Enabled {
 		generatedServices = []string{input.GeneratedServiceID}
 	}
-	promoted, err := SetComponentRuntime(
+	promoted, err := componentrecord.SetRuntime(
 		component,
 		generatedServices,
 		"",
@@ -161,22 +162,22 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 	if err != nil {
 		return platformComponentTaskChange{}, err
 	}
-	value, err := encodeComponentRecord(promoted)
+	value, err := componentrecord.EncodeRecord(promoted)
 	if err != nil {
 		return platformComponentTaskChange{}, err
 	}
 	change.values = append(change.values, value)
 	change.mutations = append(change.mutations, etcdstore.Mutation{
 		Type:  etcdstore.MutationPut,
-		Key:   componentKey(task.Target),
+		Key:   componentrecord.RecordKey(task.Target),
 		Value: value,
-	}, componentWriteFenceMutation(task.Target))
+	}, componentrecord.WriteFenceMutation(task.Target))
 	change.promoted = &promoted
 	return change, nil
 }
 
 func newPlatformComponentObservation(
-	component ComponentRecord,
+	component componentrecord.Record,
 	desiredRevision int64,
 	input PlatformComponentTaskRenderInput,
 	task TaskRecord,

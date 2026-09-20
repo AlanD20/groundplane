@@ -3,6 +3,7 @@ package dnsresolver
 import (
 	"context"
 	"encoding/json"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"net/http"
 	"time"
 
@@ -55,7 +56,7 @@ func EnsurePlatformResolverTask(
 	now := time.Now().UTC()
 	ensureService := len(current.Record.Runtime.GeneratedServices) == 0 || !current.Record.Runtime.Healthy
 	task := startupResolverTask(current.Record.Desired.ID, now, ensureService)
-	desired, err := etcd.ProjectComponentRecord(current.Record)
+	desired, err := componentrecord.ProjectRecord(current.Record)
 	if err != nil {
 		return err
 	}

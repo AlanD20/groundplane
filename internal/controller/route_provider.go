@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
@@ -27,7 +28,7 @@ type routeProviderStateReader interface {
 func ResolveComponentTaskRouteProvider(
 	catalog []EnvironmentComponentRegistration,
 	environment core.Environment,
-	components []etcd.ComponentRecord,
+	components []componentrecord.Record,
 	candidates []etcd.ComponentTaskCandidate,
 	inputRevision int64,
 	inputGeneration uint64,
@@ -58,7 +59,7 @@ func ResolveComponentTaskRouteProvider(
 				"Environment has multiple enabled HTTP router providers",
 			)
 		}
-		component, err := etcd.ProjectComponentRecord(record)
+		component, err := componentrecord.ProjectRecord(record)
 		if err != nil {
 			return nil, false, err
 		}
@@ -143,7 +144,7 @@ func (resolver *TaskPlanResolver) routeProviderRegistration(
 	var component core.Component
 	found := false
 	for _, record := range projection.Components {
-		candidate, err := etcd.ProjectComponentRecord(record)
+		candidate, err := componentrecord.ProjectRecord(record)
 		if err != nil {
 			return EnvironmentComponentRegistration{}, core.Component{}, false, err
 		}
@@ -193,7 +194,7 @@ func (resolver *TaskPlanResolver) routeProviderEnvironment(
 		Services: map[string]core.Service{},
 	}
 	for _, record := range projection.Components {
-		component, err := etcd.ProjectComponentRecord(record)
+		component, err := componentrecord.ProjectRecord(record)
 		if err != nil {
 			return core.Environment{}, 0, err
 		}
@@ -252,7 +253,7 @@ func (resolver *TaskPlanResolver) renderPinnedRouteProvider(
 			if record.Desired.ID != pin.ComponentID {
 				continue
 			}
-			component, projectErr := etcd.ProjectComponentRecord(record)
+			component, projectErr := componentrecord.ProjectRecord(record)
 			if projectErr != nil || component.Kind != registration.Kind || !component.Enabled ||
 				registration.PlanHTTPRouter == nil {
 				return componentsdk.EnvironmentPlan{}, core.Component{}, [sha256.Size]byte{}, [sha256.Size]byte{}, errs.New(

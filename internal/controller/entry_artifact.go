@@ -2,6 +2,7 @@ package controller
 
 import (
 	"crypto/sha256"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"path"
 	"path/filepath"
@@ -68,7 +69,7 @@ func ProjectEnvironmentEntryMutation(
 	candidate.DesiredRoutes = append([]etcd.EnvironmentRouteProjection(nil), current.DesiredRoutes...)
 	candidate.Volumes = append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...)
 	candidate.VolumeMounts = append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...)
-	candidate.Components = append([]etcd.ComponentRecord(nil), current.Components...)
+	candidate.Components = append([]componentrecord.Record(nil), current.Components...)
 	candidate.Entries = append([]entryrecord.Record(nil), mutation.Entries...)
 	sort.Slice(candidate.Entries, func(left, right int) bool {
 		return candidate.Entries[left].Entry.ID < candidate.Entries[right].Entry.ID

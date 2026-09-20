@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"crypto/sha256"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -124,7 +125,7 @@ func validateHierarchyDeletionRouteOwner(value []byte, id, owner string) error {
 }
 
 func validateHierarchyDeletionComponentOwner(value []byte, id, owner string) error {
-	record, err := decodeComponentRecord(value)
+	record, err := componentrecord.DecodeRecord(value)
 	if err != nil || record.Desired.ID != id || record.Desired.OwnerID != owner {
 		return corruptHierarchyDeletion()
 	}

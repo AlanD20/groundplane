@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -75,7 +76,7 @@ type EnvironmentComposeProjection struct {
 	DesiredRoutes                  []EnvironmentRouteProjection         `json:"desired_routes,omitempty"`
 	Volumes                        []EnvironmentVolumeIdentity          `json:"volumes,omitempty"`
 	VolumeMounts                   []EnvironmentServiceVolumeMount      `json:"volume_mounts,omitempty"`
-	Components                     []ComponentRecord                    `json:"components,omitempty"`
+	Components                     []componentrecord.Record             `json:"components,omitempty"`
 	ManagedComponentRuntimeSources []ManagedComponentRuntimeSource      `json:"managed_component_runtime_sources,omitempty"`
 	Entries                        []entryrecord.Record                 `json:"entries,omitempty"`
 	Backup                         *EnvironmentBlueprintBackupPolicy    `json:"backup,omitempty"`
@@ -572,7 +573,7 @@ func validateEnvironmentRouteProjections(
 	return nil
 }
 
-func validateEnvironmentComponentProjection(environmentID string, values []ComponentRecord) error {
+func validateEnvironmentComponentProjection(environmentID string, values []componentrecord.Record) error {
 	if len(values) == 0 {
 		return nil
 	}
@@ -584,7 +585,7 @@ func validateEnvironmentComponentProjection(environmentID string, values []Compo
 	serviceOwners := make(map[string]string)
 	for _, value := range values {
 		kind := value.Desired.Kind
-		if validateComponentRecord(value) != nil || value.Desired.Owner != core.ComponentOwnerEnvironment ||
+		if componentrecord.ValidateRecord(value) != nil || value.Desired.Owner != core.ComponentOwnerEnvironment ||
 			value.Desired.OwnerID != environmentID || kind <= previousKind ||
 			(kind != core.ComponentKindIngressCaddy && kind != core.ComponentKindEdgeCloudflare) {
 			return errs.New(errs.KindValidationFailed, "Environment Component projection is invalid or unsorted")
@@ -627,7 +628,7 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 	clone.VolumeMounts = append([]EnvironmentServiceVolumeMount(nil), source.VolumeMounts...)
 	clone.Backup = CloneEnvironmentBlueprintBackupPolicy(source.Backup)
 	if source.Components != nil {
-		clone.Components = make([]ComponentRecord, len(source.Components))
+		clone.Components = make([]componentrecord.Record, len(source.Components))
 		for index, component := range source.Components {
 			clone.Components[index] = cloneComponentTaskRecord(component)
 		}

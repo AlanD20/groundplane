@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
 	"github.com/AlanD20/groundplane/internal/core"
@@ -18,7 +19,7 @@ func platformComponentBootstrapKey(componentID string) string {
 }
 
 // DefaultPlatformComponents returns the stable platform singleton catalog.
-func DefaultPlatformComponents(tailnetDelegation bool) ([]ComponentRecord, error) {
+func DefaultPlatformComponents(tailnetDelegation bool) ([]componentrecord.Record, error) {
 	components := []core.Component{
 		{
 			ID:      platformCoreDNSComponentID,
@@ -32,9 +33,9 @@ func DefaultPlatformComponents(tailnetDelegation bool) ([]ComponentRecord, error
 			}},
 		},
 	}
-	records := make([]ComponentRecord, len(components))
+	records := make([]componentrecord.Record, len(components))
 	for index, component := range components {
-		record, err := NewComponentRecord(component)
+		record, err := componentrecord.NewRecord(component)
 		if err != nil {
 			return nil, err
 		}
@@ -47,9 +48,9 @@ func DefaultPlatformComponents(tailnetDelegation bool) ([]ComponentRecord, error
 // existing desired configuration or runtime state.
 func (repository *ComponentRepository) EnsurePlatformComponents(
 	ctx context.Context,
-	records []ComponentRecord,
-) ([]Versioned[ComponentRecord], error) {
-	result := make([]Versioned[ComponentRecord], 0, len(records))
+	records []componentrecord.Record,
+) ([]Versioned[componentrecord.Record], error) {
+	result := make([]Versioned[componentrecord.Record], 0, len(records))
 	for _, record := range records {
 		if err := validatePlatformComponentRecord(record); err != nil {
 			return nil, err
@@ -79,7 +80,7 @@ func (repository *ComponentRepository) EnsurePlatformComponents(
 // still the exact singleton created by the bootstrap repository transaction.
 func (repository *ComponentRepository) HasPlatformComponentBootstrapProvenance(
 	ctx context.Context,
-	current Versioned[ComponentRecord],
+	current Versioned[componentrecord.Record],
 ) (bool, error) {
 	if err := validateContext(ctx); err != nil {
 		return false, err

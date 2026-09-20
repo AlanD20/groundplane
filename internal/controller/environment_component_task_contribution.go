@@ -3,6 +3,7 @@ package controller
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -16,7 +17,7 @@ import (
 type EnvironmentManagedConfigApplyInput struct {
 	RevisionID       string
 	RenderGeneration uint64
-	Components       []etcd.ComponentRecord
+	Components       []componentrecord.Record
 	ComponentCatalog []EnvironmentComponentRegistration
 	Materializations []etcd.TaskMaterializationRecord
 	Artifact         *agentpb.ComposeArtifact
@@ -172,10 +173,10 @@ func ResolveEnvironmentManagedConfigApply(
 }
 
 func resolveEnvironmentManagedConfigCandidate(
-	components []etcd.ComponentRecord,
+	components []componentrecord.Record,
 	catalog []EnvironmentComponentRegistration,
-) (etcd.ComponentRecord, EnvironmentComponentRegistration, bool, error) {
-	var candidate etcd.ComponentRecord
+) (componentrecord.Record, EnvironmentComponentRegistration, bool, error) {
+	var candidate componentrecord.Record
 	var selected EnvironmentComponentRegistration
 	found := false
 	for _, component := range components {
@@ -184,7 +185,7 @@ func resolveEnvironmentManagedConfigCandidate(
 			continue
 		}
 		if found {
-			return etcd.ComponentRecord{}, EnvironmentComponentRegistration{}, false, errs.New(
+			return componentrecord.Record{}, EnvironmentComponentRegistration{}, false, errs.New(
 				errs.KindInternal,
 				"Blueprint managed-config provider is duplicated",
 			)
@@ -192,7 +193,7 @@ func resolveEnvironmentManagedConfigCandidate(
 		if ids.Validate(ids.KindComponent, component.Desired.ID) != nil ||
 			component.Desired.Owner != core.ComponentOwnerEnvironment ||
 			ids.Validate(ids.KindEnvironment, component.Desired.OwnerID) != nil {
-			return etcd.ComponentRecord{}, EnvironmentComponentRegistration{}, false, errs.New(
+			return componentrecord.Record{}, EnvironmentComponentRegistration{}, false, errs.New(
 				errs.KindInternal,
 				"Blueprint managed-config candidate identity is invalid",
 			)
@@ -200,13 +201,13 @@ func resolveEnvironmentManagedConfigCandidate(
 		if component.Desired.Enabled {
 			if len(component.Runtime.GeneratedServices) != 1 ||
 				ids.Validate(ids.KindService, component.Runtime.GeneratedServices[0]) != nil {
-				return etcd.ComponentRecord{}, EnvironmentComponentRegistration{}, false, errs.New(
+				return componentrecord.Record{}, EnvironmentComponentRegistration{}, false, errs.New(
 					errs.KindInternal,
 					"enabled Blueprint managed-config candidate Service identity is invalid",
 				)
 			}
 		} else if len(component.Runtime.GeneratedServices) != 0 {
-			return etcd.ComponentRecord{}, EnvironmentComponentRegistration{}, false, errs.New(
+			return componentrecord.Record{}, EnvironmentComponentRegistration{}, false, errs.New(
 				errs.KindInternal,
 				"disabled Blueprint managed-config candidate has a generated Service",
 			)
@@ -304,7 +305,7 @@ func requireEnvironmentManagedConfigArtifactService(
 func validateEnvironmentManagedConfigMaterialization(
 	reference etcd.TaskMaterializationRecord,
 	revisionID string,
-	candidate etcd.ComponentRecord,
+	candidate componentrecord.Record,
 	managed *EnvironmentManagedConfigurationRegistration,
 ) ([sha256.Size]byte, error) {
 	componentFile := reference.Source.ComponentFile

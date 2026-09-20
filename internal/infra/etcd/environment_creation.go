@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -22,7 +23,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	project Versioned[hierarchyrecord.ProjectRecord],
 	poolRegistry Versioned[EnvironmentPoolRegistry],
 	record hierarchyrecord.EnvironmentRecord,
-	components []ComponentRecord,
+	components []componentrecord.Record,
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -96,7 +97,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	defer clear(poolRegistryValue)
 	componentValues := make([][]byte, len(components))
 	for index := range components {
-		componentValues[index], err = encodeComponentRecord(components[index])
+		componentValues[index], err = componentrecord.EncodeRecord(components[index])
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
@@ -153,9 +154,9 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	}
 	for _, component := range components {
 		conditions = append(conditions,
-			etcdstore.Condition{Key: componentKey(component.Desired.ID)},
-			etcdstore.Condition{Key: componentEnvironmentOwnerKey(record.ID, component.Desired.ID)},
-			etcdstore.Condition{Key: componentEnvironmentKindKey(record.ID, component.Desired.Kind)},
+			etcdstore.Condition{Key: componentrecord.RecordKey(component.Desired.ID)},
+			etcdstore.Condition{Key: componentrecord.EnvironmentOwnerKey(record.ID, component.Desired.ID)},
+			etcdstore.Condition{Key: componentrecord.EnvironmentKindKey(record.ID, component.Desired.Kind)},
 		)
 	}
 	mutations := []etcdstore.Mutation{
@@ -173,21 +174,21 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	}
 	for index, component := range components {
 		mutations = append(mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentKey(component.Desired.ID), Value: componentValues[index]},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(component.Desired.ID), Value: componentValues[index]},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   componentEnvironmentOwnerKey(record.ID, component.Desired.ID),
+				Key:   componentrecord.EnvironmentOwnerKey(record.ID, component.Desired.ID),
 				Value: []byte(component.Desired.ID),
 			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   componentEnvironmentKindKey(record.ID, component.Desired.Kind),
+				Key:   componentrecord.EnvironmentKindKey(record.ID, component.Desired.Kind),
 				Value: []byte(component.Desired.ID),
 			},
 		)
 	}
 	if len(components) > 0 {
-		mutations = append(mutations, componentWriteFenceMutation(task.ID))
+		mutations = append(mutations, componentrecord.WriteFenceMutation(task.ID))
 	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {
@@ -214,7 +215,7 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func validateInitialEnvironmentComponents(environmentID string, components []ComponentRecord) error {
+func validateInitialEnvironmentComponents(environmentID string, components []componentrecord.Record) error {
 	if len(components) != 2 {
 		return errs.New(errs.KindValidationFailed, "Environment creation requires exactly two initial Components")
 	}
@@ -224,7 +225,7 @@ func validateInitialEnvironmentComponents(environmentID string, components []Com
 	}
 	seenIDs := make(map[string]struct{}, len(components))
 	for _, component := range components {
-		if err := validateComponentRecord(component); err != nil {
+		if err := componentrecord.ValidateRecord(component); err != nil {
 			return err
 		}
 		if component.Desired.Owner != core.ComponentOwnerEnvironment || component.Desired.OwnerID != environmentID {
@@ -255,7 +256,7 @@ func validateInitialEnvironmentComponents(environmentID string, components []Com
 func classifyEnvironmentCreateConflict(
 	project Versioned[hierarchyrecord.ProjectRecord],
 	poolRegistry Versioned[EnvironmentPoolRegistry],
-	components []ComponentRecord,
+	components []componentrecord.Record,
 	operationID string,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {

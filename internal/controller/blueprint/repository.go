@@ -3,6 +3,7 @@ package blueprint
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -43,7 +44,7 @@ type environmentBlueprintRepository interface {
 	CreateBlueprintEntryValueGeneration(context.Context, etcd.EntryValueGeneration) error
 	BindBlueprintEntryEnvironment(context.Context, string, string) error
 	ListAttaches(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.AttachRecord], error)
-	ListEnvironmentComponents(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ComponentRecord], error)
+	ListEnvironmentComponents(context.Context, string, etcd.PageRequest) (etcd.Page[componentrecord.Record], error)
 	PrepareEnvironmentComponentTask(
 		context.Context,
 		string,
@@ -221,7 +222,7 @@ func (repository *durableRepository) ListEnvironmentComponents(
 	ctx context.Context,
 	environmentID string,
 	request etcd.PageRequest,
-) (etcd.Page[etcd.ComponentRecord], error) {
+) (etcd.Page[componentrecord.Record], error) {
 	return repository.components.ListEnvironmentComponents(ctx, environmentID, request)
 }
 func (repository *durableRepository) ListZones(

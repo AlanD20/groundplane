@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -24,7 +25,7 @@ type BackingServiceCreation struct {
 	PoolRegistry Versioned[EnvironmentPoolRegistry]
 	Project      hierarchyrecord.ProjectRecord
 	Environment  hierarchyrecord.EnvironmentRecord
-	Components   []ComponentRecord
+	Components   []componentrecord.Record
 	Zone         zonerecord.Record
 	Service      ServiceRecord
 	Secrets      []secretrecord.Record
@@ -151,7 +152,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	defer clear(taskReference)
 	componentValues := make([][]byte, len(creation.Components))
 	for index := range creation.Components {
-		componentValues[index], err = encodeComponentRecord(creation.Components[index])
+		componentValues[index], err = componentrecord.EncodeRecord(creation.Components[index])
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
@@ -241,21 +242,21 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	for index, component := range creation.Components {
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentKey(component.Desired.ID), Value: componentValues[index]},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(component.Desired.ID), Value: componentValues[index]},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   componentEnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID),
+				Key:   componentrecord.EnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID),
 				Value: []byte(component.Desired.ID),
 			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
-				Key:   componentEnvironmentKindKey(creation.Environment.ID, component.Desired.Kind),
+				Key:   componentrecord.EnvironmentKindKey(creation.Environment.ID, component.Desired.Kind),
 				Value: []byte(component.Desired.ID),
 			},
 		)
 	}
 	if len(creation.Components) > 0 {
-		mutations = append(mutations, componentWriteFenceMutation(creation.Task.ID))
+		mutations = append(mutations, componentrecord.WriteFenceMutation(creation.Task.ID))
 	}
 	for index, entry := range creation.Entries {
 		mutations = append(
@@ -518,9 +519,9 @@ func backingServiceCreationConditions(
 	}
 	for _, component := range creation.Components {
 		conditions = append(conditions,
-			etcdstore.Condition{Key: componentKey(component.Desired.ID)},
-			etcdstore.Condition{Key: componentEnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID)},
-			etcdstore.Condition{Key: componentEnvironmentKindKey(creation.Environment.ID, component.Desired.Kind)},
+			etcdstore.Condition{Key: componentrecord.RecordKey(component.Desired.ID)},
+			etcdstore.Condition{Key: componentrecord.EnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID)},
+			etcdstore.Condition{Key: componentrecord.EnvironmentKindKey(creation.Environment.ID, component.Desired.Kind)},
 		)
 	}
 	for index, entry := range creation.Entries {

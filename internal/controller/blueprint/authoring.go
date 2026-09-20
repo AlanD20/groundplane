@@ -2,6 +2,7 @@ package blueprint
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"sort"
 	"time"
@@ -291,7 +292,7 @@ func environmentBlueprintAuthoringRoutes(
 }
 
 func environmentBlueprintAuthoringComponents(
-	records []etcd.ComponentRecord,
+	records []componentrecord.Record,
 ) (map[string]core.ComponentSpec, error) {
 	result := make(map[string]core.ComponentSpec)
 	for _, record := range records {

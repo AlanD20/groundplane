@@ -3,6 +3,7 @@ package etcd
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -101,7 +102,7 @@ func seedManagedComponentRuntimeSources(
 
 func managedComponentRuntimeSource(
 	projection EnvironmentComposeProjection,
-	component ComponentRecord,
+	component componentrecord.Record,
 	artifact *agentpb.ComposeArtifact,
 ) (ManagedComponentRuntimeSource, error) {
 	if len(component.Runtime.GeneratedServices) != 1 {
@@ -158,7 +159,7 @@ func validateManagedComponentRuntimeSources(projection EnvironmentComposeProject
 	if len(projection.ManagedComponentRuntimeSources) > maximumManagedComponentRuntimeSources {
 		return errs.New(errs.KindValidationFailed, "managed Component runtime source count is invalid")
 	}
-	components := make(map[core.ComponentKind]ComponentRecord, len(projection.Components))
+	components := make(map[core.ComponentKind]componentrecord.Record, len(projection.Components))
 	for _, component := range projection.Components {
 		components[component.Desired.Kind] = component
 	}

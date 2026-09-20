@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"encoding/json"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"net/http"
 	"strconv"
 
@@ -14,7 +15,7 @@ import (
 )
 
 type mutationRepository interface {
-	GetComponent(context.Context, string) (etcd.Versioned[etcd.ComponentRecord], error)
+	GetComponent(context.Context, string) (etcd.Versioned[componentrecord.Record], error)
 }
 
 type blueprintApplier interface {

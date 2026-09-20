@@ -2,11 +2,11 @@ package etcd
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"sort"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -31,16 +31,6 @@ func componentCandidateSecretReferenceKey(secretID string, taskID string, compon
 	return componentSecretReferencePrefix(secretID) + "candidates/" + taskID + "/" + componentID
 }
 
-func componentSecretReferences(record ComponentRecord) ([]string, error) {
-	references := record.Desired.Config.SecretReferences()
-	for _, reference := range references {
-		if ids.Validate(ids.KindSecret, reference) != nil {
-			return nil, errs.New(errs.KindValidationFailed, "Component Secret reference is invalid")
-		}
-	}
-	return references, nil
-}
-
 func prepareComponentTaskSecretReferences(
 	ctx context.Context,
 	store hierarchyStore,
@@ -51,7 +41,7 @@ func prepareComponentTaskSecretReferences(
 ) ([]componentTaskSecretReference, []etcdstore.Condition, []etcdstore.Mutation, error) {
 	references := make([]componentTaskSecretReference, 0, len(candidates))
 	for _, candidate := range candidates {
-		secretIDs, err := componentSecretReferences(candidate.Candidate)
+		secretIDs, err := componentrecord.SecretReferences(candidate.Candidate)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -132,11 +122,11 @@ func componentTaskTerminalSecretMutations(
 ) ([]etcdstore.Mutation, error) {
 	mutations := make([]etcdstore.Mutation, 0, len(intent.Candidates)*3)
 	for _, candidate := range intent.Candidates {
-		currentIDs, err := componentSecretReferences(candidate.Current)
+		currentIDs, err := componentrecord.SecretReferences(candidate.Current)
 		if err != nil {
 			return nil, err
 		}
-		nextIDs, err := componentSecretReferences(candidate.Candidate)
+		nextIDs, err := componentrecord.SecretReferences(candidate.Candidate)
 		if err != nil {
 			return nil, err
 		}

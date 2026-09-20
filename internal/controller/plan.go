@@ -11,6 +11,7 @@ package controller
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	"math"
@@ -708,7 +709,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentRemovalPlan(
 type pinnedEnvironmentBlueprintArtifact struct {
 	artifact     *agentpb.ComposeArtifact
 	projection   etcd.EnvironmentComposeProjection
-	components   []etcd.ComponentRecord
+	components   []componentrecord.Record
 	requirements core.BlueprintRequirements
 }
 

@@ -8,6 +8,7 @@ import (
 	channeltransport "github.com/AlanD20/groundplane/internal/controller/agentchannel/transport"
 	taskdispatch "github.com/AlanD20/groundplane/internal/controller/controllertask/dispatch"
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	"log/slog"
 	"os"
 	"time"
@@ -535,12 +536,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	if err := tasks.SetPlatformResolverTaskPreparer(func(
 		ctx context.Context,
-		current etcd.Versioned[etcd.ComponentRecord],
+		current etcd.Versioned[componentrecord.Record],
 		projection etcd.HostResolutionProjectionRecord,
 		task etcd.TaskRecord,
 		priorObservation *etcd.ComponentObservationRecord,
 	) (etcd.PlatformComponentTaskRenderInput, error) {
-		desired, err := etcd.ProjectComponentRecord(current.Record)
+		desired, err := componentrecord.ProjectRecord(current.Record)
 		if err != nil {
 			return etcd.PlatformComponentTaskRenderInput{}, err
 		}

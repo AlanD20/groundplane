@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -637,7 +638,7 @@ func (repository *BackupRuntimeRepository) manualBackupVolumeConsumers(
 	return result, nil
 }
 
-func backupVolumeTargetsGeneratedService(components []ComponentRecord, serviceID string) bool {
+func backupVolumeTargetsGeneratedService(components []componentrecord.Record, serviceID string) bool {
 	for _, component := range components {
 		for _, generatedServiceID := range component.Runtime.GeneratedServices {
 			if generatedServiceID == serviceID {

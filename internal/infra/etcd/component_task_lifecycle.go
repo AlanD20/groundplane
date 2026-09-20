@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -74,7 +75,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 
 	zoneSet := make(map[string]struct{})
 	for _, candidate := range intent.Candidates {
-		for _, record := range []ComponentRecord{candidate.Current, candidate.Candidate} {
+		for _, record := range []componentrecord.Record{candidate.Current, candidate.Candidate} {
 			binding, present, bindingErr := componentTaskAddress(record)
 			if bindingErr != nil {
 				return componentTaskChange{}, bindingErr
@@ -126,7 +127,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 	)
 	for _, candidate := range intent.Candidates {
-		keys = append(keys, componentKey(candidate.Current.Desired.ID))
+		keys = append(keys, componentrecord.RecordKey(candidate.Current.Desired.ID))
 	}
 	for _, zoneID := range zones {
 		keys = append(keys, componentAddressRegistryKey(zoneID))
@@ -211,7 +212,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 				"active Component changed before retry",
 			)
 		}
-		active, decodeErr := decodeComponentRecord(value.Value)
+		active, decodeErr := componentrecord.DecodeRecord(value.Value)
 		if decodeErr != nil {
 			return componentTaskChange{}, decodeErr
 		}
@@ -222,7 +223,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 			)
 		}
 		change.conditions = append(change.conditions, etcdstore.Condition{
-			Key: componentKey(active.Desired.ID), ModRevision: value.ModRevision,
+			Key: componentrecord.RecordKey(active.Desired.ID), ModRevision: value.ModRevision,
 		})
 	}
 
@@ -443,7 +444,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 
 	zoneSet := make(map[string]struct{})
 	for _, candidate := range intent.Candidates {
-		for _, record := range []ComponentRecord{candidate.Current, candidate.Candidate} {
+		for _, record := range []componentrecord.Record{candidate.Current, candidate.Candidate} {
 			binding, present, bindingErr := componentTaskAddress(record)
 			if bindingErr != nil {
 				return componentTaskChange{}, bindingErr
@@ -473,7 +474,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 	)
 	for _, candidate := range intent.Candidates {
-		keys = append(keys, componentKey(candidate.Current.Desired.ID))
+		keys = append(keys, componentrecord.RecordKey(candidate.Current.Desired.ID))
 	}
 	for _, zoneID := range zones {
 		keys = append(keys, componentAddressRegistryKey(zoneID))
@@ -519,7 +520,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 				"active Component changed during reconciliation",
 			)
 		}
-		active, decodeErr := decodeComponentRecord(value.Value)
+		active, decodeErr := componentrecord.DecodeRecord(value.Value)
 		if decodeErr != nil {
 			return componentTaskChange{}, decodeErr
 		}
@@ -530,7 +531,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 			)
 		}
 		change.conditions = append(change.conditions, etcdstore.Condition{
-			Key: componentKey(active.Desired.ID), ModRevision: value.ModRevision,
+			Key: componentrecord.RecordKey(active.Desired.ID), ModRevision: value.ModRevision,
 		})
 	}
 
@@ -600,7 +601,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 
 	if terminalStatus == TaskStatusCompleted {
 		for _, candidate := range intent.Candidates {
-			promoted, promoteErr := SetComponentRuntime(
+			promoted, promoteErr := componentrecord.SetRuntime(
 				candidate.Candidate,
 				candidate.Candidate.Runtime.GeneratedServices,
 				candidate.Candidate.Runtime.PinnedIPv4,
@@ -610,17 +611,17 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 				clearComponentTaskChange(change)
 				return componentTaskChange{}, promoteErr
 			}
-			value, encodeErr := encodeComponentRecord(promoted)
+			value, encodeErr := componentrecord.EncodeRecord(promoted)
 			if encodeErr != nil {
 				clearComponentTaskChange(change)
 				return componentTaskChange{}, encodeErr
 			}
 			change.values = append(change.values, value)
 			change.mutations = append(change.mutations, etcdstore.Mutation{
-				Type: etcdstore.MutationPut, Key: componentKey(candidate.Candidate.Desired.ID), Value: value,
+				Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(candidate.Candidate.Desired.ID), Value: value,
 			})
 		}
-		change.mutations = append(change.mutations, componentWriteFenceMutation(task.ID))
+		change.mutations = append(change.mutations, componentrecord.WriteFenceMutation(task.ID))
 	}
 	if terminalStatus == TaskStatusCompleted || task.Params[TaskReleasePublicationParam] == "" {
 		routeObservationChange, routeErr := repository.prepareComponentTaskRouteObservationAcknowledgement(
@@ -781,7 +782,7 @@ func validateComponentTaskReservations(
 	registries map[string]componentAddressRegistry,
 ) error {
 	for _, candidate := range intent.Candidates {
-		for _, record := range []ComponentRecord{candidate.Current, candidate.Candidate} {
+		for _, record := range []componentrecord.Record{candidate.Current, candidate.Candidate} {
 			binding, present, err := componentTaskAddress(record)
 			if err != nil {
 				return err

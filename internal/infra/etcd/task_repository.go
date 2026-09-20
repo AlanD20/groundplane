@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"math/rand/v2"
@@ -29,7 +30,7 @@ type taskRepositoryStore interface {
 // fencing; the Controller owns the registered Component renderer.
 type PlatformResolverTaskPreparer func(
 	context.Context,
-	Versioned[ComponentRecord],
+	Versioned[componentrecord.Record],
 	HostResolutionProjectionRecord,
 	TaskRecord,
 	*ComponentObservationRecord,
@@ -41,8 +42,8 @@ type PlatformResolverTaskPreparer func(
 // kept at the composition root.
 type PlatformResolverComponentSelector func(
 	context.Context,
-	[]Versioned[ComponentRecord],
-) (Versioned[ComponentRecord], error)
+	[]Versioned[componentrecord.Record],
+) (Versioned[componentrecord.Record], error)
 
 // TaskEventAppend reports the durable sequence allocated by the Controller.
 // Duplicate is true only when the same Agent event was already committed.
