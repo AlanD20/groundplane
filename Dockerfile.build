@@ -1,0 +1,17 @@
+FROM node:24.19.0-bookworm-slim AS node
+FROM golang:1.26.7-bookworm AS build
+COPY --from=node /usr/local/ /usr/local/
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install --global npm@11.17.0
+WORKDIR /src
+COPY . .
+ARG VERSION
+ENV CGO_ENABLED=0 GOMAXPROCS=2 GOFLAGS="-p=2 -trimpath" GOAMD64=v1 GOARM64=v8.0
+RUN bash scripts/repo-env.sh npm --prefix console ci \
+    && bash scripts/repo-env.sh npm --prefix console run build \
+    && make console-toolchain controller-binary cli VERSION="$VERSION"
+FROM scratch
+COPY --from=build /src/bin/controller /controller
+COPY --from=build /src/bin/controller-release.json /controller-release.json
+COPY --from=build /src/bin/groundplane /groundplane

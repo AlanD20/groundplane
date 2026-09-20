@@ -41,7 +41,8 @@ class BundleTests(unittest.TestCase):
             self.addCleanup(patcher.stop)
         self.files = release_bundle.payload("1.2.3", self.agent, self.runner, "amd64")
         script = (release_bundle.ROOT / "install.sh").read_text()
-        self.extractor = script.split("python3 -c '\n", 1)[1].split("\n' \"$deploy_dir\"", 1)[0]
+        archive_section = script.split("# Validate the complete archive", 1)[1]
+        self.extractor = archive_section.split("python3 -c '\n", 1)[1].split("\n' \"$deploy_dir\"", 1)[0]
 
     def extract(self, files=None, extra=None, version="1.2.3", arch="amd64"):
         target = self.root / "install"

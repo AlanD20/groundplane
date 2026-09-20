@@ -4,11 +4,12 @@ set -eu
 
 usage() {
     printf '%s\n' \
-        'Usage: sh install.sh [--version VERSION] [--listen-ip PRIVATE_IPV4]' \
+        'Usage: sh install.sh [--version VERSION | --ref REF] [--listen-ip PRIVATE_IPV4]' \
         '       [--bundle FILE --sha256 HEX] [--config FILE] [--stage-only]' \
         'Ubuntu 24.04/26.04 or Debian 13, native amd64/arm64, root.' \
         'No source checkout or compiler needed.' \
         'Defaults to the latest published stable release; --version pins a release.' \
+        '--ref builds a branch/tag/commit locally; requires Docker Engine.' \
         'Local --bundle installation requires --version and --sha256.' \
         'Fresh host: provision prerequisites and install. Existing host: guarded update.' \
         '--stage-only stages an existing installation without activating it.' \
@@ -36,13 +37,14 @@ resolve_version() {
     }
 }
 
-version='' bundle='' checksum='' listen_ip=127.0.0.1 config='' stage_only=0
+version='' ref='' bundle='' checksum='' listen_ip=127.0.0.1 config='' stage_only=0
 while test "$#" -gt 0; do
     case "$1" in
-        --version|--bundle|--sha256|--listen-ip|--config)
+        --version|--ref|--bundle|--sha256|--listen-ip|--config)
             test "$#" -ge 2 && test -n "$2" || { usage >&2; exit 2; }
             case "$1" in
                 --version) version=$2 ;;
+                --ref) ref=$2 ;;
                 --bundle) bundle=$2 ;;
                 --sha256) checksum=$2 ;;
                 --listen-ip) listen_ip=$2 ;;
@@ -54,6 +56,21 @@ while test "$#" -gt 0; do
         *) usage >&2; exit 2 ;;
     esac
 done
+if test -n "$ref"; then
+    test -z "$version$bundle$checksum" || {
+        echo '--ref cannot be combined with --version, --bundle or --sha256.' >&2; exit 2;
+    }
+    test "${#ref}" -le 255 || { echo 'Git ref is too long.' >&2; exit 2; }
+    case "${DOCKER_HOST:-}" in
+        ''|unix:///var/run/docker.sock) ;;
+        *) echo '--ref requires the local Docker Engine.' >&2; exit 1 ;;
+    esac
+    test -z "${DOCKER_CONTEXT:-}" || { echo '--ref requires the default local Docker context.' >&2; exit 1; }
+    export DOCKER_HOST=unix:///var/run/docker.sock
+    if ! command -v docker >/dev/null || ! docker info >/dev/null; then
+        echo '--ref requires a working local Docker Engine.' >&2; exit 1;
+    fi
+fi
 if test -n "$version"; then
     printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$' &&
         test "${#version}" -le 100 || { echo 'Invalid release version.' >&2; exit 2; }
@@ -101,15 +118,26 @@ for path in /root/.groundplane /root/.groundplane/.tmp; do
 done
 deploy_id=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
 deploy_dir=/root/.groundplane/.tmp/groundplane-deploy-$deploy_id
+build_dir=/root/.groundplane/.tmp/groundplane-build-$deploy_id
 mkdir -m 0700 "$deploy_dir"
 finish() {
     status=$?
+    trap - EXIT HUP INT TERM
+    if test -d "$build_dir"; then
+        rm -rf -- "$build_dir"
+    fi
+    if test -n "$ref" && test -d "$deploy_dir"; then
+        rmdir -- "$deploy_dir" 2>/dev/null || true
+    fi
     if test -d "$deploy_dir"; then
         echo "Installation files retained: $deploy_dir" >&2
     fi
     exit "$status"
 }
 trap finish EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 available_kib=$(df -Pk "$deploy_dir" | awk 'NR == 2 {print $4}')
 test "${available_kib:-0}" -ge 2097152 || {
     echo 'Installation requires at least 2 GiB free before downloading.' >&2; exit 1;
@@ -128,6 +156,64 @@ if test -n "$packages"; then
     # Split only the fixed package names assembled above, never user input.
     # shellcheck disable=SC2086
     apt-get install -y $packages </dev/null
+fi
+if test -n "$ref"; then
+    test "${available_kib:-0}" -ge 10485760 || {
+        echo '--ref requires at least 10 GiB free for its disposable build.' >&2; exit 1;
+    }
+    mkdir -m 0700 "$build_dir"
+    encoded_ref=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$ref")
+    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+        --connect-timeout 15 --max-time 60 --max-filesize 2097152 \
+        "https://api.github.com/repos/AlanD20/groundplane/commits/$encoded_ref" --output "$build_dir/commit.json"
+    commit=$(python3 -c '
+import json, re, sys
+sha = json.load(open(sys.argv[1])).get("sha", "")
+if not re.fullmatch(r"[0-9a-f]{40}", sha):
+    raise SystemExit("GitHub did not return an exact commit")
+print(sha)
+' "$build_dir/commit.json")
+    echo "Building Groundplane ref $ref at $commit ($arch)." >&2
+    curl --fail --location --proto '=https' --proto-redir '=https' --connect-timeout 15 \
+        --max-time 600 --max-filesize 209715200 \
+        "https://codeload.github.com/AlanD20/groundplane/tar.gz/$commit" --output "$build_dir/source.tar.gz"
+    python3 -c '
+import pathlib, sys, tarfile
+root = pathlib.Path(sys.argv[1]) / "source"
+root.mkdir(mode=0o700)
+prefix = "groundplane-" + sys.argv[2]
+total = 0
+seen = set()
+with tarfile.open(root.parent / "source.tar.gz", "r:gz") as archive:
+    for member in archive:
+        parts = pathlib.PurePosixPath(member.name).parts
+        if not parts or parts[0] != prefix or ".." in parts or member.name in seen:
+            raise SystemExit("Unsafe source archive path")
+        seen.add(member.name)
+        target = root.joinpath(*parts[1:])
+        if member.isdir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif member.isfile() and 0 <= member.size <= 67108864:
+            total += member.size
+            if total > 536870912:
+                raise SystemExit("Source archive exceeds unpacked limit")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("xb") as output:
+                import shutil
+                shutil.copyfileobj(archive.extractfile(member), output)
+            target.chmod(0o700 if member.mode & 0o111 else 0o600)
+        else:
+            raise SystemExit("Unsupported source archive member")
+' "$build_dir" "$commit"
+    test -f "$build_dir/source/scripts/install_ref.py" || {
+        echo 'Selected commit predates --ref installation support.' >&2; exit 1;
+    }
+    set -- --deploy-dir "$deploy_dir" --commit "$commit" --listen-ip "$listen_ip"
+    test "$stage_only" -eq 0 || set -- "$@" --stage-only
+    test -z "$config" || set -- "$@" --config "$config"
+    export PYTHONDONTWRITEBYTECODE=1
+    python3 "$build_dir/source/scripts/install_ref.py" "$@"
+    exit 0
 fi
 resolve_version
 echo "Selected Groundplane $version ($arch)." >&2

@@ -1,0 +1,6 @@
+.git
+.tmp
+.tmp-*
+bin
+console/node_modules
+console/dist

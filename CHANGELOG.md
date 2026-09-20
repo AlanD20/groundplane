@@ -5,6 +5,10 @@ that every deployment or failure scenario has been qualified.
 
 ## [Unreleased]
 
+- Install a branch, tag or commit with `install.sh --ref`, without a published
+  Groundplane release. Build toolchains run in disposable Docker containers;
+  installation retains the existing guarded upgrade and recovery checks.
+
 ## 0.0.1 — pending publication
 
 Initial single-host release.

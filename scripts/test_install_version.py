@@ -12,7 +12,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = (ROOT / "install.sh").read_text()
-FUNCTIONS = SCRIPT.split("version='' bundle=", 1)[0]
+FUNCTIONS = SCRIPT.split("\nversion=", 1)[0]
 DOWNLOAD = SCRIPT.split("\nresolve_version\n", 1)[1].split("\nactual=", 1)[0]
 
 

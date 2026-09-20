@@ -4,6 +4,38 @@ This runbook implements ADR0074's machine-bootstrap exception. Normal native
 activation remains the same Console/CLI/API Controller update Task. It does not
 authorize a production target or changes to ingress, host firewall or other hosts.
 
+## Build and install a Git ref
+
+Use `sudo sh install.sh --ref main` or replace `main` with a branch, tag or
+commit. This path requires no published Groundplane release or image. It resolves
+the ref once through GitHub, downloads that exact commit and builds the Controller,
+embedded Console, CLI, Agent and Runner locally. The selected commit must include
+the ref-install helper and build Dockerfile. Only select code you trust: installation
+executes that commit's deployment helpers as root.
+
+Docker Engine must already be running locally. Python, curl and CA certificates
+are installed when missing, as with tagged installation. Go, Node, npm, Git and
+Buildx are not installed on the host. The Docker build client and toolchains run
+in containers. Internet access and at least 10 GiB of free build space are required;
+this is a preflight minimum, not a bound on peak disk use.
+
+Each invocation owns its builder and cache. Normal completion and handled failures
+remove those, the source checkout, temporary image tags and newly pulled build-tool
+images. Existing images and unrelated caches are not pruned. A machine crash or
+SIGKILL cannot run cleanup. Runtime images in GP's loopback registry and files
+required for unresolved installation/recovery remain; they are not build debris.
+
+Installation reuses the normal bootstrap or guarded Controller/Agent update.
+Existing installations retain their CLI, Runner, etcd, configuration and keys.
+They skip the Runner build because normal updates do not replace it.
+The display version includes the full source commit; immutable image and binary
+identities still govern activation. `--stage-only`, `--listen-ip` and initial-only
+`--config` remain available. `--ref` cannot be combined with `--version`, `--bundle`
+or `--sha256`. Without `--ref`, installation still downloads tagged release artifacts.
+
+Ref installation is separate from release publication: it never creates a GitHub
+release, pushes an image or publishes per-commit artifacts.
+
 ## Prebuilt releases
 
 Local release scripts build artifacts without implicitly publishing or installing.
