@@ -4,7 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	registeredcatalog "github.com/AlanD20/groundplane-registered-components/catalog"
-	"github.com/AlanD20/groundplane/internal/agent"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
+
 	"github.com/AlanD20/groundplane/internal/infra/docker/dnsresolverobserver"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -12,7 +13,7 @@ import (
 )
 
 func dnsResolverObservationRequest(
-	assignment agent.Assignment,
+	assignment taskassignment.Assignment,
 	action *agentpb.ComponentApply,
 	recipe registeredcatalog.DNSResolverObservationRecipe,
 ) (dnsresolverobserver.Request, error) {

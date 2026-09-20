@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -14,7 +15,7 @@ import (
 
 func (runtime *ComposeRuntime) candidateRestoration(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (composeStepResult, error) {
 	result := composeStepResult{MutationAttempted: step.GetCandidateRestorationCompensate() != nil}
@@ -57,7 +58,7 @@ func (runtime *ComposeRuntime) candidateRestoration(
 
 func (runtime *ComposeRuntime) proxyProcedure(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (composeStepResult, error) {
 	result := composeStepResult{
@@ -95,7 +96,7 @@ func (runtime *ComposeRuntime) proxyProcedure(
 
 func (runtime *ComposeRuntime) verifyReleaseRestorationPostcondition(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	result composeStepResult,
 	stepErr error,
@@ -143,7 +144,7 @@ func (runtime *ComposeRuntime) verifyReleaseRestorationPostcondition(
 }
 
 func restorationObservationTarget(
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	result composeStepResult,
 ) (*agentpb.ComposeArtifact, string, string, string, *agentpb.ExecutionPlan, error) {
@@ -210,7 +211,7 @@ func planRestorationTarget(
 }
 
 func openServingPredecessorAuthority(
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	serviceID string,
 ) (*agentpb.ComposeArtifact, string, string, error) {
 	var encoded []byte
@@ -275,7 +276,7 @@ func nativeServingPredecessorRetainedArtifact(authority *agentpb.ReleaseRestorat
 }
 
 func candidateServingPredecessorEvidenceMatches(
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	serviceID string,
 	result composeStepResult,
 ) bool {

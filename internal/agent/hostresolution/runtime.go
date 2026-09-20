@@ -2,8 +2,8 @@ package hostresolution
 
 import (
 	"context"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
-	"github.com/AlanD20/groundplane/internal/agent"
 	"github.com/AlanD20/groundplane/internal/infra/docker/hostresolutionhelpercontainer"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -19,7 +19,7 @@ func New(helper *hostresolutionhelpercontainer.Executor) *Runtime {
 
 func (runtime *Runtime) ExecuteHostResolution(
 	ctx context.Context,
-	assignment agent.Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) error {
 	if runtime == nil || runtime.helper == nil || assignment.Plan == nil || step == nil {

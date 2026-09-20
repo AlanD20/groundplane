@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"crypto/sha256"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -12,13 +13,13 @@ import (
 type ComponentActionRuntime interface {
 	ExecuteComponentAction(
 		context.Context,
-		Assignment,
+		taskassignment.Assignment,
 		*agentpb.ExecutionStep,
 		ManagedConfigPayload,
 	) (*ComponentActionResult, error)
 	FinalizeManagedConfig(
 		context.Context,
-		Assignment,
+		taskassignment.Assignment,
 		*agentpb.ExecutionStep,
 		bool,
 	) (ManagedConfigTransactionState, error)

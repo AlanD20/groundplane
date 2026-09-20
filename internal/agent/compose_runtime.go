@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"sort"
 	"time"
 
@@ -54,7 +55,7 @@ func NewComposeRuntime(helper ComposeHelper, observer ComposeObserver) (*Compose
 
 func (runtime *ComposeRuntime) executeStep(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (composeStepResult, error) {
 	if runtime == nil || runtime.helper == nil || runtime.observer == nil {
@@ -193,7 +194,7 @@ func releaseRuntimeComposeName(
 
 func (runtime *ComposeRuntime) removeManagedVolume(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (composeStepResult, error) {
 	result := composeStepResult{MutationAttempted: true}
@@ -223,7 +224,7 @@ func (runtime *ComposeRuntime) removeManagedVolume(
 }
 func (runtime *ComposeRuntime) removeManagedNetwork(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (composeStepResult, error) {
 	result := composeStepResult{MutationAttempted: true}
@@ -264,7 +265,7 @@ func (runtime *ComposeRuntime) removeManagedNetwork(
 
 func (runtime *ComposeRuntime) mutate(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	artifactID string,
 	postcondition func(*agentpb.ObservedProject) error,

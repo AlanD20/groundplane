@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -10,7 +11,7 @@ import (
 
 func (p *WorkerPool) executeBlueprintReleaseSetup(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (composeStepResult, error) {
 	switch step.GetPayload().(type) {
@@ -36,7 +37,7 @@ func (p *WorkerPool) executeBlueprintReleaseSetup(
 
 func (p *WorkerPool) executeBlueprintReleaseComponent(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (composeStepResult, error) {
 	action := step.GetComponentApply()

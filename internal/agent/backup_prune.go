@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"crypto/sha256"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/backupobject"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -13,7 +14,7 @@ import (
 
 func (p *WorkerPool) executeBackupArtifactPrune(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) error {
 	prune := step.GetBackupArtifactPrune()

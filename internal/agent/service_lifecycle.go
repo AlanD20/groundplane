@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -9,7 +10,7 @@ import (
 
 func (runtime *ComposeRuntime) executeServiceLifecycleMutation(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	artifactID string,
 ) (composeStepResult, error) {

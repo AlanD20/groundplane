@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -12,7 +13,7 @@ import (
 // the first-release path before those containers are allowed to exist.
 func (runtime *ComposeRuntime) ensureManagedComposeResource(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (composeStepResult, error) {
 	result := composeStepResult{MutationAttempted: true}

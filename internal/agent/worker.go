@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/AlanD20/groundplane/internal/agent/backingadapter"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"log/slog"
 	"sort"
@@ -17,7 +18,7 @@ import (
 )
 
 type taskReservation struct {
-	assignment    Assignment
+	assignment    taskassignment.Assignment
 	ctx           context.Context
 	cancel        context.CancelFunc
 	eventsDurable bool
@@ -26,13 +27,13 @@ type taskReservation struct {
 type ScriptRuntime interface {
 	ExecuteScript(
 		context.Context,
-		Assignment,
+		taskassignment.Assignment,
 		*agentpb.ExecutionStep,
 		func(context.Context, *agentpb.ScriptCheckpointRequest) error,
 	) (int32, error)
 	CompleteScriptWithoutStart(
 		context.Context,
-		Assignment,
+		taskassignment.Assignment,
 		*agentpb.ExecutionStep,
 		agentpb.ScriptOutcomeReason,
 		func(context.Context, *agentpb.ScriptCheckpointRequest) error,
@@ -370,7 +371,7 @@ func (p *WorkerPool) ConsumeBackupSecretSlot(
 }
 
 // Submit reserves capacity without blocking the sole receive/control loop.
-func (p *WorkerPool) Submit(ctx context.Context, assignment Assignment) error {
+func (p *WorkerPool) Submit(ctx context.Context, assignment taskassignment.Assignment) error {
 	if ctx == nil {
 		return errs.New(errs.KindInternal, "agent: submit context is required")
 	}

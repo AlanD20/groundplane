@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"io"
 
 	"github.com/AlanD20/groundplane/internal/common/entrymaterialization"
@@ -32,7 +33,7 @@ func NewMaterializationRuntime(
 
 func (runtime *MaterializationRuntime) executeStep(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	payload materializationPayload,
 ) error {
@@ -41,7 +42,7 @@ func (runtime *MaterializationRuntime) executeStep(
 
 func (runtime *MaterializationRuntime) verifyStep(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	payload materializationPayload,
 ) error {
@@ -50,7 +51,7 @@ func (runtime *MaterializationRuntime) verifyStep(
 
 func (runtime *MaterializationRuntime) runStep(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	payload materializationPayload,
 	verifyOnly bool,

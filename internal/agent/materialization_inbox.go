@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"io"
 	"sync"
 	"time"
@@ -75,7 +76,7 @@ func newMaterializationInbox() *materializationInbox {
 	return &materializationInbox{tasks: make(map[string]*materializationTaskInbox)}
 }
 
-func (inbox *materializationInbox) Register(assignment Assignment) error {
+func (inbox *materializationInbox) Register(assignment taskassignment.Assignment) error {
 	if inbox == nil || assignment.Plan == nil {
 		return errs.New(errs.KindInternal, "agent: materialization inbox registration is invalid")
 	}

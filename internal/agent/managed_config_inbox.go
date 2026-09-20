@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"io"
 	"sync"
 
@@ -61,7 +62,7 @@ func newManagedConfigInbox() *managedConfigInbox {
 	return &managedConfigInbox{tasks: make(map[string]*managedConfigTaskInbox)}
 }
 
-func (inbox *managedConfigInbox) Register(assignment Assignment) error {
+func (inbox *managedConfigInbox) Register(assignment taskassignment.Assignment) error {
 	if inbox == nil || assignment.Plan == nil {
 		return errs.New(errs.KindInternal, "agent: managed-config inbox registration is invalid")
 	}

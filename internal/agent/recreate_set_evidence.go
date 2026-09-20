@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"time"
 
@@ -23,7 +24,7 @@ type recreateObservationTarget struct {
 // still has historical ownership, not the regenerated compensation labels.
 func (runtime *ComposeRuntime) observeRecreateRecovery(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (composeStepResult, error) {
 	probe := step.GetServiceRecreateProbe()

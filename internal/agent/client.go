@@ -5,6 +5,7 @@ package agent
 import (
 	"context"
 	"errors"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"io"
 	"log/slog"
 	"math/rand/v2"
@@ -411,7 +412,7 @@ func (c *Client) handleControllerMessage(ctx context.Context, message *agentpb.C
 				!recoveryProofRequired && !executionDeadline.Equal(assignment.RecoveryDeadline.AsTime()) {
 			return false, errs.New(errs.KindInternal, "agent: Controller sent mismatched execution deadline")
 		}
-		return false, c.pool.Submit(ctx, Assignment{
+		return false, c.pool.Submit(ctx, taskassignment.Assignment{
 			AssignmentID: assignment.AssignmentId,
 			TaskID:       assignment.TaskId, OperationID: assignment.OperationId,
 			RetryOf: assignment.RetryOf, Plan: assignment.Plan, ScriptArtifacts: assignment.ScriptArtifacts,

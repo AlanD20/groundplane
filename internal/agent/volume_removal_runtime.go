@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -14,7 +15,7 @@ import (
 type volumeRemovalCheckpoint func(context.Context, *agentpb.VolumeRemovalCheckpointRequest) (*agentpb.VolumeRemovalCheckpointAck, error)
 
 func (runtime *EnvironmentDirectoryRuntime) executeVolumeRemoval(
-	ctx context.Context, assignment Assignment, step *agentpb.ExecutionStep, checkpoint volumeRemovalCheckpoint,
+	ctx context.Context, assignment taskassignment.Assignment, step *agentpb.ExecutionStep, checkpoint volumeRemovalCheckpoint,
 ) (environmentDirectoryStepResult, error) {
 	if checkpoint == nil || runtime == nil || runtime.helper == nil || step.GetManagedVolumeDirectoryRemove() == nil {
 		return environmentDirectoryStepResult{}, errs.New(

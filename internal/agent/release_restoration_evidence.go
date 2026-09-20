@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"crypto/sha256"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 
@@ -11,7 +12,7 @@ import (
 )
 
 func releaseRestorationEvidenceProven(
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	result composeStepResult,
 ) bool {
@@ -49,7 +50,7 @@ func releaseRestorationEvidenceProven(
 }
 
 func releaseProbeEvidenceStatus(
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	result composeStepResult,
 ) (bool, error) {
@@ -178,7 +179,7 @@ func exactRecreateEvidence(
 }
 
 func candidateAbsenceEvidenceMatches(
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	serviceID, releaseID, artifactID string,
 	evidence *agentpb.CandidateAbsenceEvidence,
 ) bool {

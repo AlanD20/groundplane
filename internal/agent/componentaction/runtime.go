@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"io"
 	"time"
 
@@ -48,7 +49,7 @@ func New(
 
 func (runtime *Runtime) ExecuteComponentAction(
 	ctx context.Context,
-	assignment agent.Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	payload agent.ManagedConfigPayload,
 ) (result *agent.ComponentActionResult, resultErr error) {
@@ -165,7 +166,7 @@ func (runtime *Runtime) ExecuteComponentAction(
 
 func (runtime *Runtime) FinalizeManagedConfig(
 	ctx context.Context,
-	assignment agent.Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	commit bool,
 ) (agent.ManagedConfigTransactionState, error) {

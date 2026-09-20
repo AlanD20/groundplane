@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	scriptruntime "github.com/AlanD20/groundplane/internal/agent/scriptruntime"
 	"github.com/AlanD20/groundplane/internal/componentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"io"
@@ -67,7 +68,7 @@ type agentRuntimeResources struct {
 	dnsResolverObserver    *dnsresolverobserver.Executor
 	hostResolution         *hostresolutionhelpercontainer.Executor
 	logs                   *containerlogs.Reader
-	scripts                *agent.DockerScriptRuntime
+	scripts                *scriptruntime.Runtime
 	dockerReads            *mobyclient.Client
 }
 
@@ -220,7 +221,7 @@ func NewAgent(ctx context.Context, configPath string) (*Agent, error) {
 			),
 		)
 	}
-	scripts, err := agent.NewDockerScriptRuntime(scriptEngine)
+	scripts, err := scriptruntime.New(scriptEngine)
 	if err != nil {
 		return nil, preferAgentComposeCleanup(
 			err,

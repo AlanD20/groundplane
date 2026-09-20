@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,7 +11,7 @@ import (
 
 func (p *WorkerPool) executeBackingHookStep(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) error {
 	procedure := step.GetBackingHookProcedure()
@@ -69,7 +70,7 @@ func clearBackingHookCheckpointRequest(request *agentpb.BackingHookCheckpointReq
 }
 
 func newBackingHookCheckpointRequest(
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	event agentpb.BackingHookEvent,
 ) *agentpb.BackingHookCheckpointRequest {

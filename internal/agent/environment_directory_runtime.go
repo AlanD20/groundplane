@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -40,7 +41,7 @@ func NewEnvironmentDirectoryRuntime(
 
 func (runtime *EnvironmentDirectoryRuntime) executeStep(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	checkpoint volumeRemovalCheckpoint,
 ) (environmentDirectoryStepResult, error) {

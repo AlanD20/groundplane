@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"slices"
 	"time"
 
@@ -200,7 +201,7 @@ func (p *WorkerPool) probeReleaseRecoveryWithoutEvent(
 
 func (p *WorkerPool) executeReleaseConfigurationStep(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) (composeStepResult, error) {
 	if p.materializer == nil {

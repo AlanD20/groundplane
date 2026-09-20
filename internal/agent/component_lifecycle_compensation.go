@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -10,7 +11,7 @@ import (
 )
 
 func (p *WorkerPool) compensateComponentLifecycle(
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	managedConfigStep *agentpb.ExecutionStep,
 	attemptedSteps []*agentpb.ExecutionStep,
 ) (*agentpb.DNSResolverObservationEvidence, error) {
@@ -173,7 +174,7 @@ func (p *WorkerPool) compensateComponentLifecycle(
 
 func (p *WorkerPool) executeLifecycleCompensation(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 ) error {
 	if step.GetHostResolutionApply() != nil || step.GetHostResolutionRestore() != nil {

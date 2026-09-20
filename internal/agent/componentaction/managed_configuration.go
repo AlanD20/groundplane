@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/agent"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelper"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -76,7 +77,7 @@ func managedConfigStateMatches(state agent.ManagedConfigFileState, digest []byte
 }
 
 func managedConfigRequest(
-	assignment agent.Assignment,
+	assignment taskassignment.Assignment,
 	action *agentpb.ComponentApply,
 	relativePath string,
 	operation agentpb.ManagedConfigOperation,

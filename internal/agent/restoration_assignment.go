@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -17,7 +18,7 @@ func hasServingPredecessorAuthority(authority *agentpb.ReleaseRestorationAuthori
 	return false
 }
 
-func validateCandidateReleaseAssignmentAuthority(assignment Assignment, plan *agentpb.ExecutionPlan) error {
+func validateCandidateReleaseAssignmentAuthority(assignment taskassignment.Assignment, plan *agentpb.ExecutionPlan) error {
 	procedure := plan.GetCandidateReleaseProcedure()
 	if procedure == nil {
 		if assignment.RestorationAuthority != nil || assignment.ReleaseRecoveryDirective != nil ||

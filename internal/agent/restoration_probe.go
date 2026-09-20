@@ -1,12 +1,13 @@
 package agent
 
 import (
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 func validUnrestoredProbeResponse(
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	step *agentpb.ExecutionStep,
 	response *agentpb.ComposeHelperResponse,
 ) bool {
@@ -18,7 +19,7 @@ func validUnrestoredProbeResponse(
 
 // A negative observation can select only the compensation already sealed for
 // this exact serving member. It is not a new target or restoration evidence.
-func selectedServingProbe(assignment Assignment, step *agentpb.ExecutionStep) bool {
+func selectedServingProbe(assignment taskassignment.Assignment, step *agentpb.ExecutionStep) bool {
 	probe := step.GetCandidateRestorationProbe()
 	authority := assignment.RestorationAuthority
 	if probe == nil || step.GetStepId() == "" ||

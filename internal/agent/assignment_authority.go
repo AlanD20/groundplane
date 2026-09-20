@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -35,23 +36,23 @@ func clearBackingHookProcedureValues(procedure *agentpb.BackingHookProcedure) {
 	}
 }
 
-func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assignment, error) {
+func validateAndCopyAssignment(assignment taskassignment.Assignment, volumeRoot string) (taskassignment.Assignment, error) {
 	if err := ids.Validate(ids.KindAssignment, assignment.AssignmentID); err != nil {
-		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid assignment id")
+		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid assignment id")
 	}
 	if err := ids.Validate(ids.KindTask, assignment.TaskID); err != nil {
-		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
+		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
 	}
 	if assignment.ExecutionEpoch == 0 || assignment.ForwardDeadline.IsZero() || assignment.RecoveryDeadline.IsZero() ||
 		assignment.RecoveryDeadline.Before(assignment.ForwardDeadline) {
-		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent invalid execution authority")
+		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent invalid execution authority")
 	}
 	deadline := assignment.ForwardDeadline
 	switch assignment.ExecutionMode {
 	case agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD:
 		if assignment.ReleaseRecoveryDirective != nil || len(assignment.ReleaseRecoveryRecordSHA256) != 0 ||
 			assignment.RecoveryProofRequired {
-			return Assignment{}, errs.New(errs.KindInternal, "agent: forward assignment carries recovery authority")
+			return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: forward assignment carries recovery authority")
 		}
 	case agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY:
 		deadline = assignment.RecoveryDeadline
@@ -64,13 +65,13 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 				assignment.ReleaseRecoveryRecordSHA256,
 			) ||
 			assignment.RecoveryProofRequired && !assignment.Deadline.After(assignment.RecoveryDeadline) {
-			return Assignment{}, errs.New(errs.KindInternal, "agent: recovery assignment authority is incomplete")
+			return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: recovery assignment authority is incomplete")
 		}
 	default:
-		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid execution mode")
+		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid execution mode")
 	}
 	if err := ids.Validate(ids.KindOperation, assignment.OperationID); err != nil {
-		return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid operation id")
+		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid operation id")
 	}
 	if assignment.RetryOf != "" {
 		if err := ids.Validate(
@@ -78,39 +79,39 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 			assignment.RetryOf,
 		); err != nil ||
 			assignment.RetryOf == assignment.TaskID {
-			return Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid retry identity")
+			return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid retry identity")
 		}
 	}
 	plan, err := executionplan.Validate(assignment.Plan)
 	if err != nil {
-		return Assignment{}, errs.Wrap(errs.KindInternal, err)
+		return taskassignment.Assignment{}, errs.Wrap(errs.KindInternal, err)
 	}
 	if err := executionplan.AuthorizeVolumeDirectories(plan, volumeRoot); err != nil {
-		return Assignment{}, errs.Wrap(errs.KindInternal, err)
+		return taskassignment.Assignment{}, errs.Wrap(errs.KindInternal, err)
 	}
 	if err := validateCandidateReleaseAssignmentAuthority(assignment, plan); err != nil {
-		return Assignment{}, err
+		return taskassignment.Assignment{}, err
 	}
 	if assignment.AutomaticReconcile && plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY {
-		return Assignment{}, errs.New(
+		return taskassignment.Assignment{}, errs.New(
 			errs.KindInternal,
 			"agent: automatic reconciliation assignment has an invalid plan",
 		)
 	}
 	scriptArtifacts, err := validateAndCopyScriptArtifacts(plan, assignment.ScriptArtifacts)
 	if err != nil {
-		return Assignment{}, err
+		return taskassignment.Assignment{}, err
 	}
 	scriptCheckpoints := make([]*agentpb.ScriptExecutionCheckpoint, len(assignment.ScriptCheckpoints))
 	if len(assignment.ScriptCheckpoints) != len(plan.ScriptBodyArtifacts) {
 		clearScriptArtifacts(scriptArtifacts)
-		return Assignment{}, errs.New(errs.KindInternal, "agent: Script checkpoint set is incomplete")
+		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Script checkpoint set is incomplete")
 	}
 	expectedCheckpoints := make(map[string]struct{}, len(plan.ScriptBodyArtifacts))
 	for _, metadata := range plan.ScriptBodyArtifacts {
 		if metadata == nil || metadata.ScriptExecutionId == "" {
 			clearScriptArtifacts(scriptArtifacts)
-			return Assignment{}, errs.New(errs.KindInternal, "agent: Script execution metadata is invalid")
+			return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Script execution metadata is invalid")
 		}
 		expectedCheckpoints[metadata.ScriptExecutionId] = struct{}{}
 	}
@@ -119,18 +120,18 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 		scriptCheckpoints[index], err = executionplan.ValidateScriptExecutionCheckpoint(checkpoint)
 		if err != nil {
 			clearScriptArtifacts(scriptArtifacts)
-			return Assignment{}, errs.Wrap(errs.KindInternal, err)
+			return taskassignment.Assignment{}, errs.Wrap(errs.KindInternal, err)
 		}
 		if _, expected := expectedCheckpoints[scriptCheckpoints[index].ScriptExecutionId]; !expected {
 			clearScriptArtifacts(scriptArtifacts)
-			return Assignment{}, errs.New(
+			return taskassignment.Assignment{}, errs.New(
 				errs.KindInternal,
 				"agent: Script checkpoint does not belong to the execution plan",
 			)
 		}
 		if _, duplicate := seenCheckpoints[scriptCheckpoints[index].ScriptExecutionId]; duplicate {
 			clearScriptArtifacts(scriptArtifacts)
-			return Assignment{}, errs.New(
+			return taskassignment.Assignment{}, errs.New(
 				errs.KindInternal,
 				"agent: Script checkpoint set contains a duplicate execution",
 			)
@@ -145,7 +146,7 @@ func validateAndCopyAssignment(assignment Assignment, volumeRoot string) (Assign
 	if assignment.ReleaseRecoveryDirective != nil {
 		recoveryDirective = proto.Clone(assignment.ReleaseRecoveryDirective).(*agentpb.ReleaseRecoveryDirective)
 	}
-	return Assignment{
+	return taskassignment.Assignment{
 		AssignmentID: assignment.AssignmentID,
 		TaskID:       assignment.TaskID, OperationID: assignment.OperationID,
 		RetryOf: assignment.RetryOf, Plan: plan, ScriptArtifacts: scriptArtifacts,

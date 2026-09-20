@@ -1,6 +1,7 @@
 package agent
 
 import (
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -10,11 +11,11 @@ import (
 )
 
 func componentLifecycleComposeAssignment(
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	compensationStep *agentpb.ExecutionStep,
-) (Assignment, *agentpb.ExecutionStep, error) {
+) (taskassignment.Assignment, *agentpb.ExecutionStep, error) {
 	if assignment.Plan == nil || compensationStep == nil {
-		return Assignment{}, nil, errs.New(
+		return taskassignment.Assignment{}, nil, errs.New(
 			errs.KindInternal,
 			"agent: Component lifecycle Compose compensation is invalid",
 		)
@@ -26,12 +27,12 @@ func componentLifecycleComposeAssignment(
 	case *agentpb.ExecutionStep_ComposeRemove:
 		artifactID = payload.ComposeRemove.GetArtifactId()
 	default:
-		return Assignment{}, nil, errs.New(errs.KindInternal, "agent: Component lifecycle Compose compensation is invalid")
+		return taskassignment.Assignment{}, nil, errs.New(errs.KindInternal, "agent: Component lifecycle Compose compensation is invalid")
 	}
 	artifact := composeArtifact(assignment.Plan, artifactID)
 	planID, renderGeneration, authorityErr := componentComposeArtifactAuthority(artifact)
 	if authorityErr != nil {
-		return Assignment{}, nil, authorityErr
+		return taskassignment.Assignment{}, nil, authorityErr
 	}
 	derived := proto.Clone(assignment.Plan).(*agentpb.ExecutionPlan)
 	derived.PlanId = planID
@@ -47,7 +48,7 @@ func componentLifecycleComposeAssignment(
 	derived.PlanHash = nil
 	sealed, err := executionplan.Seal(derived)
 	if err != nil {
-		return Assignment{}, nil, errs.Wrap(errs.KindInternal, err)
+		return taskassignment.Assignment{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
 	assignment.Plan = sealed
 	return assignment, sealed.GetSteps()[0], nil
@@ -101,13 +102,13 @@ func componentRollbackComposeArtifact(
 }
 
 func componentRollbackComposeAssignment(
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	candidate *agentpb.ComposeApply,
 	rollbackArtifact *agentpb.ComposeArtifact,
-) (Assignment, *agentpb.ExecutionStep, error) {
+) (taskassignment.Assignment, *agentpb.ExecutionStep, error) {
 	if assignment.Plan == nil || candidate == nil || rollbackArtifact == nil ||
 		len(rollbackArtifact.GetServices()) != 1 {
-		return Assignment{}, nil, errs.New(errs.KindInternal, "agent: Component rollback Compose input is invalid")
+		return taskassignment.Assignment{}, nil, errs.New(errs.KindInternal, "agent: Component rollback Compose input is invalid")
 	}
 	planID := ""
 	renderGeneration := uint64(0)
@@ -139,7 +140,7 @@ func componentRollbackComposeAssignment(
 	derived.PlanHash = nil
 	sealed, err := executionplan.Seal(derived)
 	if err != nil {
-		return Assignment{}, nil, errs.Wrap(errs.KindInternal, err)
+		return taskassignment.Assignment{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
 	assignment.Plan = sealed
 	return assignment, rollbackStep, nil

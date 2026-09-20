@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"sync"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -41,7 +42,7 @@ func newBackupSecretSlotInbox() *backupSecretSlotInbox {
 	return &backupSecretSlotInbox{tasks: make(map[string]*backupSecretTaskInbox)}
 }
 
-func (inbox *backupSecretSlotInbox) Register(assignment Assignment) error {
+func (inbox *backupSecretSlotInbox) Register(assignment taskassignment.Assignment) error {
 	if inbox == nil || assignment.Plan == nil {
 		return errs.New(errs.KindInternal, "agent: Backup secret inbox registration is invalid")
 	}

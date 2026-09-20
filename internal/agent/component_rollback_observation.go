@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -11,7 +12,7 @@ import (
 
 func (p *WorkerPool) observeComponentRollback(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 ) (*agentpb.DNSResolverObservationEvidence, error) {
 	if assignment.Plan == nil || p.componentActions == nil {
 		return nil, errs.New(errs.KindInternal, "agent: Component rollback observation runtime is unavailable")
@@ -41,7 +42,7 @@ func (p *WorkerPool) observeComponentRollback(
 
 func (p *WorkerPool) observeManagedConfigRollback(
 	ctx context.Context,
-	assignment Assignment,
+	assignment taskassignment.Assignment,
 	managedConfigStep *agentpb.ExecutionStep,
 ) (*agentpb.DNSResolverObservationEvidence, error) {
 	managed := managedConfigStep.GetComponentApply()

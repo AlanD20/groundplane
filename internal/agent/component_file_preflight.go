@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"io"
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
@@ -20,7 +21,7 @@ type ComponentFileValidator interface {
 }
 
 func (runtime *MaterializationRuntime) preflightComponentFile(
-	ctx context.Context, assignment Assignment, step *agentpb.ExecutionStep, payload materializationPayload,
+	ctx context.Context, assignment taskassignment.Assignment, step *agentpb.ExecutionStep, payload materializationPayload,
 ) (materializationPayload, error) {
 	var selected *agentpb.ExecutionStep
 	for _, candidate := range assignment.Plan.GetSteps() {
