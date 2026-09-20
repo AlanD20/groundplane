@@ -18,7 +18,7 @@ const (
 
 type Repository struct{ store Store }
 
-func NewRepository(store Store) (*Repository, error) {
+func newRepository(store Store) (*Repository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindValidationFailed, "runtime configuration store is missing")
 	}

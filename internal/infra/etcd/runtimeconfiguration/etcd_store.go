@@ -1,33 +1,31 @@
-package etcd
+package runtimeconfiguration
 
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-
-	"github.com/AlanD20/groundplane/internal/infra/runtimeconfiguration"
 )
 
 // runtimeConfigurationStore translates only the persistence mechanics used by
 // the immutable file-source repository. It performs no source selection.
-type runtimeConfigurationStore struct{ store hierarchyStore }
+type runtimeConfigurationStore struct{ store etcdstore.Store }
 
-func NewRuntimeConfigurationRepository(store hierarchyStore) (*runtimeconfiguration.Repository, error) {
-	return runtimeconfiguration.NewRepository(runtimeConfigurationStore{store: store})
+func New(store etcdstore.Store) (*Repository, error) {
+	return newRepository(runtimeConfigurationStore{store: store})
 }
 
 func (adapter runtimeConfigurationStore) GetMany(
 	ctx context.Context, keys []string, revision int64,
-) (*runtimeconfiguration.GetManyResult, error) {
+) (*GetManyResult, error) {
 	read, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil || read == nil {
 		return nil, err
 	}
-	result := &runtimeconfiguration.GetManyResult{
-		ReadRevision: read.ReadRevision, Values: make([]*runtimeconfiguration.KeyValue, len(read.Values)),
+	result := &GetManyResult{
+		ReadRevision: read.ReadRevision, Values: make([]*KeyValue, len(read.Values)),
 	}
 	for index, value := range read.Values {
 		if value != nil {
-			result.Values[index] = &runtimeconfiguration.KeyValue{
+			result.Values[index] = &KeyValue{
 				Key: value.Key, Value: value.Value, ModRevision: value.ModRevision,
 			}
 		}
@@ -37,9 +35,9 @@ func (adapter runtimeConfigurationStore) GetMany(
 
 func (adapter runtimeConfigurationStore) Transact(
 	ctx context.Context,
-	conditions []runtimeconfiguration.Condition,
-	mutations []runtimeconfiguration.Mutation,
-) (runtimeconfiguration.TxnResult, error) {
+	conditions []Condition,
+	mutations []Mutation,
+) (TxnResult, error) {
 	compares := make([]etcdstore.Condition, len(conditions))
 	for index, condition := range conditions {
 		compares[index] = etcdstore.Condition{Key: condition.Key, ModRevision: condition.ModRevision}
@@ -54,8 +52,17 @@ func (adapter runtimeConfigurationStore) Transact(
 	}
 	result, err := adapter.store.Transact(ctx, compares, writes)
 	clearKeyValues(result.FailureReads)
-	return runtimeconfiguration.TxnResult{
+	return TxnResult{
 		Succeeded: result.Succeeded,
 		Revision:  result.Revision,
 	}, err
+}
+
+func clearKeyValues(values []*etcdstore.KeyValue) {
+	for _, value := range values {
+		if value != nil {
+			clear(value.Value)
+			value.Value = nil
+		}
+	}
 }
