@@ -23,7 +23,6 @@ import (
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
 	"io"
-	"math"
 	"net/http"
 	"net/netip"
 	"sort"
@@ -195,50 +194,14 @@ func (service *Service) applyBlueprintOnce(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 
-	environment, err := service.repository.GetEnvironment(ctx, environmentID)
+	baseline, err := service.loadApplyBaseline(ctx, environmentID, expectedRevision)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, err
 	}
-	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	tenant, err := service.repository.GetTenant(ctx, project.Record.TenantID)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	taskOwner, err := etcd.EnvironmentTaskOwner(project.Record, environment.Record)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	if environment.Record.ProjectID != project.Record.ID || project.Record.TenantID != tenant.Record.ID ||
-		project.Record.Kind != etcd.ProjectKindTenant {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment hierarchy is inconsistent")
-	}
-
-	head, hasHead, err := service.repository.GetEnvironmentBlueprintHead(ctx, environmentID)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	previousProjection, hasProjection, err := service.repository.GetEnvironmentComposeProjection(ctx, environmentID)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	expectedHeadRevision, previous, generation, err := environmentBlueprintState(
-		environmentID, head, hasHead, previousProjection, hasProjection,
-	)
-	if err != nil {
-		return etcd.IdempotencyResponse{}, err
-	}
-	if expectedRevision != "" && expectedRevision != environmentBlueprintRevision(head, hasHead) {
-		return etcd.IdempotencyResponse{}, errs.New(
-			errs.KindStateConflict,
-			"Environment Blueprint changed after the authoring revision was loaded",
-		)
-	}
-	if generation > math.MaxInt32 {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment render generation is exhausted")
-	}
+	environment, project, tenant := baseline.environment, baseline.project, baseline.tenant
+	taskOwner := baseline.taskOwner
+	previousProjection, hasProjection := baseline.previousProjection, baseline.hasProjection
+	expectedHeadRevision, previous, generation := baseline.expectedHeadRevision, baseline.previous, baseline.generation
 	candidateTaskID := ids.New(ids.KindTask)
 	candidateCreatedAt := service.now().UTC()
 
@@ -794,72 +757,15 @@ func (service *Service) applyBlueprintOnce(
 			ctx, service.repository, stagedPublication, preparedRelease.Publication, cause,
 		)
 	}
-	requirementGate := etcd.BlueprintRequirementGate{}
-	if len(requirements.Resolved) != 0 {
-		inherited, gateErr := environmentBlueprintRequirementTaskEdges(
-			ctx, service.repository, task.ID, requirements, requirements.ResolutionRevision,
-		)
-		if gateErr != nil {
-			return etcd.IdempotencyResponse{}, abandonPrepared(gateErr)
-		}
-		stepIDs := make([]string, len(task.Steps))
-		for index, step := range task.Steps {
-			stepIDs[index] = step.ID
-		}
-		dag, gateErr := core.BuildBlueprintRequirementDAG(task.ID, requirements, stepIDs, inherited)
-		if gateErr != nil {
-			return etcd.IdempotencyResponse{}, abandonPrepared(gateErr)
-		}
-		requirementGate, gateErr = etcd.NewBlueprintRequirementGate(
-			task, requirements.ResolutionRevision, dag,
-		)
-		if gateErr != nil {
-			return etcd.IdempotencyResponse{}, abandonPrepared(gateErr)
-		}
-		task.Params[etcd.TaskBlueprintRequirementGateSHA256Param] = requirementGate.DAGDigest
-	}
-	routeProvider, routeProjection, err := controller.ResolveComponentTaskRouteProvider(
-		service.componentCatalog,
-		componentEnvironment,
-		pinnedComponents,
-		componentPreparation.Intent.Candidates,
-		int64(generation),
-		generation,
-	)
+	requirementGate, err := service.prepareRequirementGate(ctx, task, requirements)
 	if err != nil {
 		return etcd.IdempotencyResponse{}, abandonPrepared(err)
 	}
-	if routeProjection {
-		if routeProvider != nil {
-			provider := etcd.RouteProviderObservation{
-				ComponentID:      routeProvider.ComponentID,
-				DefinitionDigest: routeProvider.DefinitionDigest,
-				CatalogDigest:    routeProvider.CatalogDigest,
-				InputRevision:    routeProvider.InputRevision,
-				InputGeneration:  routeProvider.InputGeneration,
-			}
-			for index, change := range routeChanges {
-				change.Record, err = etcd.SetRouteObservation(change.Record, etcd.RouteObservation{
-					Status:            etcd.RouteObservedPending,
-					DesiredGeneration: change.Record.DesiredGeneration,
-					Provider:          provider,
-				})
-				if err != nil {
-					return etcd.IdempotencyResponse{}, abandonPrepared(err)
-				}
-				routeChanges[index] = change
-			}
-		}
-		routeRecords := make([]etcd.RouteRecord, len(routeChanges))
-		for index, change := range routeChanges {
-			routeRecords[index] = change.Record
-		}
-		componentPreparation, err = etcd.WithComponentTaskRouteProjection(
-			componentPreparation, routeRecords, routeProvider,
-		)
-		if err != nil {
-			return etcd.IdempotencyResponse{}, abandonPrepared(err)
-		}
+	componentPreparation, routeChanges, err = service.prepareRoutePublication(
+		componentEnvironment, pinnedComponents, componentPreparation, generation, routeChanges,
+	)
+	if err != nil {
+		return etcd.IdempotencyResponse{}, abandonPrepared(err)
 	}
 	return desiredrevision.Publish(ctx, service.repository, service.idempotency, desiredrevision.PublishInput{
 		Project: project, Environment: environment, EnvironmentPool: service.environmentPool,

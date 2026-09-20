@@ -1,4 +1,4 @@
-package app
+package blueprint
 
 import (
 	"github.com/AlanD20/groundplane/internal/controller"
