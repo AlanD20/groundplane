@@ -22,7 +22,7 @@ func (repository *HierarchyDeletionRepository) GetDeletionTaskIDAtRevision(
 	targetID string,
 	revision int64,
 ) (*string, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
 	if !validHierarchyDeletionTarget(targetKind, targetID) || revision <= 0 {
@@ -81,7 +81,7 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 	taskID string,
 	revision int64,
 ) (HierarchyDeletionOperation, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil || revision < 0 {

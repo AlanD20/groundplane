@@ -84,7 +84,7 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	if repository == nil || repository.store == nil {
 		return PreparedBackupKeyRotation{}, errs.New(errs.KindInternal, "backup policy repository is not configured")
 	}
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return PreparedBackupKeyRotation{}, err
 	}
 	if ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||

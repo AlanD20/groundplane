@@ -86,7 +86,7 @@ func (repository *HierarchyDeletionRepository) FreezeMembership(
 	ctx context.Context,
 	operation HierarchyDeletionOperation,
 ) (HierarchyDeletionFrozenMembership, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return HierarchyDeletionFrozenMembership{}, err
 	}
 	current, err := repository.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)

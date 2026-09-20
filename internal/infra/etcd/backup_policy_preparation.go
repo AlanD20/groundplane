@@ -390,7 +390,7 @@ func (repository *BackupPolicyRepository) SupplyBackupPolicyInitialKey(
 	prepared PreparedBackupPolicyReplacement,
 	material BackupPolicyInitialKeyMaterial,
 ) (PreparedBackupPolicyReplacement, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
 	if !prepared.requiresInitialKey || prepared.candidate.InitialKey != nil {
@@ -450,7 +450,7 @@ func validateBackupPolicyReplacementInput(
 	ctx context.Context,
 	input BackupPolicyReplacementInput,
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, input.EnvironmentID); err != nil {

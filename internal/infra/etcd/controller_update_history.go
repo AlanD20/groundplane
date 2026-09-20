@@ -31,7 +31,7 @@ func taskJournalIndexKeys(task TaskRecord) ([]string, error) {
 }
 
 func (repository *TaskRepository) LatestControllerUpdate(ctx context.Context) (etcdstore.Versioned[TaskRecord], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, false, err
 	}
 	index, err := repository.store.Range(

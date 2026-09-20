@@ -15,7 +15,7 @@ func (repository *RunnerRepository) PutRunnerObservation(
 	record runnerrecord.RunnerObservationRecord,
 	expectedRevision int64,
 ) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, err
 	}
 	if err := runnerrecord.ValidateRunnerObservation(record); err != nil {
@@ -76,7 +76,7 @@ func (repository *RunnerRepository) GetRunnerObservation(
 	ctx context.Context,
 	runnerID string,
 ) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerObservationRecord]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindRunner, runnerID); err != nil {

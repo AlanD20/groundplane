@@ -89,7 +89,7 @@ func (repository *EntryValueGenerationRepository) CreatePlain(
 	ctx context.Context,
 	record PlainEntryValueGeneration,
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if repository == nil || repository.store == nil {
@@ -127,7 +127,7 @@ func (repository *EntryValueGenerationRepository) CreateSecret(
 	ctx context.Context,
 	record SecretEntryValueGeneration,
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if repository == nil || repository.store == nil {
@@ -166,7 +166,7 @@ func (repository *EntryValueGenerationRepository) GetPlain(
 	entryID string,
 	generationID string,
 ) (PlainEntryValueGeneration, bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return PlainEntryValueGeneration{}, false, err
 	}
 	if repository == nil || repository.store == nil {
@@ -204,7 +204,7 @@ func (repository *EntryValueGenerationRepository) GetSecret(
 	entryID string,
 	generationID string,
 ) (SecretEntryValueGeneration, bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return SecretEntryValueGeneration{}, false, err
 	}
 	if repository == nil || repository.store == nil {
@@ -261,7 +261,7 @@ func decodePlainEntryValueGeneration(value []byte) (PlainEntryValueGeneration, e
 	if err != nil {
 		return PlainEntryValueGeneration{}, err
 	}
-	createdAt, err := parseCanonicalTimestamp(data.CreatedAt)
+	createdAt, err := recordcodec.ParseCanonicalTimestamp(data.CreatedAt)
 	if err != nil {
 		clear(data.Content)
 		return PlainEntryValueGeneration{}, corruptEntryValueGeneration()
@@ -294,7 +294,7 @@ func decodeSecretEntryValueGeneration(value []byte) (SecretEntryValueGeneration,
 	if err != nil {
 		return SecretEntryValueGeneration{}, err
 	}
-	createdAt, err := parseCanonicalTimestamp(data.CreatedAt)
+	createdAt, err := recordcodec.ParseCanonicalTimestamp(data.CreatedAt)
 	if err != nil {
 		clear(data.Ciphertext)
 		return SecretEntryValueGeneration{}, corruptEntryValueGeneration()

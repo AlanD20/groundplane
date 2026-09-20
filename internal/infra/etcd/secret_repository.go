@@ -241,7 +241,7 @@ func (repository *SecretRepository) ResolveSecret(
 func (repository *SecretRepository) resolveSecretAtRevision(
 	ctx context.Context, projectID, reference string, revision int64,
 ) (etcdstore.Versioned[secretrecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[secretrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {
@@ -391,7 +391,7 @@ func validateSecretValueBinding(record secretrecord.Record, value secretrecord.E
 }
 
 func validateSecretOwnership(ctx context.Context, owner SecretOwner, record secretrecord.Record) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if err := secretrecord.ValidateRecord(record); err != nil {

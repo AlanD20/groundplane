@@ -27,7 +27,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	retrySource *backupRunRetrySource,
 	fixedRevision int64,
 ) (backupRunPublicationPlan, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return backupRunPublicationPlan{}, err
 	}
 	if record.State != BackupRunQueued || fixedRevision <= 0 ||

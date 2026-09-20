@@ -131,7 +131,7 @@ func (repository *LocalAgentRepository) CreateSingleton(
 	ctx context.Context,
 	record LocalAgentRecord,
 ) (etcdstore.Versioned[LocalAgentRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	if record.Phase != LocalAgentPhaseProvisioning {
@@ -184,7 +184,7 @@ func (repository *LocalAgentRepository) CreateSingleton(
 func (repository *LocalAgentRepository) GetSingleton(
 	ctx context.Context,
 ) (etcdstore.Versioned[LocalAgentRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
@@ -229,7 +229,7 @@ func (repository *LocalAgentRepository) ReplaceGeneration(
 	tokenDigest string,
 	updatedAt time.Time,
 ) (etcdstore.Versioned[LocalAgentRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision ||
@@ -345,7 +345,7 @@ func (repository *LocalAgentRepository) UpdateConfigIdempotent(
 	config LocalAgentConfig,
 	marker IdempotencyMarker,
 ) (etcdstore.Versioned[LocalAgentRecord], IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[LocalAgentRecord]{}, IdempotencyTransactionResult{}, err
 	}
 	if err := validateLocalAgentConfig(config); err != nil {
@@ -440,7 +440,7 @@ func (repository *LocalAgentRepository) BeginDelete(
 	generation uint64,
 	revision int64,
 ) (etcdstore.Versioned[LocalAgentRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
@@ -499,7 +499,7 @@ func (repository *LocalAgentRepository) Delete(
 	generation uint64,
 	revision int64,
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	evidence, err := repository.readSingleton(ctx)
@@ -541,7 +541,7 @@ func (repository *LocalAgentRepository) ResolveAgentChannel(
 	presentedAgentID string,
 	token [agentprotocol.RawTokenBytes]byte,
 ) (LocalAgentChannelAuthorization, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return LocalAgentChannelAuthorization{}, err
 	}
 	if err := ids.Validate(ids.KindAgent, presentedAgentID); err != nil {
@@ -612,7 +612,7 @@ func (repository *LocalAgentRepository) transitionPhase(
 	idempotent bool,
 	readyAt time.Time,
 ) (etcdstore.Versioned[LocalAgentRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	evidence, err := repository.readSingleton(ctx)
@@ -824,13 +824,13 @@ func decodeLocalAgentPrimary(value []byte) (LocalAgentRecord, error) {
 	if err != nil {
 		return LocalAgentRecord{}, err
 	}
-	createdAt, err := parseCanonicalTimestamp(data.CreatedAt)
+	createdAt, err := recordcodec.ParseCanonicalTimestamp(data.CreatedAt)
 	if err != nil {
 		return LocalAgentRecord{}, recordcodec.CorruptRecord()
 	}
 	var readyAt time.Time
 	if data.ReadyAt != "" {
-		readyAt, err = parseCanonicalTimestamp(data.ReadyAt)
+		readyAt, err = recordcodec.ParseCanonicalTimestamp(data.ReadyAt)
 		if err != nil {
 			return LocalAgentRecord{}, recordcodec.CorruptRecord()
 		}
@@ -873,11 +873,11 @@ func decodeLocalAgentToken(value []byte) (decodedLocalAgentToken, error) {
 		base64.RawURLEncoding.EncodeToString(ciphertext) != data.Ciphertext {
 		return decodedLocalAgentToken{}, recordcodec.CorruptRecord()
 	}
-	createdAt, err := parseCanonicalTimestamp(data.CreatedAt)
+	createdAt, err := recordcodec.ParseCanonicalTimestamp(data.CreatedAt)
 	if err != nil {
 		return decodedLocalAgentToken{}, recordcodec.CorruptRecord()
 	}
-	updatedAt, err := parseCanonicalTimestamp(data.UpdatedAt)
+	updatedAt, err := recordcodec.ParseCanonicalTimestamp(data.UpdatedAt)
 	if err != nil || updatedAt.Before(createdAt) {
 		return decodedLocalAgentToken{}, recordcodec.CorruptRecord()
 	}

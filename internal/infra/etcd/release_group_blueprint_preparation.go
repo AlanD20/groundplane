@@ -27,7 +27,7 @@ func (repository *HierarchyRepository) PrepareReleaseGroupBlueprintMutation(
 	current []ReleaseGroupSnapshotEntry,
 	desired []domain.Group,
 ) (ReleaseGroupBlueprintPreparedMutation, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return ReleaseGroupBlueprintPreparedMutation{}, err
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil || readRevision <= 0 {

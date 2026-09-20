@@ -136,7 +136,7 @@ func (repository *TaskRepository) prepareReleaseGroupMutationEvidence(
 	oldName string,
 	revision int64,
 ) (releaseGroupMutationEvidence, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return releaseGroupMutationEvidence{}, err
 	}
 	baseKeys := []string{

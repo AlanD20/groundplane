@@ -71,7 +71,7 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 	desired []scriptrecord.Record,
 	generations []scriptrecord.BodyGenerationRecord,
 ) (BlueprintScriptPublication, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return BlueprintScriptPublication{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil || readRevision <= 0 {

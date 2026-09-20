@@ -29,7 +29,7 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	renderInput PlatformComponentTaskRenderInput,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validatePlatformComponentRecord(current.Record); err != nil {

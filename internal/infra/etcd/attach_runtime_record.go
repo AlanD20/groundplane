@@ -18,7 +18,7 @@ func (repository *AttachRepository) PrepareAttachRuntime(
 	ctx context.Context, plan *agentpb.ExecutionPlan,
 ) (serviceruntimerecord.AttachPreparation, error) {
 	var empty serviceruntimerecord.AttachPreparation
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return empty, err
 	}
 	sealed, err := executionplan.Validate(plan)

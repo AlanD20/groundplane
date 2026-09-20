@@ -13,7 +13,7 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 	operation HierarchyDeletionOperation,
 	action HierarchyDeletionAction,
 ) (*HierarchyDeletionAgentTerminalProof, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
 	childKey, _ := HierarchyDeletionChildKey(operation.Tombstone.OperationID, action.AgentProcedure.ChildOperationID)

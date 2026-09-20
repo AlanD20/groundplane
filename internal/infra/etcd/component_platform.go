@@ -128,7 +128,7 @@ func (repository *ComponentRepository) replacePlatform(
 	current etcdstore.Versioned[componentrecord.Record],
 	replacement componentrecord.Record,
 ) (etcdstore.Versioned[componentrecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if err := validatePlatformComponentRecord(current.Record); err != nil {
@@ -289,7 +289,7 @@ func (repository *ComponentRepository) PutPlatformComponentObservation(
 	expectedComponentRevision int64,
 	expectedObservationRevision int64,
 ) (etcdstore.Versioned[ComponentObservationRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[ComponentObservationRecord]{}, err
 	}
 	if err := validateComponentObservation(record); err != nil {
@@ -347,7 +347,7 @@ func (repository *ComponentRepository) GetPlatformComponentObservation(
 	ctx context.Context,
 	componentID string,
 ) (etcdstore.Versioned[ComponentObservationRecord], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[ComponentObservationRecord]{}, false, err
 	}
 	if err := ids.Validate(ids.KindComponent, componentID); err != nil {

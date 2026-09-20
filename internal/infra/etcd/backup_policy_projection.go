@@ -45,7 +45,7 @@ func (repository *BackupPolicyRepository) GetBackupPolicyProjection(
 	ctx context.Context,
 	environmentID string,
 ) (BackupPolicyProjection, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return BackupPolicyProjection{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {

@@ -488,7 +488,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 	ctx context.Context,
 	task TaskRecord,
 ) (etcdstore.Versioned[EnvironmentDeletionIntentRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
 	}
 	if task.Executor != TaskExecutorAgent || task.Type != TaskRemove ||

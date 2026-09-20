@@ -15,7 +15,7 @@ import (
 func (repository *SecretRepository) getSecretAtRevision(
 	ctx context.Context, id string, revision int64,
 ) (etcdstore.Versioned[secretrecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[secretrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindSecret, id); err != nil {

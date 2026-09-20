@@ -58,7 +58,7 @@ func (repository *ServiceRepository) GetServiceLifecycleRenderInput(
 	ctx context.Context,
 	taskID string,
 ) (etcdstore.Versioned[ServiceLifecycleRenderInput], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[ServiceLifecycleRenderInput]{}, false, err
 	}
 	if ids.Validate(ids.KindTask, taskID) != nil {

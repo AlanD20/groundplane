@@ -43,7 +43,7 @@ func (repository *BackupRuntimeRepository) ListBackupScheduleCandidates(
 	if repository == nil || repository.store == nil {
 		return nil, errs.New(errs.KindInternal, "backup runtime repository is not configured")
 	}
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
 	var candidates []BackupScheduleCandidate
@@ -95,7 +95,7 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 	if repository == nil || repository.store == nil {
 		return BackupScheduleEvaluation{}, errs.New(errs.KindInternal, "backup runtime repository is not configured")
 	}
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return BackupScheduleEvaluation{}, err
 	}
 	now = now.UTC()

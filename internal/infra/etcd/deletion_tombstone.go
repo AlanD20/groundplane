@@ -66,7 +66,7 @@ func (repository *HierarchyRepository) GetDeletionTombstone(
 	targetKind DeletionTargetKind,
 	targetID string,
 ) (etcdstore.Versioned[DeletionTombstoneRecord], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, err
 	}
 	if err := validateDeletionTarget(targetKind, targetID); err != nil {
@@ -106,7 +106,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {

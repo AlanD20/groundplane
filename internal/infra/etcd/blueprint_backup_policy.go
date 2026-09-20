@@ -103,7 +103,7 @@ func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolic
 	ctx context.Context,
 	input EnvironmentBlueprintBackupPolicyInput,
 ) (BlueprintBackupPolicyPreparation, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return BlueprintBackupPolicyPreparation{}, err
 	}
 	if ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
@@ -215,7 +215,7 @@ func (repository *BackupPolicyRepository) ValidateEnvironmentBlueprintBackupPoli
 	ctx context.Context,
 	input EnvironmentBlueprintBackupPolicyInput,
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil || input.ReadRevision <= 0 || input.Retain {

@@ -73,7 +73,7 @@ func (repository *HierarchyRepository) GetZoneRemovalIntent(
 	ctx context.Context,
 	operationID string,
 ) (etcdstore.Versioned[ZoneRemovalIntent], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[ZoneRemovalIntent]{}, false, err
 	}
 	if ids.Validate(ids.KindOperation, operationID) != nil {

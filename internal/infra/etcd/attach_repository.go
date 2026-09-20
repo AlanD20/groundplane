@@ -620,7 +620,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 }
 
 func (repository *AttachRepository) GetAttach(ctx context.Context, id string) (etcdstore.Versioned[attachrecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindAttach, id); err != nil {
@@ -642,7 +642,7 @@ func (repository *AttachRepository) ResolveAttach(
 	environmentID string,
 	reference string,
 ) (etcdstore.Versioned[attachrecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[attachrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
@@ -819,7 +819,7 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 	name string,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateAttachVersion(current); err != nil {
@@ -1214,7 +1214,7 @@ func validateAttachCreateScope(
 	record attachrecord.Record,
 	facts *attachrecord.EncryptedFacts,
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if err := attachrecord.ValidateAttachRecord(record); err != nil {
@@ -1345,7 +1345,7 @@ func validateAttachDetachScope(
 	scope AttachCreateScope,
 	current etcdstore.Versioned[attachrecord.Record],
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if err := validateAttachVersion(current); err != nil {

@@ -97,7 +97,7 @@ func EnvironmentComposeProjectionStorageKey(environmentID string) string {
 func (repository *HierarchyRepository) ListEnvironmentAppliedComposeProjections(
 	ctx context.Context,
 ) ([]etcdstore.Versioned[EnvironmentComposeProjection], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
 	result := make([]etcdstore.Versioned[EnvironmentComposeProjection], 0)
@@ -154,7 +154,7 @@ func (repository *HierarchyRepository) GetEnvironmentAppliedComposeProjection(
 	ctx context.Context,
 	environmentID string,
 ) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
@@ -214,7 +214,7 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
 	ctx context.Context,
 	environmentID string,
 ) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
@@ -270,7 +270,7 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjectionRevision(
 	environmentID string,
 	revisionID string,
 ) (etcdstore.Versioned[EnvironmentComposeProjection], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[EnvironmentComposeProjection]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
@@ -315,7 +315,7 @@ func (repository *HierarchyRepository) FindEnvironmentVolume(
 	ctx context.Context,
 	volumeID string,
 ) (etcdstore.Versioned[EnvironmentComposeProjection], EnvironmentVolumeIdentity, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[EnvironmentComposeProjection]{}, EnvironmentVolumeIdentity{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindVolume, volumeID); err != nil {

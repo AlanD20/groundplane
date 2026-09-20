@@ -235,7 +235,7 @@ func (repository *ConnectorRepository) GetConnector(
 	ctx context.Context,
 	id string,
 ) (etcdstore.Versioned[connectorrecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[connectorrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindConnector, id); err != nil {
@@ -548,7 +548,7 @@ func validateConnectorHierarchy(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record connectorrecord.Record,
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {

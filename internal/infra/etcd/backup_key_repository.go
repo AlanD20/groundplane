@@ -25,7 +25,7 @@ func (repository *BackupPolicyRepository) GetBackupKey(
 	ctx context.Context,
 	environmentID string,
 ) (VersionedBackupKey, bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return VersionedBackupKey{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {

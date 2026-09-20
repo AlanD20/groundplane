@@ -17,7 +17,7 @@ func (repository *RunnerRepository) ResolveRunner(
 	tenantID string,
 	reference string,
 ) (etcdstore.Versioned[runnerrecord.RunnerRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
@@ -69,7 +69,7 @@ func (repository *RunnerRepository) ResolveRunner(
 }
 
 func (repository *RunnerRepository) GetRunner(ctx context.Context, id string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindRunner, id); err != nil {
@@ -122,7 +122,7 @@ func (repository *RunnerRepository) ListRunners(
 	filter RunnerFilter,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[runnerrecord.RunnerRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Page[runnerrecord.RunnerRecord]{}, err
 	}
 	if (filter.TenantID == "") == (filter.ProjectID == "") {

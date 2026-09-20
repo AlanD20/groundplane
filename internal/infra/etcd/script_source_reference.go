@@ -416,7 +416,7 @@ func (authority *ScriptSourceReferenceAuthority) validateMembers(
 	members []ScriptSourcePreparationMember,
 	readRecords bool,
 ) ([]ref.Member, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
 	if authority == nil || authority.store == nil || authority.repository == nil || len(members) == 0 {

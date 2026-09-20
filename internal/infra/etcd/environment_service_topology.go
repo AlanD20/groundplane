@@ -19,7 +19,7 @@ func (repository *ServiceRepository) GetService(
 	ctx context.Context,
 	serviceID string,
 ) (etcdstore.Versioned[ServiceRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[ServiceRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindService, serviceID); err != nil {
@@ -76,7 +76,7 @@ func (repository *ServiceRepository) ListServices(
 	environmentID string,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[ServiceRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Page[ServiceRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {

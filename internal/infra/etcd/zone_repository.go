@@ -30,7 +30,7 @@ func newZoneRepository(store hierarchyStore) (*ZoneRepository, error) {
 }
 
 func (repository *ZoneRepository) GetZone(ctx context.Context, id string) (etcdstore.Versioned[zonerecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[zonerecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindNetwork, id); err != nil {
@@ -44,7 +44,7 @@ func (repository *ZoneRepository) ListZones(
 	environmentID string,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[zonerecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Page[zonerecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {

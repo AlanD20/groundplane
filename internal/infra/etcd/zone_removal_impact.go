@@ -22,7 +22,7 @@ func (repository *AttachRepository) ListAttachesByBackingNetworkAtRevision(
 	networkID string,
 	revision int64,
 ) ([]etcdstore.Versioned[attachrecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
 	if repository == nil || repository.store == nil || recordcodec.ValidateID(ids.KindProject, backingProjectID) != nil ||

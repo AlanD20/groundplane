@@ -192,7 +192,7 @@ func (envelope BlueprintTaskTerminalTransaction) ValidateBudget(keyPrefix string
 }
 
 func (s *store) ValidateBlueprintTaskTerminal(ctx context.Context, envelope BlueprintTaskTerminalTransaction) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	return envelope.ValidateBudget(s.root)

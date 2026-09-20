@@ -117,7 +117,7 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintHead(
 	ctx context.Context,
 	environmentID string,
 ) (etcdstore.Versioned[EnvironmentBlueprintHead], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[EnvironmentBlueprintHead]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
@@ -148,7 +148,7 @@ func (repository *HierarchyRepository) GetEnvironmentBlueprintRevision(
 	environmentID string,
 	revisionID string,
 ) (etcdstore.Versioned[EnvironmentBlueprintRevision], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[EnvironmentBlueprintRevision]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {

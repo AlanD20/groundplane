@@ -21,7 +21,7 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (result IdempotencyTransactionResult, err error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return result, err
 	}
 	if repository == nil || repository.store == nil || task.Type != TaskScript {

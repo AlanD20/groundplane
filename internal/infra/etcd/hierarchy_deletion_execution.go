@@ -11,7 +11,7 @@ func (repository *HierarchyDeletionRepository) ReadyAction(
 	ctx context.Context,
 	operation HierarchyDeletionOperation,
 ) (*HierarchyDeletionAction, HierarchyDeletionOperation, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, HierarchyDeletionOperation{}, err
 	}
 	current, err := repository.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)

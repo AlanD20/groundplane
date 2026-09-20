@@ -46,7 +46,7 @@ func (repository *HierarchyDeletionRepository) ResolveProjectDeletionTargetKind(
 	ctx context.Context,
 	projectID string,
 ) (HierarchyDeletionTargetKind, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return "", err
 	}
 	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {
@@ -85,7 +85,7 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 	requested HierarchyDeletionTargetKind,
 	targetID string,
 ) (HierarchyDeletionTargetResolution, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return HierarchyDeletionTargetResolution{}, err
 	}
 	switch requested {

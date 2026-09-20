@@ -144,7 +144,7 @@ func validateEnvironmentPoolRegistry(registry EnvironmentPoolRegistry) error {
 func (repository *HierarchyRepository) GetEnvironmentPoolRegistry(
 	ctx context.Context,
 ) (etcdstore.Versioned[EnvironmentPoolRegistry], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[EnvironmentPoolRegistry]{}, err
 	}
 	result, err := repository.store.Get(ctx, environmentPoolRegistryKey)

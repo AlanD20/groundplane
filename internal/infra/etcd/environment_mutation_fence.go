@@ -79,7 +79,7 @@ func loadEnvironmentMutationFence(
 	readRevision int64,
 	owner *environmentMutationFenceOwner,
 ) (environmentMutationFenceEvidence, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return environmentMutationFenceEvidence{}, err
 	}
 	if store == nil {

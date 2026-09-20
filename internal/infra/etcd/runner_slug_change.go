@@ -15,7 +15,7 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 	slug string,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if ids.Validate(ids.KindRunner, runnerID) != nil || runnerrecord.ValidateRunnerSlug(slug) != nil ||

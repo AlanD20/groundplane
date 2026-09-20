@@ -66,7 +66,7 @@ func newReleaseGroupBlueprintPreparedMutation(
 func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 	ctx context.Context, prepared ReleaseGroupPreparedMutation, marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if prepared.taskType != TaskCreate && prepared.taskType != TaskUpdate {
@@ -118,7 +118,7 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateReleaseGroupPreparedMutation(prepared, task); err != nil {

@@ -30,7 +30,7 @@ func (repository *HierarchyDeletionRepository) CompleteControllerAction(
 	action HierarchyDeletionAction,
 	completedAt time.Time,
 ) (HierarchyDeletionOperation, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
 	if recordcodec.ValidateTimestamp("hierarchy deletion Controller completion", completedAt) != nil ||

@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/dnsproof"
@@ -87,7 +88,7 @@ func taskResultFromData(data *taskResultData) (*TaskResultRecord, error) {
 		result.DNSResolverRollbackObservation = cloneTaskDNSResolverObservationEvidence(&evidence)
 	}
 	for index, project := range data.Projects {
-		observedAt, err := parseCanonicalTimestamp(project.ObservedAt)
+		observedAt, err := recordcodec.ParseCanonicalTimestamp(project.ObservedAt)
 		if err != nil {
 			return nil, err
 		}

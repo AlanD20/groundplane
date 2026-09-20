@@ -185,7 +185,7 @@ func (repository *BackupRuntimeRepository) GetBackupOrphan(
 	ctx context.Context,
 	recoveryPointID string,
 ) (etcdstore.Versioned[BackupOrphanRecord], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[BackupOrphanRecord]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindRecoveryPoint, recoveryPointID); err != nil {
@@ -1972,7 +1972,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 	dispatch BackupRecoveryPointPruneDispatchRecord,
 	lock BackupOperationLockRecord,
 ) (backupPruneTransactionPlan, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return backupPruneTransactionPlan{}, err
 	}
 	if validateBackupRecoveryPointPruneDispatchRecord(dispatch) != nil ||
@@ -2720,7 +2720,7 @@ func getOptionalBackupRuntimeRecord[T any](
 	decode func([]byte) (T, error),
 	id func(T) string,
 ) (etcdstore.Versioned[T], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[T]{}, false, err
 	}
 	result, err := store.Get(ctx, key)

@@ -86,7 +86,7 @@ func (repository *RouteRepository) prepareRouteCreation(
 }
 
 func (repository *RouteRepository) GetRoute(ctx context.Context, id string) (etcdstore.Versioned[routerecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindRoute, id); err != nil {
@@ -109,7 +109,7 @@ func (repository *RouteRepository) ListRoutes(
 // SnapshotRevision returns one truthful MVCC view for a multi-collection
 // Route planning read. Empty Route collections still produce a store revision.
 func (repository *RouteRepository) SnapshotRevision(ctx context.Context) (int64, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return 0, err
 	}
 	result, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: routerecord.RecordPrefix, Limit: 1})
@@ -240,7 +240,7 @@ func validateRouteHierarchy(
 	target etcdstore.Versioned[ServiceRecord],
 	record routerecord.Record,
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {

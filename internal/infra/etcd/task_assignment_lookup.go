@@ -16,7 +16,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 	ctx context.Context,
 	taskID string,
 ) (TaskAssignment, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return TaskAssignment{}, err
 	}
 	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {

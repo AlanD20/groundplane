@@ -338,7 +338,7 @@ func validateBackingServicePublicationOperationCounts(
 }
 
 func validateBackingServiceCreation(ctx context.Context, creation BackingServiceCreation) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if err := hierarchyrecord.ValidateProject(creation.Project); err != nil {

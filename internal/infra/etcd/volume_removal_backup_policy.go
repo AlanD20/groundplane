@@ -43,7 +43,7 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 	environmentID, volumeID string,
 	readRevision int64,
 ) (VolumeRemovalBackupPolicyPreparation, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return VolumeRemovalBackupPolicyPreparation{}, err
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil ||

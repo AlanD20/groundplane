@@ -73,7 +73,7 @@ func (repository *AttachRepository) GetAttachTaskRenderInput(
 	ctx context.Context,
 	planID string,
 ) (etcdstore.Versioned[AttachTaskRenderInput], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[AttachTaskRenderInput]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindPlan, planID); err != nil {

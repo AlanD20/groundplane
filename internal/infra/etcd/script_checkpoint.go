@@ -116,7 +116,7 @@ func (repository *ScriptRepository) GetScriptExecution(
 	ctx context.Context,
 	executionID string,
 ) (etcdstore.Versioned[ScriptExecutionRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[ScriptExecutionRecord]{}, err
 	}
 	if repository == nil || repository.store == nil || !validRawScriptExecutionID(executionID) {
@@ -149,7 +149,7 @@ func (repository *ScriptRepository) CheckpointScriptExecution(
 	ctx context.Context,
 	input ScriptCheckpointInput,
 ) (etcdstore.Versioned[ScriptExecutionRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[ScriptExecutionRecord]{}, err
 	}
 	if repository == nil || repository.store == nil || validateScriptCheckpointInput(input) != nil {

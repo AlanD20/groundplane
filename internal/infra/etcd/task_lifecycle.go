@@ -105,21 +105,21 @@ func decodeTaskAssignment(value []byte) (TaskAssignmentRecord, error) {
 	if err := decoder.Decode(&data); err != nil || recordcodec.RequireEOF(decoder) != nil || data.Schema != 3 {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
 	}
-	assignedAt, err := parseCanonicalTimestamp(data.AssignedAt)
+	assignedAt, err := recordcodec.ParseCanonicalTimestamp(data.AssignedAt)
 	if err != nil {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
 	}
-	deadline, err := parseCanonicalTimestamp(data.ForwardDeadline)
+	deadline, err := recordcodec.ParseCanonicalTimestamp(data.ForwardDeadline)
 	if err != nil {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
 	}
-	recoveryDeadline, err := parseCanonicalTimestamp(data.RecoveryDeadline)
+	recoveryDeadline, err := recordcodec.ParseCanonicalTimestamp(data.RecoveryDeadline)
 	if err != nil {
 		return TaskAssignmentRecord{}, corruptTaskAssignment()
 	}
 	var recoveryExecutionDeadline time.Time
 	if data.RecoveryExecutionDeadline != "" {
-		recoveryExecutionDeadline, err = parseCanonicalTimestamp(data.RecoveryExecutionDeadline)
+		recoveryExecutionDeadline, err = recordcodec.ParseCanonicalTimestamp(data.RecoveryExecutionDeadline)
 		if err != nil {
 			return TaskAssignmentRecord{}, corruptTaskAssignment()
 		}
@@ -196,7 +196,7 @@ func (repository *TaskRepository) CreateTask(
 	record TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if marker.Kind != IdempotencyMarkerTask || marker.State != IdempotencyMarkerPending ||
@@ -333,7 +333,7 @@ func (repository *TaskRepository) retryTask(
 	provided *TaskInitiation,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if recordcodec.ValidateID(ids.KindTask, sourceTaskID) != nil {
@@ -734,7 +734,7 @@ func (repository *TaskRepository) claimNextTask(
 	agentGeneration uint64,
 	assignedAt time.Time,
 ) (TaskAssignment, bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return TaskAssignment{}, false, err
 	}
 	if !validTaskExecutor(executor) ||
@@ -1103,7 +1103,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 	agentGeneration uint64,
 	maximum int32,
 ) ([]TaskAssignment, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
 	if recordcodec.ValidateID(ids.KindAgent, agentID) != nil || agentGeneration == 0 || maximum <= 0 {
@@ -1264,7 +1264,7 @@ func isMarkerlessHierarchyDeletionAgentChild(task TaskRecord) bool {
 func (repository *TaskRepository) ListControllerTaskClaims(
 	ctx context.Context,
 ) ([]TaskAssignment, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
 	claims, err := repository.store.Range(ctx, etcdstore.RangeRequest{
@@ -1343,7 +1343,7 @@ func (repository *TaskRepository) TimeoutAgentAssignments(
 	maximum int32,
 	terminalAt time.Time,
 ) (int, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return 0, err
 	}
 	if err := recordcodec.ValidateTimestamp("stale Agent task terminal_at", terminalAt); err != nil {
@@ -1485,7 +1485,7 @@ func (repository *TaskRepository) acknowledgeTask(
 	terminalAt time.Time,
 	environmentID string,
 ) (etcdstore.Versioned[TaskRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if !validTaskExecutor(executor) || recordcodec.ValidateID(ids.KindTask, taskID) != nil ||
@@ -2855,7 +2855,7 @@ func backupRunStateForTaskStatus(status TaskStatus) (BackupRunState, error) {
 // ExpireTimedOutTasks terminalizes at most 24 overdue assignments per pass.
 // Deadline ordering prevents healthy future work from starving older timeouts.
 func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now time.Time) (int, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return 0, err
 	}
 	if err := recordcodec.ValidateTimestamp("task timeout collector", now); err != nil {
@@ -2941,7 +2941,7 @@ func (repository *TaskRepository) AbortPendingTask(
 	taskID string,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {

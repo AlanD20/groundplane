@@ -10,7 +10,7 @@ func (repository *RunnerRepository) GetRunnerDeletionTombstone(
 	ctx context.Context,
 	runnerID string,
 ) (etcdstore.Versioned[DeletionTombstoneRecord], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[DeletionTombstoneRecord]{}, false, err
 	}
 	if err := validateDeletionTarget(DeletionTargetRunner, runnerID); err != nil {

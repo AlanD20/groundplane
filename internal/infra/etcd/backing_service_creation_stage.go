@@ -31,7 +31,7 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 	ctx context.Context,
 	candidate BackingServiceCreationStage,
 ) (etcdstore.Versioned[BackingServiceCreationStage], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[BackingServiceCreationStage]{}, err
 	}
 	if err := validateBackingServiceCreationStage(candidate); err != nil {

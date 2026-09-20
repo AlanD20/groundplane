@@ -75,7 +75,7 @@ func (repository *HierarchyRepository) CreateTenant(
 	ctx context.Context,
 	record hierarchyrecord.TenantRecord,
 ) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if err := hierarchyrecord.ValidateTenant(record); err != nil {
@@ -116,7 +116,7 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 	record hierarchyrecord.TenantRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := hierarchyrecord.ValidateTenant(record); err != nil {
@@ -187,7 +187,7 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 	record hierarchyrecord.ProjectRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := hierarchyrecord.ValidateProject(record); err != nil {
@@ -299,7 +299,7 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 	replacement hierarchyrecord.TenantRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := hierarchyrecord.ValidateTenant(current.Record); err != nil {
@@ -414,7 +414,7 @@ func (repository *HierarchyRepository) CreateProject(
 	ctx context.Context,
 	record hierarchyrecord.ProjectRecord,
 ) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := hierarchyrecord.ValidateProject(record); err != nil {
@@ -462,7 +462,7 @@ func (repository *HierarchyRepository) CreateEnvironment(
 	ctx context.Context,
 	record hierarchyrecord.EnvironmentRecord,
 ) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if err := hierarchyrecord.ValidateEnvironment(record); err != nil {
@@ -555,7 +555,7 @@ func (repository *HierarchyRepository) GetTenant(
 	ctx context.Context,
 	id string,
 ) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTenant, id); err != nil {
@@ -571,7 +571,7 @@ func (repository *HierarchyRepository) GetProject(
 	ctx context.Context,
 	id string,
 ) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindProject, id); err != nil {
@@ -587,7 +587,7 @@ func (repository *HierarchyRepository) GetEnvironment(
 	ctx context.Context,
 	id string,
 ) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, id); err != nil {
@@ -603,7 +603,7 @@ func (repository *HierarchyRepository) ResolveTenant(
 	ctx context.Context,
 	slug string,
 ) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	if err := recordcodec.ValidateLabel("tenant slug", slug); err != nil {
@@ -627,7 +627,7 @@ func (repository *HierarchyRepository) ResolveTenantProject(
 	tenantID string,
 	slug string,
 ) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTenant, tenantID); err != nil {
@@ -655,7 +655,7 @@ func (repository *HierarchyRepository) ResolveBackingProject(
 	ctx context.Context,
 	slug string,
 ) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if err := recordcodec.ValidateLabel("project slug", slug); err != nil {
@@ -681,7 +681,7 @@ func (repository *HierarchyRepository) ResolveEnvironment(
 	projectID string,
 	name string,
 ) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindProject, projectID); err != nil {

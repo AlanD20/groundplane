@@ -116,7 +116,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	marker IdempotencyMarker,
 	blueprintTransactions environmentBlueprintTransactionStore,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {

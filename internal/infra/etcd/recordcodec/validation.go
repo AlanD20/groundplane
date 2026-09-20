@@ -39,6 +39,14 @@ func IsCanonicalUTC(value time.Time) bool {
 		value.Format(time.RFC3339Nano) == value.UTC().Format(time.RFC3339Nano)
 }
 
+func ParseCanonicalTimestamp(value string) (time.Time, error) {
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil || value != parsed.UTC().Format(time.RFC3339Nano) {
+		return time.Time{}, errs.New(errs.KindInternal, "timestamp is not canonical UTC")
+	}
+	return parsed, nil
+}
+
 func ValidateLabel(field string, value string) error {
 	if value == "" || !utf8.ValidString(value) {
 		return errs.Newf(errs.KindValidationFailed, "%s is required and must be valid UTF-8", field)

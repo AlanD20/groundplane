@@ -35,7 +35,7 @@ func (repository *EntryRepository) BindBlueprintEntryEnvironment(
 	environmentID string,
 	entryID string,
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
@@ -68,7 +68,7 @@ func (repository *EntryRepository) ResolveBlueprintEntryEnvironment(
 	ctx context.Context,
 	entryID string,
 ) (string, bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return "", false, err
 	}
 	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil {
@@ -255,7 +255,7 @@ func (repository *EntryRepository) GetEntry(
 	ctx context.Context,
 	id string,
 ) (etcdstore.Versioned[entryrecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[entryrecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvEntry, id); err != nil {
@@ -599,7 +599,7 @@ func validateEntryHierarchy(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	record entryrecord.Record,
 ) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	if err := hierarchyrecord.ValidateEnvironment(environment.Record); err != nil {

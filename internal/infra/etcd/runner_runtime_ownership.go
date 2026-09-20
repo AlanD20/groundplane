@@ -16,7 +16,7 @@ func (repository *RunnerRepository) AttestRunnerRuntimeOwnership(
 	containerID string,
 	ownership runnerrecord.RunnerRuntimeOwnershipRecord,
 ) (etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord]{}, err
 	}
 	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 || runnerrecord.ValidateRunnerRecord(current.Record) != nil {
@@ -94,7 +94,7 @@ func (repository *RunnerRepository) GetRunnerRuntimeOwnership(
 	ctx context.Context,
 	runnerID string,
 ) (etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord]{}, false, err
 	}
 	if err := recordcodec.ValidateID(ids.KindRunner, runnerID); err != nil {
@@ -129,7 +129,7 @@ func (repository *RunnerRepository) BeginFailedRunnerRuntimeCleanup(
 	ctx context.Context,
 	current etcdstore.Versioned[runnerrecord.RunnerRecord],
 ) (etcdstore.Versioned[runnerrecord.RunnerRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
 	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 || runnerrecord.ValidateRunnerRecord(current.Record) != nil ||
@@ -203,7 +203,7 @@ func (repository *RunnerRepository) DeleteRunnerRuntimeOwnershipAfterCleanup(
 	current etcdstore.Versioned[runnerrecord.RunnerRecord],
 	expected runnerrecord.RunnerRuntimeOwnershipRecord,
 ) (int64, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return 0, err
 	}
 	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 || runnerrecord.ValidateRunnerRecord(current.Record) != nil ||

@@ -14,7 +14,7 @@ func (repository *HierarchyDeletionRepository) AppendActions(
 	start int64,
 	seal bool,
 ) (HierarchyDeletionOperation, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
 	if len(actions) > hierarchyDeletionPlanBatchSize || start < 0 ||

@@ -40,17 +40,10 @@ func New(store etcdstore.Store) (*Repository, error) {
 	return &Repository{store: store}, nil
 }
 
-func validateContext(ctx context.Context) error {
-	if ctx == nil {
-		return errs.New(errs.KindInternal, "hierarchy context is required")
-	}
-	return ctx.Err()
-}
-
 func (repository *Repository) GetHostResolverBaseline(
 	ctx context.Context,
 ) (etcdstore.Versioned[Record], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[Record]{}, false, err
 	}
 	result, err := repository.store.Get(ctx, hostResolverBaselineKey)

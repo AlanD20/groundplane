@@ -15,7 +15,7 @@ func (repository *HierarchyDeletionRepository) PrepareRootFinalization(
 	action HierarchyDeletionAction,
 	preparedAt time.Time,
 ) (HierarchyDeletionOperation, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return HierarchyDeletionOperation{}, err
 	}
 	if recordcodec.ValidateTimestamp("hierarchy deletion root finalization", preparedAt) != nil {

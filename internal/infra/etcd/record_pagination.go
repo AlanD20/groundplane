@@ -81,7 +81,7 @@ func listPrimaryPage[T any](
 	identity func(T) string,
 	matches func(T) bool,
 ) (etcdstore.Page[T], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Page[T]{}, err
 	}
 	limit, revision, start, query, err := normalizePageRequest(
@@ -137,7 +137,7 @@ func listFilteredPrimaryPage[T any](
 	identity func(T) string,
 	matches func(T) bool,
 ) (etcdstore.Page[T], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Page[T]{}, err
 	}
 	limit, revision, start, query, err := normalizePageRequest(
@@ -234,7 +234,7 @@ func listIndexPageAtRevision[T any](
 	matches func(T) bool,
 	anchorRevision int64,
 ) (etcdstore.Page[T], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Page[T]{}, err
 	}
 	limit, revision, start, query, err := normalizePageRequest(

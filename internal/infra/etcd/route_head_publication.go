@@ -29,7 +29,7 @@ func prepareRouteHeadPublication(
 	audit EnvironmentDesiredMutationAudit,
 	expectedHeadRevision int64,
 ) (routeHeadPublication, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return routeHeadPublication{}, err
 	}
 	if candidate.EnvironmentID == "" || candidate.RevisionID != task.ID || expectedHeadRevision < 0 {
@@ -196,7 +196,7 @@ func prepareRouteHeadCandidate(
 	intent RouteRemovalIntent,
 	revision int64,
 ) (routeHeadPublication, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return routeHeadPublication{}, err
 	}
 	if intent.CurrentProjection == nil || intent.CandidateProjection == nil {

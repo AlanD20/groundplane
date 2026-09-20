@@ -45,7 +45,7 @@ func bindHierarchyMutation(
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
 ) (hierarchyMutationBinding, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return hierarchyMutationBinding{}, err
 	}
 	if store == nil || revision <= 0 || scope.ProjectID == "" && scope.TenantID == "" {

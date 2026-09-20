@@ -107,11 +107,11 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 }
 
 func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
-	createdAt, err := parseCanonicalTimestamp(data.CreatedAt)
+	createdAt, err := recordcodec.ParseCanonicalTimestamp(data.CreatedAt)
 	if err != nil {
 		return TaskRecord{}, err
 	}
-	updatedAt, err := parseCanonicalTimestamp(data.UpdatedAt)
+	updatedAt, err := recordcodec.ParseCanonicalTimestamp(data.UpdatedAt)
 	if err != nil {
 		return TaskRecord{}, err
 	}

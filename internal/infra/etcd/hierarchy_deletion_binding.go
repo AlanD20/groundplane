@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"slices"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -28,7 +29,7 @@ func (repository *HierarchyDeletionRepository) BindActions(
 	operation HierarchyDeletionOperation,
 	planned []HierarchyDeletionPlannedAction,
 ) ([]HierarchyDeletionAction, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
 	current, err := repository.OperationByTask(ctx, operation.Tombstone.CurrentTaskID)

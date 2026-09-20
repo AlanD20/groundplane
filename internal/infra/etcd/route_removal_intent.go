@@ -74,7 +74,7 @@ func (repository *HierarchyRepository) GetRouteRemovalIntent(
 	ctx context.Context,
 	taskID string,
 ) (etcdstore.Versioned[RouteRemovalIntent], bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[RouteRemovalIntent]{}, false, err
 	}
 	if recordcodec.ValidateID(ids.KindTask, taskID) != nil {

@@ -20,7 +20,7 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	desired, err := runnerrecord.NormalizeRunnerDesired(desired)

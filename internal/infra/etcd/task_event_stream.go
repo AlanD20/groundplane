@@ -38,7 +38,7 @@ func (repository *TaskRepository) OpenTaskEventStream(
 	taskID string,
 	after uint64,
 ) (*TaskEventStream, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return nil, err
 	}
 	snapshot, err := repository.ListTaskEvents(ctx, taskID, 0)
@@ -84,7 +84,7 @@ func (stream *TaskEventStream) Run(
 	if stream.watches != nil {
 		defer func() { stream.watches.stop() }()
 	}
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 

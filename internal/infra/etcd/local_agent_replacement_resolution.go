@@ -16,7 +16,7 @@ import (
 func (repository *LocalAgentRepository) FenceReplacementAttempt(
 	ctx context.Context, agentID string, generation uint64, revision int64,
 ) (etcdstore.Versioned[LocalAgentRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[LocalAgentRecord]{}, err
 	}
 	if ids.Validate(ids.KindAgent, agentID) != nil || generation == 0 || revision <= 0 {

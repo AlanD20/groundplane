@@ -82,7 +82,7 @@ func (repository *ComponentRepository) HasPlatformComponentBootstrapProvenance(
 	ctx context.Context,
 	current etcdstore.Versioned[componentrecord.Record],
 ) (bool, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return false, err
 	}
 	if err := validatePlatformComponentRecord(current.Record); err != nil {

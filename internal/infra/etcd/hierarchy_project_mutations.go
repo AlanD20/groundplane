@@ -17,7 +17,7 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	replacement hierarchyrecord.ProjectRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := hierarchyrecord.ValidateProject(current.Record); err != nil {

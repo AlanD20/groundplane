@@ -96,7 +96,7 @@ func listRoutesFromDesiredHead(
 	environmentID string,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[routerecord.Record], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Page[routerecord.Record]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {

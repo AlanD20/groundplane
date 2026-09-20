@@ -50,7 +50,7 @@ func renameRecord[T any](
 		return etcdstore.Versioned[T]{}, errs.New(errs.KindSlugConflict, "slug is already in use")
 	}
 	if newSlugOffset < 0 {
-		if err := validateContext(ctx); err != nil {
+		if err := etcdstore.ValidateContext(ctx); err != nil {
 			return etcdstore.Versioned[T]{}, err
 		}
 		return current, nil
@@ -73,7 +73,7 @@ func renameRecord[T any](
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: oldSlugKey},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: newSlugKey, Value: []byte(id)},
 	)
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[T]{}, err
 	}
 	result, err := store.Transact(ctx, conditions, mutations)

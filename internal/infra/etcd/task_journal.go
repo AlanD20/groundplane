@@ -909,7 +909,7 @@ func decodeTaskEventRecord(value []byte) (TaskEventRecord, error) {
 	if err != nil {
 		return TaskEventRecord{}, err
 	}
-	receivedAt, err := parseCanonicalTimestamp(data.ReceivedAt)
+	receivedAt, err := recordcodec.ParseCanonicalTimestamp(data.ReceivedAt)
 	if err != nil {
 		return TaskEventRecord{}, errs.New(errs.KindInternal, "task event record has an invalid received_at")
 	}
@@ -944,19 +944,11 @@ func decodeTaskEventDedupRecord(value []byte) (TaskEventDedupRecord, error) {
 	return record, nil
 }
 
-func parseCanonicalTimestamp(value string) (time.Time, error) {
-	parsed, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil || value != parsed.UTC().Format(time.RFC3339Nano) {
-		return time.Time{}, errs.New(errs.KindInternal, "timestamp is not canonical UTC")
-	}
-	return parsed, nil
-}
-
 func parseOptionalTimestamp(value string) (*time.Time, error) {
 	if value == "" {
 		return nil, nil
 	}
-	parsed, err := parseCanonicalTimestamp(value)
+	parsed, err := recordcodec.ParseCanonicalTimestamp(value)
 	if err != nil {
 		return nil, err
 	}

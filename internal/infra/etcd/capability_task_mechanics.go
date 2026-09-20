@@ -12,7 +12,7 @@ import (
 // Capability Task mechanics keep aggregate repositories from duplicating the
 // durable Task journal grammar while that journal remains in the flat etcd
 // migration source package.
-func ValidateCapabilityContext(ctx context.Context) error { return validateContext(ctx) }
+func ValidateCapabilityContext(ctx context.Context) error { return etcdstore.ValidateContext(ctx) }
 func ValidateCapabilityTimestamp(field string, value time.Time) error {
 	return recordcodec.ValidateTimestamp(field, value)
 }

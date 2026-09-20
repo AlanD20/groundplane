@@ -144,7 +144,7 @@ func (repository *TaskRepository) GetTask(
 	ctx context.Context,
 	taskID string,
 ) (etcdstore.Versioned[TaskRecord], error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTask, taskID); err != nil {
@@ -191,7 +191,7 @@ func (repository *TaskRepository) GetTask(
 // A missing marker can be initialized only when the Task primary collection is
 // empty. Any incompatible state or lost initialization CAS fails closed.
 func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) error {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
 	primary, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskPrefix, Limit: 1})
@@ -466,7 +466,7 @@ func (repository *TaskRepository) ListTaskEvents(
 	taskID string,
 	revision int64,
 ) (TaskEventSnapshot, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return TaskEventSnapshot{}, err
 	}
 	if err := recordcodec.ValidateID(ids.KindTask, taskID); err != nil {

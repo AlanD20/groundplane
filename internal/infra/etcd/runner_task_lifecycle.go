@@ -254,7 +254,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	task TaskRecord,
 	marker IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := runnerrecord.ValidateRunnerRecord(current.Record); err != nil {
