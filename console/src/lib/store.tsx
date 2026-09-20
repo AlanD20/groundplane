@@ -1,5 +1,12 @@
 "use client";
 import {
+  createAgentActions,
+  useAgentRefresh,
+  useAgentLoading,
+  type AgentActions,
+  type AgentState,
+} from "@/features/agent/agent-store";
+import {
   createBackingServiceActions,
   type BackingServiceActions,
 } from "@/features/backing-service/actions";
@@ -68,7 +75,6 @@ import {
   listAllRoutes,
 } from "@/features/environment/network-api";
 import { listAllReleases, projectReleaseSummary } from "@/features/release/api";
-import { listAllAgents } from "@/features/agent/api";
 import {
   useConnectorStore,
   type ConnectorState,
@@ -171,16 +177,11 @@ type TaskRetryResponse =
   operations["task.retry"]["responses"][202]["content"]["application/json"];
 type TaskAbortResponse =
   operations["task.abort"]["responses"][202]["content"]["application/json"];
-type AgentTaskAccepted =
-  operations["agent.join"]["responses"][202]["content"]["application/json"];
-type AgentConfigResponse =
-  operations["agent.config.show"]["responses"][200]["content"]["application/json"];
-type AgentConfigRequest =
-  operations["agent.config.set"]["requestBody"]["content"]["application/json"];
 type State = ReusableSecretState &
   ConnectorState &
   RunnerState &
-  ComponentState & {
+  ComponentState &
+  AgentState & {
     // UI preference: typed confirmation before revealing a secret value
     requireRevealConfirm: boolean;
     tenants: Tenant[];
@@ -196,11 +197,6 @@ type State = ReusableSecretState &
     activity: ActivityEntry[];
     taskJournals: Record<string, TaskJournalState>;
     platform: PlatformInfra;
-    agentsLoading: boolean;
-    agentError: string | null;
-    agentConfig: AgentConfigResponse | null;
-    agentConfigLoading: boolean;
-    agentConfigError: string | null;
   };
 
 function seed(): State {
@@ -264,6 +260,7 @@ type StoreContext = State &
   TenantActions &
   ProjectActions &
   BackingServiceActions &
+  AgentActions &
   ComponentActions &
   ComponentRefreshActions &
   ReturnType<typeof useControllerPlatform> &
@@ -284,15 +281,6 @@ type StoreContext = State &
       environmentId: string,
       signal?: AbortSignal,
     ) => Promise<void>;
-    refreshAgents: (signal?: AbortSignal) => Promise<PlatformInfra["agents"]>;
-    setAgentConfig: (
-      agentId: string,
-      config: AgentConfigRequest,
-    ) => Promise<AgentConfigResponse>;
-    joinAgent: () => Promise<AgentTaskAccepted>;
-    updateAgent: (agentId: string, image: string) => Promise<AgentTaskAccepted>;
-    removeAgent: (agentId: string) => Promise<AgentTaskAccepted>;
-    // selectors
     getTenant: (slug: string) => Tenant | undefined;
     getProject: (tenantSlug: string, slug: string) => Project | undefined;
     getProjectById: (id: string) => Project | undefined;
@@ -556,18 +544,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     [state, update],
   );
 
-  const refreshAgents = useCallback(
-    async (signal?: AbortSignal) => {
-      const agents = await listAllAgents(signal);
-      update((draft) => {
-        draft.platform.agents = agents;
-        draft.agentsLoading = false;
-        draft.agentError = null;
-      });
-      return agents;
-    },
-    [update],
-  );
+  const refreshAgents = useAgentRefresh(update);
 
   const reusableSecretProjectIds = useMemo(
     () =>
@@ -690,58 +667,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     update,
   ]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    void refreshAgents(controller.signal).then(
-      () => undefined,
-      (error: unknown) => {
-        if (controller.signal.aborted) return;
-        update((draft) => {
-          draft.agentsLoading = false;
-          draft.agentError =
-            error instanceof Error ? error.message : "Unable to load Agents";
-        });
-      },
-    );
-    return () => controller.abort();
-  }, [refreshAgents, update]);
-
-  const localAgentID = state.platform.agents[0]?.id ?? "";
-
-  useEffect(() => {
-    if (state.agentsLoading) return;
-    if (!localAgentID) {
-      update((draft) => {
-        draft.agentConfig = null;
-        draft.agentConfigLoading = false;
-        draft.agentConfigError = null;
-      });
-      return;
-    }
-    const controller = new AbortController();
-    const path = `/agents/${encodeURIComponent(localAgentID)}/config`;
-    void controllerRequest<AgentConfigResponse>(path, 200, {
-      signal: controller.signal,
-    }).then(
-      (config) =>
-        update((draft) => {
-          draft.agentConfig = config;
-          draft.agentConfigLoading = false;
-          draft.agentConfigError = null;
-        }),
-      (error: unknown) => {
-        if (controller.signal.aborted) return;
-        update((draft) => {
-          draft.agentConfigLoading = false;
-          draft.agentConfigError =
-            error instanceof Error
-              ? error.message
-              : "Unable to load Agent config";
-        });
-      },
-    );
-    return () => controller.abort();
-  }, [localAgentID, state.agentsLoading, update]);
+  useAgentLoading(state, update, refreshAgents);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -920,46 +846,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       refreshEnvironmentReleases,
       refreshEnvironmentServices,
       refreshAgents,
-      setAgentConfig: async (agentId, config) => {
-        const path = `/agents/${encodeURIComponent(agentId)}/config`;
-        const updated = await controllerRequest<AgentConfigResponse>(
-          path,
-          200,
-          { method: "PUT", body: config },
-        );
-        update((draft) => {
-          draft.agentConfig = updated;
-          draft.agentConfigError = null;
-        });
-        return updated;
-      },
-      joinAgent: async () => {
-        const accepted = await controllerRequest<AgentTaskAccepted>(
-          "/agents",
-          202,
-          { method: "POST" },
-        );
-        await refreshAgents();
-        return accepted;
-      },
-      updateAgent: async (agentId, image) => {
-        const accepted = await controllerRequest<AgentTaskAccepted>(
-          `/agents/${encodeURIComponent(agentId)}/update`,
-          202,
-          { method: "POST", body: { image } },
-        );
-        await refreshAgents();
-        return accepted;
-      },
-      removeAgent: async (agentId) => {
-        const accepted = await controllerRequest<AgentTaskAccepted>(
-          `/agents/${encodeURIComponent(agentId)}`,
-          202,
-          { method: "DELETE" },
-        );
-        await refreshAgents();
-        return accepted;
-      },
+      ...createAgentActions(update, refreshAgents),
       getTenant: (slug) => state.tenants.find((t) => t.slug === slug),
       getProject: (tenantSlug, slug) => {
         const tenantId = state.tenants.find(
