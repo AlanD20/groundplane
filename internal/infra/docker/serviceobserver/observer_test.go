@@ -93,6 +93,9 @@ func (engine *readEngine) ExecAttach(
 	execID string,
 	options client.ExecAttachOptions,
 ) (client.ExecAttachResult, error) {
+	if err := ctx.Err(); err != nil {
+		return client.ExecAttachResult{}, err
+	}
 	engine.calls = append(engine.calls, "exec-attach")
 	engine.execAttach = options
 	reader, writer := net.Pipe()
@@ -103,10 +106,10 @@ func (engine *readEngine) ExecAttach(
 		close(engine.execAttached)
 	}
 	if engine.execNilReader {
-		return client.ExecAttachResult{HijackedResponse: client.HijackedResponse{Conn: connection}}, ctx.Err()
+		return client.ExecAttachResult{HijackedResponse: client.HijackedResponse{Conn: connection}}, nil
 	}
 	if engine.execHoldOpen {
-		return client.ExecAttachResult{HijackedResponse: client.NewHijackedResponse(connection, "")}, ctx.Err()
+		return client.ExecAttachResult{HijackedResponse: client.NewHijackedResponse(connection, "")}, nil
 	}
 	go func() {
 		defer writer.Close()
@@ -114,7 +117,9 @@ func (engine *readEngine) ExecAttach(
 			return
 		}
 	}()
-	return client.ExecAttachResult{HijackedResponse: client.NewHijackedResponse(connection, "")}, ctx.Err()
+	// Match the Docker client: successful attachment transfers ownership even
+	// if cancellation arrives immediately afterward; errors return no connection.
+	return client.ExecAttachResult{HijackedResponse: client.NewHijackedResponse(connection, "")}, nil
 }
 
 func proxiedReadRequest(config []byte) *agentpb.ObserveServices {

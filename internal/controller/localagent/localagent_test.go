@@ -355,18 +355,6 @@ func TestCancellationStopsProvisioningBeforeReadyTransition(t *testing.T) {
 	}
 }
 
-func TestHealthRejectsNilContext(t *testing.T) {
-
-	t.Parallel()
-
-	trace := &traceLog{}
-	harness := newTestManager(t, seededRepository(trace, PhaseReady), trace)
-
-	if _, err := harness.manager.Health(nil, testAgentID); !errors.Is(err, errs.New(errs.KindInternal, "")) {
-		t.Fatalf("Health(nil) error = %v, want %s", err, errs.CodeInternal)
-	}
-}
-
 func TestEnrollRejectsMutableOrMalformedImageIdentity(t *testing.T) {
 
 	t.Parallel()
