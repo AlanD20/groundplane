@@ -59,7 +59,7 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 	if err := validateScriptVersion(current); err != nil {
 		return scriptrecord.Record{}, nil, nil, nil, err
 	}
-	active, err := readActiveScriptSet(ctx, repository.store, current.Record.EnvironmentID, current.ReadRevision)
+	active, err := scriptrecord.ReadActiveScriptSet(ctx, repository.store, current.Record.EnvironmentID, current.ReadRevision)
 	if err != nil {
 		return scriptrecord.Record{}, nil, nil, nil, err
 	}

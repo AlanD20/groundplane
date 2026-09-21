@@ -30,7 +30,7 @@ func (repository *ScriptRepository) manualScriptExecutionAtRevision(
 		return scriptexecutions.ScriptExecutionRecord{}, nil, errs.New(errs.KindInternal, "manual Script Task identity is corrupt")
 	}
 	key := scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam])
-	value, err := scriptExecutionValueAt(ctx, repository.store, key, revision)
+	value, err := scriptexecutions.ScriptExecutionValueAt(ctx, repository.store, key, revision)
 	if err != nil {
 		return scriptexecutions.ScriptExecutionRecord{}, nil, err
 	}
@@ -56,7 +56,7 @@ func (repository *ScriptRepository) manualScriptExecutionAuthority(
 		return nil, errs.New(errs.KindStateConflict, "manual Script execution does not own its Task")
 	}
 	key := scriptsourceevidence.ScriptSourceRootKey(task.OperationID)
-	value, err := scriptExecutionValueAt(ctx, repository.store, key, revision)
+	value, err := scriptexecutions.ScriptExecutionValueAt(ctx, repository.store, key, revision)
 	if err != nil {
 		return nil, err
 	}

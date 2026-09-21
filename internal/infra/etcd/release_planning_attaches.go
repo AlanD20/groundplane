@@ -20,5 +20,5 @@ func (ledger *ReleaseLedger) LoadPlanningAttaches(
 		ids.Validate(ids.KindEnvironment, scope.Environment.Record.ID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "runtime Attach capture scope is invalid")
 	}
-	return loadEnvironmentAttachesAtRevision(ctx, ledger.store, scope.Environment.Record.ID, scope.ReadRevision)
+	return attachrecord.LoadEnvironmentAttachesAtRevision(ctx, ledger.store, scope.Environment.Record.ID, scope.ReadRevision)
 }

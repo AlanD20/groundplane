@@ -15,6 +15,7 @@ import (
 	releasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -240,13 +241,13 @@ func (repository *ScriptRepository) loadExecutionSources(
 			"Script execution source request is invalid",
 		)
 	}
-	stored, err := readActiveScriptStorage(ctx, repository.store, scriptID, revision)
+	stored, err := scriptrecord.ReadActiveScriptStorage(ctx, repository.store, scriptID, revision)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
 	revision = stored.Script.ReadRevision
 	metadata := stored.Script.Record
-	bodyValue, err := scriptExecutionValueAt(
+	bodyValue, err := scriptexecutions.ScriptExecutionValueAt(
 		ctx,
 		repository.store,
 		scriptrecord.ScriptSetBodyGenerationKey(
@@ -269,7 +270,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 		return ScriptExecutionSources{}, recordcodec.CorruptRecord()
 	}
 
-	environmentValue, err := scriptExecutionValueAt(
+	environmentValue, err := scriptexecutions.ScriptExecutionValueAt(
 		ctx,
 		repository.store,
 		hierarchyrecord.EnvironmentKey(metadata.EnvironmentID),
@@ -282,7 +283,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 	if err != nil || environment.ID != metadata.EnvironmentID || environment.DeletionTaskID != "" {
 		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script Environment is not runnable")
 	}
-	projectValue, err := scriptExecutionValueAt(ctx, repository.store, hierarchyrecord.ProjectKey(environment.ProjectID), revision)
+	projectValue, err := scriptexecutions.ScriptExecutionValueAt(ctx, repository.store, hierarchyrecord.ProjectKey(environment.ProjectID), revision)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
@@ -291,7 +292,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 		project.DeletionTaskID != "" || ids.Validate(ids.KindTenant, project.TenantID) != nil {
 		return ScriptExecutionSources{}, errs.New(errs.KindStateConflict, "Script Project is not runnable")
 	}
-	tenantValue, err := scriptExecutionValueAt(ctx, repository.store, hierarchyrecord.TenantKey(project.TenantID), revision)
+	tenantValue, err := scriptexecutions.ScriptExecutionValueAt(ctx, repository.store, hierarchyrecord.TenantKey(project.TenantID), revision)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
@@ -315,7 +316,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 			return ScriptExecutionSources{}, err
 		}
 	} else {
-		intentValue, readErr := scriptExecutionValueAt(
+		intentValue, readErr := scriptexecutions.ScriptExecutionValueAt(
 			ctx, repository.store, releases.ReleaseIntentStagingKey("", releaseID), revision,
 		)
 		if readErr != nil {
@@ -365,7 +366,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	intendedAttaches, err := loadEnvironmentAttachesAtRevision(ctx, repository.store, environment.ID, revision)
+	intendedAttaches, err := attachrecord.LoadEnvironmentAttachesAtRevision(ctx, repository.store, environment.ID, revision)
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
@@ -416,7 +417,7 @@ func loadScriptExecutionDesiredProjection(
 	pinnedRevisionID string,
 	revision int64,
 ) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], error) {
-	headValue, err := scriptExecutionValueAt(ctx, store, blueprints.EnvironmentBlueprintHeadKey(environmentID), revision)
+	headValue, err := scriptexecutions.ScriptExecutionValueAt(ctx, store, blueprints.EnvironmentBlueprintHeadKey(environmentID), revision)
 	if err != nil {
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]{}, etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, err
 	}
@@ -429,7 +430,7 @@ func loadScriptExecutionDesiredProjection(
 	if selectedRevisionID == "" {
 		selectedRevisionID = headRevisionID
 	}
-	rootValue, err := scriptExecutionValueAt(
+	rootValue, err := scriptexecutions.ScriptExecutionValueAt(
 		ctx, store, blueprints.EnvironmentBlueprintRootKey(environmentID, selectedRevisionID), revision,
 	)
 	if err != nil {
@@ -477,20 +478,4 @@ func resolveScriptExecutionNetworks(
 		networks[index] = joined
 	}
 	return networks, nil
-}
-
-func scriptExecutionValueAt(
-	ctx context.Context,
-	store hierarchyStore,
-	key string,
-	revision int64,
-) (*etcdstore.KeyValue, error) {
-	read, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
-	if err != nil {
-		return nil, err
-	}
-	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
-		return nil, errs.New(errs.KindStateConflict, "Script execution source is missing at its fixed revision")
-	}
-	return read.Values[0], nil
 }

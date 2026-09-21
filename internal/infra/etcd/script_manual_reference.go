@@ -60,7 +60,7 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 	service.SourceModRevision, service.SourceDigest = snapshotRevision, execution.SnapshotSHA256
 	members = append(members, manualScriptExistingMember(service, snapshotKey))
 	releaseKey := releases.ReleaseIntentStagingKey("", execution.ReleaseID)
-	releaseValue, err := scriptExecutionValueAt(ctx, repository.store, releaseKey, sources.Revision)
+	releaseValue, err := scriptexecutions.ScriptExecutionValueAt(ctx, repository.store, releaseKey, sources.Revision)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (repository *ScriptRepository) manualScriptEntrySourceMembers(
 		if binding.Secret {
 			key = entryvalues.SecretKey(binding.EntryId, binding.ValueGenerationId)
 		}
-		value, err := scriptExecutionValueAt(ctx, repository.store, key, sources.Revision)
+		value, err := scriptexecutions.ScriptExecutionValueAt(ctx, repository.store, key, sources.Revision)
 		if err != nil {
 			return nil, err
 		}
@@ -214,7 +214,7 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	}
 	record := resolved.Record
 	secretID := record.Secret.ID
-	value, err := scriptExecutionValueAt(ctx, repository.store, secretrecord.ValueKey(secretID), sources.Revision)
+	value, err := scriptexecutions.ScriptExecutionValueAt(ctx, repository.store, secretrecord.ValueKey(secretID), sources.Revision)
 	if err != nil {
 		return scriptsourceevidence.ScriptSourcePreparationMember{}, err
 	}

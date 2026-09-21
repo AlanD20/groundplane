@@ -103,7 +103,7 @@ func (repository *HierarchyDeletionRepository) hierarchyDeletionTargetDigest(
 	case "environment", "reservation":
 		key = hierarchyrecord.EnvironmentKey(targetID)
 	case "script":
-		storage, scriptErr := readActiveScriptStorage(ctx, repository.store, targetID, revision)
+		storage, scriptErr := scriptrecord.ReadActiveScriptStorage(ctx, repository.store, targetID, revision)
 		if scriptErr != nil || storage.Script.Revision != targetRevision {
 			return "", hierarchydeletion.CorruptHierarchyDeletion()
 		}

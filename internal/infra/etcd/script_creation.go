@@ -29,7 +29,7 @@ func (repository *ScriptRepository) CreateScript(
 	if !result.Succeeded {
 		return etcdstore.Versioned[scriptrecord.Record]{}, classify(result.Revision, result.FailureReads)
 	}
-	created, err := readActiveScriptStorage(ctx, repository.store, record.Desired.ID, result.Revision)
+	created, err := scriptrecord.ReadActiveScriptStorage(ctx, repository.store, record.Desired.ID, result.Revision)
 	if err != nil {
 		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
@@ -73,7 +73,7 @@ func (repository *ScriptRepository) prepareScriptCreation(
 	if err := validateScriptHierarchy(ctx, environment, project, target, record); err != nil {
 		return nil, nil, nil, err
 	}
-	active, err := readActiveScriptSet(ctx, repository.store, record.EnvironmentID, environment.ReadRevision)
+	active, err := scriptrecord.ReadActiveScriptSet(ctx, repository.store, record.EnvironmentID, environment.ReadRevision)
 	if err != nil {
 		return nil, nil, nil, err
 	}

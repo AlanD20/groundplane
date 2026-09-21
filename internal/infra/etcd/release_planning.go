@@ -302,7 +302,7 @@ func (ledger *ReleaseLedger) rejectSelectedHooks(
 	scope ReleasePlanningScope,
 	services map[string]struct{},
 ) error {
-	active, err := readActiveScriptSet(ctx, ledger.store, scope.Environment.Record.ID, scope.ReadRevision)
+	active, err := scriptrecord.ReadActiveScriptSet(ctx, ledger.store, scope.Environment.Record.ID, scope.ReadRevision)
 	if err != nil {
 		return err
 	}

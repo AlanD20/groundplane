@@ -89,7 +89,7 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 			"Environment exceeds the 64 Script limit",
 		)
 	}
-	active, err := readActiveScriptSet(ctx, repository.store, environmentID, readRevision)
+	active, err := scriptrecord.ReadActiveScriptSet(ctx, repository.store, environmentID, readRevision)
 	if err != nil {
 		return BlueprintScriptPublication{}, err
 	}

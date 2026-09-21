@@ -40,7 +40,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		retry.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceScript {
 		return scriptTaskChange{}, errs.New(errs.KindInternal, "Script retry changed its durable target")
 	}
-	storage, err := readActiveScriptStorage(ctx, repository.store, source.Target, revision)
+	storage, err := scriptrecord.ReadActiveScriptStorage(ctx, repository.store, source.Target, revision)
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
@@ -173,7 +173,7 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 	if err != nil || !applies {
 		return scriptTaskChange{}, err
 	}
-	storage, err := readActiveScriptStorage(ctx, repository.store, task.Target, revision)
+	storage, err := scriptrecord.ReadActiveScriptStorage(ctx, repository.store, task.Target, revision)
 	if err != nil {
 		return scriptTaskChange{}, err
 	}
@@ -292,7 +292,7 @@ func (repository *TaskRepository) validateScriptTaskAcknowledgementReplay(
 	if stored == nil || len(stored.Values) != 1 || stored.Values[0] != nil {
 		return errs.New(errs.KindStateConflict, "Script deletion terminal state does not match its Task")
 	}
-	storage, scriptErr := readActiveScriptStorage(ctx, repository.store, task.Target, revision)
+	storage, scriptErr := scriptrecord.ReadActiveScriptStorage(ctx, repository.store, task.Target, revision)
 	if terminalStatus == taskjournal.TaskStatusCompleted {
 		if scriptErr == nil || !errors.Is(scriptErr, errs.New(errs.KindScriptNotFound, "")) {
 			return errs.New(errs.KindStateConflict, "completed Script deletion retained its target")

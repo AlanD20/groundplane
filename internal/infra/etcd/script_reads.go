@@ -28,7 +28,7 @@ func (repository *ScriptRepository) GetScript(ctx context.Context, id string) (e
 	if err != nil || locator.ScriptID != id {
 		return etcdstore.Versioned[scriptrecord.Record]{}, recordcodec.CorruptRecord()
 	}
-	active, err := readActiveScriptSet(ctx, repository.store, locator.EnvironmentID, locatorRead.ReadRevision)
+	active, err := scriptrecord.ReadActiveScriptSet(ctx, repository.store, locator.EnvironmentID, locatorRead.ReadRevision)
 	if err != nil {
 		return etcdstore.Versioned[scriptrecord.Record]{}, err
 	}
@@ -69,7 +69,7 @@ func (repository *ScriptRepository) ListScripts(
 		}
 		revision = cursor.Revision
 	}
-	active, err := readActiveScriptSet(ctx, repository.store, environmentID, revision)
+	active, err := scriptrecord.ReadActiveScriptSet(ctx, repository.store, environmentID, revision)
 	if err != nil {
 		return etcdstore.Page[scriptrecord.Record]{}, err
 	}

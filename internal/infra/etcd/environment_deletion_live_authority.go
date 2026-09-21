@@ -49,7 +49,7 @@ func requireEnvironmentDeletionLiveAuthorityEmpty(
 		}
 	}
 	etcdstore.ClearValues(direct.Values)
-	active, err := readActiveScriptSet(ctx, store, environmentID, revision)
+	active, err := scriptrecord.ReadActiveScriptSet(ctx, store, environmentID, revision)
 	if err != nil {
 		return err
 	}

@@ -106,7 +106,7 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			manifest.Record.PublicationID,
 			execution.ReleaseID,
 		)
-		releaseValue, err := scriptExecutionValueAt(
+		releaseValue, err := scriptexecutions.ScriptExecutionValueAt(
 			ctx,
 			ledger.store,
 			releaseKey,
@@ -222,7 +222,7 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 					binding.ValueGenerationId,
 				)
 			}
-			value, readErr := scriptExecutionValueAt(
+			value, readErr := scriptexecutions.ScriptExecutionValueAt(
 				ctx,
 				ledger.store,
 				key,
@@ -263,7 +263,7 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		}
 		for _, secret := range snapshot.SecretValues {
 			key := secretrecord.ValueKey(secret.ValueGenerationId)
-			value, readErr := scriptExecutionValueAt(
+			value, readErr := scriptexecutions.ScriptExecutionValueAt(
 				ctx,
 				ledger.store,
 				key,

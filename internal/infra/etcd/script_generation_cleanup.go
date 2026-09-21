@@ -37,7 +37,7 @@ func cleanupEnvironmentDeletionScriptLocators(
 		if len(page.Values) == 0 {
 			return nil
 		}
-		active, err := readActiveScriptSet(ctx, store, environmentID, page.ReadRevision)
+		active, err := scriptrecord.ReadActiveScriptSet(ctx, store, environmentID, page.ReadRevision)
 		if err != nil {
 			return err
 		}

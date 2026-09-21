@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	"sort"
 	"strings"
@@ -36,7 +37,7 @@ func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
 		return nil, errs.New(errs.KindValidationFailed, "release hook operation is invalid")
 	}
 	selected := make([]core.Script, 0)
-	active, err := readActiveScriptSet(ctx, ledger.store, scope.Environment.Record.ID, scope.ReadRevision)
+	active, err := scriptrecord.ReadActiveScriptSet(ctx, ledger.store, scope.Environment.Record.ID, scope.ReadRevision)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +58,7 @@ func (ledger *ReleaseLedger) ListPlanningHookScriptIDs(
 				!bytes.Equal(value.Value, []byte(scriptID)) {
 				return nil, releases.CorruptReleaseRecord()
 			}
-			primary, readErr := scriptExecutionValueAt(ctx, ledger.store, scriptrecord.ScriptSetScriptKey(
+			primary, readErr := scriptexecutions.ScriptExecutionValueAt(ctx, ledger.store, scriptrecord.ScriptSetScriptKey(
 				scope.Environment.Record.ID, active.Record.GenerationID, scriptID,
 			), scope.ReadRevision)
 			if readErr != nil {

@@ -42,7 +42,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	scriptID := current.Record.Desired.ID
-	active, err := readActiveScriptSet(ctx, repository.store, current.Record.EnvironmentID, current.ReadRevision)
+	active, err := scriptrecord.ReadActiveScriptSet(ctx, repository.store, current.Record.EnvironmentID, current.ReadRevision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

@@ -7,11 +7,9 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"sort"
 
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,30 +17,6 @@ type ScriptAttachSources struct {
 	Networks []etcdstore.Versioned[zonerecord.Record]
 	Heads    []etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]
 	Attaches []etcdstore.Versioned[attachrecord.Record]
-}
-
-func loadEnvironmentAttachesAtRevision(
-	ctx context.Context,
-	store hierarchyStore,
-	environmentID string,
-	revision int64,
-) ([]etcdstore.Versioned[attachrecord.Record], error) {
-	var result []etcdstore.Versioned[attachrecord.Record]
-	request := etcdstore.PageRequest{Limit: 200}
-	for {
-		page, err := recordquery.ListIndexAtRevision(ctx, store, "attaches", "environment", environmentID,
-			attachrecord.AttachOwnerPrefix(environmentID), attachrecord.AttachKey, ids.KindAttach, request, attachrecord.DecodeAttachRecord,
-			func(record attachrecord.Record) string { return record.ID },
-			func(record attachrecord.Record) bool { return record.EnvironmentID == environmentID }, revision)
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, page.Items...)
-		if page.NextCursor == "" {
-			return result, nil
-		}
-		request.Cursor = page.NextCursor
-	}
 }
 
 // Bind only the intended consumer's Attach networks. Backing Zones are existing

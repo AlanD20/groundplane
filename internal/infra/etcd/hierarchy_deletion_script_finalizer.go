@@ -15,7 +15,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionScriptFin
 	if action.ControllerProcedure == nil {
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	storage, err := readActiveScriptStorage(
+	storage, err := scriptrecord.ReadActiveScriptStorage(
 		ctx,
 		repository.store,
 		action.TargetID,

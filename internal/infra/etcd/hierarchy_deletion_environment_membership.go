@@ -25,7 +25,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
 	environmentRevision int64,
 	environmentDigest string,
 ) ([]HierarchyDeletionMembershipNode, error) {
-	activeScripts, err := readActiveScriptSet(
+	activeScripts, err := scriptrecord.ReadActiveScriptSet(
 		ctx,
 		repository.store,
 		environmentID,
