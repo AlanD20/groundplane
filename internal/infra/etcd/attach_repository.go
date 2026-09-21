@@ -34,5 +34,9 @@ func NewAttachRepository(store etcdstore.Store) (*AttachRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach repository store is required")
 	}
-	return &AttachRepository{Lifecycle: attachrecord.NewLifecycle(store), Reader: attachrecord.NewReader(store), store: store}, nil
+	return &AttachRepository{
+		Lifecycle: attachrecord.NewLifecycle(store),
+		Reader:    attachrecord.NewReader(store),
+		store:     store,
+	}, nil
 }

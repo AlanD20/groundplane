@@ -25,7 +25,8 @@ func (repository *Reader) ListAttachesByBackingNetworkAtRevision(
 		return nil, err
 	}
 	if repository == nil || repository.store == nil || recordcodec.ValidateID(ids.KindProject, backingProjectID) != nil ||
-		recordcodec.ValidateID(ids.KindNetwork, networkID) != nil || revision <= 0 {
+		recordcodec.ValidateID(ids.KindNetwork, networkID) != nil ||
+		revision <= 0 {
 		return nil, errs.New(errs.KindValidationFailed, "backing Zone impact scope is invalid")
 	}
 	prefix := attachBackingProjectPrefix(backingProjectID)
@@ -57,7 +58,8 @@ func (repository *Reader) ListAttachesByBackingNetworkAtRevision(
 	idsByIndex := make([]string, len(indexes))
 	for index, value := range indexes {
 		attachID := strings.TrimPrefix(value.Key, prefix)
-		if attachID == value.Key || strings.Contains(attachID, "/") || recordcodec.ValidateID(ids.KindAttach, attachID) != nil ||
+		if attachID == value.Key || strings.Contains(attachID, "/") ||
+			recordcodec.ValidateID(ids.KindAttach, attachID) != nil ||
 			string(value.Value) != attachID {
 			return nil, errs.New(errs.KindInternal, "backing Zone Attach index is corrupt")
 		}

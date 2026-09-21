@@ -42,7 +42,9 @@ func newHierarchyDeletionZoneEvidence(
 
 func validateHierarchyDeletionZoneEvidence(evidence hierarchyDeletionZoneEvidence) error {
 	if evidence.ProjectionRevision <= 0 || evidence.ZoneID != evidence.Desired.ID ||
-		zonerecord.ValidateRecord(zonerecord.Record{EnvironmentID: evidence.EnvironmentID, Desired: evidence.Desired}) != nil {
+		zonerecord.ValidateRecord(
+			zonerecord.Record{EnvironmentID: evidence.EnvironmentID, Desired: evidence.Desired},
+		) != nil {
 		return hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return nil

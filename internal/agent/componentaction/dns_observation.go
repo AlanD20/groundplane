@@ -3,7 +3,7 @@ package componentaction
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	registeredcatalog "github.com/AlanD20/groundplane-registered-components/catalog"
+	registeredcatalog "github.com/AlanD20/groundplane-component-sdk/catalog"
 	taskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 
 	"github.com/AlanD20/groundplane/internal/infra/docker/dnsresolverobserver"

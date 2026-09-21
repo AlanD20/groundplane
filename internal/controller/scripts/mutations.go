@@ -271,7 +271,10 @@ func (service *scriptMutationService) RemoveScript(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.deletions == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script deletion service is not configured")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Script deletion service is not configured",
+		)
 	}
 	return service.deletions.RemoveScript(ctx, scriptID, idempotencyKey)
 }
@@ -282,7 +285,10 @@ func (service *scriptMutationService) CreateScript(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Script creation context is required",
+		)
 	}
 	if err := scriptdefinition.ValidateCreation(input); err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
@@ -301,7 +307,10 @@ func (service *scriptMutationService) CreateScript(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Script creation retry bound was not enforced",
+	)
 }
 
 func (service *scriptMutationService) createScriptOnce(
@@ -375,7 +384,10 @@ func (service *scriptMutationService) EditScript(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script edit retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Script edit retry bound was not enforced",
+	)
 }
 
 func (service *scriptMutationService) editScriptOnce(
@@ -473,13 +485,21 @@ func (service *scriptMutationService) scriptResponseMarker(
 ) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {
 	body, err := json.Marshal(scriptdefinition.Response(record))
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(
+			errs.KindInternal,
+			err,
+		)
 	}
 	defer clear(body)
 	response := idempotencyrecord.IdempotencyResponse{
 		Status: status, ContentKind: "application/json", Body: append([]byte(nil), body...),
 	}
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
+		locator,
+		evidence.durable,
+		response,
+		service.now().UTC(),
+	)
 	if err != nil {
 		clear(response.Body)
 		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, err
@@ -518,7 +538,10 @@ func (service *scriptMutationService) resolveScriptMutation(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
 		clear(response.Body)
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script mutation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Script mutation resolution is invalid",
+		)
 	}
 }
 
@@ -531,7 +554,10 @@ func scriptMutationLocator(intent scriptMutationIntent, idempotencyKey string) i
 
 func scriptReplayResponse(resolution requestidempotency.Resolution) (idempotencyrecord.IdempotencyResponse, error) {
 	if resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script replay resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Script replay resolution is invalid",
+		)
 	}
 	return requestidempotency.CloneResponse(resolution.Response), nil
 }

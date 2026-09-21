@@ -94,7 +94,9 @@ func ReadProjectionAtRevision(
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, projectionrecord.CorruptEnvironmentComposeProjection()
 	}
 	if headResult.Values[0] == nil {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: headResult.ReadRevision}, false, nil
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
+			ReadRevision: headResult.ReadRevision,
+		}, false, nil
 	}
 	revisionID, err := idempotencyrecord.DecodeTaskReference(headResult.Values[0].Value)
 	if err != nil {

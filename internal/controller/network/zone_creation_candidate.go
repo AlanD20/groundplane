@@ -49,7 +49,10 @@ func buildZoneCreationProjection(
 	})
 	artifact := &agentpb.ComposeArtifact{}
 	if err := (proto.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(current.ComposeArtifact, artifact); err != nil {
-		return projectionrecord.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Zone baseline artifact is corrupt")
+		return projectionrecord.EnvironmentComposeProjection{}, errs.New(
+			errs.KindInternal,
+			"Zone baseline artifact is corrupt",
+		)
 	}
 	addition := composerender.ZoneArtifactAddition{
 		Zone: zone.Desired, ProjectID: project.ID, TenantID: project.TenantID,

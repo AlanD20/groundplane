@@ -43,7 +43,11 @@ func (advance *blueprintTerminalSourceAdvance) execute(ctx context.Context, repo
 func (advance *blueprintTerminalSourceAdvance) projection(
 	executionGuards []etcdstore.Condition,
 ) scriptTerminalSourceRelease {
-	rootKey, reportKey := scriptsourceevidence.ScriptSourceRootKey(advance.task.OperationID), blueprintClosingReportKey(advance.task.ID)
+	rootKey, reportKey := scriptsourceevidence.ScriptSourceRootKey(
+		advance.task.OperationID,
+	), blueprintClosingReportKey(
+		advance.task.ID,
+	)
 	conditions := []etcdstore.Condition{
 		{Key: rootKey, ModRevision: math.MaxInt64},
 		{Key: ref.ReversePrefix(advance.task.OperationID), Prefix: true},
@@ -54,7 +58,10 @@ func (advance *blueprintTerminalSourceAdvance) projection(
 	}
 	return scriptTerminalSourceRelease{
 		conditions: conditions,
-		mutations:  []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: rootKey}, {Type: etcdstore.MutationDelete, Key: reportKey}},
-		advance:    advance,
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationDelete, Key: rootKey},
+			{Type: etcdstore.MutationDelete, Key: reportKey},
+		},
+		advance: advance,
 	}
 }

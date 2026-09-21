@@ -175,7 +175,8 @@ func (repository *Repository) GetPlain(
 			"Entry value generation repository is not configured",
 		)
 	}
-	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil || recordcodec.ValidateID(ids.KindConfig, generationID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil ||
+		recordcodec.ValidateID(ids.KindConfig, generationID) != nil {
 		return PlainGeneration{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Entry plain value generation identity is invalid",
@@ -213,7 +214,8 @@ func (repository *Repository) GetSecret(
 			"Entry value generation repository is not configured",
 		)
 	}
-	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil || recordcodec.ValidateID(ids.KindConfig, generationID) != nil {
+	if recordcodec.ValidateID(ids.KindEnvEntry, entryID) != nil ||
+		recordcodec.ValidateID(ids.KindConfig, generationID) != nil {
 		return SecretGeneration{}, false, errs.New(
 			errs.KindValidationFailed,
 			"Entry secret value generation identity is invalid",

@@ -84,7 +84,10 @@ func validateBlueprintCandidateManifest(
 	return nil
 }
 
-func blueprintCandidateCompensationResult(task TaskRecord, result taskjournal.TaskResultRecord) (*taskjournal.TaskResultRecord, error) {
+func blueprintCandidateCompensationResult(
+	task TaskRecord,
+	result taskjournal.TaskResultRecord,
+) (*taskjournal.TaskResultRecord, error) {
 	if result.FailedStepID == "" && result.Diagnostic == taskjournal.TaskResultDiagnosticTimeoutBeforeEffect {
 		return nil, nil
 	}
@@ -323,7 +326,10 @@ func (repository *TaskRepository) prepareBlueprintCandidateClaimEpoch(
 		writer.BlueprintAppliedPredecessor.Present &&
 		epochRevision == writer.BlueprintAppliedPredecessor.KeyRevision
 	if !markerOrAttemptMatches && !readyGateMatches && !appliedPredecessorMatches {
-		return etcdstore.Condition{}, etcdstore.Mutation{}, errs.New(errs.KindStateConflict, "Blueprint claim mutation epoch changed")
+		return etcdstore.Condition{}, etcdstore.Mutation{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint claim mutation epoch changed",
+		)
 	}
 	return etcdstore.Condition{Key: epochKey, ModRevision: epochRevision},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: epochKey, Value: slices.Clone(read.Values[1].Value)}, nil
@@ -403,11 +409,17 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 		read.Values[3] == nil || read.Values[4] == nil {
 		return blueprintCandidateAuthoritySnapshot{}, releases.CorruptReleaseRecord()
 	}
-	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		read.Values[0].Value,
+		"release-publication",
+	)
 	if err != nil {
 		return blueprintCandidateAuthoritySnapshot{}, releases.CorruptReleaseRecord()
 	}
-	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+		read.Values[1].Value,
+		"release-staged-manifest",
+	)
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
 		return blueprintCandidateAuthoritySnapshot{}, releases.CorruptReleaseRecord()
 	}
@@ -475,7 +487,10 @@ func blueprintAttemptIDs(attempts []domain.Attempt) []string {
 	return result
 }
 
-func appendBlueprintCandidateCondition(conditions []etcdstore.Condition, candidate etcdstore.Condition) ([]etcdstore.Condition, error) {
+func appendBlueprintCandidateCondition(
+	conditions []etcdstore.Condition,
+	candidate etcdstore.Condition,
+) ([]etcdstore.Condition, error) {
 	for _, condition := range conditions {
 		if condition.Key != candidate.Key {
 			continue

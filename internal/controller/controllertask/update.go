@@ -62,7 +62,10 @@ func (runner *Runner) executeUpdate(ctx context.Context, claim etcd.TaskAssignme
 		return err
 	}
 	switch status {
-	case taskjournal.TaskStatusCompleted, taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, taskjournal.TaskStatusTimedOut:
+	case taskjournal.TaskStatusCompleted,
+		taskjournal.TaskStatusFailed,
+		taskjournal.TaskStatusAborted,
+		taskjournal.TaskStatusTimedOut:
 	default:
 		return errs.New(errs.KindInternal, "controller update recovery returned no settled result")
 	}

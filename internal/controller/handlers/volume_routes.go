@@ -264,7 +264,10 @@ func (s *Server) removeVolume(ctx context.Context, request *volumeRemoveInput) (
 	return s.volumeMutationResponse(response, "remove"), nil
 }
 
-func (s *Server) volumeMutationResponse(response idempotencyrecord.IdempotencyResponse, action string) *volumeMutationOutput {
+func (s *Server) volumeMutationResponse(
+	response idempotencyrecord.IdempotencyResponse,
+	action string,
+) *volumeMutationOutput {
 	return &volumeMutationOutput{
 		Status: response.Status, ContentType: response.ContentKind,
 		Body: func(ctx huma.Context) {
@@ -313,10 +316,16 @@ func volumeRecordResponse(record etcd.VolumeRecord) apiTypes.Volume {
 
 func volumeListRequest(environmentID string, limit int, cursor string) (etcdstore.PageRequest, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcdstore.PageRequest{}, errs.New(errs.KindValidationFailed, "Volume list requires a stable Environment id")
+		return etcdstore.PageRequest{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume list requires a stable Environment id",
+		)
 	}
 	if limit < 0 {
-		return etcdstore.PageRequest{}, errs.New(errs.KindValidationFailed, "Volume list limit must be a positive integer")
+		return etcdstore.PageRequest{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume list limit must be a positive integer",
+		)
 	}
 	return etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 }

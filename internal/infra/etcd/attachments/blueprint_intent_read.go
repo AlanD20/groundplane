@@ -21,7 +21,10 @@ func (repository *Reader) GetBlueprintAttachTaskIntent(
 			"Blueprint Attach Task id is invalid",
 		)
 	}
-	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{BlueprintAttachTaskIntentKey(taskID)}})
+	result, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{BlueprintAttachTaskIntentKey(taskID)}},
+	)
 	if err != nil {
 		return etcdstore.Versioned[BlueprintAttachTaskIntent]{}, false, err
 	}

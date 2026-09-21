@@ -95,7 +95,9 @@ func scriptExecutionState(state agentpb.ScriptExecutionState) (scriptexecutions.
 	}
 }
 
-func scriptCheckpointEvidence(request *agentpb.ScriptCheckpointRequest) (scriptexecutions.ScriptCheckpointEvidence, error) {
+func scriptCheckpointEvidence(
+	request *agentpb.ScriptCheckpointRequest,
+) (scriptexecutions.ScriptCheckpointEvidence, error) {
 	switch evidence := request.GetEvidence().(type) {
 	case *agentpb.ScriptCheckpointRequest_StartAuthorized:
 		return scriptexecutions.ScriptCheckpointEvidence{

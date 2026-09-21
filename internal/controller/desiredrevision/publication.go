@@ -64,7 +64,12 @@ type PublicationRepository interface {
 
 type PublicationIdempotency interface {
 	ResolveKnown(context.Context, Evidence, etcd.IdempotencyTransactionResult) (requestidempotency.Resolution, error)
-	ResolveUnknown(context.Context, idempotencyrecord.IdempotencyLocator, Evidence, error) (requestidempotency.Resolution, error)
+	ResolveUnknown(
+		context.Context,
+		idempotencyrecord.IdempotencyLocator,
+		Evidence,
+		error,
+	) (requestidempotency.Resolution, error)
 }
 
 // Repository is the aggregate used by mutation services that both stage and
@@ -281,7 +286,10 @@ func Stage(
 	}}, nil
 }
 
-func (publication StagedPublication) consume(environmentID, taskID string, locator idempotencyrecord.IdempotencyLocator) (
+func (publication StagedPublication) consume(
+	environmentID, taskID string,
+	locator idempotencyrecord.IdempotencyLocator,
+) (
 	blueprints.EnvironmentBlueprintStageClaim,
 	projectionrecord.EnvironmentComposeProjection,
 	error,
@@ -478,7 +486,10 @@ func Publish(
 	case requestidempotency.ResolutionReplay:
 		return cloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Environment Blueprint resolution is invalid",
+		)
 	}
 }
 

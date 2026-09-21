@@ -167,7 +167,10 @@ func (service *agentRemovalService) RemoveAgent(
 	}
 	if found {
 		if existing.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent removal replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Agent removal replay resolution is invalid",
+			)
 		}
 		return requestidempotency.CloneResponse(existing.Response), nil
 	}
@@ -216,7 +219,10 @@ func (service *agentRemovalService) RemoveAgent(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent removal resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Agent removal resolution is invalid",
+		)
 	}
 	return requestidempotency.CloneResponse(response), nil
 }

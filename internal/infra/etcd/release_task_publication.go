@@ -61,9 +61,16 @@ func (repository *TaskRepository) prepareReleaseTaskPublicationFragment(
 		{Type: etcdstore.MutationPut, Key: ownerKeys[0], Value: []byte(task.ID)},
 		{Type: etcdstore.MutationPut, Key: ownerKeys[1], Value: []byte(task.ID)},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 	}
-	return releaseTaskPublicationFragment{condition: etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID)}, mutations: mutations}, nil
+	return releaseTaskPublicationFragment{
+		condition: etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID)},
+		mutations: mutations,
+	}, nil
 }
 
 func clearReleaseTaskPublicationFragment(fragment releaseTaskPublicationFragment) {

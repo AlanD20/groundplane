@@ -22,13 +22,19 @@ func (repository *Repository) CreateTenant(
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
-	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(hierarchydeletion.HierarchyDeletionTargetTenant, record.ID)
+	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(
+		hierarchydeletion.HierarchyDeletionTargetTenant,
+		record.ID,
+	)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, err
 	}
 	primary := hierarchyrecord.TenantKey(record.ID)
 	slug := hierarchyrecord.TenantSlugKey(record.Slug)
-	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetTenant), record.ID)
+	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(
+		string(hierarchydeletion.HierarchyDeletionTargetTenant),
+		record.ID,
+	)
 	result, err := repository.store.Transact(ctx,
 		[]etcdstore.Condition{{Key: primary}, {Key: slug}, {Key: coordinationKey}},
 		[]etcdstore.Mutation{
@@ -43,5 +49,9 @@ func (repository *Repository) CreateTenant(
 	if !result.Succeeded {
 		return etcdstore.Versioned[hierarchyrecord.TenantRecord]{}, repository.diagnoseCreate(ctx, primary, slug)
 	}
-	return etcdstore.Versioned[hierarchyrecord.TenantRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return etcdstore.Versioned[hierarchyrecord.TenantRecord]{
+		Record:       record,
+		Revision:     result.Revision,
+		ReadRevision: result.Revision,
+	}, nil
 }

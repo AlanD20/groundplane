@@ -22,7 +22,10 @@ func (service *MutationService) CreateAttach(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Attach creation context is required",
+		)
 	}
 	normalized, err := normalizeAttachRequest(request)
 	if err != nil {
@@ -40,7 +43,10 @@ func (service *MutationService) CreateAttach(
 			return idempotencyrecord.IdempotencyResponse{}, createErr
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Attach creation retry bound was not enforced",
+	)
 }
 
 func (service *MutationService) createAttachOnce(
@@ -175,7 +181,13 @@ func (service *MutationService) createAttachOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	prepared, err := service.plans.SealDraft(
-		ctx, etcdstore.Versioned[attachrecord.Record]{Record: record}, renderInput, task, identity, encryptedFacts, hookInputs,
+		ctx,
+		etcdstore.Versioned[attachrecord.Record]{Record: record},
+		renderInput,
+		task,
+		identity,
+		encryptedFacts,
+		hookInputs,
 	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

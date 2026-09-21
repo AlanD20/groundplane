@@ -8,7 +8,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func validateReleaseOperationHead(value releases.ReleaseOperationHead, manifest releases.ReleaseStagedManifest, task TaskRecord) error {
+func validateReleaseOperationHead(
+	value releases.ReleaseOperationHead,
+	manifest releases.ReleaseStagedManifest,
+	task TaskRecord,
+) error {
 	if value.OperationID != manifest.OperationID || value.PublicationID != manifest.PublicationID ||
 		ids.Validate(ids.KindEnvironment, value.EnvironmentID) != nil || value.State != domain.StatePending ||
 		len(value.Attempts) != 1 || value.Attempts[0].TaskID != task.ID || value.LatestTaskID != task.ID ||

@@ -45,7 +45,10 @@ func (repository *Preparer) prepareReleaseGroupProjectEvidence(
 	}
 	conditions := []etcdstore.Condition{
 		{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision},
-		{Key: hierarchyrecord.EnvironmentOwnerKey(project.ID, environment.ID), ModRevision: projectResult.Values[1].ModRevision},
+		{
+			Key:         hierarchyrecord.EnvironmentOwnerKey(project.ID, environment.ID),
+			ModRevision: projectResult.Values[1].ModRevision,
+		},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.ID)},
 	}
 	ownerIndex := hierarchyrecord.ProjectOwnerKey(project)
@@ -82,9 +85,15 @@ func (repository *Preparer) prepareReleaseGroupProjectEvidence(
 				"release group tenant deletion is in progress",
 			)
 		}
-		conditions = append(conditions,
-			etcdstore.Condition{Key: hierarchyrecord.TenantKey(project.TenantID), ModRevision: ownerResult.Values[1].ModRevision},
-			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)},
+		conditions = append(
+			conditions,
+			etcdstore.Condition{
+				Key:         hierarchyrecord.TenantKey(project.TenantID),
+				ModRevision: ownerResult.Values[1].ModRevision,
+			},
+			etcdstore.Condition{
+				Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
+			},
 		)
 	}
 	return conditions, nil

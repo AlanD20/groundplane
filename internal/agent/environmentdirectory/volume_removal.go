@@ -15,7 +15,10 @@ import (
 type volumeRemovalCheckpoint func(context.Context, *agentpb.VolumeRemovalCheckpointRequest) (*agentpb.VolumeRemovalCheckpointAck, error)
 
 func (runtime *Runtime) executeVolumeRemoval(
-	ctx context.Context, assignment taskassignment.Assignment, step *agentpb.ExecutionStep, checkpoint volumeRemovalCheckpoint,
+	ctx context.Context,
+	assignment taskassignment.Assignment,
+	step *agentpb.ExecutionStep,
+	checkpoint volumeRemovalCheckpoint,
 ) (StepResult, error) {
 	if checkpoint == nil || runtime == nil || runtime.helper == nil || step.GetManagedVolumeDirectoryRemove() == nil {
 		return StepResult{}, errs.New(

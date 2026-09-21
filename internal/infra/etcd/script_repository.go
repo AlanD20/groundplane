@@ -26,5 +26,9 @@ func newScriptRepository(store hierarchyStore) (*ScriptRepository, error) {
 }
 
 func composeScriptRepository(store hierarchyStore) *ScriptRepository {
-	return &ScriptRepository{Repository: scriptmutations.NewRepository(store), SourceReader: scriptsourcequeries.NewSourceReader(store), store: store}
+	return &ScriptRepository{
+		Repository:   scriptmutations.NewRepository(store),
+		SourceReader: scriptsourcequeries.NewSourceReader(store),
+		store:        store,
+	}
 }

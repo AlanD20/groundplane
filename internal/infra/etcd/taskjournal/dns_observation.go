@@ -52,7 +52,8 @@ func validateTaskDNSResolverObservationEvidence(
 		!evidence.StaticQuerySucceeded
 	if evidence.StaticQueryPresent {
 		staticValid = resolutionrecord.ValidPlatformDNSName(evidence.StaticQueryName) && addressErr == nil && address.Is4() &&
-			!address.Is4In6() && evidence.StaticQuerySucceeded
+			!address.Is4In6() &&
+			evidence.StaticQuerySucceeded
 	}
 	if canonicalErr != nil || hex.EncodeToString(canonical.GetProofSha256()) != evidence.ProofSHA256 ||
 		canonical.GetComponentId() != evidence.ComponentID || canonical.GetServiceId() != evidence.ServiceID ||
@@ -66,7 +67,10 @@ func validateTaskDNSResolverObservationEvidence(
 		!recordcodec.ValidNonZeroSHA256(evidence.ImageConfigDigest) ||
 		hex.EncodeToString(canonical.GetImageConfigDigest()) != evidence.ImageConfigDigest ||
 		evidence.ListenEndpoint != "127.0.0.1:53" || !validSHA512(evidence.ReloadSHA512) ||
-		recordcodec.ValidateTimestamp("DNS resolver observation observed_at", evidence.ObservedAt) != nil || !staticValid ||
+		recordcodec.ValidateTimestamp(
+			"DNS resolver observation observed_at",
+			evidence.ObservedAt,
+		) != nil || !staticValid ||
 		!evidence.RecursiveQuerySucceeded || evidence.ForwarderSuccessCount != evidence.ForwarderQueryCount ||
 		evidence.ForwarderQueryCount > 8 || !recordcodec.ValidSHA256(evidence.ProofSHA256) {
 		return errs.New(errs.KindValidationFailed, "task DNS resolver observation evidence is invalid")

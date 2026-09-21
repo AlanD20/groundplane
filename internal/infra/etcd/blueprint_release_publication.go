@@ -49,11 +49,17 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 	if loaded == nil || len(loaded.Values) != 2 || loaded.Values[0] == nil || loaded.Values[1] == nil {
 		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 	}
-	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](loaded.Values[0].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+		loaded.Values[0].Value,
+		"release-staged-manifest",
+	)
 	if err != nil || manifest.PublicationID != publicationID || manifest.OperationID != task.OperationID {
 		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 	}
-	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](loaded.Values[1].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		loaded.Values[1].Value,
+		"release-publication",
+	)
 	if err != nil || marker.PublicationID != publicationID || marker.OperationID != task.OperationID ||
 		marker.ManifestDigest != manifest.Digest {
 		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
@@ -65,7 +71,10 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 			releases.ReleaseRenderInputStagingKey(publicationID, member.ReleaseID),
 		)
 	}
-	loadedMembers, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: memberKeys, Revision: loaded.ReadRevision})
+	loadedMembers, err := ledger.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: memberKeys, Revision: loaded.ReadRevision},
+	)
 	if err != nil {
 		return ReleaseTaskRenderInput{}, err
 	}
@@ -146,7 +155,9 @@ func newBlueprintReleasePublication(input blueprintReleasePublicationInput) (Blu
 	}
 	publication := BlueprintReleasePublication{
 		environmentID: input.EnvironmentID, operationID: input.OperationID,
-		conditions: append(append([]etcdstore.Condition(nil), input.Conditions...), input.SourceFragment.Conditions()...),
+		conditions: append(
+			append([]etcdstore.Condition(nil), input.Conditions...),
+			input.SourceFragment.Conditions()...),
 		mutations: append(
 			cloneBlueprintReleaseMutations(input.Mutations),
 			cloneBlueprintReleaseMutations(input.SourceFragment.Mutations())...),
@@ -344,7 +355,10 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleaseHooks(
 				return PreparedBlueprintReleaseHooks{}, txErr
 			}
 			if !result.Succeeded {
-				loaded, loadErr = ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{pair[0].Key, pair[1].Key}})
+				loaded, loadErr = ledger.store.GetMany(
+					ctx,
+					etcdstore.GetManyRequest{Keys: []string{pair[0].Key, pair[1].Key}},
+				)
 				if loadErr != nil {
 					return PreparedBlueprintReleaseHooks{}, loadErr
 				}
@@ -447,7 +461,9 @@ func prepareBlueprintReleaseHookPublicationFragment(
 			execution.ScriptSetGeneration = hook.Sources.Script.Record.ScriptSetGeneration
 		}
 		if scriptsourcequeries.ValidateStoredScriptContext(hook.Sources, execution) != nil ||
-			scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
+			scriptexecutions.ValidateScriptExecutionRecord(
+				execution,
+			) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			!execution.ActiveReference || execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
 			execution.PlanHash != task.PlanHash || task.Params[releaserender.ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID {
 			clearReleaseHookPublicationFragment(fragment)
@@ -471,9 +487,18 @@ func prepareBlueprintReleaseHookPublicationFragment(
 			etcdstore.Condition{Key: scriptexecutions.ScriptExecutionKey(execution.ID)},
 			etcdstore.Condition{Key: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID)},
 		)
-		fragment.mutations = append(fragment.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptexecutions.ScriptExecutionKey(execution.ID), Value: executionValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID), Value: snapshotValue},
+		fragment.mutations = append(
+			fragment.mutations,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   scriptexecutions.ScriptExecutionKey(execution.ID),
+				Value: executionValue,
+			},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID),
+				Value: snapshotValue,
+			},
 		)
 	}
 	return fragment, nil
@@ -495,7 +520,9 @@ func cloneBlueprintReleaseMutations(values []etcdstore.Mutation) []etcdstore.Mut
 	return result
 }
 
-func cloneScriptSourcePreparationMembers(values []scriptsourceevidence.ScriptSourcePreparationMember) []scriptsourceevidence.ScriptSourcePreparationMember {
+func cloneScriptSourcePreparationMembers(
+	values []scriptsourceevidence.ScriptSourcePreparationMember,
+) []scriptsourceevidence.ScriptSourcePreparationMember {
 	result := make([]scriptsourceevidence.ScriptSourcePreparationMember, len(values))
 	for index, value := range values {
 		result[index] = value

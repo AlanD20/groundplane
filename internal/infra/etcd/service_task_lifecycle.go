@@ -65,7 +65,13 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 			servicerecord.ServiceRuntimeCondition(service),
 			{Key: servicerecord.ServiceLifecycleActiveKey(source.Target)},
 		},
-		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: servicerecord.ServiceLifecycleActiveKey(source.Target), Value: reference}},
+		mutations: []etcdstore.Mutation{
+			{
+				Type:  etcdstore.MutationPut,
+				Key:   servicerecord.ServiceLifecycleActiveKey(source.Target),
+				Value: reference,
+			},
+		},
 	}
 	if source.Executor == taskjournal.TaskExecutorAgent {
 		if values.Values[1] == nil {
@@ -75,8 +81,12 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 		if decodeErr != nil || input.PlanID != source.PlanID || source.PlanID != retry.PlanID {
 			return serviceTaskChange{}, errs.New(errs.KindInternal, "Service lifecycle render input changed")
 		}
-		change.conditions = append(change.conditions,
-			etcdstore.Condition{Key: releaserender.ServiceLifecycleRenderInputKey(source.ID), ModRevision: values.Values[1].ModRevision},
+		change.conditions = append(
+			change.conditions,
+			etcdstore.Condition{
+				Key:         releaserender.ServiceLifecycleRenderInputKey(source.ID),
+				ModRevision: values.Values[1].ModRevision,
+			},
 			etcdstore.Condition{Key: releaserender.ServiceLifecycleRenderInputKey(retry.ID)},
 		)
 		change.mutations = append(change.mutations, etcdstore.Mutation{
@@ -117,7 +127,9 @@ func (repository *TaskRepository) prepareServiceTaskAcknowledgement(
 		conditions: []etcdstore.Condition{
 			{Key: servicerecord.ServiceLifecycleActiveKey(task.Target), ModRevision: values.Values[0].ModRevision},
 		},
-		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: servicerecord.ServiceLifecycleActiveKey(task.Target)}},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationDelete, Key: servicerecord.ServiceLifecycleActiveKey(task.Target)},
+		},
 	}, nil
 }
 
@@ -129,7 +141,8 @@ func (repository *TaskRepository) prepareAcknowledgedServiceTask(
 	readRevision int64,
 ) (serviceTaskChange, error) {
 	change, err := repository.prepareServiceTaskAcknowledgement(ctx, task, readRevision)
-	if err != nil || !change.applies || terminalStatus != taskjournal.TaskStatusCompleted || task.Executor != taskjournal.TaskExecutorAgent {
+	if err != nil || !change.applies || terminalStatus != taskjournal.TaskStatusCompleted ||
+		task.Executor != taskjournal.TaskExecutorAgent {
 		return change, err
 	}
 	inputRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -152,7 +165,8 @@ func (repository *TaskRepository) prepareAcknowledgedServiceTask(
 	}
 	event := backinghook.Event("")
 	stepID := ""
-	if task.Type == taskjournal.TaskStart && input.HookConfiguration != nil && input.HookConfiguration.AfterStart != nil {
+	if task.Type == taskjournal.TaskStart && input.HookConfiguration != nil &&
+		input.HookConfiguration.AfterStart != nil {
 		event = backinghook.AfterStart
 		stepID = task.Steps[len(task.Steps)-1].ID
 	}

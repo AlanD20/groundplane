@@ -13,7 +13,10 @@ import (
 )
 
 type localAgentRecords interface {
-	CreateSingleton(context.Context, localagentrecord.LocalAgentRecord) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
+	CreateSingleton(
+		context.Context,
+		localagentrecord.LocalAgentRecord,
+	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	GetSingleton(context.Context) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	UpdateConfigIdempotent(
 		context.Context,
@@ -21,7 +24,13 @@ type localAgentRecords interface {
 		localagentrecord.LocalAgentConfig,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], etcd.IdempotencyTransactionResult, error)
-	MarkReady(context.Context, string, uint64, int64, time.Time) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
+	MarkReady(
+		context.Context,
+		string,
+		uint64,
+		int64,
+		time.Time,
+	) (etcdstore.Versioned[localagentrecord.LocalAgentRecord], error)
 	ReplaceGeneration(
 		context.Context,
 		etcdstore.Versioned[localagentrecord.LocalAgentRecord],

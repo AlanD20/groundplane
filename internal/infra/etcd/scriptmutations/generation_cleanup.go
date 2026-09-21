@@ -112,7 +112,8 @@ func CleanupTaskEnvironmentDeletionScriptLocators(
 		return errs.New(errs.KindStateConflict, "Environment deletion tombstone is missing")
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(read.Entry.Value)
-	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment || tombstone.TargetID != environmentID ||
+	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment ||
+		tombstone.TargetID != environmentID ||
 		tombstone.TaskID != taskID {
 		return errs.New(errs.KindStateConflict, "Environment deletion tombstone ownership changed")
 	}

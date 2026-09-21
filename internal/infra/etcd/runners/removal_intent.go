@@ -81,7 +81,8 @@ func ValidateRunnerDeletionTombstone(record deletionrecord.DeletionTombstoneReco
 	if record.TargetKind != deletionrecord.DeletionTargetRunner || ids.Validate(ids.KindRunner, record.TargetID) != nil ||
 		record.TargetRevision <= 0 || ids.Validate(ids.KindTask, record.TaskID) != nil ||
 		record.Phase != deletionrecord.DeletionPhaseFinalizing || record.Checkpoint != (deletionrecord.DeletionCheckpoint{}) ||
-		!recordcodec.IsCanonicalUTC(record.CreatedAt) || !recordcodec.IsCanonicalUTC(record.UpdatedAt) ||
+		!recordcodec.IsCanonicalUTC(record.CreatedAt) ||
+		!recordcodec.IsCanonicalUTC(record.UpdatedAt) ||
 		record.UpdatedAt.Before(record.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "runner deletion tombstone is invalid")
 	}
@@ -97,11 +98,17 @@ func EncodeRunnerDeletionTombstone(record deletionrecord.DeletionTombstoneRecord
 
 func DecodeRunnerDeletionTombstone(value []byte) (deletionrecord.DeletionTombstoneRecord, error) {
 	if len(value) > MaximumRunnerPersistenceBytes {
-		return deletionrecord.DeletionTombstoneRecord{}, errs.New(errs.KindInternal, "runner deletion tombstone is corrupt")
+		return deletionrecord.DeletionTombstoneRecord{}, errs.New(
+			errs.KindInternal,
+			"runner deletion tombstone is corrupt",
+		)
 	}
 	record, err := recordcodec.Decode[deletionrecord.DeletionTombstoneRecord](value, "deletion-tombstone")
 	if err != nil || ValidateRunnerDeletionTombstone(record) != nil {
-		return deletionrecord.DeletionTombstoneRecord{}, errs.New(errs.KindInternal, "runner deletion tombstone is corrupt")
+		return deletionrecord.DeletionTombstoneRecord{}, errs.New(
+			errs.KindInternal,
+			"runner deletion tombstone is corrupt",
+		)
 	}
 	return record, nil
 }

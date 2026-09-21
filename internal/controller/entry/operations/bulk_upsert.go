@@ -45,7 +45,10 @@ func (service *entryBulkUpsertService) BulkUpsertEntries(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry bulk upsert context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Entry bulk upsert context is required",
+		)
 	}
 	input, err := prepareEntryBulkUpsert(request)
 	if err != nil {
@@ -66,7 +69,10 @@ func (service *entryBulkUpsertService) BulkUpsertEntries(
 			return idempotencyrecord.IdempotencyResponse{}, mutationErr
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry bulk upsert retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Entry bulk upsert retry bound was not enforced",
+	)
 }
 
 func (service *entryBulkUpsertService) bulkUpsertOnce(
@@ -124,7 +130,13 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	headRevision, generation, err := controllerrevision.NextGeneration(input.environmentID, head, hasHead, current, hasCurrent)
+	headRevision, generation, err := controllerrevision.NextGeneration(
+		input.environmentID,
+		head,
+		hasHead,
+		current,
+		hasCurrent,
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -318,7 +330,10 @@ func (service *entryBulkUpsertService) bulkUpsertOnce(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry bulk upsert resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Entry bulk upsert resolution is invalid",
+		)
 	}
 	return requestidempotency.CloneResponse(response), nil
 }

@@ -189,7 +189,11 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}
-	managedRuntimeSources, err := projectionrecord.SelectManagedComponentRuntimeSources(desired.Record, selected.Record, found)
+	managedRuntimeSources, err := projectionrecord.SelectManagedComponentRuntimeSources(
+		desired.Record,
+		selected.Record,
+		found,
+	)
 	if err != nil {
 		return ComponentTaskPreparation{}, err
 	}
@@ -299,7 +303,8 @@ func (repository *Planner) PrepareEnvironmentComponentTask(
 				registryValue.Value,
 				"component_address_registry",
 			)
-			if decodeErr != nil || networkreservations.ValidateComponentAddressRegistry(zoneChange.Record, decoded) != nil {
+			if decodeErr != nil ||
+				networkreservations.ValidateComponentAddressRegistry(zoneChange.Record, decoded) != nil {
 				return ComponentTaskPreparation{}, networkreservations.CorruptComponentAddressRegistry()
 			}
 			currentRegistry = decoded
@@ -497,8 +502,10 @@ func ValidateComponentTaskPreparation(preparation ComponentTaskPreparation) erro
 
 func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) ComponentTaskPreparation {
 	clone := ComponentTaskPreparation{
-		Intent:                    environmentchanges.CloneComponentTaskIntent(preparation.Intent),
-		managedRuntimeSources:     append([]projectionrecord.ManagedComponentRuntimeSource(nil), preparation.managedRuntimeSources...),
+		Intent: environmentchanges.CloneComponentTaskIntent(preparation.Intent),
+		managedRuntimeSources: append(
+			[]projectionrecord.ManagedComponentRuntimeSource(nil),
+			preparation.managedRuntimeSources...),
 		appliedComponentRuntime:   append([]byte(nil), preparation.appliedComponentRuntime...),
 		appliedProjectionPresent:  preparation.appliedProjectionPresent,
 		appliedProjectionRevision: preparation.appliedProjectionRevision,
@@ -507,7 +514,9 @@ func cloneComponentTaskPreparation(preparation ComponentTaskPreparation) Compone
 	}
 	for index, address := range preparation.addresses {
 		clone.addresses[index] = address
-		clone.addresses[index].Current.Record = networkreservations.CloneComponentAddressRegistry(address.Current.Record)
+		clone.addresses[index].Current.Record = networkreservations.CloneComponentAddressRegistry(
+			address.Current.Record,
+		)
 		clone.addresses[index].Next = networkreservations.CloneComponentAddressRegistry(address.Next)
 	}
 	return clone

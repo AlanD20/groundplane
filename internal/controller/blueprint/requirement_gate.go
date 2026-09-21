@@ -6,7 +6,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
-func (service *Service) prepareRequirementGate(ctx context.Context, task etcd.TaskRecord, requirements core.BlueprintRequirements) (etcd.BlueprintRequirementGate, error) {
+func (service *Service) prepareRequirementGate(
+	ctx context.Context,
+	task etcd.TaskRecord,
+	requirements core.BlueprintRequirements,
+) (etcd.BlueprintRequirementGate, error) {
 	requirementGate := etcd.BlueprintRequirementGate{}
 	if len(requirements.Resolved) != 0 {
 		inherited, gateErr := environmentBlueprintRequirementTaskEdges(

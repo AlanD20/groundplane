@@ -157,7 +157,10 @@ func backingHookIntentValue(configuration *apiTypes.BackingHookConfiguration) re
 		}
 		return requestidempotency.Object(
 			requestidempotency.Field{Name: "command", Value: requestidempotency.List(command...)},
-			requestidempotency.Field{Name: "timeout_seconds", Value: requestidempotency.Integer(int64(value.TimeoutSeconds))},
+			requestidempotency.Field{
+				Name:  "timeout_seconds",
+				Value: requestidempotency.Integer(int64(value.TimeoutSeconds)),
+			},
 		)
 	}
 	facts := make([]requestidempotency.Value, len(configuration.Facts))

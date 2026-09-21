@@ -1,7 +1,7 @@
 package app
 
 import (
-	"github.com/AlanD20/groundplane/internal/componentregistration"
+	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"

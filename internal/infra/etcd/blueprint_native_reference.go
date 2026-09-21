@@ -116,9 +116,13 @@ func resolveBlueprintNativePredecessors(
 			if err != nil || digest != reference.PriorRuntimeSHA256 || witness.ServiceID != reference.ServiceID ||
 				member.Intent.PriorServingReleaseID != reference.Serving.ServingReleaseID ||
 				member.Render.PriorTarget != reference.Serving.Target ||
-				!recoveryRenderMatchesPredecessor(member.Render, member.Intent, &taskassignments.ReleaseRestorationAuthority{
-					NativePredecessors: []taskassignments.ReleaseNativePredecessorAuthority{*witness},
-				}) {
+				!recoveryRenderMatchesPredecessor(
+					member.Render,
+					member.Intent,
+					&taskassignments.ReleaseRestorationAuthority{
+						NativePredecessors: []taskassignments.ReleaseNativePredecessorAuthority{*witness},
+					},
+				) {
 				return nil, releases.CorruptReleaseRecord()
 			}
 			runtime.CurrentArtifact = witness.CurrentArtifact

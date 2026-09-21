@@ -24,7 +24,10 @@ func (service *serviceMutationService) RemoveService(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil || ids.Validate(ids.KindService, serviceID) != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Service removal input is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Service removal input is invalid",
+		)
 	}
 	for attempt := 0; attempt < maximumServiceMutationAttempts; attempt++ {
 		response, err := service.removeServiceOnce(ctx, serviceID, idempotencyKey)
@@ -36,7 +39,10 @@ func (service *serviceMutationService) RemoveService(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service removal retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Service removal retry bound was not enforced",
+	)
 }
 
 func (service *serviceMutationService) removeServiceOnce(
@@ -44,7 +50,10 @@ func (service *serviceMutationService) removeServiceOnce(
 	serviceID string,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetService, ID: serviceID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetService,
+		ID:   serviceID,
+	}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, serviceEditRoute, idempotencyKey,
 	)
@@ -101,7 +110,7 @@ func (service *serviceMutationService) removeServiceOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	expectedHeadRevision, generation, err := serviceDesiredState(
+	expectedHeadRevision, generation, err := controllerrevision.NextGeneration(
 		environment.Record.ID, head, hasHead, projection, hasProjection,
 	)
 	if err != nil {
@@ -168,7 +177,10 @@ func (service *serviceMutationService) removeServiceOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if service.lifecycle == nil || service.lifecycle.plans == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service removal planner is not configured")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Service removal planner is not configured",
+		)
 	}
 	task, err = service.lifecycle.plans.PrepareServiceRemovalTask(
 		ctx, task, removalIntent,
@@ -219,7 +231,10 @@ func (service *serviceMutationService) replayIndexedServiceRemoval(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service removal replay target is inconsistent")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Service removal replay target is inconsistent",
+		)
 	}
 	return serviceReplayResponse(resolution)
 }

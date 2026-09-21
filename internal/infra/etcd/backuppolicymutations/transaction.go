@@ -247,7 +247,11 @@ func PrepareBackupPolicyReplacement(
 		}
 		plan.mutations = append(
 			plan.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupKeyKey(candidate.Replacement.EnvironmentID), Value: recordValue},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   backuppolicy.BackupKeyKey(candidate.Replacement.EnvironmentID),
+				Value: recordValue,
+			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
 				Key:   backuppolicy.BackupKeyValueKey(candidate.Replacement.EnvironmentID),

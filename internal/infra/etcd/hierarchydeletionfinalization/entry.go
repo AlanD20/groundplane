@@ -32,9 +32,18 @@ func (repository *Preparer) prepareHierarchyDeletionEntryFinalizer(
 		return Effects{}, err
 	}
 	effects.conditions = append(effects.conditions, fences...)
-	effects.mutations = append(effects.mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryvalues.PlainPrefix + record.Entry.ID + "/", Prefix: true},
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryvalues.SecretPrefix + record.Entry.ID + "/", Prefix: true},
+	effects.mutations = append(
+		effects.mutations,
+		etcdstore.Mutation{
+			Type:   etcdstore.MutationDelete,
+			Key:    entryvalues.PlainPrefix + record.Entry.ID + "/",
+			Prefix: true,
+		},
+		etcdstore.Mutation{
+			Type:   etcdstore.MutationDelete,
+			Key:    entryvalues.SecretPrefix + record.Entry.ID + "/",
+			Prefix: true,
+		},
 	)
 	return effects, nil
 }

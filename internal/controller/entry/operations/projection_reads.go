@@ -45,7 +45,10 @@ func (service *entryReadService) listProjectedEntries(
 		return etcdstore.Page[entryrecord.Record]{}, found, err
 	}
 	if offset < 0 || offset > len(projection.Record.Entries) {
-		return etcdstore.Page[entryrecord.Record]{}, false, errs.New(errs.KindValidationFailed, "Entry page cursor is invalid")
+		return etcdstore.Page[entryrecord.Record]{}, false, errs.New(
+			errs.KindValidationFailed,
+			"Entry page cursor is invalid",
+		)
 	}
 	limit := request.Limit
 	if limit == 0 {

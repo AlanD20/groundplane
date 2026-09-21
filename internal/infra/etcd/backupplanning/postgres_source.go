@@ -19,7 +19,9 @@ func (repository *Planner) prepareManualPostgresSource(
 	resolvePostgres BackupPostgresIdentityResolver,
 ) (backupruntime.BackupRunSourceAttemptRecord, error) {
 	read, err := repository.reader.ReadFixedKeys(
-		ctx, []string{attachrecord.AttachKey(attempt.TargetID), attachrecord.AttachFactsKey(attempt.TargetID)}, fixedRevision,
+		ctx,
+		[]string{attachrecord.AttachKey(attempt.TargetID), attachrecord.AttachFactsKey(attempt.TargetID)},
+		fixedRevision,
 	)
 	if err != nil {
 		return backupruntime.BackupRunSourceAttemptRecord{}, err
@@ -61,8 +63,14 @@ func (repository *Planner) prepareManualPostgresSource(
 	}
 	project, projectErr := hierarchyrecord.DecodeProject(backingRead.Values[0].Value)
 	environment, environmentErr := hierarchyrecord.DecodeEnvironment(backingRead.Values[1].Value)
-	service, serviceErr := environmentqueries.FindServiceAtRevision(ctx, repository.store, attach.BackingServiceID, fixedRevision)
-	if projectErr != nil || environmentErr != nil || serviceErr != nil || project.Kind != hierarchyrecord.ProjectKindBacking ||
+	service, serviceErr := environmentqueries.FindServiceAtRevision(
+		ctx,
+		repository.store,
+		attach.BackingServiceID,
+		fixedRevision,
+	)
+	if projectErr != nil || environmentErr != nil || serviceErr != nil ||
+		project.Kind != hierarchyrecord.ProjectKindBacking ||
 		environment.ProjectID != project.ID ||
 		environment.ID != attach.BackingEnvironmentID ||
 		service.Record.EnvironmentID != environment.ID ||

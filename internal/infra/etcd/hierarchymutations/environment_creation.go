@@ -40,7 +40,10 @@ func (repository *Repository) CreateEnvironment(
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
-	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(hierarchydeletion.HierarchyDeletionTargetEnvironment, record.ID)
+	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(
+		hierarchydeletion.HierarchyDeletionTargetEnvironment,
+		record.ID,
+	)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, err
 	}
@@ -55,7 +58,10 @@ func (repository *Repository) CreateEnvironment(
 	label := hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name)
 	ownerIndex := hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID)
 	epochKey := hierarchyrecord.EnvironmentMutationEpochKey(record.ID)
-	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), record.ID)
+	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(
+		string(hierarchydeletion.HierarchyDeletionTargetEnvironment),
+		record.ID,
+	)
 	scriptSetKey := scriptrecord.ScriptSetActiveKey(record.ID)
 	result, err := repository.store.Transact(ctx,
 		[]etcdstore.Condition{
@@ -100,5 +106,9 @@ func (repository *Repository) CreateEnvironment(
 		}
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, repository.diagnoseCreate(ctx, primary, label)
 	}
-	return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{
+		Record:       record,
+		Revision:     result.Revision,
+		ReadRevision: result.Revision,
+	}, nil
 }

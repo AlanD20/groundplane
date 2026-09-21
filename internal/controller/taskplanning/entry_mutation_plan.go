@@ -32,7 +32,10 @@ const EntryMutationBaselineRevisionParam = "entry_baseline_revision_id"
 // reconstruction. Only Entry create/edit/bulk-upsert use this path; removal has
 // its own terminal-publication and no-restart contract.
 func (runtime EntryMutationRuntime) PrepareTask(
-	volumeRoot string, task etcd.TaskRecord, candidate projectionrecord.EnvironmentComposeProjection, applyStepID string,
+	volumeRoot string,
+	task etcd.TaskRecord,
+	candidate projectionrecord.EnvironmentComposeProjection,
+	applyStepID string,
 ) (etcd.TaskRecord, error) {
 	baseline := runtime.Projection
 	if runtime.EpochRevision <= 0 {
@@ -68,10 +71,16 @@ func (runtime EntryMutationRuntime) PrepareTask(
 	)
 	task.Steps = make([]taskjournal.TaskStepRecord, 0, len(references)+1)
 	for _, reference := range references {
-		task.Steps = append(task.Steps, taskjournal.TaskStepRecord{ID: reference.StepID, Kind: taskjournal.TaskStepOperation})
+		task.Steps = append(
+			task.Steps,
+			taskjournal.TaskStepRecord{ID: reference.StepID, Kind: taskjournal.TaskStepOperation},
+		)
 	}
 	if len(selected) != 0 {
-		task.Steps = append(task.Steps, taskjournal.TaskStepRecord{ID: applyStepID, Kind: taskjournal.TaskStepOperation})
+		task.Steps = append(
+			task.Steps,
+			taskjournal.TaskStepRecord{ID: applyStepID, Kind: taskjournal.TaskStepOperation},
+		)
 	}
 	plan, err := buildEntryMutationPlan(volumeRoot, task, baseline, candidate)
 	if err != nil {
@@ -172,7 +181,8 @@ func buildEntryMutationPlan(
 		task.Params[EntryMutationBaselineRevisionParam] != baseline.RevisionID ||
 		candidate.RenderGeneration != uint64(
 			task.RenderGeneration,
-		) || baseline.RenderGeneration >= candidate.RenderGeneration {
+		) ||
+		baseline.RenderGeneration >= candidate.RenderGeneration {
 		return nil, errs.New(errs.KindInternal, "Entry mutation Task identity is invalid")
 	}
 	if _, err := etcd.EntryRuntimeEpochRevision(task); err != nil {
@@ -227,7 +237,11 @@ func buildEntryMutationPlan(
 		if !found {
 			return nil, errs.New(errs.KindInternal, "Entry mutation materialization is absent")
 		}
-		step, err := taskmaterialization.BuildTaskMaterializationStep(reference, newArtifact.ArtifactId, uint32(task.TimeoutSeconds))
+		step, err := taskmaterialization.BuildTaskMaterializationStep(
+			reference,
+			newArtifact.ArtifactId,
+			uint32(task.TimeoutSeconds),
+		)
 		if err != nil {
 			return nil, err
 		}

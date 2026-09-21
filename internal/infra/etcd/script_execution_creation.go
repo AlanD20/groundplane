@@ -31,7 +31,10 @@ func NewScriptExecutionRecord(
 			clear(records[index].Plan)
 			clear(records[index].Snapshot)
 		}
-		return scriptexecutions.ScriptExecutionRecord{}, errs.New(errs.KindValidationFailed, "manual Script Task must own one execution")
+		return scriptexecutions.ScriptExecutionRecord{}, errs.New(
+			errs.KindValidationFailed,
+			"manual Script Task must own one execution",
+		)
 	}
 	return records[0], nil
 }
@@ -120,7 +123,10 @@ func NewScriptExecutionRecords(
 	return records, nil
 }
 
-func validateScriptExecutionSources(sources scriptsourcequeries.ScriptExecutionSources, execution scriptexecutions.ScriptExecutionRecord) error {
+func validateScriptExecutionSources(
+	sources scriptsourcequeries.ScriptExecutionSources,
+	execution scriptexecutions.ScriptExecutionRecord,
+) error {
 	if sources.Revision <= 0 || sources.Tenant.ReadRevision != sources.Revision ||
 		sources.Project.ReadRevision != sources.Revision || sources.Environment.ReadRevision != sources.Revision ||
 		sources.Service.ReadRevision != sources.Revision || sources.ScriptSet.ReadRevision != sources.Revision ||

@@ -10,7 +10,6 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
-	"reflect"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -63,13 +62,17 @@ func (repository *Planner) PrepareComponentTaskPublication(
 	publication.conditions = append(publication.conditions, etcdstore.Condition{
 		Key: environmentchanges.ComponentTaskIntentKey(task.ID),
 	})
-	appliedProjectionCondition := etcdstore.Condition{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID)}
+	appliedProjectionCondition := etcdstore.Condition{
+		Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
+	}
 	if preparation.appliedProjectionPresent {
 		appliedProjectionCondition.ModRevision = preparation.appliedProjectionRevision
 	}
 	publication.conditions = append(publication.conditions, appliedProjectionCondition)
 	publication.conditions = append(publication.conditions, etcdstore.Condition{
-		Key: blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), ModRevision: preparation.desiredProjectionRevision,
+		Key: blueprints.EnvironmentBlueprintHeadKey(
+			environment.Record.ID,
+		), ModRevision: preparation.desiredProjectionRevision,
 	})
 	for _, candidate := range preparation.Intent.Candidates {
 		publication.conditions = append(publication.conditions, etcdstore.Condition{
@@ -89,8 +92,13 @@ func (repository *Planner) PrepareComponentTaskPublication(
 		return Publication{}, err
 	}
 	publication.values = append(publication.values, intentValue)
-	publication.mutations = append(publication.mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskIntentKey(task.ID), Value: intentValue},
+	publication.mutations = append(
+		publication.mutations,
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   environmentchanges.ComponentTaskIntentKey(task.ID),
+			Value: intentValue,
+		},
 		etcdstore.Mutation{
 			Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID),
 		},
@@ -123,7 +131,7 @@ func validateComponentTaskPublicationZones(
 	}
 	for _, address := range preparation.addresses {
 		change, found := changes[address.Zone.Record.Desired.ID]
-		if !found || !reflect.DeepEqual(change.Record, address.Zone.Record) ||
+		if !found || change.Record != address.Zone.Record ||
 			(change.Current == nil) != (address.Zone.Revision == 0) ||
 			(change.Current != nil && change.Current.Revision != address.Zone.Revision) {
 			return errs.New(errs.KindValidationFailed, "Component candidate Zone preparation changed")

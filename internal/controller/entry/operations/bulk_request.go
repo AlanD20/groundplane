@@ -95,5 +95,9 @@ func entryBulkUpsertResponse(changes []entryBulkChange, taskID string) (idempote
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return idempotencyrecord.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}, nil
+	return idempotencyrecord.IdempotencyResponse{
+		Status:      http.StatusAccepted,
+		ContentKind: "application/json",
+		Body:        body,
+	}, nil
 }

@@ -132,7 +132,7 @@ func (repository *TaskRepository) abortPendingBackupTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		transaction, err := runtime.transact(ctx, conditions, mutations)
+		transaction, err := runtime.TransactRuntime(ctx, conditions, mutations)
 		etcdstore.ClearMutationValues(mutations)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -165,7 +165,12 @@ func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 			"pending Backup Task terminal identity is invalid",
 		)
 	}
-	terminal, err := TransitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, terminalAt)
+	terminal, err := TransitionTaskStatus(
+		task,
+		taskjournal.TaskStatusPending,
+		taskjournal.TaskStatusAborted,
+		terminalAt,
+	)
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}

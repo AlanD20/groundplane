@@ -30,7 +30,8 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != retry.ID ||
-		!marker.CreatedAt.Equal(retry.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
+		!marker.CreatedAt.Equal(retry.CreatedAt) ||
+		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"backup key rotation retry marker does not match its Task",
@@ -45,7 +46,9 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, source.Record.ID),
 		backupruntime.BackupKeyRotationKey(retry.ID),
 		backupKeyRotationEnvironmentIndexKeyForRetry(source.Record.Owner.EnvironmentID, retry.ID),
-		backuppolicy.BackupKeyKey(source.Record.Owner.EnvironmentID), backuppolicy.BackupKeyValueKey(source.Record.Owner.EnvironmentID),
+		backuppolicy.BackupKeyKey(
+			source.Record.Owner.EnvironmentID,
+		), backuppolicy.BackupKeyValueKey(source.Record.Owner.EnvironmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(source.Record.Owner.EnvironmentID),
 	}, Revision: source.ReadRevision})
 	if err != nil {
@@ -125,8 +128,12 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 	}
 	defer clear(reference)
 	conditions := []etcdstore.Condition{
-		{Key: taskjournal.TaskStorageKey(retry.ID)}, {Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID)},
-		{Key: taskjournal.TaskActiveOperationKey(retry.OperationID)}, {Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID)},
+		{
+			Key: taskjournal.TaskStorageKey(retry.ID),
+		}, {Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID)},
+		{
+			Key: taskjournal.TaskActiveOperationKey(retry.OperationID),
+		}, {Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID)},
 		{Key: backupruntime.BackupKeyRotationKey(source.Record.ID), ModRevision: read.Values[0].ModRevision},
 		{
 			Key: backupKeyRotationEnvironmentIndexKeyForRetry(
@@ -137,12 +144,19 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		},
 		{Key: backupruntime.BackupKeyRotationKey(retry.ID)}, {Key: newIndex},
 		{Key: backuppolicy.BackupKeyKey(source.Record.Owner.EnvironmentID), ModRevision: read.Values[4].ModRevision},
-		{Key: backuppolicy.BackupKeyValueKey(source.Record.Owner.EnvironmentID), ModRevision: read.Values[5].ModRevision},
+		{
+			Key:         backuppolicy.BackupKeyValueKey(source.Record.Owner.EnvironmentID),
+			ModRevision: read.Values[5].ModRevision,
+		},
 	}
 	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(retry.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(retry.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID), Value: reference},
 		{Type: etcdstore.MutationDelete, Key: backupruntime.BackupKeyRotationKey(source.Record.ID)},
@@ -152,7 +166,11 @@ func (repository *TaskRepository) retryBackupKeyRotationTask(
 		},
 		{Type: etcdstore.MutationPut, Key: backupruntime.BackupKeyRotationKey(retry.ID), Value: rotationValue},
 		{Type: etcdstore.MutationPut, Key: newIndex, Value: []byte(retry.ID)},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(source.Record.Owner.EnvironmentID), Value: lockValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchyrecord.EnvironmentOperationLockKey(source.Record.Owner.EnvironmentID),
+			Value: lockValue,
+		},
 	}
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {

@@ -119,13 +119,21 @@ func (service *routeMutationService) routeResponseMarker(
 ) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {
 	body, err := json.Marshal(apiTypes.RouteTaskAccepted{Route: routeAPIResponse(record), TaskID: taskID})
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(
+			errs.KindInternal,
+			err,
+		)
 	}
 	defer clear(body)
 	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json", Body: append([]byte(nil), body...),
 	}
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
+		locator,
+		evidence.durable,
+		response,
+		service.now().UTC(),
+	)
 	if err != nil {
 		clear(response.Body)
 		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, err
@@ -164,7 +172,10 @@ func (service *routeMutationService) resolveRouteMutation(
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
 		clear(response.Body)
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route mutation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Route mutation resolution is invalid",
+		)
 	}
 }
 
@@ -177,7 +188,10 @@ func routeMutationLocator(intent routeMutationIntent, idempotencyKey string) ide
 
 func routeReplayResponse(resolution requestidempotency.Resolution) (idempotencyrecord.IdempotencyResponse, error) {
 	if resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route replay resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Route replay resolution is invalid",
+		)
 	}
 	return cloneIdempotencyResponse(resolution.Response), nil
 }

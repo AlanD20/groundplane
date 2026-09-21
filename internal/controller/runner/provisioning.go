@@ -99,7 +99,10 @@ func (service *ProvisioningService) CreateRunner(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Runner creation context is required",
+		)
 	}
 	token, err := runnerRegistrationToken(request.RegistrationToken)
 	request.RegistrationToken = ""
@@ -125,7 +128,10 @@ func (service *ProvisioningService) CreateRunner(
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner creation replay is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Runner creation replay is invalid",
+			)
 		}
 		return cloneResponse(resolution.Response), nil
 	}
@@ -187,7 +193,10 @@ func (service *ProvisioningService) RetryRunner(
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner retry replay is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Runner retry replay is invalid",
+			)
 		}
 		return cloneResponse(resolution.Response), nil
 	}
@@ -335,7 +344,10 @@ func (service *ProvisioningService) newTaskMarker(
 ) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(
+			errs.KindInternal,
+			err,
+		)
 	}
 	defer clear(body)
 	response := idempotencyrecord.IdempotencyResponse{
@@ -390,7 +402,10 @@ func (service *ProvisioningService) resolvePublication(
 		}
 		return cloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner publication resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Runner publication resolution is invalid",
+		)
 	}
 }
 

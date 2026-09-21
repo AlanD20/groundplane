@@ -103,7 +103,8 @@ func ValidateTaskRecord(record TaskRecord) error {
 	if record.UpdatedAt.Before(record.CreatedAt) {
 		return errs.New(errs.KindInternal, "task updated_at precedes created_at")
 	}
-	if record.Status == taskjournal.TaskStatusPending && record.EventCount == 0 && !record.UpdatedAt.Equal(record.CreatedAt) {
+	if record.Status == taskjournal.TaskStatusPending && record.EventCount == 0 &&
+		!record.UpdatedAt.Equal(record.CreatedAt) {
 		return errs.New(errs.KindInternal, "new pending task timestamps are inconsistent")
 	}
 	if err := taskjournal.ValidateTaskSteps(record.Steps); err != nil {

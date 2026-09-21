@@ -15,7 +15,11 @@ type hierarchyStore interface {
 	Get(context.Context, string) (*etcdstore.GetResult, error)
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
-	MeasureTransaction(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionBudget, error)
+	MeasureTransaction(
+		context.Context,
+		[]etcdstore.Condition,
+		[]etcdstore.Mutation,
+	) (etcdstore.TransactionBudget, error)
 	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 

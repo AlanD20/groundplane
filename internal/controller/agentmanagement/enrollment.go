@@ -166,7 +166,10 @@ func (service *agentEnrollmentService) EnrollAgent(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent enrollment context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Agent enrollment context is required",
+		)
 	}
 	evidence, err := service.idempotency.Prepare(ctx)
 	if err != nil {
@@ -235,7 +238,10 @@ func (service *agentEnrollmentService) EnrollAgent(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent enrollment resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Agent enrollment resolution is invalid",
+		)
 	}
 	return requestidempotency.CloneResponse(response), nil
 }

@@ -22,7 +22,8 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 	if err := hierarchyrecord.ValidateTenant(record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Tenant creation marker must be a completed direct mutation",
@@ -36,14 +37,24 @@ func (repository *HierarchyRepository) CreateTenantIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
-	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(hierarchydeletion.HierarchyDeletionTargetTenant, record.ID)
+	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(
+		hierarchydeletion.HierarchyDeletionTargetTenant,
+		record.ID,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(coordinationValue)
-	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetTenant), record.ID)
+	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(
+		string(hierarchydeletion.HierarchyDeletionTargetTenant),
+		record.ID,
+	)
 	plan, err := NewIdempotencyMutationPlan(
-		[]etcdstore.Condition{{Key: hierarchyrecord.TenantKey(record.ID)}, {Key: hierarchyrecord.TenantSlugKey(record.Slug)}, {Key: coordinationKey}},
+		[]etcdstore.Condition{
+			{Key: hierarchyrecord.TenantKey(record.ID)},
+			{Key: hierarchyrecord.TenantSlugKey(record.Slug)},
+			{Key: coordinationKey},
+		},
 		[]etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: hierarchyrecord.TenantKey(record.ID), Value: value},
 			{Type: etcdstore.MutationPut, Key: hierarchyrecord.TenantSlugKey(record.Slug), Value: []byte(record.ID)},

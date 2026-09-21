@@ -44,7 +44,10 @@ type backingZoneCascadeRepository interface {
 	) ([]etcdstore.Versioned[attachrecord.Record], error)
 	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	GetSystemTaskInitiation(context.Context, string) (etcd.TaskInitiation, error)
-	GetZoneRemovalIntent(context.Context, string) (etcdstore.Versioned[environmentchanges.ZoneRemovalIntent], bool, error)
+	GetZoneRemovalIntent(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[environmentchanges.ZoneRemovalIntent], bool, error)
 	HandoffBackingZoneDeletion(
 		context.Context,
 		etcdstore.Versioned[zonerecord.Record],
@@ -368,7 +371,10 @@ func (service *backingZoneCascadeService) waitForTask(
 			return etcdstore.Versioned[etcd.TaskRecord]{}, err
 		}
 		switch current.Record.Status {
-		case taskjournal.TaskStatusCompleted, taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, taskjournal.TaskStatusTimedOut:
+		case taskjournal.TaskStatusCompleted,
+			taskjournal.TaskStatusFailed,
+			taskjournal.TaskStatusAborted,
+			taskjournal.TaskStatusTimedOut:
 			return current, nil
 		case taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning:
 			if err := service.wait(ctx); err != nil {
@@ -464,7 +470,8 @@ func isBackingZoneCascadeTask(task etcd.TaskRecord) (bool, error) {
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceBackingZone {
 		return false, nil
 	}
-	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 3 ||
+	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil ||
+		len(task.Params) != 3 ||
 		ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskZoneEnvironmentParam]) != nil ||
 		len(task.Params[taskjournal.TaskZoneImpactTokenParam]) != sha256.Size*2 {
 		return false, errs.New(errs.KindValidationFailed, "backing Zone cascade Task parameters are invalid")

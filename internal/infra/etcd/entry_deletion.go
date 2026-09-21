@@ -21,10 +21,15 @@ import (
 // applied-projection candidate, and publishes the Task that owns finalization.
 // The Entry and every immutable generation remain visible until success.
 func (repository *EntryRepository) BeginEntryDeletionWithTask(
-	ctx context.Context, environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	ctx context.Context,
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	entry etcdstore.Versioned[entryrecord.Record],
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	tombstone deletionrecord.DeletionTombstoneRecord, intent environmentchanges.EntryRemovalIntent, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
+	tombstone deletionrecord.DeletionTombstoneRecord,
+	intent environmentchanges.EntryRemovalIntent,
+	task TaskRecord,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := entryrecord.ValidateEntryHierarchy(ctx, environment, project, entry.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -57,11 +62,15 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 			"entry deletion Task, intent, and tombstone do not match",
 		)
 	}
-	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: entry.Record.Entry.ID}
+	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetEntry,
+		ID:   entry.Record.Entry.ID,
+	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
-		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
+		*marker.ReplayTarget != wantReplayTarget ||
+		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -155,8 +164,12 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		{Key: tombstoneKey},
 	}
 	if projection != nil {
-		conditions = append(conditions,
-			etcdstore.Condition{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID), ModRevision: projection.Revision},
+		conditions = append(
+			conditions,
+			etcdstore.Condition{
+				Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
+				ModRevision: projection.Revision,
+			},
 			etcdstore.Condition{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)},
 		)
 	}
@@ -174,7 +187,11 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	conditions = append(conditions, scriptConditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
@@ -226,7 +243,8 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 }
 
 func validateEntryDeletionProjection(
-	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], intent environmentchanges.EntryRemovalIntent,
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	intent environmentchanges.EntryRemovalIntent,
 ) error {
 	if intent.CurrentProjection == nil {
 		if projection != nil {
@@ -243,8 +261,10 @@ func validateEntryDeletionProjection(
 }
 
 func classifyEntryDeletionStartConflict(
-	entry etcdstore.Versioned[entryrecord.Record], projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	ownerRevision int64, operationID string,
+	entry etcdstore.Versioned[entryrecord.Record],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	ownerRevision int64,
+	operationID string,
 	fence environmentfence.Evidence,
 ) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {
@@ -307,12 +327,16 @@ func classifyEntryDeletionStartConflict(
 }
 
 func loadEntryTaskInitiationTenantAtRevision(
-	ctx context.Context, store hierarchyStore, project etcdstore.Versioned[hierarchyrecord.ProjectRecord], readRevision int64,
+	ctx context.Context,
+	store hierarchyStore,
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	readRevision int64,
 ) (*etcdstore.Versioned[hierarchyrecord.TenantRecord], error) {
 	if project.Record.Kind == hierarchyrecord.ProjectKindBacking {
 		return nil, nil
 	}
-	if project.Record.Kind != hierarchyrecord.ProjectKindTenant || ids.Validate(ids.KindTenant, project.Record.TenantID) != nil {
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
+		ids.Validate(ids.KindTenant, project.Record.TenantID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "task initiation project ancestry is invalid")
 	}
 	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{

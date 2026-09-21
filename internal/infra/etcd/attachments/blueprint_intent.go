@@ -55,7 +55,8 @@ func TerminalBlueprintAttachTaskIntent(
 	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (BlueprintAttachTaskIntent, error) {
-	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) || terminalAt.IsZero() {
+	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) ||
+		terminalAt.IsZero() {
 		return BlueprintAttachTaskIntent{}, errs.New(errs.KindStateConflict, "Blueprint Attach intent is not pending")
 	}
 	terminal := intent

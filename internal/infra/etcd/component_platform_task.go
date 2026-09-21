@@ -129,8 +129,14 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	defer clear(reference)
 	conditions := []etcdstore.Condition{
 		{Key: componentrecord.RecordKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{Key: platformcomponents.PlatformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
-		{Key: platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
+		{
+			Key:         platformcomponents.PlatformComponentOwnerKey(current.Record.Desired.ID),
+			ModRevision: indexes.Values[0].ModRevision,
+		},
+		{
+			Key:         platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind),
+			ModRevision: indexes.Values[1].ModRevision,
+		},
 		{Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID)},
 		{Key: taskjournal.TaskStorageKey(task.ID)},
 		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
@@ -141,12 +147,24 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(replacement.Desired.ID), Value: componentValue},
 		componentrecord.WriteFenceMutation(replacement.Desired.ID),
-		{Type: etcdstore.MutationPut, Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID), Value: renderInputValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID),
+			Value: renderInputValue,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(replacement.Desired.ID), Value: []byte(task.ID)},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   platformComponentTaskActiveKey(replacement.Desired.ID),
+			Value: []byte(task.ID),
+		},
 	}
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,

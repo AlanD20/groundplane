@@ -67,7 +67,10 @@ func (service *MutationService) RenameAttach(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Attach rename retry bound was not enforced",
+	)
 }
 
 func (service *MutationService) renameAttachOnce(
@@ -76,7 +79,10 @@ func (service *MutationService) renameAttachOnce(
 	request apiTypes.AttachRenameRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetAttach, ID: attachID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetAttach,
+		ID:   attachID,
+	}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodPost, attachRenameRoute, idempotencyKey,
 	)
@@ -105,7 +111,10 @@ func (service *MutationService) renameAttachOnce(
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Attach rename replay resolution is invalid",
+			)
 		}
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
@@ -127,7 +136,12 @@ func (service *MutationService) renameAttachOnce(
 	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
+		locator,
+		evidence.durable,
+		response,
+		service.now().UTC(),
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -154,7 +168,10 @@ func (service *MutationService) renameAttachOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Attach rename resolution is invalid",
+		)
 	}
 }
 
@@ -174,7 +191,10 @@ func (service *MutationService) replayAttachRename(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach rename replay index is inconsistent")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Attach rename replay index is inconsistent",
+		)
 	}
 	return requestidempotency.CloneResponse(resolution.Response), nil
 }

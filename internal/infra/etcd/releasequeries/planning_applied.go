@@ -37,7 +37,9 @@ func (ledger *Reader) GetPlanningAppliedProjection(
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, releases.CorruptReleaseRecord()
 	}
 	if read.Values[0] == nil {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: scope.ReadRevision}, false, nil
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
+			ReadRevision: scope.ReadRevision,
+		}, false, nil
 	}
 	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[0].Value)
 	if err != nil || projection.EnvironmentID != scope.Environment.Record.ID {

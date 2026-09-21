@@ -215,7 +215,8 @@ func decodeScriptRunnerSnapshotSource(
 	if err != nil || snapshot.SnapshotID == "" || key != scriptexecutions.ScriptRunnerSnapshotKey(snapshot.SnapshotID) ||
 		snapshot.ExecutionID != reference.ScriptExecutionID || snapshot.SHA256 != reference.SourceDigest ||
 		hex.EncodeToString(digest[:]) != reference.SourceDigest || proto.Unmarshal(snapshot.Payload, &payload) != nil ||
-		payload.SnapshotId != snapshot.SnapshotID || payload.ScriptExecutionId != snapshot.ExecutionID ||
+		payload.SnapshotId != snapshot.SnapshotID ||
+		payload.ScriptExecutionId != snapshot.ExecutionID ||
 		!scriptRunnerSnapshotSourceOwnerMatches(&payload, reference) {
 		return nil, "", errs.New(
 			errs.KindValidationFailed,

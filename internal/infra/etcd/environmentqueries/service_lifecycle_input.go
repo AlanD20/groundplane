@@ -33,7 +33,9 @@ func (repository *ServiceReader) GetServiceLifecycleRenderInput(
 		)
 	}
 	if result.Entry == nil {
-		return etcdstore.Versioned[releaserender.ServiceLifecycleRenderInput]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[releaserender.ServiceLifecycleRenderInput]{
+			ReadRevision: result.ReadRevision,
+		}, false, nil
 	}
 	input, err := releaserender.DecodeServiceLifecycleRenderInput(result.Entry.Value)
 	if err != nil {

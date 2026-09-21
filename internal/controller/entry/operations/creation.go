@@ -2,8 +2,6 @@ package operations
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -56,117 +54,6 @@ type entryCreationGenerator interface {
 	) (entryrecord.EntryValueGeneration, error)
 }
 
-type entryCreationEvidence struct {
-	candidate requestidempotency.ProtectedEvidence
-	durable   idempotencyrecord.ProtectedIntentRecord
-}
-
-type entryCreationIdempotency interface {
-	Prepare(context.Context, string, core.EnvEntry) (entryCreationEvidence, error)
-	MatchesStaged(context.Context, entryCreationEvidence, idempotencyrecord.ProtectedIntentRecord) (bool, error)
-	ResolveExisting(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		entryCreationEvidence,
-	) (requestidempotency.Resolution, bool, error)
-	ResolveKnown(
-		context.Context,
-		entryCreationEvidence,
-		etcd.IdempotencyTransactionResult,
-	) (requestidempotency.Resolution, error)
-	ResolveUnknown(
-		context.Context,
-		idempotencyrecord.IdempotencyLocator,
-		entryCreationEvidence,
-		error,
-	) (requestidempotency.Resolution, error)
-}
-
-func (service *durableEntryCreationIdempotency) MatchesStaged(
-	ctx context.Context,
-	evidence entryCreationEvidence,
-	existing idempotencyrecord.ProtectedIntentRecord,
-) (bool, error) {
-	return service.coordinator.MatchesDurable(ctx, evidence.candidate, existing)
-}
-
-type durableEntryCreationIdempotency struct {
-	coordinator *requestidempotency.Coordinator
-	repository  *etcd.IdempotencyRepository
-}
-
-func NewCreationIdempotency(
-	coordinator *requestidempotency.Coordinator,
-	repository *etcd.IdempotencyRepository,
-) (*durableEntryCreationIdempotency, error) {
-	if coordinator == nil || repository == nil {
-		return nil, errs.New(errs.KindInternal, "Entry creation idempotency is not configured")
-	}
-	return &durableEntryCreationIdempotency{coordinator: coordinator, repository: repository}, nil
-}
-
-func (service *durableEntryCreationIdempotency) Prepare(
-	ctx context.Context,
-	environmentID string,
-	entry core.EnvEntry,
-) (entryCreationEvidence, error) {
-	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{
-		Method: http.MethodPost,
-		Route:  entryCreationRoute,
-		Scope:  requestidempotency.Scope{Kind: requestidempotency.ScopeEnvironment, ID: environmentID},
-		Query:  requestidempotency.Object(),
-		Body: requestidempotency.JSONBody(requestidempotency.Object(
-			requestidempotency.Field{Name: "environment_id", Value: requestidempotency.String(environmentID)},
-			requestidempotency.Field{Name: "exposure", Value: canonicalEntryExposure(entry.Exposure)},
-			requestidempotency.Field{Name: "gid", Value: canonicalEntryNumericID(entry.GID)},
-			requestidempotency.Field{Name: "key", Value: requestidempotency.String(entry.Key)},
-			requestidempotency.Field{Name: "path", Value: requestidempotency.String(entry.Path)},
-			requestidempotency.Field{Name: "secret", Value: requestidempotency.Bool(entry.Secret)},
-			requestidempotency.Field{Name: "source", Value: canonicalEntrySource(entry)},
-			requestidempotency.Field{Name: "type", Value: requestidempotency.String(string(entry.Kind))},
-			requestidempotency.Field{Name: "uid", Value: canonicalEntryNumericID(entry.UID)},
-		)),
-	})
-	if err != nil {
-		return entryCreationEvidence{}, err
-	}
-	defer digest.Destroy()
-	candidate, err := service.coordinator.ProtectIntent(ctx, version, digest)
-	if err != nil {
-		return entryCreationEvidence{}, err
-	}
-	durable, err := candidate.DurableRecord()
-	if err != nil {
-		return entryCreationEvidence{}, err
-	}
-	return entryCreationEvidence{candidate: candidate, durable: durable}, nil
-}
-
-func (service *durableEntryCreationIdempotency) ResolveExisting(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence entryCreationEvidence,
-) (requestidempotency.Resolution, bool, error) {
-	return service.coordinator.ResolveExisting(ctx, service.repository, locator, evidence.candidate)
-}
-
-func (service *durableEntryCreationIdempotency) ResolveKnown(
-	ctx context.Context,
-	evidence entryCreationEvidence,
-	result etcd.IdempotencyTransactionResult,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveKnown(ctx, evidence.candidate, result)
-}
-
-func (service *durableEntryCreationIdempotency) ResolveUnknown(
-	ctx context.Context,
-	locator idempotencyrecord.IdempotencyLocator,
-	evidence entryCreationEvidence,
-	original error,
-) (requestidempotency.Resolution, error) {
-	return service.coordinator.ResolveUnknown(ctx, service.repository, locator, evidence.candidate, original)
-}
-
 type entryCreationService struct {
 	repository  entryCreationRepository
 	generator   entryCreationGenerator
@@ -193,7 +80,10 @@ func (service *entryCreationService) CreateEntry(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Entry creation context is required",
+		)
 	}
 	for attempt := 0; attempt < maximumEntryCreationAttempts; attempt++ {
 		response, err := service.createEntryOnce(ctx, input, idempotencyKey)
@@ -205,7 +95,10 @@ func (service *entryCreationService) CreateEntry(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Entry creation retry bound was not enforced",
+	)
 }
 
 func (service *entryCreationService) createEntryOnce(
@@ -307,7 +200,10 @@ func (service *entryCreationService) createEntryOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Entry creation resolution is invalid",
+		)
 	}
 }
 
@@ -325,7 +221,11 @@ func (service *entryCreationService) validateExposure(
 	}
 	cursor := ""
 	for {
-		page, err := service.repository.ListServices(ctx, environmentID, etcdstore.PageRequest{Limit: 200, Cursor: cursor})
+		page, err := service.repository.ListServices(
+			ctx,
+			environmentID,
+			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
+		)
 		if err != nil {
 			return err
 		}
@@ -456,56 +356,6 @@ func entryCreationNumericID(value *int64, field string) (*uint32, error) {
 	}
 	converted := uint32(*value)
 	return &converted, nil
-}
-
-func canonicalEntryNumericID(value *uint32) requestidempotency.Value {
-	if value == nil {
-		return requestidempotency.Null()
-	}
-	return requestidempotency.UnsignedInteger(uint64(*value))
-}
-
-func canonicalEntryExposure(exposure []string) requestidempotency.Value {
-	values := make([]requestidempotency.Value, len(exposure))
-	for index, value := range exposure {
-		values[index] = requestidempotency.String(value)
-	}
-	return requestidempotency.List(values...)
-}
-
-func canonicalEntrySource(entry core.EnvEntry) requestidempotency.Value {
-	source := entry.Source
-	switch source.Kind {
-	case core.SourceLiteral:
-		if entry.Secret {
-			digest := sha256.Sum256([]byte(source.Literal))
-			return requestidempotency.Object(
-				requestidempotency.Field{Name: "kind", Value: requestidempotency.String(string(source.Kind))},
-				requestidempotency.Field{
-					Name:  "literal_sha256",
-					Value: requestidempotency.String(hex.EncodeToString(digest[:])),
-				},
-			)
-		}
-		return requestidempotency.Object(
-			requestidempotency.Field{Name: "kind", Value: requestidempotency.String(string(source.Kind))},
-			requestidempotency.Field{Name: "literal", Value: requestidempotency.String(source.Literal)},
-		)
-	case core.SourceSecretRef:
-		return requestidempotency.Object(
-			requestidempotency.Field{Name: "kind", Value: requestidempotency.String(string(source.Kind))},
-			requestidempotency.Field{Name: "secret_ref", Value: requestidempotency.String(source.SecretRef)},
-		)
-	case core.SourceFact:
-		return requestidempotency.Object(
-			requestidempotency.Field{Name: "attach_id", Value: requestidempotency.String(source.Fact.Attach)},
-			requestidempotency.Field{Name: "fact", Value: requestidempotency.String(source.Fact.Key)},
-			requestidempotency.Field{Name: "grant_attach_id", Value: requestidempotency.String(source.Fact.Grant)},
-			requestidempotency.Field{Name: "kind", Value: requestidempotency.String(string(source.Kind))},
-		)
-	default:
-		return requestidempotency.Object()
-	}
 }
 
 func entryCreationResponse(entry core.EnvEntry) apiTypes.Entry {

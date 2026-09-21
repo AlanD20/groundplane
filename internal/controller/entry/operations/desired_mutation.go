@@ -33,13 +33,20 @@ type entryDesiredMutationRepository interface {
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetEnvironmentBlueprintHead(context.Context, string) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
+	GetEnvironmentBlueprintHead(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
-	ListEnvironmentComponents(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[componentrecord.Record], error)
+	ListEnvironmentComponents(
+		context.Context,
+		string,
+		etcdstore.PageRequest,
+	) (etcdstore.Page[componentrecord.Record], error)
 	ResolveBlueprintEntryEnvironment(context.Context, string) (string, bool, error)
 	BlueprintEntryValueGenerationExists(context.Context, entryrecord.Record) (bool, error)
 	CreateBlueprintEntryValueGeneration(context.Context, entryrecord.EntryValueGeneration) error
@@ -290,7 +297,10 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 	if candidateRecord != nil {
 		targetEntryID = candidateRecord.Entry.ID
 	}
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: targetEntryID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetEntry,
+		ID:   targetEntryID,
+	}
 	marker := idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
 		Locator: request.locator, ReplayTarget: &target, Intent: claim.Intent, Response: response,
@@ -325,10 +335,24 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	result, publicationErr := service.repository.PublishEnvironmentDesiredRevisionWithTask(
-		ctx, project, environment, expectedHeadRevision, claim,
-		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: request.environmentID, RevisionID: claim.RevisionID},
-		candidate, nil, nil, nil, groupstore.ReleaseGroupBlueprintPreparedMutation{},
-		componentplanning.ComponentTaskPreparation{}, blueprintplanning.BlueprintAttachTaskPreparation{}, task, marker,
+		ctx,
+		project,
+		environment,
+		expectedHeadRevision,
+		claim,
+		blueprints.EnvironmentDesiredRevisionIdentity{
+			EnvironmentID: request.environmentID,
+			RevisionID:    claim.RevisionID,
+		},
+		candidate,
+		nil,
+		nil,
+		nil,
+		groupstore.ReleaseGroupBlueprintPreparedMutation{},
+		componentplanning.ComponentTaskPreparation{},
+		blueprintplanning.BlueprintAttachTaskPreparation{},
+		task,
+		marker,
 	)
 	if publicationErr != nil {
 		if !isUnknownEntryCreationOutcome(publicationErr) {
@@ -345,7 +369,10 @@ func (service *entryDesiredMutationService) mutateEntryOnce(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry desired mutation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Entry desired mutation resolution is invalid",
+		)
 	}
 	return requestidempotency.CloneResponse(response), nil
 }

@@ -53,7 +53,10 @@ func (repository *TaskRepository) blueprintAcknowledgedArtifact(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
 		return nil, etcdstore.Condition{}, releases.CorruptReleaseRecord()
 	}
-	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		read.Values[0].Value,
+		"release-publication",
+	)
 	if err != nil || marker.OperationID != task.OperationID ||
 		marker.PublicationID != task.Params[releaserender.TaskReleasePublicationParam] ||
 		marker.CandidateReleaseDescriptor.PlanID != task.PlanID ||

@@ -45,7 +45,11 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		return false, true, nil
 	}
 	var intent hierarchydeletion.HierarchyDeletionIntent
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(intentRead.Values[0].Value, hierarchydeletion.HierarchyDeletionLargeRecordBytes, &intent) != nil ||
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
+		intentRead.Values[0].Value,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+		&intent,
+	) != nil ||
 		intent.OperationID != operationID {
 		return false, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
@@ -76,7 +80,8 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	if tombstone.Terminal.RetainUntil.After(now) {
 		return false, false, nil
 	}
-	if tombstone.Terminal.Status != string(taskjournal.TaskStatusCompleted) || tombstone.Phase != hierarchydeletion.HierarchyDeletionRetained {
+	if tombstone.Terminal.Status != string(taskjournal.TaskStatusCompleted) ||
+		tombstone.Phase != hierarchydeletion.HierarchyDeletionRetained {
 		transaction, transactErr := repository.store.Transact(ctx,
 			[]etcdstore.Condition{
 				{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
@@ -105,7 +110,10 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 			Schema: 1, ParentOperationID: operationID, Phase: hierarchydeletion.HierarchyDeletionPruneReceipts,
 			RetainUntil: tombstone.Terminal.RetainUntil, UpdatedAt: now,
 		}
-		value, encodeErr := hierarchydeletion.EncodeHierarchyDeletionRecord(prune, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+		value, encodeErr := hierarchydeletion.EncodeHierarchyDeletionRecord(
+			prune,
+			hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+		)
 		if encodeErr != nil {
 			return false, false, encodeErr
 		}
@@ -128,7 +136,8 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	}
 	var prune hierarchydeletion.HierarchyDeletionPruneIntent
 	if hierarchydeletion.DecodeHierarchyDeletionRecord(pruneRead.Entry.Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &prune) != nil ||
-		prune.ParentOperationID != operationID || !prune.RetainUntil.Equal(tombstone.Terminal.RetainUntil) {
+		prune.ParentOperationID != operationID ||
+		!prune.RetainUntil.Equal(tombstone.Terminal.RetainUntil) {
 		clear(pruneRead.Entry.Value)
 		return false, false, hierarchydeletion.CorruptHierarchyDeletion()
 	}
@@ -173,14 +182,19 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 			continue
 		}
 		count := min(len(page.Values), maximumTaskPruneBatchRecords)
-		conditions := []etcdstore.Condition{{Key: mustHierarchyDeletionPruneIntentKey(operationID), ModRevision: pruneRevision}}
+		conditions := []etcdstore.Condition{
+			{Key: mustHierarchyDeletionPruneIntentKey(operationID), ModRevision: pruneRevision},
+		}
 		mutations := make([]etcdstore.Mutation, 0, count)
 		for index := 0; index < count; index++ {
 			conditions = append(
 				conditions,
 				etcdstore.Condition{Key: page.Values[index].Key, ModRevision: page.Values[index].ModRevision},
 			)
-			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: page.Values[index].Key})
+			mutations = append(
+				mutations,
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: page.Values[index].Key},
+			)
 		}
 		transaction, transactErr := repository.store.Transact(ctx, conditions, mutations)
 		if transactErr != nil {
@@ -196,14 +210,20 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 		prune.Phase = nextHierarchyDeletionPrunePhase(prune.Phase)
 		prune.NextOrdinal = 0
 		prune.UpdatedAt = now
-		value, encodeErr := hierarchydeletion.EncodeHierarchyDeletionRecord(prune, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+		value, encodeErr := hierarchydeletion.EncodeHierarchyDeletionRecord(
+			prune,
+			hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+		)
 		if encodeErr != nil {
 			return false, encodeErr
 		}
 		defer clear(value)
-		transaction, transactErr := repository.store.Transact(ctx,
+		transaction, transactErr := repository.store.Transact(
+			ctx,
 			[]etcdstore.Condition{{Key: mustHierarchyDeletionPruneIntentKey(operationID), ModRevision: pruneRevision}},
-			[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: mustHierarchyDeletionPruneIntentKey(operationID), Value: value}},
+			[]etcdstore.Mutation{
+				{Type: etcdstore.MutationPut, Key: mustHierarchyDeletionPruneIntentKey(operationID), Value: value},
+			},
 		)
 		if transactErr != nil {
 			return false, transactErr
@@ -217,7 +237,10 @@ func (repository *TaskRepository) advanceHierarchyDeletionPrune(
 	return repository.finishHierarchyDeletionPrune(ctx, task, tombstone, tombstoneRevision, pruneRevision)
 }
 
-func hierarchyDeletionPrunePrefixes(operationID string, phase hierarchydeletion.HierarchyDeletionPrunePhase) ([]string, error) {
+func hierarchyDeletionPrunePrefixes(
+	operationID string,
+	phase hierarchydeletion.HierarchyDeletionPrunePhase,
+) ([]string, error) {
 	switch phase {
 	case hierarchydeletion.HierarchyDeletionPruneReceipts:
 		receipts, err := hierarchydeletion.HierarchyDeletionReceiptPrefix(operationID)
@@ -245,7 +268,9 @@ func hierarchyDeletionPrunePrefixes(operationID string, phase hierarchydeletion.
 	}
 }
 
-func nextHierarchyDeletionPrunePhase(phase hierarchydeletion.HierarchyDeletionPrunePhase) hierarchydeletion.HierarchyDeletionPrunePhase {
+func nextHierarchyDeletionPrunePhase(
+	phase hierarchydeletion.HierarchyDeletionPrunePhase,
+) hierarchydeletion.HierarchyDeletionPrunePhase {
 	switch phase {
 	case hierarchydeletion.HierarchyDeletionPruneReceipts:
 		return hierarchydeletion.HierarchyDeletionPruneProgress
@@ -278,8 +303,12 @@ func (repository *TaskRepository) finishHierarchyDeletionPrune(
 		hierarchydeletion.HierarchyDeletionLockKey(string(tombstone.TargetKind), tombstone.TargetID),
 		mustHierarchyDeletionOperationKey(hierarchydeletion.HierarchyDeletionReceiptSummaryKey(operationID)),
 		mustHierarchyDeletionOperationKey(hierarchydeletion.HierarchyDeletionCompletionSummaryKey(operationID)),
-		mustHierarchyDeletionOperationKey(hierarchydeletion.HierarchyDeletionReceiptScanCursorKey(operationID, task.ID)),
-		mustHierarchyDeletionOperationKey(hierarchydeletion.HierarchyDeletionCompletionScanCursorKey(operationID, task.ID)),
+		mustHierarchyDeletionOperationKey(
+			hierarchydeletion.HierarchyDeletionReceiptScanCursorKey(operationID, task.ID),
+		),
+		mustHierarchyDeletionOperationKey(
+			hierarchydeletion.HierarchyDeletionCompletionScanCursorKey(operationID, task.ID),
+		),
 		mustHierarchyDeletionPruneIntentKey(operationID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})

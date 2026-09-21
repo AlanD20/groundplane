@@ -40,7 +40,10 @@ func (repository *Preparer) prepareHierarchyDeletionRouteFinalizer(
 		}
 		conditions[0].ModRevision = result.Entry.ModRevision
 		digest = hierarchydeletion.HierarchyDeletionBytesDigest(result.Entry.Value)
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routerecord.ObservationKey(action.TargetID)})
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routerecord.ObservationKey(action.TargetID)},
+		)
 		clear(result.Entry.Value)
 	}
 	return Effects{
@@ -87,7 +90,11 @@ func (repository *Preparer) prepareHierarchyDeletionZoneFinalizer(
 	}
 	defer clear(zoneValue)
 	zone := zonerecord.Record{EnvironmentID: evidence.EnvironmentID, Desired: evidence.Desired}
-	poolKey, addressesKey := networkreservations.ZonePoolRegistryKey(evidence.EnvironmentID), networkreservations.ComponentAddressRegistryKey(action.TargetID)
+	poolKey, addressesKey := networkreservations.ZonePoolRegistryKey(
+		evidence.EnvironmentID,
+	), networkreservations.ComponentAddressRegistryKey(
+		action.TargetID,
+	)
 	values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		poolKey, addressesKey,
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), evidence.ZoneID),
@@ -145,6 +152,9 @@ func (repository *Preparer) prepareHierarchyDeletionZoneFinalizer(
 		return Effects{}, err
 	}
 	effects.values = append(effects.values, poolValue)
-	effects.mutations = append(effects.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: poolKey, Value: poolValue})
+	effects.mutations = append(
+		effects.mutations,
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: poolKey, Value: poolValue},
+	)
 	return effects, nil
 }

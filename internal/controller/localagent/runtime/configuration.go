@@ -213,7 +213,12 @@ func (adapter *localAgentRepositoryAdapter) updateConfigOnce(
 	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, adapter.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
+		locator,
+		evidence.durable,
+		response,
+		adapter.now().UTC(),
+	)
 	if err != nil {
 		return localagent.ConfigUpdateResult{}, err
 	}

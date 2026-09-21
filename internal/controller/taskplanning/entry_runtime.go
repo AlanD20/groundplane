@@ -111,8 +111,14 @@ func (resolver *TaskPlanResolver) CaptureEntryMutationRuntime(
 			return EntryMutationRuntime{}, err
 		}
 	}
-	baseline, err = composerender.MutateEnvironmentEntryArtifact(baseline, current.Record,
-		composerender.EnvironmentEntryArtifactMutation{ArtifactID: baseline.ArtifactId, Entries: current.Record.Entries})
+	baseline, err = composerender.MutateEnvironmentEntryArtifact(
+		baseline,
+		current.Record,
+		composerender.EnvironmentEntryArtifactMutation{
+			ArtifactID: baseline.ArtifactId,
+			Entries:    current.Record.Entries,
+		},
+	)
 	if err != nil {
 		return EntryMutationRuntime{}, err
 	}
@@ -156,7 +162,13 @@ func entryRuntimeWithoutReplacedProxyConfigs(
 			continue
 		}
 		configName := "gp-proxy-" + strings.ToLower(service.ServiceId)
-		configIndex, serviceIndex := composerender.MappingIndex(root, "configs"), composerender.MappingIndex(services, service.ComposeName)
+		configIndex, serviceIndex := composerender.MappingIndex(
+			root,
+			"configs",
+		), composerender.MappingIndex(
+			services,
+			service.ComposeName,
+		)
 		if service.OwnerComponentId != "" || configIndex < 0 || serviceIndex < 0 {
 			return nil, errs.New(errs.KindStateConflict, "Entry proxy config ownership changed")
 		}

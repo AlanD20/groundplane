@@ -204,7 +204,8 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 	if err != nil {
 		return nil, err
 	}
-	if claim.Executor != taskjournal.TaskExecutorController || claimValue.Key != taskjournal.ControllerTaskClaimKey(claim.TaskID) ||
+	if claim.Executor != taskjournal.TaskExecutorController ||
+		claimValue.Key != taskjournal.ControllerTaskClaimKey(claim.TaskID) ||
 		claim.ClaimedTaskRevision >= claimValue.ModRevision {
 		return nil, errs.New(errs.KindInternal, "controller Task claim does not match its key")
 	}

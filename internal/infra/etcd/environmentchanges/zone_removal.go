@@ -92,7 +92,11 @@ func TransferZoneRemovalIntent(
 	return next, nil
 }
 
-func TerminalZoneRemovalIntent(intent ZoneRemovalIntent, status taskjournal.TaskStatus, at time.Time) (ZoneRemovalIntent, error) {
+func TerminalZoneRemovalIntent(
+	intent ZoneRemovalIntent,
+	status taskjournal.TaskStatus,
+	at time.Time,
+) (ZoneRemovalIntent, error) {
 	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) {
 		return ZoneRemovalIntent{}, errs.New(errs.KindStateConflict, "Zone removal intent is not pending")
 	}
@@ -162,7 +166,9 @@ func ValidateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 		}
 		expected.DesiredZones = append(expected.DesiredZones, zone)
 	}
-	expected.DesiredServices = append([]servicerecord.EnvironmentServiceProjection(nil), intent.DesiredProjection.DesiredServices...)
+	expected.DesiredServices = append(
+		[]servicerecord.EnvironmentServiceProjection(nil),
+		intent.DesiredProjection.DesiredServices...)
 	affected := make([]string, 0)
 	for index, service := range intent.DesiredProjection.DesiredServices {
 		expected.DesiredServices[index] = service

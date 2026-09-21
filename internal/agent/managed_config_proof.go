@@ -26,7 +26,10 @@ func managedConfigCommitProven(step *agentpb.ExecutionStep, state componentactio
 		managedConfigFileStateMatches(state.Previous, action.GetExpectedPreviousArtifactDigest())
 }
 
-func managedConfigRollbackProven(step *agentpb.ExecutionStep, state componentaction.ManagedConfigTransactionState) bool {
+func managedConfigRollbackProven(
+	step *agentpb.ExecutionStep,
+	state componentaction.ManagedConfigTransactionState,
+) bool {
 	if step == nil || step.GetComponentApply() == nil {
 		return false
 	}

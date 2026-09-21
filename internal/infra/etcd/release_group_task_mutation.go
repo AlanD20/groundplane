@@ -32,7 +32,8 @@ func (repository *TaskRepository) PublishReleaseGroupDirectMutation(
 			"release group direct mutation identity is invalid",
 		)
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != prepared.EnvironmentID() {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -82,7 +83,8 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != environment.Record.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
+		marker.Locator.ScopeID != environment.Record.ID ||
+		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -118,11 +120,24 @@ func (repository *TaskRepository) PublishReleaseGroupMutation(
 		etcdstore.Condition{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 	)
 	mutations := prepared.Mutations()
-	mutations = append(mutations,
+	mutations = append(
+		mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskActiveOperationKey(task.OperationID),
+			Value: reference,
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskQueueKey(task.Executor, task.ID),
+			Value: reference,
+		},
 	)
 	if prepared.TaskType() == taskjournal.TaskRemove {
 		tombstone := deletionrecord.DeletionTombstoneRecord{

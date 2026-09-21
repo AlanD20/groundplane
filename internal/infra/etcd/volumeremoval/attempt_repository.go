@@ -187,7 +187,8 @@ func validateEnvironmentVolumeRemovalRootMarker(
 ) error {
 	marker, err := idempotencyrecord.DecodeIdempotencyMarker(value, volumeRemovalRootLocator(runtime))
 	if err != nil || marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != runtime.OriginTaskID || marker.Locator != volumeRemovalRootLocator(runtime) ||
+		marker.TaskID != runtime.OriginTaskID ||
+		marker.Locator != volumeRemovalRootLocator(runtime) ||
 		marker.Response.Status != http.StatusAccepted ||
 		sha256.Sum256(marker.Response.Body) != runtime.RootResponseSHA256 {
 		return errs.New(

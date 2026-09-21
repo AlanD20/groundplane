@@ -126,17 +126,32 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 	}
 	conditions := []etcdstore.Condition{
 		{Key: hierarchyrecord.EnvironmentKey(environment.ID), ModRevision: environmentValue.ModRevision},
-		{Key: hierarchyrecord.EnvironmentNameKey(environment.ProjectID, environment.Name), ModRevision: indexes.Values[0].ModRevision},
-		{Key: hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID), ModRevision: indexes.Values[1].ModRevision},
+		{
+			Key:         hierarchyrecord.EnvironmentNameKey(environment.ProjectID, environment.Name),
+			ModRevision: indexes.Values[0].ModRevision,
+		},
+		{
+			Key:         hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID),
+			ModRevision: indexes.Values[1].ModRevision,
+		},
 		{
 			Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID),
 			ModRevision: tombstoneValue.ModRevision,
 		},
-		{Key: blueprints.EnvironmentBlueprintHeadKey(environment.ID), ModRevision: etcdstore.RevisionOf(stored.Values[2])},
-		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.ID), ModRevision: etcdstore.RevisionOf(stored.Values[3])},
+		{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(environment.ID),
+			ModRevision: etcdstore.RevisionOf(stored.Values[2]),
+		},
+		{
+			Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(environment.ID),
+			ModRevision: etcdstore.RevisionOf(stored.Values[3]),
+		},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.ID), ModRevision: stored.Values[5].ModRevision},
 		{Key: hierarchyrecord.EnvironmentOperationLockKey(environment.ID), ModRevision: stored.Values[6].ModRevision},
-		{Key: groupstore.ReleaseGroupCollectionEpochKey(environment.ID), ModRevision: etcdstore.RevisionOf(stored.Values[7])},
+		{
+			Key:         groupstore.ReleaseGroupCollectionEpochKey(environment.ID),
+			ModRevision: etcdstore.RevisionOf(stored.Values[7]),
+		},
 	}
 	conditions, err = environmentfence.AppendConditions(conditions, ownedFence)
 	if err != nil {
@@ -150,7 +165,9 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 				return nil, nil, errs.New(errs.KindInternal, "environment deletion desired projection is incomplete")
 			}
 			revisionID, decodeErr := idempotencyrecord.DecodeTaskReference(stored.Values[2].Value)
-			projection, projectionErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(stored.Values[3].Value)
+			projection, projectionErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(
+				stored.Values[3].Value,
+			)
 			if decodeErr != nil || projectionErr != nil || projection.EnvironmentID != environment.ID ||
 				projection.RevisionID != revisionID {
 				return nil, nil, errs.New(errs.KindInternal, "environment deletion desired projection is corrupt")
@@ -168,23 +185,37 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		); err != nil {
 			return nil, nil, err
 		}
-		conditions = append(conditions,
-			hierarchydeletionfinalization.EnvironmentDeletionLiveAuthorityConditions(environment.ID, task.OperationID, projectedKeys...)...)
+		conditions = append(
+			conditions,
+			hierarchydeletionfinalization.EnvironmentDeletionLiveAuthorityConditions(
+				environment.ID,
+				task.OperationID,
+				projectedKeys...)...)
 	}
 	mutations := make([]etcdstore.Mutation, 0, len(intentMutations)+12)
 	if terminalStatus == taskjournal.TaskStatusCompleted {
-		mutations = append(mutations,
+		mutations = append(
+			mutations,
 			etcdstore.Mutation{
 				Type: etcdstore.MutationDelete,
 				Key:  deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID),
 			},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(environment.ID)},
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  hierarchyrecord.EnvironmentOperationLockKey(environment.ID),
+			},
 		)
 		mutations = append(mutations, intentMutations...)
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: groupstore.ReleaseGroupCollectionEpochKey(environment.ID)},
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  hierarchyrecord.EnvironmentMutationEpochKey(environment.ID),
+			},
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  groupstore.ReleaseGroupCollectionEpochKey(environment.ID),
+			},
 		)
 		nextPoolRegistry, err := poolRegistry.Release(environment.ID, environment.NetworkPool)
 		if err != nil {
@@ -232,7 +263,10 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		if stored.Values[2] != nil {
 			mutations = append(
 				mutations,
-				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: blueprints.EnvironmentBlueprintHeadKey(environment.ID)},
+				etcdstore.Mutation{
+					Type: etcdstore.MutationDelete,
+					Key:  blueprints.EnvironmentBlueprintHeadKey(environment.ID),
+				},
 				etcdstore.Mutation{
 					Type: etcdstore.MutationDelete,
 					Key:  projectionrecord.EnvironmentComposeProjectionStorageKey(environment.ID),
@@ -250,8 +284,16 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 				Key:  hierarchyrecord.EnvironmentOwnerKey(environment.ProjectID, environment.ID),
 			},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentKey(environment.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptSetEnvironmentPrefix(environment.ID), Prefix: true},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(environment.ID), Prefix: true},
+			etcdstore.Mutation{
+				Type:   etcdstore.MutationDelete,
+				Key:    scriptrecord.ScriptSetEnvironmentPrefix(environment.ID),
+				Prefix: true,
+			},
+			etcdstore.Mutation{
+				Type:   etcdstore.MutationDelete,
+				Key:    scriptrecord.ScriptEnvironmentLocatorPrefixFor(environment.ID),
+				Prefix: true,
+			},
 		)
 	} else {
 		epochValue, err := backupruntime.EncodeEnvironmentMutationEpochRecord(epoch)

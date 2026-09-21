@@ -70,7 +70,10 @@ func (repository *EtcdRepository) InspectRemoval(
 	if repository == nil {
 		return RemovalInspection{}, errs.New(errs.KindInternal, "entry deletion persistence is not configured")
 	}
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: request.EntryID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetEntry,
+		ID:   request.EntryID,
+	}
 	locator, indexed, err := repository.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, entryDeletionRoute, request.IdempotencyKey,
 	)
@@ -110,7 +113,10 @@ func (repository *EtcdRepository) PublishRemoval(
 		return RemovalOutcome{}, errs.New(errs.KindInternal, "entry deletion persistence is not configured")
 	}
 	request := publication.Request
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: request.EntryID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetEntry,
+		ID:   request.EntryID,
+	}
 	locator, indexed, err := repository.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, entryDeletionRoute, request.IdempotencyKey,
 	)
@@ -450,7 +456,10 @@ func persistedRemovalMaterialization(input RemovalMaterialization) (materializat
 		if input.Source.GeneratedEnvironment == nil {
 			return materializationrecord.Record{}, errs.New(errs.KindInternal, "entry removal source is incomplete")
 		}
-		values := make([]materializationrecord.GeneratedEnvironmentEntryReference, len(input.Source.GeneratedEnvironment.Values))
+		values := make(
+			[]materializationrecord.GeneratedEnvironmentEntryReference,
+			len(input.Source.GeneratedEnvironment.Values),
+		)
 		for index, value := range input.Source.GeneratedEnvironment.Values {
 			storage, err := persistedRemovalValueStorage(value.Storage)
 			if err != nil {

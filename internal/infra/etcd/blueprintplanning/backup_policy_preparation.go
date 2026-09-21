@@ -265,7 +265,12 @@ func (repository *BackupPolicyPlanner) resolveBlueprintBackupConnector(
 	if ids.Validate(ids.KindConnector, connectorID) != nil {
 		return "", nil, nil, nil, connectorrecord.CorruptRecord()
 	}
-	connector, owner, err := repository.policy.LoadBackupPolicyConnectorEvidence(ctx, environmentID, connectorID, revision)
+	connector, owner, err := repository.policy.LoadBackupPolicyConnectorEvidence(
+		ctx,
+		environmentID,
+		connectorID,
+		revision,
+	)
 	if err != nil {
 		return "", nil, nil, nil, err
 	}
@@ -273,7 +278,9 @@ func (repository *BackupPolicyPlanner) resolveBlueprintBackupConnector(
 		return "", nil, nil, nil, connectorrecord.CorruptRecord()
 	}
 	tombstone, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID)}, Revision: revision,
+		Keys: []string{
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID),
+		}, Revision: revision,
 	})
 	if err != nil {
 		return "", nil, nil, nil, err
@@ -284,5 +291,7 @@ func (repository *BackupPolicyPlanner) resolveBlueprintBackupConnector(
 	if tombstone.Values[0] != nil {
 		return "", nil, nil, nil, errs.New(errs.KindResourceInUse, "connector deletion is in progress")
 	}
-	return connectorID, connector, owner, backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(nameRead.Values[0]), nil
+	return connectorID, connector, owner, backuppolicymutations.CloneBackupPolicyEvidenceKeyValue(
+		nameRead.Values[0],
+	), nil
 }

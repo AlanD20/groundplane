@@ -25,7 +25,10 @@ type applyBaseline struct {
 	generation           uint64
 }
 
-func (service *Service) loadApplyBaseline(ctx context.Context, environmentID, expectedRevision string) (applyBaseline, error) {
+func (service *Service) loadApplyBaseline(
+	ctx context.Context,
+	environmentID, expectedRevision string,
+) (applyBaseline, error) {
 	environment, err := service.repository.GetEnvironment(ctx, environmentID)
 	if err != nil {
 		return applyBaseline{}, err
@@ -71,5 +74,15 @@ func (service *Service) loadApplyBaseline(ctx context.Context, environmentID, ex
 		return applyBaseline{}, errs.New(errs.KindInternal, "Environment render generation is exhausted")
 	}
 
-	return applyBaseline{environment: environment, project: project, tenant: tenant, taskOwner: taskOwner, previousProjection: previousProjection, hasProjection: hasProjection, expectedHeadRevision: expectedHeadRevision, previous: previous, generation: generation}, nil
+	return applyBaseline{
+		environment:          environment,
+		project:              project,
+		tenant:               tenant,
+		taskOwner:            taskOwner,
+		previousProjection:   previousProjection,
+		hasProjection:        hasProjection,
+		expectedHeadRevision: expectedHeadRevision,
+		previous:             previous,
+		generation:           generation,
+	}, nil
 }

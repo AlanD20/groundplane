@@ -20,7 +20,11 @@ import (
 // Retry publishes the successor and its operation ownership together. The
 // accepted DELETE response and all completed traversal work remain unchanged.
 func (repository *TaskRepository) retryVolumeRemovalTask(
-	ctx context.Context, source etcdstore.Versioned[TaskRecord], retryID string, actor taskjournal.TaskActor, marker idempotencyrecord.IdempotencyMarker,
+	ctx context.Context,
+	source etcdstore.Versioned[TaskRecord],
+	retryID string,
+	actor taskjournal.TaskActor,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	if actor != taskjournal.TaskActorOperator ||
 		(source.Record.Status != taskjournal.TaskStatusFailed && source.Record.Status != taskjournal.TaskStatusTimedOut) {
@@ -36,7 +40,8 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != retry.ID ||
 		marker.Locator.Method != http.MethodPost || marker.Locator.Route != "/tasks/{id}/retry" ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || marker.Locator.ScopeID != source.Record.Owner.EnvironmentID ||
-		marker.ReplayTarget != nil || !marker.CreatedAt.Equal(marker.UpdatedAt) || idempotencyrecord.ValidateIdempotencyMarker(marker) != nil {
+		marker.ReplayTarget != nil || !marker.CreatedAt.Equal(marker.UpdatedAt) ||
+		idempotencyrecord.ValidateIdempotencyMarker(marker) != nil {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Volume removal retry marker is invalid",
@@ -64,15 +69,24 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		retry.CreatedAt.Before(*source.Record.FinishedAt) {
 		return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	locator := idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
-		ScopeID: runtime.RootLocator.ScopeID, Method: runtime.RootLocator.Method,
-		Route: runtime.RootLocator.Route, Key: runtime.RootLocator.Key}
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
+		ScopeID:   runtime.RootLocator.ScopeID,
+		Method:    runtime.RootLocator.Method,
+		Route:     runtime.RootLocator.Route,
+		Key:       runtime.RootLocator.Key,
+	}
 	rootKey, err := idempotencyrecord.IdempotencyMarkerKey(locator)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	replayKey, err := idempotencyrecord.IdempotencyReplayTargetKey(idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
-		ID: runtime.VolumeID}, locator.Method, locator.Route, locator.Key)
+	replayKey, err := idempotencyrecord.IdempotencyReplayTargetKey(
+		idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
+			ID: runtime.VolumeID},
+		locator.Method,
+		locator.Route,
+		locator.Key,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -81,12 +95,21 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		removalrecord.EnvironmentLockKey(
 			runtime.EnvironmentID,
 		), rootKey, replayKey, blueprints.EnvironmentBlueprintHeadKey(runtime.EnvironmentID),
-		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), runtime.EnvironmentID),
-		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetProject), source.Record.Owner.ProjectID)}
+		hierarchydeletion.HierarchyDeletionTombstoneKey(
+			string(hierarchydeletion.HierarchyDeletionTargetEnvironment),
+			runtime.EnvironmentID,
+		),
+		hierarchydeletion.HierarchyDeletionTombstoneKey(
+			string(hierarchydeletion.HierarchyDeletionTargetProject),
+			source.Record.Owner.ProjectID,
+		)}
 	if source.Record.Owner.TenantID != "" {
 		keys = append(
 			keys,
-			hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetTenant), source.Record.Owner.TenantID),
+			hierarchydeletion.HierarchyDeletionTombstoneKey(
+				string(hierarchydeletion.HierarchyDeletionTargetTenant),
+				source.Record.Owner.TenantID,
+			),
 		)
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: source.ReadRevision})
@@ -97,10 +120,18 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 	}
 	defer etcdstore.ClearValues(read.Values)
-	conditions := []etcdstore.Condition{{Key: taskjournal.TaskStorageKey(source.Record.ID), ModRevision: source.Revision},
-		{Key: taskjournal.TaskStorageKey(retry.ID)}, {Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID)},
-		{Key: taskjournal.TaskActiveOperationKey(retry.OperationID)}, {Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID)},
-		{Key: runtimeKey, ModRevision: runtimeRead.Values[0].ModRevision}}
+	conditions := []etcdstore.Condition{
+		{Key: taskjournal.TaskStorageKey(source.Record.ID), ModRevision: source.Revision},
+		{
+			Key: taskjournal.TaskStorageKey(retry.ID),
+		},
+		{Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID)},
+		{
+			Key: taskjournal.TaskActiveOperationKey(retry.OperationID),
+		},
+		{Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID)},
+		{Key: runtimeKey, ModRevision: runtimeRead.Values[0].ModRevision},
+	}
 	for index, value := range read.Values {
 		absent := index >= 8
 		if absent && value != nil || !absent && index != 1 && value == nil ||
@@ -110,7 +141,10 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		// Reserved idempotency keys are bound by the closed commit below, not
 		// exposed as writable keys in a generic Task mutation plan.
 		if index != 5 && index != 6 {
-			conditions = append(conditions, etcdstore.Condition{Key: keys[index], ModRevision: etcdstore.RevisionOf(value)})
+			conditions = append(
+				conditions,
+				etcdstore.Condition{Key: keys[index], ModRevision: etcdstore.RevisionOf(value)},
+			)
 		}
 	}
 	progress, err := removalrecord.DecodeProgress(read.Values[0].Value)
@@ -167,7 +201,8 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	}
 	defer clear(root.Intent.Ciphertext)
 	defer clear(root.Response.Body)
-	if root.Kind != idempotencyrecord.IdempotencyMarkerTask || root.State != idempotencyrecord.IdempotencyMarkerPending ||
+	if root.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		root.State != idempotencyrecord.IdempotencyMarkerPending ||
 		root.TaskID != runtime.OriginTaskID ||
 		root.Response.Status != http.StatusAccepted ||
 		root.ReplayTarget == nil ||
@@ -208,13 +243,26 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(attemptValue)
-	conditions = append(conditions, etcdstore.Condition{Key: removalrecord.AttemptKey(runtime.OperationID, attempt.Ordinal)})
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(retry.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+	conditions = append(
+		conditions,
+		etcdstore.Condition{Key: removalrecord.AttemptKey(runtime.OperationID, attempt.Ordinal)},
+	)
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(retry.ID), Value: taskValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(retry.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: runtimeKey, Value: runtimeValue},
-		{Type: etcdstore.MutationPut, Key: removalrecord.AttemptKey(runtime.OperationID, attempt.Ordinal), Value: attemptValue}}
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   removalrecord.AttemptKey(runtime.OperationID, attempt.Ordinal),
+			Value: attemptValue,
+		},
+	}
 	ancestry, err := hierarchydeletion.BindMutationEpochs(
 		ctx,
 		repository.store,

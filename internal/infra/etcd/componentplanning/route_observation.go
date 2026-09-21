@@ -113,7 +113,10 @@ func (repository *Planner) prepareComponentTaskRouteObservationStatus(
 			return RouteObservationChange{}, encodeErr
 		}
 		key := routerecord.ObservationKey(candidate.Desired.ID)
-		read, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
+		read, readErr := repository.store.GetMany(
+			ctx,
+			etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision},
+		)
 		if readErr != nil {
 			clear(encoded)
 			return RouteObservationChange{}, readErr
@@ -137,7 +140,10 @@ func (repository *Planner) prepareComponentTaskRouteObservationStatus(
 		}
 		change.conditions = append(change.conditions, condition)
 		change.values = append(change.values, encoded)
-		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded})
+		change.mutations = append(
+			change.mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded},
+		)
 	}
 	return change, nil
 }

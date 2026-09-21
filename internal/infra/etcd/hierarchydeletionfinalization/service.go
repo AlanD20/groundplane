@@ -15,7 +15,11 @@ func (repository *Preparer) prepareHierarchyDeletionServiceFinalizer(
 	ctx context.Context,
 	action hierarchydeletion.HierarchyDeletionAction,
 ) (Effects, error) {
-	primary, err := repository.readHierarchyDeletionPrimary(ctx, servicerecord.ServiceRuntimeKey(action.TargetID), action)
+	primary, err := repository.readHierarchyDeletionPrimary(
+		ctx,
+		servicerecord.ServiceRuntimeKey(action.TargetID),
+		action,
+	)
 	if err != nil {
 		return Effects{}, err
 	}

@@ -56,7 +56,11 @@ func (repository *BackupPolicyPlanner) GetEnvironmentBlueprintBackupPolicySnapsh
 	}
 	keys := make([]string, 0, len(policy.SourceIDs)*3+2)
 	for _, sourceID := range policy.SourceIDs {
-		keys = append(keys, backuppolicy.BackupSourceKey(sourceID), backuppolicy.BackupSourceEnvironmentKey(environmentID, sourceID))
+		keys = append(
+			keys,
+			backuppolicy.BackupSourceKey(sourceID),
+			backuppolicy.BackupSourceEnvironmentKey(environmentID, sourceID),
+		)
 	}
 	if policy.ConnectorID != "" {
 		keys = append(

@@ -80,7 +80,10 @@ func (service *MutationService) CreateVolume(
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil || ids.Validate(ids.KindEnvironment, input.EnvironmentID) != nil ||
 		slug.Validate("volume slug", input.Slug) != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Volume creation input is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume creation input is invalid",
+		)
 	}
 	keySupplied := input.Key != ""
 	if input.Key == "" {
@@ -112,7 +115,10 @@ func (service *MutationService) EditVolume(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil || ids.Validate(ids.KindVolume, volumeID) != nil || slug.Validate("volume slug", input.Slug) != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Volume edit input is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume edit input is invalid",
+		)
 	}
 	projection, identity, err := service.repository.FindEnvironmentVolume(ctx, volumeID)
 	if err != nil {
@@ -141,9 +147,15 @@ func (service *MutationService) RemoveVolume(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil || ids.Validate(ids.KindVolume, volumeID) != nil || len(impactToken) != sha256.Size*2 {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Volume removal input is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Volume removal input is invalid",
+		)
 	}
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetVolume, ID: volumeID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
+		ID:   volumeID,
+	}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, volumeIdentityRoute, idempotencyKey,
 	)
@@ -210,7 +222,10 @@ func (service *MutationService) replayVolumeRemoval(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Volume removal replay index is inconsistent")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Volume removal replay index is inconsistent",
+		)
 	}
 	return replayResponse(resolution)
 }
@@ -258,7 +273,10 @@ func (service *MutationService) mutateWithRetry(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Volume mutation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Volume mutation retry bound was not enforced",
+	)
 }
 
 func (service *MutationService) mutateOnce(
@@ -392,7 +410,10 @@ func (service *MutationService) mutateOnce(
 	}
 	intentDigest, err := hex.DecodeString(claim.Intent.CiphertextDigest)
 	if err != nil || len(intentDigest) != sha256.Size {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Volume protected intent digest is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Volume protected intent digest is invalid",
+		)
 	}
 	if request.action == volumeMutationActionRemove {
 		candidate.Backup = removalPolicy.Projection()
@@ -467,7 +488,10 @@ func (service *MutationService) mutateOnce(
 		CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
 	if request.action == volumeMutationActionRemove {
-		target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetVolume, ID: request.volumeID}
+		target := idempotencyrecord.IdempotencyReplayTarget{
+			Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
+			ID:   request.volumeID,
+		}
 		marker.ReplayTarget = &target
 	}
 	var result etcd.IdempotencyTransactionResult
@@ -514,7 +538,10 @@ func (service *MutationService) mutateOnce(
 		return cloneResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Volume mutation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Volume mutation resolution is invalid",
+		)
 	}
 	return cloneResponse(response), nil
 }

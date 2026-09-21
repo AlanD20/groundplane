@@ -35,7 +35,8 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(read.Values[0].Value)
 	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEntry || tombstone.TargetID != intent.EntryID ||
-		tombstone.TaskID != task.ID || tombstone.TargetRevision != intent.EntryRevision ||
+		tombstone.TaskID != task.ID ||
+		tombstone.TargetRevision != intent.EntryRevision ||
 		tombstone.Phase != entryRemovalTombstonePhase(intent) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal tombstone changed")
 	}
@@ -48,13 +49,22 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 		return routeTaskChange{}, err
 	}
 	change := routeTaskChange{applies: true,
-		conditions: []etcdstore.Condition{{Key: environmentchanges.EntryRemovalIntentKey(task.ID), ModRevision: intentRevision},
+		conditions: []etcdstore.Condition{
+			{Key: environmentchanges.EntryRemovalIntentKey(task.ID), ModRevision: intentRevision},
 			{
 				Key:         keys[0],
 				ModRevision: read.Values[0].ModRevision,
-			}, {Key: keys[1], ModRevision: read.Values[1].ModRevision}},
-		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: environmentchanges.EntryRemovalIntentKey(task.ID), Value: value},
-			{Type: etcdstore.MutationDelete, Key: keys[0]}, {Type: etcdstore.MutationDelete, Key: keys[1]}}, values: [][]byte{value}}
+			},
+			{Key: keys[1], ModRevision: read.Values[1].ModRevision},
+		},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: environmentchanges.EntryRemovalIntentKey(task.ID), Value: value},
+			{
+				Type: etcdstore.MutationDelete,
+				Key:  keys[0],
+			},
+			{Type: etcdstore.MutationDelete, Key: keys[1]},
+		}, values: [][]byte{value}}
 	if task.Executor == taskjournal.TaskExecutorController {
 		if read.Values[2] == nil {
 			clearRouteTaskChange(change)
@@ -71,7 +81,10 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 				"Entry removal materialization exclusion changed",
 			)
 		}
-		change.conditions = append(change.conditions, etcdstore.Condition{Key: keys[2], ModRevision: read.Values[2].ModRevision})
+		change.conditions = append(
+			change.conditions,
+			etcdstore.Condition{Key: keys[2], ModRevision: read.Values[2].ModRevision},
+		)
 		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[2]})
 	}
 	if status != taskjournal.TaskStatusCompleted {
@@ -95,7 +108,9 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 	keys := []string{blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		blueprints.EnvironmentBlueprintDescriptorKeyByID(desired.DescriptorID),
 		blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, desired.RevisionID),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), entries.BlueprintEntryEnvironmentPrefix + intent.EntryID}
+		projectionrecord.EnvironmentComposeProjectionStorageKey(
+			intent.EnvironmentID,
+		), entries.BlueprintEntryEnvironmentPrefix + intent.EntryID}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err
@@ -178,7 +193,11 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 			}, {Key: keys[2], ModRevision: read.Values[2].ModRevision},
 			{Key: keys[4], ModRevision: read.Values[4].ModRevision}},
 		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: keys[0], Value: reference},
-			{Type: etcdstore.MutationPut, Key: keys[1], Value: descriptorValue}, {Type: etcdstore.MutationDelete, Key: locatorKey},
+			{
+				Type:  etcdstore.MutationPut,
+				Key:   keys[1],
+				Value: descriptorValue,
+			}, {Type: etcdstore.MutationDelete, Key: locatorKey},
 			{Type: etcdstore.MutationDelete, Key: keys[4]},
 			{Type: etcdstore.MutationDelete, Key: entryvalues.PlainPrefix + intent.EntryID + "/", Prefix: true},
 			{Type: etcdstore.MutationDelete, Key: entryvalues.SecretPrefix + intent.EntryID + "/", Prefix: true}},
@@ -216,7 +235,10 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 			clearRouteTaskChange(change)
 			return routeTaskChange{}, err
 		}
-		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[3], Value: appliedValue})
+		change.mutations = append(
+			change.mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[3], Value: appliedValue},
+		)
 		change.values = append(change.values, appliedValue)
 	}
 	return change, nil

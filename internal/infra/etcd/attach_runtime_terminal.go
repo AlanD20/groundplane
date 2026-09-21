@@ -114,13 +114,19 @@ func (repository *TaskRepository) readAttachRuntimePreparation(
 ) (attachrender.AttachTaskRenderInput, int64, error) {
 	snapshot, err := repository.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{attachrender.AttachTaskRenderInputKey(task.PlanID)}, Revision: revision},
+		etcdstore.GetManyRequest{
+			Keys:     []string{attachrender.AttachTaskRenderInputKey(task.PlanID)},
+			Revision: revision,
+		},
 	)
 	if err != nil {
 		return attachrender.AttachTaskRenderInput{}, 0, err
 	}
 	if snapshot == nil || snapshot.ReadRevision != revision || len(snapshot.Values) != 1 || snapshot.Values[0] == nil {
-		return attachrender.AttachTaskRenderInput{}, 0, errs.New(errs.KindStateConflict, "Attach runtime preparation is missing")
+		return attachrender.AttachTaskRenderInput{}, 0, errs.New(
+			errs.KindStateConflict,
+			"Attach runtime preparation is missing",
+		)
 	}
 	defer etcdstore.ClearValues(snapshot.Values)
 	input, err := attachrender.DecodeAttachTaskRenderInput(snapshot.Values[0].Value)
@@ -143,10 +149,15 @@ func (repository *TaskRepository) attachRuntimeClaimConditions(
 	if err != nil {
 		return nil, err
 	}
-	conditions := []etcdstore.Condition{{Key: attachrender.AttachTaskRenderInputKey(task.PlanID), ModRevision: inputRevision}}
+	conditions := []etcdstore.Condition{
+		{Key: attachrender.AttachTaskRenderInputKey(task.PlanID), ModRevision: inputRevision},
+	}
 	for _, update := range input.RuntimePreparation.Updates {
 		key := serviceruntimerecord.Key(update.Runtime.ServiceID)
-		snapshot, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
+		snapshot, err := repository.store.GetMany(
+			ctx,
+			etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision},
+		)
 		if err != nil {
 			return nil, err
 		}

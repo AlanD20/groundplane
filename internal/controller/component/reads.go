@@ -15,7 +15,11 @@ import (
 
 type readRepository interface {
 	GetComponent(context.Context, string) (etcdstore.Versioned[componentrecord.Record], error)
-	ListEnvironmentComponents(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[componentrecord.Record], error)
+	ListEnvironmentComponents(
+		context.Context,
+		string,
+		etcdstore.PageRequest,
+	) (etcdstore.Page[componentrecord.Record], error)
 	ListPlatformComponents(context.Context, etcdstore.PageRequest) (etcdstore.Page[componentrecord.Record], error)
 }
 
@@ -46,7 +50,10 @@ func (service *ReadService) ListComponents(
 	var records etcdstore.Page[componentrecord.Record]
 	var err error
 	if platform {
-		records, err = service.repository.ListPlatformComponents(ctx, etcdstore.PageRequest{Limit: etcdstore.MaximumPageLimit})
+		records, err = service.repository.ListPlatformComponents(
+			ctx,
+			etcdstore.PageRequest{Limit: etcdstore.MaximumPageLimit},
+		)
 	} else {
 		if ids.Validate(ids.KindEnvironment, environmentID) != nil {
 			return nil, errs.New(errs.KindValidationFailed, "Component Environment id is invalid")

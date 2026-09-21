@@ -29,7 +29,8 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 	if err := hierarchyrecord.ValidateProject(replacement); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if current.Record.Kind != hierarchyrecord.ProjectKindTenant || replacement.Kind != hierarchyrecord.ProjectKindTenant {
+	if current.Record.Kind != hierarchyrecord.ProjectKindTenant ||
+		replacement.Kind != hierarchyrecord.ProjectKindTenant {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	if current.Record.ID != replacement.ID || current.Record.TenantID != replacement.TenantID ||
@@ -41,7 +42,8 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 		)
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject || marker.Locator.ScopeID != current.Record.ID {
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject ||
+		marker.Locator.ScopeID != current.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Project mutation marker must be a completed Project-scoped direct mutation",
 		)
@@ -99,12 +101,19 @@ func (repository *HierarchyRepository) MutateProjectIdempotent(
 		{Key: deletions.TombstoneKey("project", current.Record.ID)},
 		{Key: deletions.TombstoneKey("tenant", current.Record.TenantID)},
 	}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(current.Record.ID), Value: value}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(current.Record.ID), Value: value},
+	}
 	if renaming {
 		conditions = append(conditions, etcdstore.Condition{Key: hierarchyrecord.ProjectSlugKey(replacement)})
-		mutations = append(mutations,
+		mutations = append(
+			mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.ProjectSlugKey(current.Record)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectSlugKey(replacement), Value: []byte(current.Record.ID)},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   hierarchyrecord.ProjectSlugKey(replacement),
+				Value: []byte(current.Record.ID),
+			},
 		)
 	}
 	plan, err := NewIdempotencyMutationPlan(

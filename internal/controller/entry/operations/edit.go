@@ -245,7 +245,10 @@ func (service *entryEditService) editEntryOnce(
 	input entryEditInput,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: entryID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetEntry,
+		ID:   entryID,
+	}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx,
 		target,

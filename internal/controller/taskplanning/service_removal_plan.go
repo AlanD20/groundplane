@@ -16,7 +16,10 @@ import (
 )
 
 type serviceRemovalPlanReader interface {
-	GetServiceRemovalIntent(context.Context, string) (etcdstore.Versioned[environmentchanges.ServiceRemovalIntent], bool, error)
+	GetServiceRemovalIntent(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[environmentchanges.ServiceRemovalIntent], bool, error)
 }
 
 func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
@@ -120,7 +123,8 @@ func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent environmentchan
 		task.Params[taskjournal.TaskServiceEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID ||
 		ids.Validate(ids.KindConfig, task.Params[taskjournal.TaskComposeArtifactParam]) != nil ||
-		ids.Validate(ids.KindStep, task.Steps[0].ID) != nil || task.TimeoutSeconds <= 0 ||
+		ids.Validate(ids.KindStep, task.Steps[0].ID) != nil ||
+		task.TimeoutSeconds <= 0 ||
 		uint64(task.RenderGeneration) != intent.CurrentProjection.RenderGeneration {
 		return errs.New(errs.KindInternal, "durable Service removal Task changed")
 	}

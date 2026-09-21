@@ -17,12 +17,14 @@ func ProjectManagedComponentRuntimeSources(
 	preparation componentplanning.ComponentTaskPreparation,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) ([]projectionrecord.ManagedComponentRuntimeSource, error) {
-	sources := append([]projectionrecord.ManagedComponentRuntimeSource(nil), projection.ManagedComponentRuntimeSources...)
+	sources := append(
+		[]projectionrecord.ManagedComponentRuntimeSource(nil),
+		projection.ManagedComponentRuntimeSources...)
 	if !componentplanning.ComponentTaskPreparationIsZero(preparation) {
 		if err := componentplanning.ValidateComponentTaskPreparation(preparation); err != nil {
 			return nil, err
 		}
-		sources = append(sources[:0], preparation.managedRuntimeSources...)
+		sources = append(sources[:0], preparation.ManagedComponentTeardownSources()...)
 	}
 
 	artifact := &agentpb.ComposeArtifact{}
@@ -36,7 +38,7 @@ func ProjectManagedComponentRuntimeSources(
 		if len(candidate.Candidate.Runtime.GeneratedServices) != 1 {
 			return nil, errs.New(errs.KindInternal, "enabled Component candidate runtime identity is incomplete")
 		}
-		source, err := projectionrecord.ManagedComponentRuntimeSource(
+		source, err := projectionrecord.PrepareManagedComponentRuntimeSource(
 			projection,
 			candidate.Candidate,
 			artifact,

@@ -21,7 +21,11 @@ type hierarchyDeletionStore interface {
 	Get(context.Context, string) (*etcdstore.GetResult, error)
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
-	MeasureTransaction(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionBudget, error)
+	MeasureTransaction(
+		context.Context,
+		[]etcdstore.Condition,
+		[]etcdstore.Mutation,
+	) (etcdstore.TransactionBudget, error)
 	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
@@ -100,8 +104,15 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 			ScopeID:    targetID,
 		}, nil
 	case hierarchydeletion.HierarchyDeletionTargetProject:
-		project, err := recordquery.Get(ctx, repository.store, hierarchyrecord.ProjectKey(targetID), targetID, errs.KindProjectNotFound,
-			hierarchyrecord.DecodeProject, func(record hierarchyrecord.ProjectRecord) string { return record.ID })
+		project, err := recordquery.Get(
+			ctx,
+			repository.store,
+			hierarchyrecord.ProjectKey(targetID),
+			targetID,
+			errs.KindProjectNotFound,
+			hierarchyrecord.DecodeProject,
+			func(record hierarchyrecord.ProjectRecord) string { return record.ID },
+		)
 		if err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
@@ -126,8 +137,15 @@ func (repository *HierarchyDeletionRepository) ResolveDeletionTarget(
 		if err := recordcodec.ValidateID(ids.KindProject, targetID); err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
-		project, err := recordquery.Get(ctx, repository.store, hierarchyrecord.ProjectKey(targetID), targetID, errs.KindProjectNotFound,
-			hierarchyrecord.DecodeProject, func(record hierarchyrecord.ProjectRecord) string { return record.ID })
+		project, err := recordquery.Get(
+			ctx,
+			repository.store,
+			hierarchyrecord.ProjectKey(targetID),
+			targetID,
+			errs.KindProjectNotFound,
+			hierarchyrecord.DecodeProject,
+			func(record hierarchyrecord.ProjectRecord) string { return record.ID },
+		)
 		if err != nil {
 			return HierarchyDeletionTargetResolution{}, err
 		}
@@ -268,11 +286,24 @@ func (repository *HierarchyDeletionRepository) Begin(
 		etcdstore.Condition{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 		etcdstore.Condition{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 	)
-	mutations = append(mutations,
+	mutations = append(
+		mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: encodedTask},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: taskReference,
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskActiveOperationKey(task.OperationID),
+			Value: taskReference,
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskQueueKey(task.Executor, task.ID),
+			Value: taskReference,
+		},
 	)
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,
@@ -321,14 +352,20 @@ func validateHierarchyDeletionBegin(begin HierarchyDeletionBegin) error {
 		ids.Validate(ids.KindOperation, begin.TaskOperationID) != nil ||
 		!hierarchydeletion.ValidHierarchyDeletionOperation(begin.OperationKind, begin.TargetKind) ||
 		!hierarchydeletion.ValidHierarchyDeletionTarget(begin.TargetKind, begin.TargetID) ||
-		ids.Validate(ids.KindTask, begin.TaskID) != nil || !hierarchydeletion.ValidHierarchyDeletionDigest(begin.IdempotencyHash) ||
-		!hierarchydeletion.ValidHierarchyDeletionTimestamp(begin.CreatedAt) || !hierarchydeletion.ValidHierarchyDeletionTimestamp(begin.DeadlineAt) ||
+		ids.Validate(
+			ids.KindTask,
+			begin.TaskID,
+		) != nil || !hierarchydeletion.ValidHierarchyDeletionDigest(begin.IdempotencyHash) ||
+		!hierarchydeletion.ValidHierarchyDeletionTimestamp(
+			begin.CreatedAt,
+		) || !hierarchydeletion.ValidHierarchyDeletionTimestamp(begin.DeadlineAt) ||
 		!begin.DeadlineAt.Equal(begin.CreatedAt.Add(hierarchydeletion.AttemptTimeout)) {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion publication is invalid")
 	}
 	if begin.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask || begin.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		begin.Marker.TaskID != begin.TaskID || !begin.Marker.CreatedAt.Equal(begin.CreatedAt) ||
-		!begin.Marker.UpdatedAt.Equal(begin.CreatedAt) || idempotencyrecord.ValidateIdempotencyMarker(begin.Marker) != nil {
+		!begin.Marker.UpdatedAt.Equal(begin.CreatedAt) ||
+		idempotencyrecord.ValidateIdempotencyMarker(begin.Marker) != nil {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion idempotency evidence is invalid")
 	}
 	return nil
@@ -344,7 +381,10 @@ func hierarchyDeletionTask(
 		return TaskRecord{}, errs.New(errs.KindInternal, "hierarchy deletion Task identity is invalid")
 	}
 	suffix := begin.TaskID[separator+1:]
-	intentValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(intent, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
+	intentValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		intent,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+	)
 	if err != nil {
 		return TaskRecord{}, err
 	}

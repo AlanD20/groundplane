@@ -69,7 +69,9 @@ func (repository *ProjectionReader) GetEnvironmentBlueprintRevision(
 		return etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision]{}, false, err
 	}
 	if seal.SourceKind == blueprints.EnvironmentBlueprintSourceMutation {
-		return etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision]{ReadRevision: rootResult.ReadRevision}, false, nil
+		return etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision]{
+			ReadRevision: rootResult.ReadRevision,
+		}, false, nil
 	}
 	stream, readRevision, err := blueprints.ReadStream(ctx, repository.store, seal, "audit")
 	if err != nil {

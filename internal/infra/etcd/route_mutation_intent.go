@@ -39,7 +39,9 @@ func (repository *HierarchyRepository) GetRouteMutationIntent(
 		)
 	}
 	if result.Entry == nil {
-		return etcdstore.Versioned[environmentchanges.RouteMutationIntent]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[environmentchanges.RouteMutationIntent]{
+			ReadRevision: result.ReadRevision,
+		}, false, nil
 	}
 	intent, err := environmentchanges.DecodeRouteMutationIntent(result.Entry.Value)
 	if err != nil || intent.TaskID != taskID {

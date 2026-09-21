@@ -56,9 +56,18 @@ func PrepareBlueprintBackupPolicyPublication(
 			clear(policyValue)
 			return BackupPolicyPublication{}, err
 		}
-		publication.mutations = append(publication.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupPolicyKey(state.environmentID), Value: policyValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: coordinationrecord.Key(state.environmentID), Value: coordinationValue},
+		publication.mutations = append(
+			publication.mutations,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   backuppolicy.BackupPolicyKey(state.environmentID),
+				Value: policyValue,
+			},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   coordinationrecord.Key(state.environmentID),
+				Value: coordinationValue,
+			},
 		)
 	}
 	compare := func(kind backuppolicymutations.BackupPolicyReplacementCompareKind, id, key string, revision int64) {
@@ -71,7 +80,12 @@ func PrepareBlueprintBackupPolicyPublication(
 	if state.candidate.Current != nil {
 		policyRevision = state.candidate.Current.Revision
 	}
-	compare(backuppolicymutations.BackupPolicyComparePolicy, state.environmentID, backuppolicy.BackupPolicyKey(state.environmentID), policyRevision)
+	compare(
+		backuppolicymutations.BackupPolicyComparePolicy,
+		state.environmentID,
+		backuppolicy.BackupPolicyKey(state.environmentID),
+		policyRevision,
+	)
 	compare(
 		backuppolicymutations.BackupPolicyCompareCoordination,
 		state.environmentID,
@@ -85,7 +99,12 @@ func PrepareBlueprintBackupPolicyPublication(
 			environmentRevision = source.environmentIndex.ModRevision
 			identityRevision = source.identityIndex.ModRevision
 		}
-		compare(backuppolicymutations.BackupPolicyCompareSource, source.record.ID, backuppolicy.BackupSourceKey(source.record.ID), primaryRevision)
+		compare(
+			backuppolicymutations.BackupPolicyCompareSource,
+			source.record.ID,
+			backuppolicy.BackupSourceKey(source.record.ID),
+			primaryRevision,
+		)
 		compare(
 			backuppolicymutations.BackupPolicyCompareSourceEnvironmentIndex,
 			source.record.ID,
@@ -106,15 +125,23 @@ func PrepareBlueprintBackupPolicyPublication(
 			}
 			publication.mutations = append(
 				publication.mutations,
-				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupSourceKey(source.record.ID), Value: sourceValue},
+				etcdstore.Mutation{
+					Type:  etcdstore.MutationPut,
+					Key:   backuppolicy.BackupSourceKey(source.record.ID),
+					Value: sourceValue,
+				},
 				etcdstore.Mutation{
 					Type:  etcdstore.MutationPut,
 					Key:   backuppolicy.BackupSourceEnvironmentKey(state.environmentID, source.record.ID),
 					Value: []byte(source.record.ID),
 				},
 				etcdstore.Mutation{
-					Type:  etcdstore.MutationPut,
-					Key:   backuppolicy.BackupSourceIdentityKey(state.environmentID, source.record.Kind, source.record.TargetID),
+					Type: etcdstore.MutationPut,
+					Key: backuppolicy.BackupSourceIdentityKey(
+						state.environmentID,
+						source.record.Kind,
+						source.record.TargetID,
+					),
 					Value: []byte(source.record.ID),
 				},
 			)
@@ -222,8 +249,18 @@ func PrepareBlueprintBackupPolicyPublication(
 		recordRevision = state.candidate.ExistingKey.RecordRevision
 		encryptedRevision = state.candidate.ExistingKey.EncryptedRevision
 	}
-	compare(backuppolicymutations.BackupPolicyCompareKey, state.environmentID, backuppolicy.BackupKeyKey(state.environmentID), recordRevision)
-	compare(backuppolicymutations.BackupPolicyCompareKey, state.environmentID, backuppolicy.BackupKeyValueKey(state.environmentID), encryptedRevision)
+	compare(
+		backuppolicymutations.BackupPolicyCompareKey,
+		state.environmentID,
+		backuppolicy.BackupKeyKey(state.environmentID),
+		recordRevision,
+	)
+	compare(
+		backuppolicymutations.BackupPolicyCompareKey,
+		state.environmentID,
+		backuppolicy.BackupKeyValueKey(state.environmentID),
+		encryptedRevision,
+	)
 	if state.candidate.InitialKey != nil {
 		recordValue, encodeErr := backuppolicy.EncodeBackupKeyRecord(state.candidate.InitialKey.Record)
 		if encodeErr != nil {
@@ -236,9 +273,18 @@ func PrepareBlueprintBackupPolicyPublication(
 			ClearPreparedBlueprintBackupPolicyPublication(publication)
 			return BackupPolicyPublication{}, encodeErr
 		}
-		publication.mutations = append(publication.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupKeyKey(state.environmentID), Value: recordValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupKeyValueKey(state.environmentID), Value: encryptedValue},
+		publication.mutations = append(
+			publication.mutations,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   backuppolicy.BackupKeyKey(state.environmentID),
+				Value: recordValue,
+			},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   backuppolicy.BackupKeyValueKey(state.environmentID),
+				Value: encryptedValue,
+			},
 		)
 	}
 	return publication, nil

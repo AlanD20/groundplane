@@ -197,7 +197,11 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 		if !exists {
 			return nil, errs.New(errs.KindInternal, "durable Blueprint materialization order is invalid")
 		}
-		step, stepErr := taskmaterialization.BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
+		step, stepErr := taskmaterialization.BuildTaskMaterializationStep(
+			reference,
+			artifactID,
+			uint32(task.TimeoutSeconds),
+		)
 		if stepErr != nil {
 			return nil, stepErr
 		}

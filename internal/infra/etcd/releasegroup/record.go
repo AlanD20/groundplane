@@ -199,7 +199,10 @@ func decodeService(value []byte) (servicerecord.ServiceRecord, error) {
 }
 
 func decodeComposeProjection(value []byte) (projectionrecord.EnvironmentComposeProjection, error) {
-	projection, err := decodeDurable[projectionrecord.EnvironmentComposeProjection](value, "environment-compose-projection")
+	projection, err := decodeDurable[projectionrecord.EnvironmentComposeProjection](
+		value,
+		"environment-compose-projection",
+	)
 	if err != nil || ids.Validate(ids.KindEnvironment, projection.EnvironmentID) != nil ||
 		ids.Validate(ids.KindTask, projection.RevisionID) != nil || projection.RenderGeneration == 0 {
 		return projectionrecord.EnvironmentComposeProjection{}, corruptRecord()

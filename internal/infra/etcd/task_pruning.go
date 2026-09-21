@@ -54,7 +54,10 @@ func (repository *TaskRepository) PruneExpiredTasks(
 func (repository *TaskRepository) nextTaskPruneIntent(
 	ctx context.Context,
 ) (etcdstore.Versioned[taskjournal.PruneIntent], bool, error) {
-	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskjournal.TaskPruneIntentPrefix, Limit: 1})
+	page, err := repository.store.Range(
+		ctx,
+		etcdstore.RangeRequest{Prefix: taskjournal.TaskPruneIntentPrefix, Limit: 1},
+	)
 	if err != nil {
 		return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, err
 	}

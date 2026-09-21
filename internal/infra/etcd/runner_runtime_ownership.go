@@ -20,7 +20,8 @@ func (repository *RunnerRepository) AttestRunnerRuntimeOwnership(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord]{}, err
 	}
-	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 || runnerrecord.ValidateRunnerRecord(current.Record) != nil {
+	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 ||
+		runnerrecord.ValidateRunnerRecord(current.Record) != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord]{}, errs.New(
 			errs.KindValidationFailed,
 			"runner attestation target is invalid",
@@ -30,7 +31,8 @@ func (repository *RunnerRepository) AttestRunnerRuntimeOwnership(
 	if err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord]{}, err
 	}
-	if runnerrecord.ValidateRunnerRuntimeOwnership(ownership) != nil || ownership.RunnerID != current.Record.Desired.ID ||
+	if runnerrecord.ValidateRunnerRuntimeOwnership(ownership) != nil ||
+		ownership.RunnerID != current.Record.Desired.ID ||
 		ownership.RuntimeEpoch != replacement.RuntimeEpoch {
 		return etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord]{}, errs.New(
 			errs.KindValidationFailed,
@@ -55,7 +57,11 @@ func (repository *RunnerRepository) AttestRunnerRuntimeOwnership(
 	}
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerLifecycleKey(ownership.RunnerID), Value: lifecycleValue},
-		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerRuntimeOwnershipKey(ownership.RunnerID), Value: ownershipValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   runnerrecord.RunnerRuntimeOwnershipKey(ownership.RunnerID),
+			Value: ownershipValue,
+		},
 	})
 	if err != nil {
 		return etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord]{}, err
@@ -88,7 +94,10 @@ func (repository *RunnerRepository) AttestRunnerRuntimeOwnership(
 			Record: stored, Revision: result.FailureReads[2].ModRevision, ReadRevision: result.Revision,
 		}, nil
 	}
-	return etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord]{}, recordcodec.StateConflict("runner runtime ownership", ownership.RunnerID)
+	return etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord]{}, recordcodec.StateConflict(
+		"runner runtime ownership",
+		ownership.RunnerID,
+	)
 }
 
 func (repository *RunnerRepository) GetRunnerRuntimeOwnership(
@@ -112,7 +121,9 @@ func (repository *RunnerRepository) GetRunnerRuntimeOwnership(
 		)
 	}
 	if result.Entry == nil {
-		return etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[runnerrecord.RunnerRuntimeOwnershipRecord]{
+			ReadRevision: result.ReadRevision,
+		}, false, nil
 	}
 	record, err := runnerrecord.DecodeRunnerRuntimeOwnership(result.Entry.Value)
 	if err != nil || record.RunnerID != runnerID {
@@ -134,8 +145,12 @@ func (repository *RunnerRepository) BeginFailedRunnerRuntimeCleanup(
 		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, err
 	}
 	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 || runnerrecord.ValidateRunnerRecord(current.Record) != nil ||
-		current.Record.ProvisioningState != runnerrecord.RunnerProvisioningFailed || current.Record.ContainerID == "" {
-		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindValidationFailed, "failed runner cleanup target is invalid")
+		current.Record.ProvisioningState != runnerrecord.RunnerProvisioningFailed ||
+		current.Record.ContainerID == "" {
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"failed runner cleanup target is invalid",
+		)
 	}
 	evidence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		runnerrecord.RunnerRuntimeOwnershipKey(current.Record.Desired.ID),
@@ -153,7 +168,10 @@ func (repository *RunnerRepository) BeginFailedRunnerRuntimeCleanup(
 	ownership, err := runnerrecord.DecodeRunnerRuntimeOwnership(evidence.Values[0].Value)
 	if err != nil || ownership.RunnerID != current.Record.Desired.ID ||
 		ownership.RuntimeEpoch != current.Record.RuntimeEpoch {
-		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(errs.KindStateConflict, "failed runner cleanup ownership changed")
+		return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"failed runner cleanup ownership changed",
+		)
 	}
 	replacement, err := runnerrecord.TakeRunnerRuntimeCleanupOwnership(current.Record)
 	if err != nil {
@@ -166,8 +184,14 @@ func (repository *RunnerRepository) BeginFailedRunnerRuntimeCleanup(
 	defer clear(lifecycleValue)
 	conditions := []etcdstore.Condition{
 		{Key: runnerrecord.RunnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
-		{Key: runnerrecord.RunnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
-		{Key: runnerrecord.RunnerRuntimeOwnershipKey(current.Record.Desired.ID), ModRevision: evidence.Values[0].ModRevision},
+		{
+			Key:         runnerrecord.RunnerLifecycleKey(current.Record.Desired.ID),
+			ModRevision: current.Record.LifecycleRevision,
+		},
+		{
+			Key:         runnerrecord.RunnerRuntimeOwnershipKey(current.Record.Desired.ID),
+			ModRevision: evidence.Values[0].ModRevision,
+		},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID)},
 	}
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{
@@ -196,7 +220,10 @@ func (repository *RunnerRepository) BeginFailedRunnerRuntimeCleanup(
 			Record: replacement, Revision: current.Revision, ReadRevision: result.Revision,
 		}, nil
 	}
-	return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, recordcodec.StateConflict("failed runner cleanup ownership", current.Record.Desired.ID)
+	return etcdstore.Versioned[runnerrecord.RunnerRecord]{}, recordcodec.StateConflict(
+		"failed runner cleanup ownership",
+		current.Record.Desired.ID,
+	)
 }
 
 func (repository *RunnerRepository) DeleteRunnerRuntimeOwnershipAfterCleanup(
@@ -209,7 +236,8 @@ func (repository *RunnerRepository) DeleteRunnerRuntimeOwnershipAfterCleanup(
 	}
 	if current.Revision <= 0 || current.Record.LifecycleRevision <= 0 || runnerrecord.ValidateRunnerRecord(current.Record) != nil ||
 		runnerrecord.ValidateRunnerRuntimeOwnership(expected) != nil || expected.RunnerID != current.Record.Desired.ID ||
-		current.Record.ContainerID == "" || current.Record.RuntimeEpoch <= expected.RuntimeEpoch {
+		current.Record.ContainerID == "" ||
+		current.Record.RuntimeEpoch <= expected.RuntimeEpoch {
 		return 0, errs.New(errs.KindValidationFailed, "runner runtime cleanup proof does not match its lifecycle")
 	}
 	expectedValue, err := runnerrecord.EncodeRunnerRuntimeOwnership(expected)

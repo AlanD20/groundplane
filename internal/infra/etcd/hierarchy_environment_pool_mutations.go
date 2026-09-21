@@ -53,7 +53,8 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 			"Environment pool replacement identity is invalid",
 		)
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != current.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -195,8 +196,12 @@ func (repository *HierarchyRepository) ReplaceEnvironmentPoolIdempotent(
 	defer clear(epochMutation.Value)
 
 	conditions := append([]etcdstore.Condition(nil), fenceConditions...)
-	conditions = append(conditions,
-		etcdstore.Condition{Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: registries.Values[0].ModRevision},
+	conditions = append(
+		conditions,
+		etcdstore.Condition{
+			Key:         networkreservations.EnvironmentPoolRegistryKey,
+			ModRevision: registries.Values[0].ModRevision,
+		},
 		etcdstore.Condition{Key: networkreservations.ZonePoolRegistryKey(current.Record.ID), ModRevision: zoneRevision},
 	)
 	mutations := []etcdstore.Mutation{

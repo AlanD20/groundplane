@@ -79,7 +79,8 @@ func (service *taskAbortService) AbortTask(
 		}
 		switch current.Record.Status {
 		case taskjournal.TaskStatusAborted:
-			if current.Record.StartedAt == nil && current.Record.Params[releaserender.TaskReleasePublicationParam] != "" &&
+			if current.Record.StartedAt == nil &&
+				current.Record.Params[releaserender.TaskReleasePublicationParam] != "" &&
 				(current.Record.Type == taskjournal.TaskDeploy || current.Record.Type == taskjournal.TaskRollback) {
 				if _, err := service.repository.AbortPendingTask(ctx, taskID, service.now().UTC()); err != nil {
 					return idempotencyrecord.IdempotencyResponse{}, err
@@ -126,7 +127,10 @@ func (service *taskAbortService) AbortTask(
 			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Task abort status is invalid")
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Task changed repeatedly during abort")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindStateConflict,
+		"Task changed repeatedly during abort",
+	)
 }
 
 func (service *taskAbortService) abortAgentTask(ctx context.Context, assignment etcd.TaskAssignment) error {

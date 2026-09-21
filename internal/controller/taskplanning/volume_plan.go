@@ -202,11 +202,14 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 			return nil, errs.New(errs.KindInternal, "durable Volume removal retained its identity")
 		}
 	}
-	expectedCandidate, err := composerender.MutateEnvironmentVolumeArtifact(baselineArtifact, composerender.VolumeArtifactMutation{
-		Action: composerender.VolumeArtifactRemove, VolumeID: task.Target, Key: key, ArtifactID: candidateArtifactID,
-		PlanID: task.PlanID, TenantID: tenant.Record.ID, ProjectID: project.Record.ID,
-		RenderGeneration: uint64(task.RenderGeneration),
-	})
+	expectedCandidate, err := composerender.MutateEnvironmentVolumeArtifact(
+		baselineArtifact,
+		composerender.VolumeArtifactMutation{
+			Action: composerender.VolumeArtifactRemove, VolumeID: task.Target, Key: key, ArtifactID: candidateArtifactID,
+			PlanID: task.PlanID, TenantID: tenant.Record.ID, ProjectID: project.Record.ID,
+			RenderGeneration: uint64(task.RenderGeneration),
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +362,10 @@ func volumeTaskStepIDsValid(steps []taskjournal.TaskStepRecord) bool {
 	return true
 }
 
-func volumePlanConsumerIDs(projection projectionrecord.EnvironmentComposeProjection, volumeID string) ([]string, error) {
+func volumePlanConsumerIDs(
+	projection projectionrecord.EnvironmentComposeProjection,
+	volumeID string,
+) ([]string, error) {
 	seen := make(map[string]struct{})
 	for _, mount := range projection.VolumeMounts {
 		if mount.VolumeID != volumeID {

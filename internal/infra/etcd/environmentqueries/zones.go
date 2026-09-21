@@ -29,7 +29,10 @@ func FindZoneAtRevision(
 			return etcdstore.Versioned[zonerecord.Record]{}, err
 		}
 		if page == nil || page.ReadRevision <= 0 {
-			return etcdstore.Versioned[zonerecord.Record]{}, errs.New(errs.KindInternal, "Environment desired head scan is invalid")
+			return etcdstore.Versioned[zonerecord.Record]{}, errs.New(
+				errs.KindInternal,
+				"Environment desired head scan is invalid",
+			)
 		}
 		if fixedRevision == 0 {
 			fixedRevision = page.ReadRevision
@@ -73,7 +76,10 @@ func FindZoneAtRevision(
 			break
 		}
 		if len(page.Values) == 0 {
-			return etcdstore.Versioned[zonerecord.Record]{}, errs.New(errs.KindInternal, "Environment desired head scan did not advance")
+			return etcdstore.Versioned[zonerecord.Record]{}, errs.New(
+				errs.KindInternal,
+				"Environment desired head scan did not advance",
+			)
 		}
 	}
 	if matched == nil {

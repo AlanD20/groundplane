@@ -51,7 +51,10 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 	index := 0
 	for _, member := range manifest.Members {
 		if !selected[member.ServiceID] {
-			witnesses = append(witnesses, taskassignments.ReleaseNativePredecessorAuthority{ServiceID: member.ServiceID})
+			witnesses = append(
+				witnesses,
+				taskassignments.ReleaseNativePredecessorAuthority{ServiceID: member.ServiceID},
+			)
 			continue
 		}
 		intentValue, renderValue := read.Values[2*index], read.Values[2*index+1]

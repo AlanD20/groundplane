@@ -33,7 +33,10 @@ func (repository *Reader) GetRunnerObservation(
 	}
 	record, err := DecodeRunnerObservation(result.Entry.Value)
 	if err != nil || record.RunnerID != runnerID {
-		return etcdstore.Versioned[RunnerObservationRecord]{}, false, errs.New(errs.KindInternal, "runner observation is corrupt")
+		return etcdstore.Versioned[RunnerObservationRecord]{}, false, errs.New(
+			errs.KindInternal,
+			"runner observation is corrupt",
+		)
 	}
 	return etcdstore.Versioned[RunnerObservationRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,

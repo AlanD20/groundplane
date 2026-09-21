@@ -57,7 +57,10 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 	if renaming {
 		secondaryKeys = append(secondaryKeys, runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, slug))
 	}
-	secondary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: secondaryKeys, Revision: current.ReadRevision})
+	secondary, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: secondaryKeys, Revision: current.ReadRevision},
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -87,9 +90,14 @@ func (repository *RunnerRepository) ReplaceRunnerSlugIdempotent(
 		},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), runnerID)},
 	}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerKey(runnerID), Value: value}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerKey(runnerID), Value: value},
+	}
 	if renaming {
-		conditions = append(conditions, etcdstore.Condition{Key: runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, slug)})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, slug)},
+		)
 		mutations = append(
 			mutations,
 			etcdstore.Mutation{

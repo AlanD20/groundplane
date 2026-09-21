@@ -50,7 +50,8 @@ func prepareBackupRunTerminalReceipt(
 	if current.Revision <= 0 || current.Record.Type != taskjournal.TaskBackup || terminal.Type != taskjournal.TaskBackup ||
 		current.Record.ID != terminal.ID || !taskjournal.IsTerminalTaskStatus(terminal.Status) ||
 		ValidateBackupRunTaskBinding(terminal, run) != nil || !backupruntime.TerminalBackupRunState(run.State) ||
-		terminal.FinishedAt == nil || !run.UpdatedAt.Equal(*terminal.FinishedAt) {
+		terminal.FinishedAt == nil ||
+		!run.UpdatedAt.Equal(*terminal.FinishedAt) {
 		return backupTerminalReceiptPlan{}, errs.New(
 			errs.KindValidationFailed,
 			"backup terminal receipt binding is invalid",

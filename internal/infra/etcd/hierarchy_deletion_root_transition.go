@@ -20,10 +20,16 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 		operation.Fence.CurrentTaskID != task.ID {
 		return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
+	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(
+		string(operation.Tombstone.TargetKind),
+		operation.Tombstone.TargetID,
+	)
 	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(operation.Tombstone.OperationID)
 	replayKey, _ := hierarchydeletion.HierarchyDeletionReplayTargetKey(operation.Tombstone.OperationID)
-	lockKey := hierarchydeletion.HierarchyDeletionLockKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
+	lockKey := hierarchydeletion.HierarchyDeletionLockKey(
+		string(operation.Tombstone.TargetKind),
+		operation.Tombstone.TargetID,
+	)
 	auxiliary, err := repository.store.GetMany(
 		ctx,
 		etcdstore.GetManyRequest{Keys: []string{replayKey, lockKey}, Revision: revision},
@@ -39,7 +45,8 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 	if hierarchydeletion.DecodeHierarchyDeletionRecord(auxiliary.Values[0].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &replay) != nil ||
 		hierarchydeletion.DecodeHierarchyDeletionRecord(auxiliary.Values[1].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &lock) != nil ||
 		replay.ParentOperationID != operation.Tombstone.OperationID || replay.CurrentTaskID != task.ID ||
-		lock.ParentOperationID != operation.Tombstone.OperationID || lock.DeletionEpoch != operation.Tombstone.DeletionEpoch {
+		lock.ParentOperationID != operation.Tombstone.OperationID ||
+		lock.DeletionEpoch != operation.Tombstone.DeletionEpoch {
 		return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	retainUntil := terminalAt.Add(taskjournal.TaskRetention)
@@ -71,18 +78,27 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 		change.values = append(change.values, completed.values...)
 		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: lockKey})
 	}
-	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
+	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		nextTombstone,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+	)
 	if err != nil {
 		change.clear()
 		return hierarchyDeletionRootAckChange{}, err
 	}
-	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		nextFence,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		clear(tombstoneValue)
 		change.clear()
 		return hierarchyDeletionRootAckChange{}, err
 	}
-	replayValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(replay, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	replayValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		replay,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		clear(tombstoneValue)
 		clear(fenceValue)

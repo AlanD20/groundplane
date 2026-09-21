@@ -59,7 +59,7 @@ func prepareRuntimeConfigurationTask(
 		return TaskRecord{}, errs.New(errs.KindInternal, "runtime configuration read is incomplete")
 	}
 	defer etcdstore.ClearValues(read.Values)
-	sources, err := runtimeconfiguration.NewRepository(runtimeConfigurationStore{store: store})
+	sources, err := runtimeconfiguration.New(store)
 	if err != nil {
 		return TaskRecord{}, err
 	}
@@ -140,7 +140,11 @@ func prepareRuntimeConfigurationTask(
 		return TaskRecord{}, errs.New(errs.KindStateConflict, "prepared configuration source set changed")
 	}
 	prepared := cloneTaskRecord(task)
-	prepared.Configuration = &taskconfiguration.TaskConfiguration{Current: reference, Prior: prior, PriorRevision: headRevision}
+	prepared.Configuration = &taskconfiguration.TaskConfiguration{
+		Current:       reference,
+		Prior:         prior,
+		PriorRevision: headRevision,
+	}
 	return prepared, nil
 }
 
@@ -267,9 +271,7 @@ func (repository *TaskRepository) runtimeConfigurationClaimConditions(
 			return nil, errs.New(errs.KindStateConflict, "configuration claim predecessor differs from captured source")
 		}
 	}
-	sources, err := runtimeconfiguration.NewRepository(
-		runtimeConfigurationStore{store: repository.store},
-	)
+	sources, err := runtimeconfiguration.New(repository.store)
 	if err != nil {
 		return nil, err
 	}

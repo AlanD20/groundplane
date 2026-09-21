@@ -190,7 +190,8 @@ func ReadPolicySnapshot(
 		primary := support.Values[offset]
 		owner := support.Values[offset+1]
 		offset += 2
-		if primary == nil || owner == nil || owner.Key != backuppolicy.BackupSourceEnvironmentKey(environmentID, sourceID) ||
+		if primary == nil || owner == nil ||
+			owner.Key != backuppolicy.BackupSourceEnvironmentKey(environmentID, sourceID) ||
 			string(owner.Value) != sourceID {
 			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
@@ -206,7 +207,10 @@ func ReadPolicySnapshot(
 			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}
 		seen[identity] = struct{}{}
-		identityKeys = append(identityKeys, backuppolicy.BackupSourceIdentityKey(environmentID, source.Kind, source.TargetID))
+		identityKeys = append(
+			identityKeys,
+			backuppolicy.BackupSourceIdentityKey(environmentID, source.Kind, source.TargetID),
+		)
 		if source.Kind == core.BackupSourceConfig && policy.Encryption != "age" {
 			return BackupPolicyProjection{}, recordcodec.CorruptRecord()
 		}

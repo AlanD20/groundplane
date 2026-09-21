@@ -135,7 +135,11 @@ func (repository *TaskRepository) AppendTaskEvent(
 				!record.RecoveryDeadline.Equal(assignment.RecoveryDeadline) {
 				return TaskEventAppend{}, taskassignments.CorruptTaskAssignment()
 			}
-			next, changed, advanceErr := taskassignments.AdvanceReleaseRecoveryRecord(record, input, result.ReadRevision)
+			next, changed, advanceErr := taskassignments.AdvanceReleaseRecoveryRecord(
+				record,
+				input,
+				result.ReadRevision,
+			)
 			if advanceErr != nil {
 				return TaskEventAppend{}, advanceErr
 			}
@@ -145,7 +149,9 @@ func (repository *TaskRepository) AppendTaskEvent(
 					return TaskEventAppend{}, encodeErr
 				}
 				defer clear(encoded)
-				recoveryMutation = []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: recoveryValue.Key, Value: encoded}}
+				recoveryMutation = []etcdstore.Mutation{
+					{Type: etcdstore.MutationPut, Key: recoveryValue.Key, Value: encoded},
+				}
 			}
 		} else if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward {
 			return TaskEventAppend{}, taskassignments.CorruptTaskAssignment()
@@ -190,7 +196,10 @@ func (repository *TaskRepository) AppendTaskEvent(
 			{Key: scriptClosingReportKey(task)},
 		}
 		if recoveryValue != nil {
-			conditions = append(conditions, etcdstore.Condition{Key: recoveryValue.Key, ModRevision: recoveryValue.ModRevision})
+			conditions = append(
+				conditions,
+				etcdstore.Condition{Key: recoveryValue.Key, ModRevision: recoveryValue.ModRevision},
+			)
 		}
 		mutations := []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: encodedTask},

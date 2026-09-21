@@ -35,7 +35,11 @@ func (repository *Repository) CreateSecret(
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: secretrecord.RecordKey(record.Secret.ID), Value: primaryValue},
 		{Type: etcdstore.MutationPut, Key: secretrecord.SecretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
-		{Type: etcdstore.MutationPut, Key: secretrecord.SecretScopedKey(record.Secret), Value: []byte(record.Secret.ID)},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   secretrecord.SecretScopedKey(record.Secret),
+			Value: []byte(record.Secret.ID),
+		},
 		{Type: etcdstore.MutationPut, Key: secretrecord.ValueKey(record.Secret.ID), Value: encryptedValue},
 	})
 	if err != nil {

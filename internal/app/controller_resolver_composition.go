@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
-	"github.com/AlanD20/groundplane/internal/componentregistration"
+	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	controllerdns "github.com/AlanD20/groundplane/internal/controller/dnsresolver"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/taskplanning"

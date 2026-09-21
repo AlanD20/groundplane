@@ -108,7 +108,10 @@ func componentRollbackComposeAssignment(
 ) (taskassignment.Assignment, *agentpb.ExecutionStep, error) {
 	if assignment.Plan == nil || candidate == nil || rollbackArtifact == nil ||
 		len(rollbackArtifact.GetServices()) != 1 {
-		return taskassignment.Assignment{}, nil, errs.New(errs.KindInternal, "agent: Component rollback Compose input is invalid")
+		return taskassignment.Assignment{}, nil, errs.New(
+			errs.KindInternal,
+			"agent: Component rollback Compose input is invalid",
+		)
 	}
 	planID := ""
 	renderGeneration := uint64(0)

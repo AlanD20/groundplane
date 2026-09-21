@@ -131,16 +131,25 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 	}
 	for index := 0; index < len(conditions)-1; index++ {
 		if etcdstore.RevisionOf(transaction.FailureReads[index]) != conditions[index].ModRevision {
-			return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, recordcodec.StateConflict("runner readiness", task.Target)
+			return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, recordcodec.StateConflict(
+				"runner readiness",
+				task.Target,
+			)
 		}
 	}
 	existing := transaction.FailureReads[len(conditions)-1]
 	if existing == nil {
-		return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, recordcodec.StateConflict("runner readiness", task.Target)
+		return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, recordcodec.StateConflict(
+			"runner readiness",
+			task.Target,
+		)
 	}
 	stored, err := runnerrecord.DecodeRunnerReadinessProof(existing.Value)
 	if err != nil || stored != proof {
-		return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, recordcodec.StateConflict("runner readiness", task.Target)
+		return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{}, recordcodec.StateConflict(
+			"runner readiness",
+			task.Target,
+		)
 	}
 	return etcdstore.Versioned[runnerrecord.RunnerReadinessProofRecord]{
 		Record: stored, Revision: existing.ModRevision, ReadRevision: transaction.Revision,

@@ -19,7 +19,10 @@ import (
 )
 
 type zoneRemovalPlanReader interface {
-	GetZoneRemovalIntent(context.Context, string) (etcdstore.Versioned[environmentchanges.ZoneRemovalIntent], bool, error)
+	GetZoneRemovalIntent(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[environmentchanges.ZoneRemovalIntent], bool, error)
 }
 
 type ZoneRemovalTaskProcedureIDs struct {
@@ -55,7 +58,10 @@ func (resolver *TaskPlanResolver) PrepareZoneRemovalTask(
 		if ids.Validate(ids.KindStep, stepID) != nil {
 			return etcd.TaskRecord{}, errs.New(errs.KindValidationFailed, "Zone removal Service step id is invalid")
 		}
-		prepared.Steps = append(prepared.Steps, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: stepID})
+		prepared.Steps = append(
+			prepared.Steps,
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: stepID},
+		)
 	}
 	prepared.Steps = append(
 		prepared.Steps,

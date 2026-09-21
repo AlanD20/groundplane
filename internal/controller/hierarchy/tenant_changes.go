@@ -234,7 +234,10 @@ func (service *tenantChangeService) changeTenant(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant change retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Tenant change retry bound was not enforced",
+	)
 }
 
 func (service *tenantChangeService) changeTenantOnce(
@@ -255,7 +258,10 @@ func (service *tenantChangeService) changeTenantOnce(
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant change replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Tenant change replay resolution is invalid",
+			)
 		}
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
@@ -283,7 +289,12 @@ func (service *tenantChangeService) changeTenantOnce(
 		Status: http.StatusOK, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
+		locator,
+		evidence.durable,
+		response,
+		service.now().UTC(),
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -310,7 +321,10 @@ func (service *tenantChangeService) changeTenantOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant change resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Tenant change resolution is invalid",
+		)
 	}
 }
 

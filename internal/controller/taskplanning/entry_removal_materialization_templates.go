@@ -147,8 +147,11 @@ func entryRemovalEnvironmentTemplate(
 		return reference, nil
 	}
 	reference.Source = materializationrecord.Source{
-		Kind:                 materializationrecord.SourceGeneratedEnvironment,
-		GeneratedEnvironment: &materializationrecord.GeneratedEnvironmentValueReference{FormatVersion: 1, Values: values},
+		Kind: materializationrecord.SourceGeneratedEnvironment,
+		GeneratedEnvironment: &materializationrecord.GeneratedEnvironmentValueReference{
+			FormatVersion: 1,
+			Values:        values,
+		},
 	}
 	return reference, nil
 }

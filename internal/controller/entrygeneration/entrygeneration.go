@@ -71,7 +71,10 @@ func (service *EntryGenerationService) Generate(
 	createdAt time.Time,
 ) (entries.EntryValueGeneration, error) {
 	if ctx == nil {
-		return entries.EntryValueGeneration{}, errs.New(errs.KindValidationFailed, "Entry generation context is required")
+		return entries.EntryValueGeneration{}, errs.New(
+			errs.KindValidationFailed,
+			"Entry generation context is required",
+		)
 	}
 	for _, check := range []struct {
 		kind  ids.Kind

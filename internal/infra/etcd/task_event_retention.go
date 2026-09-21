@@ -26,7 +26,10 @@ func nextTaskControllerTimestamp(previous time.Time, supplied time.Time) (time.T
 	return previous.Add(time.Nanosecond), nil
 }
 
-func taskCheckpointAssignmentMatches(checkpoint taskjournal.TaskEventCheckpoint, assignment taskassignments.TaskAssignmentRecord) bool {
+func taskCheckpointAssignmentMatches(
+	checkpoint taskjournal.TaskEventCheckpoint,
+	assignment taskassignments.TaskAssignmentRecord,
+) bool {
 	identity := checkpoint.Identity
 	return identity.AssignmentID == assignment.AssignmentID && identity.AgentID == assignment.AgentID &&
 		identity.AgentGeneration == assignment.AgentGeneration && identity.Attempt > 0 && identity.Attempt <= assignment.ExecutionEpoch
@@ -53,7 +56,11 @@ func validateTaskEventCheckpoints(task TaskRecord) error {
 	return nil
 }
 
-func trimmedTaskEventReplay(task TaskRecord, input taskjournal.TaskEventInput, hash string) (*taskjournal.TaskEventDedupRecord, error) {
+func trimmedTaskEventReplay(
+	task TaskRecord,
+	input taskjournal.TaskEventInput,
+	hash string,
+) (*taskjournal.TaskEventDedupRecord, error) {
 	for _, checkpoint := range task.EventCheckpoints {
 		if checkpoint.Identity.StepID != input.Identity.StepID {
 			continue
@@ -99,7 +106,10 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 		return nil, nil, recordcodec.CorruptRecord()
 	}
 	dedupKey := taskjournal.TaskEventDedupKey(event.Identity)
-	dedupRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{dedupKey}, Revision: revision})
+	dedupRead, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{dedupKey}, Revision: revision},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -115,7 +125,8 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 	}
 	checkpoint := taskjournal.TaskEventCheckpoint{Identity: event.Identity, Sequence: event.Sequence,
 		PayloadSHA256: event.PayloadSHA256, State: event.State,
-		Running:   event.State == taskjournal.TaskEventStateRunning || event.State == taskjournal.TaskEventStateCompleted,
+		Running: event.State == taskjournal.TaskEventStateRunning ||
+			event.State == taskjournal.TaskEventStateCompleted,
 		Completed: event.State == taskjournal.TaskEventStateCompleted, EffectPossible: event.State != taskjournal.TaskEventStatePending}
 	index := slices.IndexFunc(
 		prepared.Task.EventCheckpoints,
@@ -150,5 +161,8 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 	}
 	return []etcdstore.Condition{{Key: read.Values[0].Key, ModRevision: read.Values[0].ModRevision},
 			{Key: dedupKey, ModRevision: dedupRead.Values[0].ModRevision}},
-		[]etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: read.Values[0].Key}, {Type: etcdstore.MutationDelete, Key: dedupKey}}, nil
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationDelete, Key: read.Values[0].Key},
+			{Type: etcdstore.MutationDelete, Key: dedupKey},
+		}, nil
 }

@@ -45,7 +45,9 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		return scriptTaskChange{}, err
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetScript), source.Target)}, Revision: revision,
+		Keys: []string{
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetScript), source.Target),
+		}, Revision: revision,
 	})
 	if err != nil {
 		return scriptTaskChange{}, err
@@ -107,15 +109,27 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{
-				Key:         scriptrecord.ScriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
+				Key: scriptrecord.ScriptSetScriptKey(
+					record.EnvironmentID,
+					record.ScriptSetGeneration,
+					record.Desired.ID,
+				),
 				ModRevision: storage.Script.Revision,
 			},
 			{
-				Key:         scriptrecord.ScriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
+				Key: scriptrecord.ScriptSetOwnerKey(
+					record.EnvironmentID,
+					record.ScriptSetGeneration,
+					record.Desired.ID,
+				),
 				ModRevision: dependencies.Values[0].ModRevision,
 			},
 			{
-				Key:         scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+				Key: scriptrecord.ScriptSetSlugKey(
+					record.EnvironmentID,
+					record.ScriptSetGeneration,
+					record.Desired.Slug,
+				),
 				ModRevision: dependencies.Values[1].ModRevision,
 			},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetScript), record.Desired.ID)},
@@ -130,7 +144,9 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 	}
 	if project.TenantID != "" {
 		tenantFence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)}, Revision: revision,
+			Keys: []string{
+				deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
+			}, Revision: revision,
 		})
 		if err != nil {
 			return scriptTaskChange{}, err
@@ -178,7 +194,9 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 		return scriptTaskChange{}, err
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetScript), task.Target)}, Revision: revision,
+		Keys: []string{
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetScript), task.Target),
+		}, Revision: revision,
 	})
 	if err != nil {
 		return scriptTaskChange{}, err
@@ -211,7 +229,11 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{
-				Key:         scriptrecord.ScriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+				Key: scriptrecord.ScriptSetScriptKey(
+					record.EnvironmentID,
+					record.ScriptSetGeneration,
+					task.Target,
+				),
 				ModRevision: storage.Script.Revision,
 			},
 			{
@@ -219,11 +241,19 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 				ModRevision: stored.Values[0].ModRevision,
 			},
 			{
-				Key:         scriptrecord.ScriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+				Key: scriptrecord.ScriptSetOwnerKey(
+					record.EnvironmentID,
+					record.ScriptSetGeneration,
+					task.Target,
+				),
 				ModRevision: indexes.Values[0].ModRevision,
 			},
 			{
-				Key:         scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+				Key: scriptrecord.ScriptSetSlugKey(
+					record.EnvironmentID,
+					record.ScriptSetGeneration,
+					record.Desired.Slug,
+				),
 				ModRevision: indexes.Values[1].ModRevision,
 			},
 			{Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
@@ -246,11 +276,19 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 			},
 			etcdstore.Mutation{
 				Type: etcdstore.MutationDelete,
-				Key:  scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
+				Key: scriptrecord.ScriptSetSlugKey(
+					record.EnvironmentID,
+					record.ScriptSetGeneration,
+					record.Desired.Slug,
+				),
 			},
 			etcdstore.Mutation{
-				Type:   etcdstore.MutationDelete,
-				Key:    scriptrecord.ScriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
+				Type: etcdstore.MutationDelete,
+				Key: scriptrecord.ScriptSetBodyGenerationPrefix(
+					record.EnvironmentID,
+					record.ScriptSetGeneration,
+					task.Target,
+				),
 				Prefix: true,
 			},
 			etcdstore.Mutation{
@@ -258,7 +296,10 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 				Key:  scriptrecord.ScriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, task.Target),
 			},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptLocatorKey(task.Target)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, task.Target)},
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, task.Target),
+			},
 		)
 	}
 	activeValue, err := scriptrecord.EncodeScriptSetGeneration(storage.Active.Record)
@@ -268,7 +309,11 @@ func (repository *TaskRepository) prepareScriptTaskAcknowledgement(
 	change.values = append(change.values, activeValue)
 	change.mutations = append(
 		change.mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), Value: activeValue},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   scriptrecord.ScriptSetActiveKey(record.EnvironmentID),
+			Value: activeValue,
+		},
 	)
 	return change, nil
 }
@@ -284,7 +329,9 @@ func (repository *TaskRepository) validateScriptTaskAcknowledgementReplay(
 		return err
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetScript), task.Target)}, Revision: revision,
+		Keys: []string{
+			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetScript), task.Target),
+		}, Revision: revision,
 	})
 	if err != nil {
 		return err
@@ -309,10 +356,12 @@ func (repository *TaskRepository) validateScriptTaskAcknowledgementReplay(
 }
 
 func taskOwnsScriptRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceScript {
+	if task.Executor != taskjournal.TaskExecutorController ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceScript {
 		return false, nil
 	}
-	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindScript, task.Target) != nil {
+	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 ||
+		ids.Validate(ids.KindScript, task.Target) != nil {
 		return false, errs.New(errs.KindInternal, "Script deletion Task has invalid durable input")
 	}
 	return true, nil

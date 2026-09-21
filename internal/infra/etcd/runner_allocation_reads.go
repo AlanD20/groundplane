@@ -64,7 +64,9 @@ func (repository *RunnerRepository) getRunnerAllocationState(
 		if len(result.Values[runnerAllocationSystemIndex].Value) > runnerrecord.MaximumRunnerPersistenceBytes {
 			return runnerAllocationState{}, runnerrecord.CorruptSystemPoolRegistry()
 		}
-		state.system.Record, err = runnerrecord.DecodeSystemPoolRegistry(result.Values[runnerAllocationSystemIndex].Value)
+		state.system.Record, err = runnerrecord.DecodeSystemPoolRegistry(
+			result.Values[runnerAllocationSystemIndex].Value,
+		)
 		if err != nil || state.system.Record.Validate(config.SystemPool) != nil ||
 			state.system.Record.RunnerNetworkPool != config.RunnerPool.String() {
 			return runnerAllocationState{}, runnerrecord.CorruptSystemPoolRegistry()

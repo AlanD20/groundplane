@@ -203,7 +203,10 @@ func validateNativeRestorationDescriptor(
 			}
 		}
 		if len(witness.RetainedPriorArtifact) != 0 {
-			retained, err := taskassignments.OpenRestorationWitness(authority.EnvironmentID, witness.RetainedPriorArtifact)
+			retained, err := taskassignments.OpenRestorationWitness(
+				authority.EnvironmentID,
+				witness.RetainedPriorArtifact,
+			)
 			if err != nil || retained.GetArtifactId() != prior.GetRetainedPriorArtifactId() {
 				return taskassignments.CorruptTaskAssignment()
 			}
@@ -251,8 +254,15 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 	if err != nil {
 		return nil, err
 	}
-	_, conditions, err := ledger.tasks.blueprintNativePredecessorsAtRevision(ctx, evidence.Task,
-		releases.ReleasePublicationMarker{NativePredecessors: references}, evidence.Manifest.Record, evidence.Manifest.Revision)
+	_, conditions, err := ledger.tasks.blueprintNativePredecessorsAtRevision(
+		ctx,
+		evidence.Task,
+		releases.ReleasePublicationMarker{
+			NativePredecessors: references,
+		},
+		evidence.Manifest.Record,
+		evidence.Manifest.Revision,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -301,8 +311,14 @@ func (ledger *ReleaseLedger) blueprintNativePredecessorConditions(
 		conditions = append(conditions, guards...)
 		conditions = append(
 			conditions,
-			etcdstore.Condition{Key: releases.ReleaseProjectionKey(captured.ServiceID), ModRevision: captured.ProjectionRevision},
-			etcdstore.Condition{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(evidence.EnvironmentID), ModRevision: applied.Revision},
+			etcdstore.Condition{
+				Key:         releases.ReleaseProjectionKey(captured.ServiceID),
+				ModRevision: captured.ProjectionRevision,
+			},
+			etcdstore.Condition{
+				Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(evidence.EnvironmentID),
+				ModRevision: applied.Revision,
+			},
 		)
 		if captured.Serving != nil {
 			conditions = append(conditions, etcdstore.Condition{

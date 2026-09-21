@@ -52,9 +52,11 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 		ScriptID:            execution.ScriptID, BodyGeneration: execution.ScriptGeneration,
 	}
 	body.SourceModRevision, body.SourceDigest = sources.BodyGeneration.Revision, execution.BodySHA256
-	members := []scriptsourceevidence.ScriptSourcePreparationMember{manualScriptExistingMember(body, scriptrecord.ScriptSetBodyGenerationKey(
-		execution.EnvironmentID, body.Source.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration,
-	))}
+	members := []scriptsourceevidence.ScriptSourcePreparationMember{
+		manualScriptExistingMember(body, scriptrecord.ScriptSetBodyGenerationKey(
+			execution.EnvironmentID, body.Source.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration,
+		)),
+	}
 	snapshotKey := scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID)
 	service := base
 	service.Source = sourceref.SourceIdentity{Kind: sourceref.SourceService, ServiceID: execution.ServiceID}
@@ -72,7 +74,10 @@ func (repository *ScriptRepository) manualScriptSourceMembers(
 	members = append(members, manualScriptExistingMember(release, releaseKey))
 
 	snapshotReference := base
-	snapshotReference.Source = sourceref.SourceIdentity{Kind: sourceref.SourceRunnerSnapshot, SnapshotID: execution.SnapshotID}
+	snapshotReference.Source = sourceref.SourceIdentity{
+		Kind:       sourceref.SourceRunnerSnapshot,
+		SnapshotID: execution.SnapshotID,
+	}
 	snapshotReference.SourceModRevision, snapshotReference.SourceDigest = snapshotRevision, execution.SnapshotSHA256
 	members = append(members, manualScriptExistingMember(snapshotReference, snapshotKey))
 	seen := make(map[sourceref.SourceIdentity]struct{})
@@ -215,7 +220,12 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	}
 	record := resolved.Record
 	secretID := record.Secret.ID
-	value, err := scriptexecutions.ScriptExecutionValueAt(ctx, repository.store, secretrecord.ValueKey(secretID), sources.Revision)
+	value, err := scriptexecutions.ScriptExecutionValueAt(
+		ctx,
+		repository.store,
+		secretrecord.ValueKey(secretID),
+		sources.Revision,
+	)
 	if err != nil {
 		return scriptsourceevidence.ScriptSourcePreparationMember{}, err
 	}
@@ -238,9 +248,14 @@ func (repository *ScriptRepository) manualScriptSecretSourceMember(
 	return manualScriptExistingMember(member, secretrecord.ValueKey(secretID)), nil
 }
 
-func manualScriptExistingMember(reference sourceref.Reference, key string) scriptsourceevidence.ScriptSourcePreparationMember {
+func manualScriptExistingMember(
+	reference sourceref.Reference,
+	key string,
+) scriptsourceevidence.ScriptSourcePreparationMember {
 	return scriptsourceevidence.ScriptSourcePreparationMember{
 		Reference: reference,
-		Evidence:  scriptsourceevidence.ScriptSourceEvidence{Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{SourceKey: key}},
+		Evidence: scriptsourceevidence.ScriptSourceEvidence{
+			Existing: &scriptsourceevidence.ScriptExistingSourceEvidence{SourceKey: key},
+		},
 	}
 }

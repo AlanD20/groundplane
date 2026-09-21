@@ -42,7 +42,10 @@ func (repository *HierarchyDeletionRepository) PublishOrResumeAgentAction(
 	if err := hierarchydeletionexecution.ValidateHierarchyDeletionActiveAction(current, action); err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
-	childKey, _ := hierarchydeletion.HierarchyDeletionChildKey(current.Tombstone.OperationID, action.AgentProcedure.ChildOperationID)
+	childKey, _ := hierarchydeletion.HierarchyDeletionChildKey(
+		current.Tombstone.OperationID,
+		action.AgentProcedure.ChildOperationID,
+	)
 	stored, err := repository.store.Get(ctx, childKey)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
@@ -169,12 +172,17 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
 	if parentTask.Entry == nil || parentTask.Entry.ModRevision <= 0 {
-		return hierarchydeletion.HierarchyDeletionChildEntry{}, errs.New(errs.KindStateConflict, "hierarchy deletion parent Task changed")
+		return hierarchydeletion.HierarchyDeletionChildEntry{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion parent Task changed",
+		)
 	}
 	defer clear(parentTask.Entry.Value)
 	parent, err := DecodeTaskRecord(parentTask.Entry.Value)
-	if err != nil || parent.ID != operation.Tombstone.CurrentTaskID || parent.Executor != taskjournal.TaskExecutorController ||
-		parent.Status != taskjournal.TaskStatusRunning || parent.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion ||
+	if err != nil || parent.ID != operation.Tombstone.CurrentTaskID ||
+		parent.Executor != taskjournal.TaskExecutorController ||
+		parent.Status != taskjournal.TaskStatusRunning ||
+		parent.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion ||
 		parent.Params[taskjournal.TaskHierarchyDeletionOperationParam] != operation.Tombstone.OperationID {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, errs.New(
 			errs.KindStateConflict,
@@ -229,7 +237,10 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 			AttemptID: strconv.FormatInt(generation, 10),
 		},
 	}
-	entryValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(entry, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
+	entryValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		entry,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+	)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
@@ -239,12 +250,18 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		ChildOperationID: action.AgentProcedure.ChildOperationID, ActionOrdinal: action.Ordinal,
 		AttemptID: attemptID, TaskID: taskID,
 	}
-	successorValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(successor, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	successorValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		successor,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
 	defer clear(successorValue)
-	childKey, _ := hierarchydeletion.HierarchyDeletionChildKey(operation.Tombstone.OperationID, action.AgentProcedure.ChildOperationID)
+	childKey, _ := hierarchydeletion.HierarchyDeletionChildKey(
+		operation.Tombstone.OperationID,
+		action.AgentProcedure.ChildOperationID,
+	)
 	successorKey, _ := hierarchydeletion.HierarchyDeletionSuccessorKey(
 		operation.Tombstone.OperationID,
 		action.AgentProcedure.ChildOperationID,
@@ -259,19 +276,27 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	nextFence.ActiveChildAttemptID = attemptID
 	nextFence.Dispatch = hierarchydeletion.HierarchyDeletionDispatchOpen
 	nextFence.UpdatedAt = now
-	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
+	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		nextTombstone,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+	)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
 	defer clear(tombstoneValue)
-	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		nextFence,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
 	defer clear(fenceValue)
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID)}, {Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
+		{
+			Key: taskjournal.TaskActiveOperationKey(task.OperationID),
+		}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: childKey, ModRevision: previousRevision}, {Key: successorKey},
 		{Key: taskjournal.TaskStorageKey(parent.ID), ModRevision: parentTask.Entry.ModRevision},
 		{
@@ -286,14 +311,21 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	conditions = append(conditions, etcdstore.Condition{Key: fenceKey, ModRevision: operation.FenceRevision})
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: taskReference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: childKey, Value: entryValue},
 		{Type: etcdstore.MutationPut, Key: successorKey, Value: successorValue},
 		{
-			Type:  etcdstore.MutationPut,
-			Key:   hierarchydeletion.HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID),
+			Type: etcdstore.MutationPut,
+			Key: hierarchydeletion.HierarchyDeletionTombstoneKey(
+				string(operation.Tombstone.TargetKind),
+				operation.Tombstone.TargetID,
+			),
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: fenceKey, Value: fenceValue},
@@ -336,7 +368,12 @@ func hierarchyDeletionChildMatches(
 
 func decodeHierarchyDeletionChildEntry(value []byte) (hierarchydeletion.HierarchyDeletionChildEntry, error) {
 	var entry hierarchydeletion.HierarchyDeletionChildEntry
-	if hierarchydeletion.DecodeHierarchyDeletionRecord(value, hierarchydeletion.HierarchyDeletionLargeRecordBytes, &entry) != nil || entry.Schema != 1 {
+	if hierarchydeletion.DecodeHierarchyDeletionRecord(
+		value,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+		&entry,
+	) != nil ||
+		entry.Schema != 1 {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	return entry, nil
@@ -361,7 +398,10 @@ func hierarchyDeletionStableULID(domain string, values ...string) string {
 	return operation[len(string(ids.KindOperation))+1:]
 }
 
-func hierarchyDeletionTaskResultDigest(result *taskjournal.TaskResultRecord, terminal taskjournal.TaskStatus) (string, string, error) {
+func hierarchyDeletionTaskResultDigest(
+	result *taskjournal.TaskResultRecord,
+	terminal taskjournal.TaskStatus,
+) (string, string, error) {
 	if result == nil {
 		return "", "", errs.New(errs.KindInternal, "hierarchy deletion child Task lost its result")
 	}
@@ -374,10 +414,16 @@ func hierarchyDeletionTaskResultDigest(result *taskjournal.TaskResultRecord, ter
 	if terminal == taskjournal.TaskStatusCompleted {
 		return digest, "", nil
 	}
-	return "", hierarchydeletion.HierarchyDeletionFoldDigest("gp-deletion-child-error-v1", string(terminal), digest), nil
+	return "", hierarchydeletion.HierarchyDeletionFoldDigest(
+		"gp-deletion-child-error-v1",
+		string(terminal),
+		digest,
+	), nil
 }
 
-func hierarchyDeletionAgentTerminalFromTask(status taskjournal.TaskStatus) (hierarchydeletion.HierarchyDeletionAgentTerminal, error) {
+func hierarchyDeletionAgentTerminalFromTask(
+	status taskjournal.TaskStatus,
+) (hierarchydeletion.HierarchyDeletionAgentTerminal, error) {
 	switch status {
 	case taskjournal.TaskStatusCompleted:
 		return hierarchydeletion.HierarchyDeletionAgentCompleted, nil

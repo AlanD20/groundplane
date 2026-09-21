@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	"github.com/AlanD20/groundplane/internal/common/ids"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -11,23 +12,18 @@ import (
 	recordquery "github.com/AlanD20/groundplane/internal/infra/etcd/recordquery"
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
-	"math/rand/v2"
-	"time"
-
-	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
-)
-
-const (
-	initialTaskCASDelay = 2 * time.Millisecond
-	maximumTaskCASDelay = 128 * time.Millisecond
 )
 
 type taskRepositoryStore interface {
 	Get(context.Context, string) (*etcdstore.GetResult, error)
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
-	MeasureTransaction(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionBudget, error)
+	MeasureTransaction(
+		context.Context,
+		[]etcdstore.Condition,
+		[]etcdstore.Mutation,
+	) (etcdstore.TransactionBudget, error)
 	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
@@ -85,13 +81,6 @@ const (
 	TaskListScopeProject           TaskListScopeKind = "project"
 	TaskListScopeEnvironment       TaskListScopeKind = "environment"
 )
-
-type taskCASRetryPolicy struct {
-	initialDelay time.Duration
-	maximumDelay time.Duration
-	jitter       func(time.Duration) time.Duration
-	wait         func(context.Context, time.Duration) error
-}
 
 // TaskRepository owns the accepted Task primary, durable queue/assignment
 // lifecycle, and event-journal mechanics. Retention metadata is persisted by
@@ -186,7 +175,10 @@ func (repository *TaskRepository) GetTask(
 	}
 	for index, value := range indexes.Values {
 		if value == nil || value.Key != indexKeys[index] || string(value.Value) != taskID {
-			return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task owner index membership is corrupt")
+			return etcdstore.Versioned[TaskRecord]{}, errs.New(
+				errs.KindInternal,
+				"task owner index membership is corrupt",
+			)
 		}
 	}
 	return etcdstore.Versioned[TaskRecord]{
@@ -218,7 +210,8 @@ func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) e
 		return errs.New(errs.KindInternal, "task journal schema marker read is incomplete")
 	}
 	if marker.Values[0] != nil {
-		if marker.Values[0].Key != taskjournal.TaskJournalSchemaKey || string(marker.Values[0].Value) != taskjournal.TaskJournalSchemaValue {
+		if marker.Values[0].Key != taskjournal.TaskJournalSchemaKey ||
+			string(marker.Values[0].Value) != taskjournal.TaskJournalSchemaValue {
 			return errs.New(errs.KindInternal, "task journal schema marker is incompatible")
 		}
 		return nil
@@ -229,7 +222,13 @@ func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) e
 	initialized, err := repository.store.Transact(
 		ctx,
 		[]etcdstore.Condition{{Key: taskjournal.TaskJournalSchemaKey}, {Key: taskjournal.TaskPrefix, Prefix: true}},
-		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: taskjournal.TaskJournalSchemaKey, Value: []byte(taskjournal.TaskJournalSchemaValue)}},
+		[]etcdstore.Mutation{
+			{
+				Type:  etcdstore.MutationPut,
+				Key:   taskjournal.TaskJournalSchemaKey,
+				Value: []byte(taskjournal.TaskJournalSchemaValue),
+			},
+		},
 	)
 	if err != nil {
 		return err
@@ -266,7 +265,8 @@ func (repository *TaskRepository) GetSystemTaskInitiation(
 	if err != nil {
 		return TaskInitiation{}, err
 	}
-	if parent.Record.Executor != taskjournal.TaskExecutorController || parent.Record.Status != taskjournal.TaskStatusRunning {
+	if parent.Record.Executor != taskjournal.TaskExecutorController ||
+		parent.Record.Status != taskjournal.TaskStatusRunning {
 		return TaskInitiation{}, errs.New(
 			errs.KindStateConflict,
 			"system task initiation parent is not a running controller task",
@@ -295,7 +295,10 @@ func (repository *TaskRepository) ListTasksByScope(
 	switch scope.Kind {
 	case TaskListScopeGlobal:
 		if scope.ID != "" {
-			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "global task scope cannot contain an id")
+			return etcdstore.Page[TaskRecord]{}, errs.New(
+				errs.KindValidationFailed,
+				"global task scope cannot contain an id",
+			)
 		}
 		page, err := recordquery.ListPrimary(
 			ctx, repository.store, "tasks", "global", "-", taskjournal.TaskPrefix, ids.KindTask,
@@ -317,14 +320,18 @@ func (repository *TaskRepository) ListTasksByScope(
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeTenantWorkspace:
 		if ids.Validate(ids.KindTenant, scope.ID) != nil {
-			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "tenant task workspace scope is invalid")
+			return etcdstore.Page[TaskRecord]{}, errs.New(
+				errs.KindValidationFailed,
+				"tenant task workspace scope is invalid",
+			)
 		}
 		page, err := recordquery.ListIndex(
 			ctx, repository.store, "tasks", "workspace", scope.ID,
 			taskjournal.TaskWorkspaceTenantPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask, request,
 			DecodeTaskRecord, identity,
 			func(record TaskRecord) bool {
-				return record.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant && record.Owner.TenantID == scope.ID
+				return record.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant &&
+					record.Owner.TenantID == scope.ID
 			},
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
@@ -348,7 +355,10 @@ func (repository *TaskRepository) ListTasksByScope(
 		return repository.verifyTaskOwnerPage(ctx, page, err)
 	case TaskListScopeEnvironment:
 		if ids.Validate(ids.KindEnvironment, scope.ID) != nil {
-			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "environment task scope is invalid")
+			return etcdstore.Page[TaskRecord]{}, errs.New(
+				errs.KindValidationFailed,
+				"environment task scope is invalid",
+			)
 		}
 		page, err := recordquery.ListIndex(
 			ctx, repository.store, "tasks", "environment", scope.ID,
@@ -405,64 +415,6 @@ func (repository *TaskRepository) verifyTaskOwnerPage(
 		}
 	}
 	return page, nil
-}
-
-func defaultTaskCASRetryPolicy() taskCASRetryPolicy {
-	return taskCASRetryPolicy{
-		initialDelay: initialTaskCASDelay,
-		maximumDelay: maximumTaskCASDelay,
-		jitter: func(bound time.Duration) time.Duration {
-			if bound <= 0 {
-				return 0
-			}
-			return time.Duration(rand.Int64N(int64(bound) + 1))
-		},
-		wait: waitForTaskCASRetry,
-	}
-}
-
-func validateTaskCASRetryPolicy(policy taskCASRetryPolicy) error {
-	if policy.initialDelay <= 0 || policy.maximumDelay < policy.initialDelay ||
-		policy.jitter == nil || policy.wait == nil {
-		return errs.New(errs.KindInternal, "task CAS retry policy is invalid")
-	}
-	return nil
-}
-
-func (policy taskCASRetryPolicy) waitAfterConflict(ctx context.Context, conflicts int) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	delay := policy.initialDelay
-	for exponent := 1; exponent < conflicts && delay < policy.maximumDelay; exponent++ {
-		if delay > policy.maximumDelay/2 {
-			delay = policy.maximumDelay
-			break
-		}
-		delay *= 2
-	}
-	jitterBound := delay / 2
-	jitter := policy.jitter(jitterBound)
-	if jitter < 0 || jitter > jitterBound {
-		return errs.New(errs.KindInternal, "task CAS retry jitter is outside its bound")
-	}
-	if delay > policy.maximumDelay-jitter {
-		delay = policy.maximumDelay
-	} else {
-		delay += jitter
-	}
-	return policy.wait(ctx, delay)
-}
-
-func waitForTaskCASRetry(ctx context.Context, delay time.Duration) error {
-	timer := time.NewTimer(delay)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
 }
 
 // ListTaskEvents returns the complete journal at revision. Revision zero

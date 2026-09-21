@@ -27,7 +27,10 @@ func (service *scriptMutationService) RunScript(
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.repository == nil || service.idempotency == nil || service.preparation == nil ||
 		ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script execution service is not configured")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Script execution service is not configured",
+		)
 	}
 	if ids.Validate(ids.KindScript, scriptID) != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Script id is invalid")
@@ -103,9 +106,12 @@ func (service *scriptMutationService) RunScript(
 	}
 	marker := idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator:      locator,
-		ReplayTarget: &idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetScript, ID: scriptID},
-		Intent:       evidence.durable,
+		Locator: locator,
+		ReplayTarget: &idempotencyrecord.IdempotencyReplayTarget{
+			Kind: idempotencyrecord.IdempotencyReplayTargetScript,
+			ID:   scriptID,
+		},
+		Intent: evidence.durable,
 		Response: idempotencyrecord.IdempotencyResponse{
 			Status: response.Status, ContentKind: response.ContentKind, Body: append([]byte(nil), response.Body...),
 		},

@@ -18,7 +18,11 @@ func (repository *Preparer) prepareHierarchyDeletionReleaseGroupFinalizer(
 	ctx context.Context,
 	action hierarchydeletion.HierarchyDeletionAction,
 ) (Effects, error) {
-	primary, err := repository.readHierarchyDeletionPrimary(ctx, groupstore.ReleaseGroupRecordKey(action.TargetID), action)
+	primary, err := repository.readHierarchyDeletionPrimary(
+		ctx,
+		groupstore.ReleaseGroupRecordKey(action.TargetID),
+		action,
+	)
 	if err != nil {
 		return Effects{}, err
 	}
@@ -46,7 +50,11 @@ func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 	); err != nil {
 		return Effects{}, err
 	}
-	primary, err := repository.readHierarchyDeletionPrimary(ctx, hierarchyrecord.EnvironmentKey(action.TargetID), action)
+	primary, err := repository.readHierarchyDeletionPrimary(
+		ctx,
+		hierarchyrecord.EnvironmentKey(action.TargetID),
+		action,
+	)
 	if err != nil {
 		return Effects{}, err
 	}
@@ -56,8 +64,13 @@ func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name), hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID),
-		blueprints.EnvironmentBlueprintHeadKey(record.ID), projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID),
+		hierarchyrecord.EnvironmentNameKey(
+			record.ProjectID,
+			record.Name,
+		), hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID),
+		blueprints.EnvironmentBlueprintHeadKey(
+			record.ID,
+		), projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID),
 		groupstore.ReleaseGroupCollectionEpochKey(record.ID),
 	}})
 	if err != nil {
@@ -96,14 +109,26 @@ func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 		{Key: indexes.Values[0].Key, ModRevision: indexes.Values[0].ModRevision},
 		{Key: indexes.Values[1].Key, ModRevision: indexes.Values[1].ModRevision},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(record.ID), ModRevision: etcdstore.RevisionOf(indexes.Values[2])},
-		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID), ModRevision: etcdstore.RevisionOf(indexes.Values[3])},
-		{Key: groupstore.ReleaseGroupCollectionEpochKey(record.ID), ModRevision: etcdstore.RevisionOf(indexes.Values[4])},
+		{
+			Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID),
+			ModRevision: etcdstore.RevisionOf(indexes.Values[3]),
+		},
+		{
+			Key:         groupstore.ReleaseGroupCollectionEpochKey(record.ID),
+			ModRevision: etcdstore.RevisionOf(indexes.Values[4]),
+		},
 	}
 	conditions = append(
 		conditions,
 		EnvironmentDeletionLiveAuthorityConditions(record.ID, operation.Tombstone.OperationID)...)
-	conditions = append(conditions, etcdstore.Condition{Key: blueprints.EnvironmentBlueprintRevisionsPrefix(record.ID), Prefix: true})
-	conditions = append(conditions, etcdstore.Condition{Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true})
+	conditions = append(
+		conditions,
+		etcdstore.Condition{Key: blueprints.EnvironmentBlueprintRevisionsPrefix(record.ID), Prefix: true},
+	)
+	conditions = append(
+		conditions,
+		etcdstore.Condition{Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true},
+	)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: blueprints.EnvironmentBlueprintHeadKey(record.ID)},
 		{Type: etcdstore.MutationDelete, Key: projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID)},
@@ -115,6 +140,8 @@ func (repository *Preparer) prepareHierarchyDeletionEnvironmentFinalizer(
 		{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true},
 	}
 	return Effects{
-		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,
+		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(
+			primary.Value,
+		), conditions: conditions, mutations: mutations,
 	}, nil
 }

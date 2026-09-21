@@ -40,13 +40,15 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		return result, err
 	}
 	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
-		!execution.ActiveReference || execution.SourceMembershipCount != 0 {
+		!execution.ActiveReference ||
+		execution.SourceMembershipCount != 0 {
 		return result, errs.New(errs.KindValidationFailed, "new Script execution record is invalid")
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || task.ID != execution.CurrentTaskID ||
-		task.OperationID != execution.OperationID || len(task.Steps) != 1 || task.Steps[0].ID != execution.StepID {
+		task.OperationID != execution.OperationID || len(task.Steps) != 1 ||
+		task.Steps[0].ID != execution.StepID {
 		return result, errs.New(errs.KindValidationFailed, "Script execution marker does not match its Task")
 	}
 	initiation, err := newEnvironmentTaskInitiation(
@@ -126,7 +128,10 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 		{Key: scriptrecord.ScriptSetActiveKey(execution.EnvironmentID), ModRevision: sources.ScriptSet.Revision},
 		{Key: releases.ReleaseProjectionKey(execution.ServiceID), ModRevision: sources.Release.ProjectionRevision},
 		{Key: releases.ReleaseIntentStagingKey("", execution.ReleaseID), ModRevision: sources.Release.IntentRevision},
-		{Key: releases.ReleaseRenderInputStagingKey("", execution.ReleaseID), ModRevision: sources.RenderInput.Revision},
+		{
+			Key:         releases.ReleaseRenderInputStagingKey("", execution.ReleaseID),
+			ModRevision: sources.RenderInput.Revision,
+		},
 		{Key: scriptexecutions.ScriptRunnerSnapshotKey(execution.SnapshotID), ModRevision: snapshotRevision},
 	}
 	sourceConditions, err := manualScriptSourceConditions(sources)
@@ -153,7 +158,11 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: scriptexecutions.ScriptExecutionKey(execution.ID), Value: executionValue},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: taskReference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
 	}

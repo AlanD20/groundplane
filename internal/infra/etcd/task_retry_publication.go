@@ -71,7 +71,8 @@ func (repository *TaskRepository) retryTask(
 	if source.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceHierarchyDeletion {
 		return repository.retryHierarchyDeletionTask(ctx, source, retryTaskID, actor, provided, marker)
 	}
-	if source.Record.Type == taskjournal.TaskRemove && source.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
+	if source.Record.Type == taskjournal.TaskRemove &&
+		source.Record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
 		return repository.retryVolumeRemovalTask(ctx, source, retryTaskID, actor, marker)
 	}
 	retry, err := CloneRetryTask(source.Record, retryTaskID, actor, marker.CreatedAt)
@@ -101,7 +102,8 @@ func (repository *TaskRepository) retryTask(
 		}
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != retry.ID || !marker.CreatedAt.Equal(retry.CreatedAt) ||
+		marker.TaskID != retry.ID ||
+		!marker.CreatedAt.Equal(retry.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -142,7 +144,11 @@ func (repository *TaskRepository) retryTask(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(retry.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(retry.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID), Value: reference},
 	}

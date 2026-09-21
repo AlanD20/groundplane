@@ -46,7 +46,10 @@ func (repository *ScriptRepository) GetScriptExecution(
 	defer clear(result.Entry.Value)
 	record, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](result.Entry.Value, "script-execution")
 	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.ID != executionID {
-		return etcdstore.Versioned[scriptexecutions.ScriptExecutionRecord]{}, errs.New(errs.KindInternal, "Script execution record is corrupt")
+		return etcdstore.Versioned[scriptexecutions.ScriptExecutionRecord]{}, errs.New(
+			errs.KindInternal,
+			"Script execution record is corrupt",
+		)
 	}
 	return etcdstore.Versioned[scriptexecutions.ScriptExecutionRecord]{
 		Record: record, Revision: result.Entry.ModRevision, ReadRevision: result.ReadRevision,
@@ -109,7 +112,9 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	input scriptexecutions.ScriptCheckpointInput,
 ) (scriptCheckpointAnchor, error) {
 	primary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		scriptexecutions.ScriptExecutionKey(input.ExecutionID), taskjournal.TaskStorageKey(input.TaskID), taskjournal.TaskAssignmentIndexKey(input.TaskID),
+		scriptexecutions.ScriptExecutionKey(
+			input.ExecutionID,
+		), taskjournal.TaskStorageKey(input.TaskID), taskjournal.TaskAssignmentIndexKey(input.TaskID),
 	}})
 	if err != nil {
 		return scriptCheckpointAnchor{}, err
@@ -120,7 +125,10 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 		return scriptCheckpointAnchor{}, errs.New(errs.KindStateConflict, "Script checkpoint assignment is unavailable")
 	}
 	defer etcdstore.ClearValues(primary.Values)
-	execution, executionErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](primary.Values[0].Value, "script-execution")
+	execution, executionErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](
+		primary.Values[0].Value,
+		"script-execution",
+	)
 	task, taskErr := DecodeTaskRecord(primary.Values[1].Value)
 	assignment, assignmentErr := taskassignments.DecodeTaskAssignment(primary.Values[2].Value)
 	if executionErr != nil || taskErr != nil || assignmentErr != nil ||

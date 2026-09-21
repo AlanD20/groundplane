@@ -50,7 +50,7 @@ func (repository *TaskRepository) prepareAttachTaskClaim(
 		if current.Record.Status != core.AttachDetaching ||
 			current.Record.Operation != attachrecord.AttachOperationDetach ||
 			current.Record.TaskID != task.ID {
-			return attachTaskChange{}, attachStateError(current.Record, "cannot claim detaching Task")
+			return attachTaskChange{}, attachrecord.StateError(current.Record, "cannot claim detaching Task")
 		}
 		return change, nil
 	}
@@ -139,8 +139,10 @@ func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 			return attachTaskChange{}, completeErr
 		}
 		return encodeAttachTaskChange(attachTaskChange{
-			applies:    true,
-			conditions: []etcdstore.Condition{{Key: attachrecord.AttachKey(task.Target), ModRevision: current.Revision}},
+			applies: true,
+			conditions: []etcdstore.Condition{
+				{Key: attachrecord.AttachKey(task.Target), ModRevision: current.Revision},
+			},
 		}, terminal)
 	}
 	terminal, err := attachrecord.CompleteAttachDetaching(current.Record, task.ID, succeeded)
@@ -149,8 +151,10 @@ func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 	}
 	if !succeeded {
 		return encodeAttachTaskChange(attachTaskChange{
-			applies:    true,
-			conditions: []etcdstore.Condition{{Key: attachrecord.AttachKey(task.Target), ModRevision: current.Revision}},
+			applies: true,
+			conditions: []etcdstore.Condition{
+				{Key: attachrecord.AttachKey(task.Target), ModRevision: current.Revision},
+			},
 		}, terminal)
 	}
 	conditions, mutations, values, err := attachrecord.PrepareAttachRemoval(
@@ -260,7 +264,10 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 		attachrecord.AttachBackingProjectKey(input.BackingProjectID, task.Target),
 		attachrecord.AttachFactsKey(task.Target),
 	}
-	exclusionKey, err := backupruntime.BackupSourceTargetExclusionKey(backupruntime.BackupSourceTargetAttach, task.Target)
+	exclusionKey, err := backupruntime.BackupSourceTargetExclusionKey(
+		backupruntime.BackupSourceTargetAttach,
+		task.Target,
+	)
 	if err != nil {
 		return err
 	}
@@ -290,7 +297,10 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 			return err
 		}
 		replayTargetKey, keyErr := idempotencyrecord.IdempotencyReplayTargetKey(
-			idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetAttach, ID: task.Target},
+			idempotencyrecord.IdempotencyReplayTarget{
+				Kind: idempotencyrecord.IdempotencyReplayTargetAttach,
+				ID:   task.Target,
+			},
 			locator.Method,
 			locator.Route,
 			locator.Key,
@@ -411,7 +421,8 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 }
 
 func taskOwnsAttachLifecycle(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorAgent || (task.Type != taskjournal.TaskAttach && task.Type != taskjournal.TaskDetach) {
+	if task.Executor != taskjournal.TaskExecutorAgent ||
+		(task.Type != taskjournal.TaskAttach && task.Type != taskjournal.TaskDetach) {
 		return false, nil
 	}
 	if recordcodec.ValidateID(ids.KindAttach, task.Target) != nil {
@@ -427,7 +438,10 @@ func encodeAttachTaskChange(change attachTaskChange, record attachrecord.Record)
 	}
 	change.mutates = true
 	change.values = append(change.values, value)
-	change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(record.ID), Value: value})
+	change.mutations = append(
+		change.mutations,
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(record.ID), Value: value},
+	)
 	return change, nil
 }
 

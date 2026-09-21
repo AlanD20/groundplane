@@ -64,7 +64,12 @@ func NewPlatformComponentExecutionPlanner(
 	if volumeRoot == "" || components == nil || baselines == nil || catalog == nil {
 		return nil, errs.New(errs.KindInternal, "Platform Component execution planner dependencies are required")
 	}
-	return &PlatformExecutionPlanner{volumeRoot: volumeRoot, components: components, baselines: baselines, catalog: catalog}, nil
+	return &PlatformExecutionPlanner{
+		volumeRoot: volumeRoot,
+		components: components,
+		baselines:  baselines,
+		catalog:    catalog,
+	}, nil
 }
 
 func (planner *PlatformExecutionPlanner) ResolveComponentExecutionPlan(

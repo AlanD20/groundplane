@@ -335,13 +335,17 @@ func PinnedComponentServiceIdentity(
 	service *agentpb.ComposeService,
 	componentID string,
 ) (composeidentity.Resource, error) {
-	image := composeidentity.ComponentImage{Repository: service.GetImageRepository(), Reference: service.GetImageReference(),
-		IndexDigest: hex.EncodeToString(service.GetImageIndexDigest()), Platform: componentsdk.OCIPlatform{
+	image := composeidentity.ComponentImage{
+		Repository:  service.GetImageRepository(),
+		Reference:   service.GetImageReference(),
+		IndexDigest: hex.EncodeToString(service.GetImageIndexDigest()),
+		Platform: componentsdk.OCIPlatform{
 			OS: service.GetImageOs(), Architecture: service.GetImageArchitecture(), Variant: service.GetImageVariant(),
 			ChildDigest: hex.EncodeToString(
 				service.GetImageChildDigest(),
 			), ConfigDigest: hex.EncodeToString(service.GetImageConfigDigest()),
-		}}
+		},
+	}
 	if service.GetOwnerComponentId() != componentID || validateSelectedComponentImage(image) != nil {
 		return composeidentity.Resource{}, errs.New(errs.KindInternal, "pinned Component image authority is invalid")
 	}

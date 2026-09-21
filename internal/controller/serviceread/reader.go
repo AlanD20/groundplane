@@ -39,7 +39,10 @@ func (service *Reader) GetService(
 	serviceID string,
 ) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
 	if ctx == nil {
-		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(errs.KindInternal, "Service read context is required")
+		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(
+			errs.KindInternal,
+			"Service read context is required",
+		)
 	}
 	if ids.Validate(ids.KindService, serviceID) != nil {
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(
@@ -63,7 +66,10 @@ func (service *Reader) ListServices(
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[servicerecord.ServiceRecord], error) {
 	if ctx == nil {
-		return etcdstore.Page[servicerecord.ServiceRecord]{}, errs.New(errs.KindInternal, "Service list context is required")
+		return etcdstore.Page[servicerecord.ServiceRecord]{}, errs.New(
+			errs.KindInternal,
+			"Service list context is required",
+		)
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
 		return etcdstore.Page[servicerecord.ServiceRecord]{}, errs.New(

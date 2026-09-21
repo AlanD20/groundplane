@@ -72,7 +72,10 @@ func (repository *Repository) prepareRouteCreation(
 	return conditions, mutations, classify, nil
 }
 
-func (repository *Repository) GetRoute(ctx context.Context, id string) (etcdstore.Versioned[routerecord.Record], error) {
+func (repository *Repository) GetRoute(
+	ctx context.Context,
+	id string,
+) (etcdstore.Versioned[routerecord.Record], error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[routerecord.Record]{}, err
 	}
@@ -158,7 +161,11 @@ func (repository *Repository) prepareRouteReplacement(
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			routerecord.OwnerKey(current.Record.EnvironmentID, current.Record.Desired.ID),
-			routerecord.MatchKey(current.Record.EnvironmentID, current.Record.Desired.Host, current.Record.Desired.Path),
+			routerecord.MatchKey(
+				current.Record.EnvironmentID,
+				current.Record.Desired.Host,
+				current.Record.Desired.Path,
+			),
 		},
 		Revision: current.ReadRevision,
 	})
@@ -178,7 +185,9 @@ func (repository *Repository) prepareRouteReplacement(
 		environment, project, target, current.Record, &current,
 		indexes.Values[0].ModRevision, indexes.Values[1].ModRevision,
 	)
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: routerecord.RecordKey(replacement.Desired.ID), Value: value}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: routerecord.RecordKey(replacement.Desired.ID), Value: value},
+	}
 	classify := func(_ int64, values []*etcdstore.KeyValue) error {
 		return classifyRouteWriteConflict(values, environment, project, target, current.Record, current.Revision)
 	}
@@ -196,7 +205,9 @@ func routeWriteConditions(
 ) []etcdstore.Condition {
 	routeCondition := etcdstore.Condition{Key: routerecord.RecordKey(record.Desired.ID)}
 	ownerCondition := etcdstore.Condition{Key: routerecord.OwnerKey(record.EnvironmentID, record.Desired.ID)}
-	matchCondition := etcdstore.Condition{Key: routerecord.MatchKey(record.EnvironmentID, record.Desired.Host, record.Desired.Path)}
+	matchCondition := etcdstore.Condition{
+		Key: routerecord.MatchKey(record.EnvironmentID, record.Desired.Host, record.Desired.Path),
+	}
 	if current != nil {
 		routeCondition.ModRevision = current.Revision
 		ownerCondition.ModRevision = ownerRevision
@@ -215,7 +226,10 @@ func routeWriteConditions(
 		{Key: deletions.TombstoneKey("service", target.Record.Desired.ID)},
 	}
 	if project.Record.TenantID != "" {
-		conditions = append(conditions, etcdstore.Condition{Key: deletions.TombstoneKey("tenant", project.Record.TenantID)})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: deletions.TombstoneKey("tenant", project.Record.TenantID)},
+		)
 	}
 	return conditions
 }

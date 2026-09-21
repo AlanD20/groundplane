@@ -28,7 +28,10 @@ func (repository *Repository) CreateProject(
 		if err != nil {
 			return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 		}
-		conditions = append(conditions, etcdstore.Condition{Key: hierarchyrecord.TenantKey(record.TenantID), ModRevision: owner.Revision})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: hierarchyrecord.TenantKey(record.TenantID), ModRevision: owner.Revision},
+		)
 	}
 	value, err := recordcodec.Encode("project", record)
 	if err != nil {
@@ -51,7 +54,15 @@ func (repository *Repository) CreateProject(
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, err
 	}
 	if !result.Succeeded {
-		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, repository.diagnoseCreate(ctx, hierarchyrecord.ProjectKey(record.ID), hierarchyrecord.ProjectSlugKey(record))
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, repository.diagnoseCreate(
+			ctx,
+			hierarchyrecord.ProjectKey(record.ID),
+			hierarchyrecord.ProjectSlugKey(record),
+		)
 	}
-	return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{
+		Record:       record,
+		Revision:     result.Revision,
+		ReadRevision: result.Revision,
+	}, nil
 }

@@ -40,7 +40,10 @@ func ServiceMutationReferenceConditions(
 			return nil, errs.New(errs.KindValidationFailed, "Service Zone reference is not desired")
 		}
 		delete(wantZones, zone.Record.Desired.Name)
-		conditions = append(conditions, etcdstore.Condition{Key: deletions.TombstoneKey("zone", zone.Record.Desired.ID)})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: deletions.TombstoneKey("zone", zone.Record.Desired.ID)},
+		)
 	}
 	wantDependencies := make(map[string]struct{}, len(record.Desired.DependsOn))
 	for name := range record.Desired.DependsOn {
@@ -69,7 +72,10 @@ func ServiceMutationReferenceConditions(
 	return conditions, nil
 }
 
-func ClassifyServiceMutationReferenceConflict(values []*etcdstore.KeyValue, references ServiceMutationReferences) error {
+func ClassifyServiceMutationReferenceConflict(
+	values []*etcdstore.KeyValue,
+	references ServiceMutationReferences,
+) error {
 	if len(values) != len(references.Zones)+2*len(references.Dependencies) {
 		return errs.New(errs.KindInternal, "Service reference compare evidence is incomplete")
 	}
@@ -94,7 +100,8 @@ func ClassifyServiceMutationReferenceConflict(values []*etcdstore.KeyValue, refe
 
 func ValidateServiceMutationMarker(marker idempotencyrecord.IdempotencyMarker, environmentID string) error {
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || marker.Locator.ScopeID != environmentID {
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != environmentID {
 		return errs.New(
 			errs.KindValidationFailed,
 			"Service mutation marker must be a completed Environment-scoped direct mutation",

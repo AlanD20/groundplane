@@ -73,11 +73,15 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 			)
 		}
 	}
-	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetService, ID: current.Record.Desired.ID}
+	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetService,
+		ID:   current.Record.Desired.ID,
+	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
-		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
+		*marker.ReplayTarget != wantReplayTarget ||
+		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -165,11 +169,23 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: servicerecord.ServiceRuntimeKey(current.Record.Desired.ID), Value: serviceValue},
-		{Type: etcdstore.MutationPut, Key: servicerecord.ServiceLifecycleActiveKey(current.Record.Desired.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   servicerecord.ServiceRuntimeKey(current.Record.Desired.ID),
+			Value: serviceValue,
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   servicerecord.ServiceLifecycleActiveKey(current.Record.Desired.ID),
+			Value: reference,
+		},
 	}
 	if renderInput != nil {
 		inputValue, encodeErr := releaserender.EncodeServiceLifecycleRenderInput(*renderInput)
@@ -311,7 +327,11 @@ func validateServiceLifecycleHierarchy(
 	return nil
 }
 
-func validateServiceLifecycleReplacement(current servicerecord.ServiceRecord, replacement servicerecord.ServiceRecord, task TaskRecord) error {
+func validateServiceLifecycleReplacement(
+	current servicerecord.ServiceRecord,
+	replacement servicerecord.ServiceRecord,
+	task TaskRecord,
+) error {
 	if servicerecord.ValidateServiceRecord(current) != nil || servicerecord.ValidateServiceRecord(replacement) != nil ||
 		replacement.EnvironmentID != current.EnvironmentID ||
 		replacement.BackingNetworkID != current.BackingNetworkID ||
@@ -344,7 +364,9 @@ func validateServiceLifecycleProjection(
 ) error {
 	if projection == nil && input == nil {
 		if task.Executor != taskjournal.TaskExecutorController || task.RenderGeneration != 1 ||
-			len(task.Params) != 2 || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
+			len(
+				task.Params,
+			) != 2 || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
 			task.Params[taskjournal.TaskServiceEnvironmentParam] == "" {
 			return errs.New(errs.KindValidationFailed, "unapplied Service lifecycle Task is invalid")
 		}
@@ -374,7 +396,10 @@ func validateServiceLifecycleProjection(
 	return releaserender.ValidateServiceLifecycleRenderInput(*input)
 }
 
-func serviceLifecycleHooks(configuration *backinghook.Configuration, taskType taskjournal.TaskType) *backinghook.Configuration {
+func serviceLifecycleHooks(
+	configuration *backinghook.Configuration,
+	taskType taskjournal.TaskType,
+) *backinghook.Configuration {
 	if configuration == nil {
 		return nil
 	}
@@ -386,7 +411,10 @@ func serviceLifecycleHooks(configuration *backinghook.Configuration, taskType ta
 	return configuration
 }
 
-func serviceLifecycleHookConfigured(input releaserender.ServiceLifecycleRenderInput, taskType taskjournal.TaskType) bool {
+func serviceLifecycleHookConfigured(
+	input releaserender.ServiceLifecycleRenderInput,
+	taskType taskjournal.TaskType,
+) bool {
 	return serviceLifecycleHooks(input.HookConfiguration, taskType) != nil
 }
 

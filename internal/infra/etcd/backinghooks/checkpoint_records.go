@@ -55,7 +55,10 @@ func AdvanceCheckpoint(
 ) (CheckpointRecord, error) {
 	if input.State == CheckpointStarted {
 		if current != nil {
-			return CheckpointRecord{}, errs.New(errs.KindStateConflict, "Backing hook STARTED checkpoint already exists")
+			return CheckpointRecord{}, errs.New(
+				errs.KindStateConflict,
+				"Backing hook STARTED checkpoint already exists",
+			)
 		}
 		return CheckpointRecord{
 			TaskID: input.TaskID, OperationID: input.OperationID, AssignmentID: input.AssignmentID,
@@ -65,7 +68,10 @@ func AdvanceCheckpoint(
 	}
 	if current == nil || current.State != CheckpointStarted ||
 		!sameBackingHookCheckpointIdentity(*current, input) {
-		return CheckpointRecord{}, errs.New(errs.KindStateConflict, "Backing hook RESULT has no exact STARTED checkpoint")
+		return CheckpointRecord{}, errs.New(
+			errs.KindStateConflict,
+			"Backing hook RESULT has no exact STARTED checkpoint",
+		)
 	}
 	next := *current
 	next.State = CheckpointResult
@@ -78,7 +84,10 @@ func AdvanceCheckpoint(
 
 func ValidateCheckpointInput(input CheckpointInput) error {
 	if ids.Validate(ids.KindTask, input.TaskID) != nil || ids.Validate(ids.KindOperation, input.OperationID) != nil ||
-		ids.Validate(ids.KindAssignment, input.AssignmentID) != nil || ids.Validate(ids.KindStep, input.StepID) != nil ||
+		ids.Validate(
+			ids.KindAssignment,
+			input.AssignmentID,
+		) != nil || ids.Validate(ids.KindStep, input.StepID) != nil ||
 		input.AgentID == "" || input.AgentGeneration == 0 || input.ExecutionEpoch == 0 ||
 		len(input.PlanHash) != 64 || input.At.IsZero() || input.Event == "" {
 		return errs.New(errs.KindValidationFailed, "Backing hook checkpoint identity is invalid")
@@ -96,7 +105,8 @@ func ValidateCheckpointInput(input CheckpointInput) error {
 			return errs.New(errs.KindValidationFailed, "Backing hook RESULT digest is invalid")
 		}
 		if input.Event == "attach" {
-			if input.Facts == nil || attachrecord.ValidateAttachEncryptedFacts(*input.Facts) != nil || input.Facts.AttachID != input.AttachID {
+			if input.Facts == nil || attachrecord.ValidateAttachEncryptedFacts(*input.Facts) != nil ||
+				input.Facts.AttachID != input.AttachID {
 				return errs.New(errs.KindValidationFailed, "Backing hook RESULT facts are invalid")
 			}
 		} else if input.Facts != nil {

@@ -26,7 +26,11 @@ func (repository *Preparer) prepareHierarchyDeletionSecretFinalizer(
 	if err != nil {
 		return Effects{}, err
 	}
-	keys := []string{secretrecord.SecretOwnerKey(record.Secret), secretrecord.SecretScopedKey(record.Secret), secretrecord.ValueKey(action.TargetID)}
+	keys := []string{
+		secretrecord.SecretOwnerKey(record.Secret),
+		secretrecord.SecretScopedKey(record.Secret),
+		secretrecord.ValueKey(action.TargetID),
+	}
 	effects, err := repository.prepareHierarchyDeletionIndexedDelete(ctx, action, primary, keys)
 	if err != nil {
 		return Effects{}, err

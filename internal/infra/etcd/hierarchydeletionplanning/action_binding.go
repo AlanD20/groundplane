@@ -52,8 +52,11 @@ func BindHierarchyDeletionAction(
 			)
 		}
 		action.AgentProcedure = &hierarchydeletion.HierarchyDeletionAgentProcedure{
-			ChildOperationID: hierarchydeletion.HierarchyDeletionStableOperationID(planned.ParentOperationID, planned.NodeID),
-			TaskType:         input.TaskType, TypedProcedure: input.TypedProcedure,
+			ChildOperationID: hierarchydeletion.HierarchyDeletionStableOperationID(
+				planned.ParentOperationID,
+				planned.NodeID,
+			),
+			TaskType: input.TaskType, TypedProcedure: input.TypedProcedure,
 			InputDigest: input.InputDigest, TimeoutSeconds: input.TimeoutSeconds,
 		}
 	case hierarchydeletion.HierarchyDeletionProcedureController:

@@ -21,7 +21,8 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 		(task.Type != taskjournal.TaskScript && task.Params[releaserender.TaskReleasePublicationParam] == "") {
 		return nil, nil
 	}
-	if task.Params[releaserender.TaskReleasePublicationParam] != "" && assignment.ExecutionMode == taskassignments.TaskExecutionModeForward &&
+	if task.Params[releaserender.TaskReleasePublicationParam] != "" &&
+		assignment.ExecutionMode == taskassignments.TaskExecutionModeForward &&
 		(result.ExecutionEpoch != assignment.ExecutionEpoch || result.ReleaseRecoveryRecordSHA256 != "") {
 		return nil, errs.New(errs.KindStateConflict, "release terminal execution epoch changed")
 	}

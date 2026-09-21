@@ -67,10 +67,20 @@ func (repository *TaskRepository) closeReleaseOperation(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: releases.ReleaseOperationKey(task.OperationID), Value: headValue},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID), Value: epochValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
+			Value: epochValue,
+		},
 	}
 	if state != domain.StateRecoveryRequired {
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: releases.ReleaseFenceSetKey(task.Owner.EnvironmentID)})
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  releases.ReleaseFenceSetKey(task.Owner.EnvironmentID),
+			},
+		)
 	} else if fence.OperationID != task.OperationID {
 		return false, releases.CorruptReleaseRecord()
 	}

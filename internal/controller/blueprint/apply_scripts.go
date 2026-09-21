@@ -10,7 +10,14 @@ import (
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
-func (service *Service) prepareApplyScripts(ctx context.Context, environmentID, revisionID string, authored map[string]core.ScriptSpec, desiredServices []core.Service, resources desiredrevision.BlueprintScriptResources, allocate func(ids.Kind, string) string) (desiredrevision.BlueprintScriptReconciliation, etcd.BlueprintScriptPublication, error) {
+func (service *Service) prepareApplyScripts(
+	ctx context.Context,
+	environmentID, revisionID string,
+	authored map[string]core.ScriptSpec,
+	desiredServices []core.Service,
+	resources desiredrevision.BlueprintScriptResources,
+	allocate func(ids.Kind, string) string,
+) (desiredrevision.BlueprintScriptReconciliation, etcd.BlueprintScriptPublication, error) {
 	scriptRepository := service.repository
 	currentScripts, scriptsReadRevision, err := service.listBlueprintScripts(ctx, environmentID, scriptRepository)
 	if err != nil {

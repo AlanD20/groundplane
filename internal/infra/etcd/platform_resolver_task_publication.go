@@ -32,7 +32,8 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	if task.Owner != taskjournal.PlatformTaskOwner() || task.Actor != taskjournal.TaskActorSystem || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskUpdate || task.Status != taskjournal.TaskStatusPending || task.Target != current.Record.Desired.ID ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
-		task.Params[TaskAutomaticReconcileParam] != "true" || len(task.Params) != 2 {
+		task.Params[TaskAutomaticReconcileParam] != "true" ||
+		len(task.Params) != 2 {
 		return errs.New(errs.KindValidationFailed, "platform DNS resolver Task shape is invalid")
 	}
 	if task.PlanID != renderInput.PlanID || task.ID != renderInput.TaskID || task.Target != renderInput.ComponentID ||
@@ -99,19 +100,35 @@ func (repository *TaskRepository) PublishPlatformDNSResolverTask(
 	conditions := []etcdstore.Condition{
 		{Key: componentrecord.RecordKey(task.Target), ModRevision: current.Revision},
 		{Key: platformcomponents.PlatformComponentOwnerKey(task.Target), ModRevision: indexes.Values[0].ModRevision},
-		{Key: platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
-		{Key: platformcomponents.PlatformComponentBootstrapKey(task.Target), ModRevision: indexes.Values[2].ModRevision},
+		{
+			Key:         platformcomponents.PlatformComponentKindKey(current.Record.Desired.Kind),
+			ModRevision: indexes.Values[1].ModRevision,
+		},
+		{
+			Key:         platformcomponents.PlatformComponentBootstrapKey(task.Target),
+			ModRevision: indexes.Values[2].ModRevision,
+		},
 		{Key: resolutionrecord.StorageKey},
 		{Key: platformComponentTaskActiveKey(task.Target)},
 		{Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID)},
 		{Key: taskjournal.TaskStorageKey(task.ID)}, {Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
+		{
+			Key: taskjournal.TaskActiveOperationKey(task.OperationID),
+		}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: resolutionrecord.StorageKey, Value: projectionValue},
-		{Type: etcdstore.MutationPut, Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID), Value: renderValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID),
+			Value: renderValue,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(task.Target), Value: []byte(task.ID)},
@@ -180,7 +197,9 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	}
 	task.Params[TaskPlatformComponentDesiredSHA256Param] = desiredSHA256
 	ensureService := len(current.Record.Runtime.GeneratedServices) == 0 || !current.Record.Runtime.Healthy
-	task.Steps = platformResolverTaskSteps(platformcomponents.PlatformComponentTaskRenderInput{EnsureService: ensureService})
+	task.Steps = platformResolverTaskSteps(
+		platformcomponents.PlatformComponentTaskRenderInput{EnsureService: ensureService},
+	)
 	var finalLineage *platformResolverLiveLineage
 	if sealedPredecessor != nil {
 		if active == nil || string(active.Value) != sealedPredecessor.ID {
@@ -206,7 +225,9 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 			return hostResolutionReconciliationChange{}, decodeErr
 		}
 		predecessorInputRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{platformcomponents.PlatformComponentTaskRenderInputKey(predecessor.PlanID)}, Revision: active.ModRevision,
+			Keys: []string{
+				platformcomponents.PlatformComponentTaskRenderInputKey(predecessor.PlanID),
+			}, Revision: active.ModRevision,
 		})
 		if readErr != nil {
 			return hostResolutionReconciliationChange{}, readErr
@@ -218,7 +239,9 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 				"platform resolver predecessor render input is missing",
 			)
 		}
-		predecessorInput, decodeErr := platformcomponents.DecodePlatformComponentTaskRenderInput(predecessorInputRead.Values[0].Value)
+		predecessorInput, decodeErr := platformcomponents.DecodePlatformComponentTaskRenderInput(
+			predecessorInputRead.Values[0].Value,
+		)
 		if decodeErr != nil {
 			return hostResolutionReconciliationChange{}, decodeErr
 		}
@@ -335,13 +358,25 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskContribution(
 	}
 	conditions = appendHostResolutionCondition(conditions, activeCondition)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID), Value: renderValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID),
+			Value: renderValue,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskWorkspacePlatformIndexKey(task.ID), Value: []byte(task.ID)},
-		{Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(current.Record.Desired.ID), Value: []byte(task.ID)},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   platformComponentTaskActiveKey(current.Record.Desired.ID),
+			Value: []byte(task.ID),
+		},
 	}
 	return hostResolutionReconciliationChange{
 		applies: true, conditions: conditions, mutations: mutations,

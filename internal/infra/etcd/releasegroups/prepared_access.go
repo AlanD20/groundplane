@@ -35,6 +35,9 @@ func (prepared ReleaseGroupBlueprintPreparedMutation) ConditionCount() int {
 
 // AppendTo contributes this fragment to the final Blueprint transaction.
 // Mutation values retain the original shared ownership and clearing lifecycle.
-func (prepared ReleaseGroupBlueprintPreparedMutation) AppendTo(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) ([]etcdstore.Condition, []etcdstore.Mutation) {
+func (prepared ReleaseGroupBlueprintPreparedMutation) AppendTo(
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) ([]etcdstore.Condition, []etcdstore.Mutation) {
 	return append(conditions, prepared.conditions...), append(mutations, prepared.mutations...)
 }

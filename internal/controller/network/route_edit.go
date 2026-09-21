@@ -21,7 +21,10 @@ func (service *routeMutationService) EditRoute(
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route edit context is required")
 	}
 	if ids.Validate(ids.KindRoute, routeID) != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Route edit requires a stable Route id")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Route edit requires a stable Route id",
+		)
 	}
 	if input.Exposure != "public" && input.Exposure != "internal" {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(
@@ -39,7 +42,10 @@ func (service *routeMutationService) EditRoute(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route edit retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Route edit retry bound was not enforced",
+	)
 }
 
 func (service *routeMutationService) editRouteOnce(

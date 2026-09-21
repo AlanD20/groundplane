@@ -42,7 +42,8 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 			"Environment mutation identity is invalid",
 		)
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != current.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -79,7 +80,10 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 		deletions.TombstoneKey("tenant", project.TenantID),
 	}
 	if renaming {
-		secondaryKeys = append(secondaryKeys, hierarchyrecord.EnvironmentNameKey(replacement.ProjectID, replacement.Name))
+		secondaryKeys = append(
+			secondaryKeys,
+			hierarchyrecord.EnvironmentNameKey(replacement.ProjectID, replacement.Name),
+		)
 	}
 	secondary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: secondaryKeys, Revision: current.ReadRevision,
@@ -143,12 +147,20 @@ func (repository *HierarchyRepository) MutateEnvironmentIdempotent(
 		{Key: hierarchyrecord.TenantKey(tenant.ID), ModRevision: secondary.Values[4].ModRevision},
 		{Key: deletions.TombstoneKey("tenant", tenant.ID)},
 	}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(current.Record.ID), Value: value}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(current.Record.ID), Value: value},
+	}
 	if renaming {
-		conditions = append(conditions, etcdstore.Condition{Key: hierarchyrecord.EnvironmentNameKey(replacement.ProjectID, replacement.Name)})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: hierarchyrecord.EnvironmentNameKey(replacement.ProjectID, replacement.Name)},
+		)
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentNameKey(current.Record.ProjectID, current.Record.Name)},
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  hierarchyrecord.EnvironmentNameKey(current.Record.ProjectID, current.Record.Name),
+			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
 				Key:   hierarchyrecord.EnvironmentNameKey(replacement.ProjectID, replacement.Name),

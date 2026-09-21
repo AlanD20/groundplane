@@ -89,12 +89,14 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		PlanHash: record.PlanHash, RenderGeneration: record.RenderGeneration,
 		Type: record.Type, Target: record.Target, Params: cloneStringMap(record.Params),
 		Steps: taskjournal.CloneTaskSteps(record.Steps), TimeoutSeconds: record.TimeoutSeconds,
-		ComponentActionStepIDs:          append([]string(nil), record.ComponentActionStepIDs...),
-		ManagedComponentTeardownSources: projectionrecord.CloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources),
-		Materializations:                materializationrecord.Clone(record.Materializations),
-		EntryRuntime:                    taskjournal.CloneEntryTaskRuntime(record.EntryRuntime),
-		Configuration:                   taskconfiguration.CloneTaskConfiguration(record.Configuration),
-		Status:                          record.Status, NextEventSequence: record.NextEventSequence,
+		ComponentActionStepIDs: append([]string(nil), record.ComponentActionStepIDs...),
+		ManagedComponentTeardownSources: projectionrecord.CloneManagedComponentRuntimeSources(
+			record.ManagedComponentTeardownSources,
+		),
+		Materializations: materializationrecord.Clone(record.Materializations),
+		EntryRuntime:     taskjournal.CloneEntryTaskRuntime(record.EntryRuntime),
+		Configuration:    taskconfiguration.CloneTaskConfiguration(record.Configuration),
+		Status:           record.Status, NextEventSequence: record.NextEventSequence,
 		EventCheckpoints:   append([]taskjournal.TaskEventCheckpoint(nil), record.EventCheckpoints...),
 		Result:             taskjournal.TaskResultToData(record.Result),
 		TerminalAssignment: taskjournal.CloneTaskTerminalAssignment(record.TerminalAssignment),
@@ -139,12 +141,14 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 		Executor: data.Executor, PlanID: data.PlanID,
 		PlanHash: data.PlanHash, RenderGeneration: data.RenderGeneration,
 		Type: data.Type, Target: data.Target, Params: data.Params, Steps: data.Steps,
-		ComponentActionStepIDs:          append([]string(nil), data.ComponentActionStepIDs...),
-		ManagedComponentTeardownSources: projectionrecord.CloneManagedComponentRuntimeSources(data.ManagedComponentTeardownSources),
-		Materializations:                data.Materializations,
-		EntryRuntime:                    data.EntryRuntime,
-		Configuration:                   data.Configuration,
-		TimeoutSeconds:                  data.TimeoutSeconds, Status: data.Status,
+		ComponentActionStepIDs: append([]string(nil), data.ComponentActionStepIDs...),
+		ManagedComponentTeardownSources: projectionrecord.CloneManagedComponentRuntimeSources(
+			data.ManagedComponentTeardownSources,
+		),
+		Materializations: data.Materializations,
+		EntryRuntime:     data.EntryRuntime,
+		Configuration:    data.Configuration,
+		TimeoutSeconds:   data.TimeoutSeconds, Status: data.Status,
 		Result:             result,
 		TerminalAssignment: taskjournal.CloneTaskTerminalAssignment(data.TerminalAssignment),
 		NextEventSequence:  data.NextEventSequence, EventCount: data.EventCount,
@@ -157,7 +161,9 @@ func cloneTaskRecord(record TaskRecord) TaskRecord {
 	cloned := record
 	cloned.EventCheckpoints = append([]taskjournal.TaskEventCheckpoint(nil), record.EventCheckpoints...)
 	cloned.ComponentActionStepIDs = append([]string(nil), record.ComponentActionStepIDs...)
-	cloned.ManagedComponentTeardownSources = projectionrecord.CloneManagedComponentRuntimeSources(record.ManagedComponentTeardownSources)
+	cloned.ManagedComponentTeardownSources = projectionrecord.CloneManagedComponentRuntimeSources(
+		record.ManagedComponentTeardownSources,
+	)
 	cloned.Params = cloneStringMap(record.Params)
 	cloned.Steps = taskjournal.CloneTaskSteps(record.Steps)
 	cloned.Materializations = materializationrecord.Clone(record.Materializations)

@@ -85,7 +85,9 @@ func NewRouteMutationIntent(
 		intent.Kind = RouteMutationEdit
 		intent.RouteRevision = previous.Revision
 		prior := etcdstore.Versioned[routerecord.Record]{
-			Record: routerecord.CloneRecord(previous.Record), Revision: previous.Revision, ReadRevision: previous.ReadRevision,
+			Record: routerecord.CloneRecord(
+				previous.Record,
+			), Revision: previous.Revision, ReadRevision: previous.ReadRevision,
 		}
 		intent.Previous = &prior
 	}

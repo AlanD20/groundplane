@@ -71,7 +71,12 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		root.rootSlug = project.Slug
 		root.workspace = hierarchydeletion.HierarchyDeletionWorkspace{Type: "platform"}
 		root.owner, err = taskjournal.ProjectTaskOwner(project)
-		root.coordinationKeys = []string{hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), targetID)}
+		root.coordinationKeys = []string{
+			hierarchydeletion.HierarchyCoordinationKey(
+				string(hierarchydeletion.HierarchyDeletionTargetProject),
+				targetID,
+			),
+		}
 	case hierarchydeletion.HierarchyDeletionTargetEnvironment:
 		environment, decodeErr := hierarchyrecord.DecodeEnvironment(result.Entry.Value)
 		if decodeErr != nil || environment.ID != targetID || environment.DeletionTaskID != "" {
@@ -101,7 +106,10 @@ func (repository *HierarchyDeletionRepository) readDeletionRoot(
 		clear(root.targetValue)
 		return hierarchyDeletionRoot{}, 0, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	root.coordination = make([]etcdstore.Versioned[hierarchydeletion.HierarchyCoordinationRecord], len(root.coordinationKeys))
+	root.coordination = make(
+		[]etcdstore.Versioned[hierarchydeletion.HierarchyCoordinationRecord],
+		len(root.coordinationKeys),
+	)
 	for index, value := range coordination.Values {
 		if value == nil || value.Key != root.coordinationKeys[index] || value.ModRevision <= 0 {
 			clear(root.targetValue)
@@ -178,7 +186,9 @@ func (repository *HierarchyDeletionRepository) readEnvironmentParentsAtRevision(
 	}
 	project, err := hierarchyrecord.DecodeProject(projectResult.Values[0].Value)
 	if err != nil || project.ID != environment.ProjectID || project.DeletionTaskID != "" {
-		return hierarchyDeletionRoot{}, hierarchyDeletionUnavailable(hierarchydeletion.HierarchyDeletionTargetEnvironment)
+		return hierarchyDeletionRoot{}, hierarchyDeletionUnavailable(
+			hierarchydeletion.HierarchyDeletionTargetEnvironment,
+		)
 	}
 	root.primaryFences = append(root.primaryFences, etcdstore.Condition{
 		Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: projectResult.Values[0].ModRevision,
@@ -188,8 +198,14 @@ func (repository *HierarchyDeletionRepository) readEnvironmentParentsAtRevision(
 		return hierarchyDeletionRoot{}, err
 	}
 	root.coordinationKeys = []string{
-		hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), project.ID),
-		hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), environment.ID),
+		hierarchydeletion.HierarchyCoordinationKey(
+			string(hierarchydeletion.HierarchyDeletionTargetProject),
+			project.ID,
+		),
+		hierarchydeletion.HierarchyCoordinationKey(
+			string(hierarchydeletion.HierarchyDeletionTargetEnvironment),
+			environment.ID,
+		),
 	}
 	if project.TenantID != "" {
 		root, err = repository.readProjectParentAtRevision(ctx, revision, project, root)
@@ -208,8 +224,10 @@ func prepareHierarchyDeletionPublication(
 	root hierarchyDeletionRoot,
 	snapshotRevision int64,
 ) (hierarchydeletion.HierarchyDeletionOperation, []etcdstore.Condition, []etcdstore.Mutation, TaskInitiation, error) {
-	if begin.OperationKind == hierarchydeletion.HierarchyDeletionOperationProject && root.workspace.Type == "platform" ||
-		begin.OperationKind == hierarchydeletion.HierarchyDeletionOperationBacking && root.workspace.Type != "platform" {
+	if begin.OperationKind == hierarchydeletion.HierarchyDeletionOperationProject &&
+		root.workspace.Type == "platform" ||
+		begin.OperationKind == hierarchydeletion.HierarchyDeletionOperationBacking &&
+			root.workspace.Type != "platform" {
 		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, errs.New(
 			errs.KindValidationFailed,
 			"hierarchy deletion Project kind must use its exclusive permanent-delete authority",
@@ -249,8 +267,10 @@ func prepareHierarchyDeletionPublication(
 		OperationID: begin.OperationID, TaskOperationID: begin.TaskOperationID,
 		DeletionEpoch: deletionEpoch, CurrentTaskID: begin.TaskID, Workspace: root.workspace,
 		SnapshotRevision: snapshotRevision, Phase: hierarchydeletion.HierarchyDeletionPlanning,
-		Checkpoint: hierarchydeletion.HierarchyDeletionCheckpoint{CompletedPrefixDigest: hex.EncodeToString(initialDigest[:])},
-		CreatedAt:  begin.CreatedAt, AttemptDeadline: begin.DeadlineAt,
+		Checkpoint: hierarchydeletion.HierarchyDeletionCheckpoint{
+			CompletedPrefixDigest: hex.EncodeToString(initialDigest[:]),
+		},
+		CreatedAt: begin.CreatedAt, AttemptDeadline: begin.DeadlineAt,
 	}
 	intent := hierarchydeletion.HierarchyDeletionIntent{
 		Schema: 1, OperationKind: begin.OperationKind, OperationID: begin.OperationID,
@@ -268,7 +288,9 @@ func prepareHierarchyDeletionPublication(
 		Schema: 1, ParentOperationID: begin.OperationID, OperationKind: begin.OperationKind,
 		TargetKind: begin.TargetKind, TargetID: begin.TargetID, DeletionEpoch: deletionEpoch,
 		RootTaskID: begin.TaskID, CurrentTaskID: begin.TaskID,
-		ResponseDigest: hierarchydeletion.HierarchyDeletionDigest(begin.Marker.Response.Body), TombstoneKey: tombstoneKey,
+		ResponseDigest: hierarchydeletion.HierarchyDeletionDigest(
+			begin.Marker.Response.Body,
+		), TombstoneKey: tombstoneKey,
 	}
 	fence := hierarchydeletion.HierarchyDeletionCleanupFence{
 		Schema: 1, ParentOperationID: begin.OperationID, DeletionEpoch: deletionEpoch,
@@ -276,29 +298,44 @@ func prepareHierarchyDeletionPublication(
 		Phase: hierarchydeletion.HierarchyDeletionPlanning, CurrentTaskID: begin.TaskID,
 		Dispatch: hierarchydeletion.HierarchyDeletionDispatchOpen, UpdatedAt: begin.CreatedAt,
 	}
-	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(tombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
+	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		tombstone,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+	)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
-	intentValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(intent, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
+	intentValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		intent,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+	)
 	if err != nil {
 		clear(tombstoneValue)
 		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
-	lockValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(lock, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	lockValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		lock,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		clear(tombstoneValue)
 		clear(intentValue)
 		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
-	replayValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(replay, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	replayValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		replay,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		clear(tombstoneValue)
 		clear(intentValue)
 		clear(lockValue)
 		return hierarchydeletion.HierarchyDeletionOperation{}, nil, nil, TaskInitiation{}, err
 	}
-	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(fence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		fence,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		clear(tombstoneValue)
 		clear(intentValue)
@@ -378,7 +415,8 @@ func hierarchyDeletionRootValue(
 		return hierarchyrecord.EncodeProject(record)
 	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		record, err := hierarchyrecord.DecodeProject(value)
-		if err != nil || record.Kind != hierarchyrecord.ProjectKindBacking || record.TenantID != "" || record.DeletionTaskID != "" {
+		if err != nil || record.Kind != hierarchyrecord.ProjectKindBacking || record.TenantID != "" ||
+			record.DeletionTaskID != "" {
 			return nil, hierarchyDeletionUnavailable(targetKind)
 		}
 		record.DeletionTaskID = taskID

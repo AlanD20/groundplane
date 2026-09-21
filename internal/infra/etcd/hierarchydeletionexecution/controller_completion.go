@@ -84,7 +84,10 @@ func (repository *Executor) CompleteControllerAction(
 		},
 		CompletedAt: completedAt,
 	}
-	completionValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(completion, hierarchydeletion.HierarchyDeletionCompletionRecordBytes)
+	completionValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		completion,
+		hierarchydeletion.HierarchyDeletionCompletionRecordBytes,
+	)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}

@@ -30,7 +30,8 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 			errs.KindValidationFailed, "direct Project creation requires a tenant-owned Project",
 		)
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Project creation marker must be a completed direct mutation",
 		)
@@ -60,12 +61,18 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(value)
-	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(hierarchydeletion.HierarchyDeletionTargetProject, record.ID)
+	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(
+		hierarchydeletion.HierarchyDeletionTargetProject,
+		record.ID,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(coordinationValue)
-	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), record.ID)
+	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(
+		string(hierarchydeletion.HierarchyDeletionTargetProject),
+		record.ID,
+	)
 	plan, err := NewIdempotencyMutationPlan(
 		[]etcdstore.Condition{
 			{Key: hierarchyrecord.ProjectKey(record.ID)},
@@ -93,7 +100,10 @@ func (repository *HierarchyRepository) CreateProjectIdempotent(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func classifyProjectCreateConflict(record hierarchyrecord.ProjectRecord, ownerRevision int64) idempotencyPlanClassifier {
+func classifyProjectCreateConflict(
+	record hierarchyrecord.ProjectRecord,
+	ownerRevision int64,
+) idempotencyPlanClassifier {
 	return func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != 6 {
 			return errs.New(errs.KindInternal, "Project creation compare evidence is incomplete")

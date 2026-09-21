@@ -36,7 +36,9 @@ const (
 
 type environmentCreationRepository interface {
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironmentPoolRegistry(context.Context) (etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry], error)
+	GetEnvironmentPoolRegistry(
+		context.Context,
+	) (etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry], error)
 	CreateEnvironmentWithTask(
 		context.Context,
 		string,
@@ -179,7 +181,10 @@ func (service *environmentCreationService) CreateEnvironment(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Environment creation context is required",
+		)
 	}
 	for attempt := 0; attempt < maximumEnvironmentCreationAttempts; attempt++ {
 		response, err := service.createEnvironmentOnce(ctx, input, idempotencyKey)
@@ -191,7 +196,10 @@ func (service *environmentCreationService) CreateEnvironment(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Environment creation retry bound was not enforced",
+	)
 }
 
 func (service *environmentCreationService) createEnvironmentOnce(
@@ -313,7 +321,10 @@ func (service *environmentCreationService) createEnvironmentOnce(
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment creation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Environment creation resolution is invalid",
+		)
 	}
 	return cloneIdempotencyResponse(response), nil
 }

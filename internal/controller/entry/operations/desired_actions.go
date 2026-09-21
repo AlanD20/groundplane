@@ -18,7 +18,10 @@ func (service *entryDesiredMutationService) CreateEntry(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Entry creation context is required",
+		)
 	}
 	desired, err := prepareEntryCreation(input)
 	if err != nil {
@@ -62,7 +65,10 @@ func (service *entryDesiredMutationService) CreateEntry(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Entry creation retry bound was not enforced",
+	)
 }
 
 func (service *entryDesiredMutationService) EditEntry(
@@ -72,13 +78,19 @@ func (service *entryDesiredMutationService) EditEntry(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil || ids.Validate(ids.KindEnvEntry, entryID) != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Entry edit requires a stable Entry id")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Entry edit requires a stable Entry id",
+		)
 	}
 	prepared, err := prepareEntryEditInput(input)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: entryID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetEntry,
+		ID:   entryID,
+	}
 	locator, indexed, err := service.edit.ResolveReplayLocator(
 		ctx,
 		target,
@@ -140,7 +152,10 @@ func (service *entryDesiredMutationService) EditEntry(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry edit retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Entry edit retry bound was not enforced",
+	)
 }
 
 func (service *entryDesiredMutationService) RemoveEntry(
@@ -152,7 +167,10 @@ func (service *entryDesiredMutationService) RemoveEntry(
 			errs.KindValidationFailed, "Entry removal requires a stable Entry id",
 		)
 	}
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetEntry, ID: request.EntryID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetEntry,
+		ID:   request.EntryID,
+	}
 	locator, indexed, err := service.removal.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, entryEditRoute, request.IdempotencyKey,
 	)
@@ -238,7 +256,10 @@ func (service *entryDesiredMutationService) replayEntryDesiredEdit(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Entry edit replay resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Entry edit replay resolution is invalid",
+		)
 	}
 	return requestidempotency.CloneResponse(resolution.Response), nil
 }

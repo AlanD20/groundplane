@@ -87,7 +87,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		(input.ExpectedHeadRevision > 0 && (!found || previous.Revision != input.ExpectedHeadRevision)) {
 		return IdempotencyTransactionResult{}, errs.New(errs.KindStateConflict, "Environment desired state changed")
 	}
-	if err := validateEnvironmentComposeProjectionAdvance(previous.Record, found, input.Projection); err != nil {
+	if err := projectionrecord.ValidateEnvironmentComposeProjectionAdvance(previous.Record, found, input.Projection); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateDirectEnvironmentServiceChange(input); err != nil {
@@ -118,19 +118,28 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	serviceID := input.Change.Record.Desired.ID
 	conditions := []etcdstore.Condition{
 		{
-			Key:         blueprints.EnvironmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID),
+			Key: blueprints.EnvironmentBlueprintRootKey(
+				input.Revision.EnvironmentID,
+				input.Revision.RevisionID,
+			),
 			ModRevision: publication.rootRevision,
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
-		{Key: blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
+		{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID),
+			ModRevision: input.ExpectedHeadRevision,
+		},
 		{Key: deletions.TombstoneKey("service", serviceID)},
 	}
 	if input.Change.Current == nil {
 		conditions = append(conditions, etcdstore.Condition{Key: servicerecord.ServiceRuntimeKey(serviceID)})
 	}
 	removalLockIndex := len(conditions)
-	conditions = append(conditions, etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)})
+	conditions = append(
+		conditions,
+		etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)},
+	)
 	conditions = append(conditions, referenceConditions...)
 	referenceOffset := len(conditions) - len(referenceConditions)
 	fenceOffset := len(conditions)
@@ -138,17 +147,27 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
-		{Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID),
+			Value: headReference,
+		},
 	}
 	if input.Change.Current == nil {
-		runtimeValue, runtimeErr := servicerecord.EncodeServiceRuntimeRecord(servicerecord.NewServiceRuntimeRecord(input.Change.Record))
+		runtimeValue, runtimeErr := servicerecord.EncodeServiceRuntimeRecord(
+			servicerecord.NewServiceRuntimeRecord(input.Change.Record),
+		)
 		if runtimeErr != nil {
 			return IdempotencyTransactionResult{}, runtimeErr
 		}
 		defer clear(runtimeValue)
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: servicerecord.ServiceRuntimeKey(serviceID), Value: runtimeValue},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   servicerecord.ServiceRuntimeKey(serviceID),
+				Value: runtimeValue,
+			},
 		)
 	}
 	mutations = append(mutations, epochMutation)
@@ -225,7 +244,10 @@ func (repository *HierarchyRepository) validateDirectServiceHierarchy(
 	return nil
 }
 
-func equalDirectEnvironmentRecord(left hierarchyrecord.EnvironmentRecord, right hierarchyrecord.EnvironmentRecord) bool {
+func equalDirectEnvironmentRecord(
+	left hierarchyrecord.EnvironmentRecord,
+	right hierarchyrecord.EnvironmentRecord,
+) bool {
 	return left.ID == right.ID && left.ProjectID == right.ProjectID && left.Name == right.Name &&
 		left.NetworkPool == right.NetworkPool && left.VolumeDir == right.VolumeDir &&
 		left.ProvisioningState == right.ProvisioningState && left.CreateTaskID == right.CreateTaskID &&

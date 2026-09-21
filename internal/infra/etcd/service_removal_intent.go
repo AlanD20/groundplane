@@ -10,7 +10,8 @@ import (
 
 func validateServiceRemovalTaskOwner(task TaskRecord, intent environmentchanges.ServiceRemovalIntent) error {
 	if task.ID != intent.TaskID || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
-		task.Target != intent.ServiceID || !task.CreatedAt.Equal(intent.CreatedAt) || len(task.Params) != 4 ||
+		task.Target != intent.ServiceID || !task.CreatedAt.Equal(intent.CreatedAt) ||
+		len(task.Params) != 4 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
 		task.Params[taskjournal.TaskServiceEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID ||

@@ -203,7 +203,10 @@ func (service *routeRemovalService) RemoveRoute(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"route removal retry bound was not enforced",
+	)
 }
 
 func (service *routeRemovalService) removeRouteOnce(
@@ -211,7 +214,10 @@ func (service *routeRemovalService) removeRouteOnce(
 	routeID string,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetRoute, ID: routeID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetRoute,
+		ID:   routeID,
+	}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, routeDeletionRoute, idempotencyKey,
 	)
@@ -350,7 +356,10 @@ func (service *routeRemovalService) removeRouteOnce(
 	case requestidempotency.ResolutionReplay:
 		return cloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"route removal resolution is invalid",
+		)
 	}
 }
 
@@ -369,7 +378,10 @@ func (service *routeRemovalService) replayIndexedRemoval(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal replay target is inconsistent")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"route removal replay target is inconsistent",
+		)
 	}
 	return replayResponse(resolution)
 }
@@ -427,7 +439,10 @@ func controllerRouteRemovalPlanHash(intent environmentchanges.RouteRemovalIntent
 
 func replayResponse(resolution requestidempotency.Resolution) (idempotencyrecord.IdempotencyResponse, error) {
 	if resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "route removal replay resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"route removal replay resolution is invalid",
+		)
 	}
 	return cloneResponse(resolution.Response), nil
 }

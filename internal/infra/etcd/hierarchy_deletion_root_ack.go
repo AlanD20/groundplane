@@ -130,7 +130,10 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 		assignment.AgentID != "" || assignment.AgentGeneration != 0 || task.Status != taskjournal.TaskStatusRunning ||
 		task.StartedAt == nil || assignment.ClaimedTaskRevision >= assignmentValue.ModRevision ||
 		!assignment.AssignedAt.Equal(*task.StartedAt) {
-		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion root claim changed")
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion root claim changed",
+		)
 	}
 	terminalAt, err = nextTaskControllerTimestamp(task.UpdatedAt, terminalAt)
 	if err != nil {

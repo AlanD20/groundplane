@@ -43,7 +43,12 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	scriptID := current.Record.Desired.ID
-	active, err := scriptrecord.ReadActiveScriptSet(ctx, repository.store, current.Record.EnvironmentID, current.ReadRevision)
+	active, err := scriptrecord.ReadActiveScriptSet(
+		ctx,
+		repository.store,
+		current.Record.EnvironmentID,
+		current.ReadRevision,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -60,11 +65,15 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 			errs.KindValidationFailed, "Script deletion Task and tombstone do not match",
 		)
 	}
-	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetScript, ID: scriptID}
+	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetScript,
+		ID:   scriptID,
+	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
-		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
+		*marker.ReplayTarget != wantReplayTarget ||
+		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Script deletion marker does not match its Task",
@@ -74,7 +83,11 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			scriptrecord.ScriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
-			scriptrecord.ScriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.Slug),
+			scriptrecord.ScriptSetSlugKey(
+				current.Record.EnvironmentID,
+				active.Record.GenerationID,
+				current.Record.Desired.Slug,
+			),
 		},
 		Revision: current.ReadRevision,
 	})
@@ -124,11 +137,19 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{
-			Key:         scriptrecord.ScriptSetScriptKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
+			Key: scriptrecord.ScriptSetScriptKey(
+				current.Record.EnvironmentID,
+				active.Record.GenerationID,
+				scriptID,
+			),
 			ModRevision: current.Revision,
 		},
 		{
-			Key:         scriptrecord.ScriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, scriptID),
+			Key: scriptrecord.ScriptSetOwnerKey(
+				current.Record.EnvironmentID,
+				active.Record.GenerationID,
+				scriptID,
+			),
 			ModRevision: indexes.Values[0].ModRevision,
 		},
 		{
@@ -155,14 +176,22 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
 			Type: etcdstore.MutationPut, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetScript), scriptID),
 			Value: tombstoneValue,
 		},
-		{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(current.Record.EnvironmentID), Value: activeValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   scriptrecord.ScriptSetActiveKey(current.Record.EnvironmentID),
+			Value: activeValue,
+		},
 	}
 	taskTenant, err := loadTaskInitiationTenant(ctx, repository.store, project)
 	if err != nil {

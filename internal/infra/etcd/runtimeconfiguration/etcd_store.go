@@ -7,9 +7,14 @@ import (
 
 // runtimeConfigurationStore translates only the persistence mechanics used by
 // the immutable file-source repository. It performs no source selection.
-type runtimeConfigurationStore struct{ store etcdstore.Store }
+type Persistence interface {
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
+}
 
-func New(store etcdstore.Store) (*Repository, error) {
+type runtimeConfigurationStore struct{ store Persistence }
+
+func New(store Persistence) (*Repository, error) {
 	return newRepository(runtimeConfigurationStore{store: store})
 }
 

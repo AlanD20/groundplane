@@ -29,11 +29,14 @@ func classifyEntryScriptReferences(entryID string, values []*etcdstore.KeyValue)
 	}
 	count, err := scriptsourceevidence.DecodeScriptSourceCount(values[0].Value)
 	if err != nil || count.Source.Kind != sourceref.SourceEntryValue || count.Source.EntryID != entryID ||
-		values[0].Key != scriptsourceevidence.ScriptSourceCountKey(count.Source) || count.ReferencedExecutionCount == 0 {
+		values[0].Key != scriptsourceevidence.ScriptSourceCountKey(
+			count.Source,
+		) || count.ReferencedExecutionCount == 0 {
 		return errs.New(errs.KindInternal, "Entry Script reference count is corrupt")
 	}
 	reference, err := recordcodec.Decode[sourceref.Reference](values[1].Value, "script-source-reference")
-	if err != nil || reference.Source != count.Source || scriptsourceevidence.ScriptSourceForwardReferenceKey(reference) != values[1].Key {
+	if err != nil || reference.Source != count.Source ||
+		scriptsourceevidence.ScriptSourceForwardReferenceKey(reference) != values[1].Key {
 		return errs.New(errs.KindInternal, "Entry Script source membership is corrupt")
 	}
 	return errs.New(errs.KindResourceInUse, "Entry is referenced by a Script")

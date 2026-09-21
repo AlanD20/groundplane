@@ -43,7 +43,7 @@ func ApplyEnvironmentRoute(
 			next.DesiredRoutes[right].Desired.Host+"\x00"+next.DesiredRoutes[right].Desired.Path
 	})
 	next.RenderGeneration++
-	if err := validateEnvironmentComposeProjectionAdvance(current, true, next); err != nil {
+	if err := ValidateEnvironmentComposeProjectionAdvance(current, true, next); err != nil {
 		return EnvironmentComposeProjection{}, err
 	}
 	return next, nil
@@ -77,7 +77,7 @@ func RemoveEnvironmentEntry(
 	next := CloneEnvironmentComposeProjection(current)
 	next.Entries = append(next.Entries[:index], next.Entries[index+1:]...)
 	next.RenderGeneration++
-	if err := validateEnvironmentComposeProjectionAdvance(current, true, next); err != nil {
+	if err := ValidateEnvironmentComposeProjectionAdvance(current, true, next); err != nil {
 		return EnvironmentComposeProjection{}, false, err
 	}
 	return next, true, nil

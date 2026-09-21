@@ -188,7 +188,10 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 				Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 				ModRevision: etcdstore.RevisionOf(state.Values[1]),
 			},
-			{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
+			{
+				Key:         blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
+				ModRevision: state.Values[2].ModRevision,
+			},
 			{
 				Key:         blueprints.EnvironmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 				ModRevision: state.Values[3].ModRevision,
@@ -252,7 +255,8 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	changedRegistries := make(map[string]struct{})
 	for _, candidate := range intent.Candidates {
 		current, currentPresent, _ := environmentchanges.ComponentTaskAddress(candidate.Current)
-		if currentPresent && registries[current.ZoneID()].Reservations[candidate.Current.Desired.ID] != current.Address() {
+		if currentPresent &&
+			registries[current.ZoneID()].Reservations[candidate.Current.Desired.ID] != current.Address() {
 			return componentTaskChange{}, errs.New(errs.KindStateConflict, "active Component address changed")
 		}
 		next, nextPresent, _ := environmentchanges.ComponentTaskAddress(candidate.Candidate)
@@ -293,8 +297,13 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		return componentTaskChange{}, err
 	}
 	change.values = append(change.values, intentBytes)
-	change.mutations = append(change.mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskIntentKey(retry.ID), Value: intentBytes},
+	change.mutations = append(
+		change.mutations,
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   environmentchanges.ComponentTaskIntentKey(retry.ID),
+			Value: intentBytes,
+		},
 		etcdstore.Mutation{
 			Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID),
 		},
@@ -332,7 +341,10 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 	}
 	change.conditions = append(
 		change.conditions,
-		etcdstore.Condition{Key: hierarchyrecord.EnvironmentKey(intent.EnvironmentID), ModRevision: environmentState.Values[0].ModRevision},
+		etcdstore.Condition{
+			Key:         hierarchyrecord.EnvironmentKey(intent.EnvironmentID),
+			ModRevision: environmentState.Values[0].ModRevision,
+		},
 	)
 	change.conditions = append(change.conditions, secretConditions...)
 	change.mutations = append(change.mutations, secretMutations...)

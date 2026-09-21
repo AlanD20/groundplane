@@ -59,7 +59,10 @@ func (repository *Repository) BeginDelete(
 	}
 	etcdstore.ClearValues(result.FailureReads)
 	if !result.Succeeded {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent deletion state changed")
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"local Agent deletion state changed",
+		)
 	}
 	return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{
 		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,

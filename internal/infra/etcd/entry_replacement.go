@@ -36,7 +36,8 @@ func (repository *EntryRepository) ReplaceEntryIdempotent(
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != current.Record.EnvironmentID ||
-		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetEntry ||
+		marker.ReplayTarget == nil ||
+		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetEntry ||
 		marker.ReplayTarget.ID != current.Record.Entry.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,

@@ -36,10 +36,15 @@ type volumeRemovalInitialPublication struct {
 // authority; evidence, ownership and Task writes remain one transaction.
 func (repository *EnvironmentBlueprintRepository) PublishEnvironmentVolumeRemovalWithTask(
 	ctx context.Context,
-	project etcdstore.Versioned[hierarchyrecord.ProjectRecord], environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	expectedHeadRevision int64, claim blueprints.EnvironmentBlueprintStageClaim,
-	projection projectionrecord.EnvironmentComposeProjection, policy VolumeRemovalBackupPolicyPreparation,
-	initial removalrecord.InitialPublication, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
+	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
+	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+	expectedHeadRevision int64,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	projection projectionrecord.EnvironmentComposeProjection,
+	policy VolumeRemovalBackupPolicyPreparation,
+	initial removalrecord.InitialPublication,
+	task TaskRecord,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
 	return repository.publishEnvironmentDesiredRevisionWithTask(
 		ctx,
@@ -123,15 +128,28 @@ func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 					return volumeRemovalInitialPublication{}, err
 				}
 				lockKey := removalrecord.EnvironmentLockKey(runtime.EnvironmentID)
-				publication.conditions = append(publication.conditions,
-					etcdstore.Condition{Key: taskjournal.TaskMaterializationWriterKey(runtime.EnvironmentID)}, etcdstore.Condition{Key: lockKey},
+				publication.conditions = append(
+					publication.conditions,
+					etcdstore.Condition{
+						Key: taskjournal.TaskMaterializationWriterKey(runtime.EnvironmentID),
+					},
+					etcdstore.Condition{Key: lockKey},
 				)
 				publication.conditions = append(publication.conditions, evidenceConditions...)
 				publication.mutations = append(publication.mutations, etcdstore.Mutation{
 					Type: etcdstore.MutationPut, Key: lockKey, Value: lockValue,
 				})
-				ancestry, err := hierarchydeletion.BindMutationEpochs(ctx, repository.store, readRevision,
-					hierarchydeletion.MutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, nil, nil)
+				ancestry, err := hierarchydeletion.BindMutationEpochs(
+					ctx,
+					repository.store,
+					readRevision,
+					hierarchydeletion.MutationScope{
+						TenantID:  task.Owner.TenantID,
+						ProjectID: task.Owner.ProjectID,
+					},
+					nil,
+					nil,
+				)
 				if err != nil {
 					etcdstore.ClearMutationValues(publication.mutations)
 					return volumeRemovalInitialPublication{}, err
@@ -270,7 +288,9 @@ func validateVolumeRemovalInitialBinding(
 		}
 	}
 	locator := idempotencyrecord.IdempotencyLocator{
-		ScopeKind: idempotencyrecord.IdempotencyScopeKind(runtime.RootLocator.ScopeKind), ScopeID: runtime.RootLocator.ScopeID,
+		ScopeKind: idempotencyrecord.IdempotencyScopeKind(
+			runtime.RootLocator.ScopeKind,
+		), ScopeID: runtime.RootLocator.ScopeID,
 		Method: runtime.RootLocator.Method, Route: runtime.RootLocator.Route, Key: runtime.RootLocator.Key,
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
@@ -280,7 +300,8 @@ func validateVolumeRemovalInitialBinding(
 		!bytes.Equal(marker.Response.Body, []byte(`{"task_id":"`+runtime.OriginTaskID+`"}`)) ||
 		sha256.Sum256(marker.Response.Body) != runtime.RootResponseSHA256 ||
 		sha256.Sum256(marker.Intent.Ciphertext) != runtime.IntentSHA256 ||
-		!marker.CreatedAt.Equal(runtime.CreatedAt) || !marker.UpdatedAt.Equal(runtime.CreatedAt) {
+		!marker.CreatedAt.Equal(runtime.CreatedAt) ||
+		!marker.UpdatedAt.Equal(runtime.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "initial Volume removal marker does not match its records")
 	}
 	return nil

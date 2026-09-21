@@ -209,7 +209,10 @@ func (service *projectChangeService) changeProject(
 	change func(core.Project) (core.Project, error),
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project change context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Project change context is required",
+		)
 	}
 	locator := idempotencyrecord.IdempotencyLocator{
 		ScopeKind: idempotencyrecord.IdempotencyScopeProject, ScopeID: id,
@@ -225,7 +228,10 @@ func (service *projectChangeService) changeProject(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project change retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Project change retry bound was not enforced",
+	)
 }
 
 func (service *projectChangeService) changeProjectOnce(
@@ -276,7 +282,12 @@ func (service *projectChangeService) changeProjectOnce(
 	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusOK, ContentKind: "application/json", Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
+		locator,
+		evidence.durable,
+		response,
+		service.now().UTC(),
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -303,7 +314,10 @@ func (service *projectChangeService) changeProjectOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project change resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Project change resolution is invalid",
+		)
 	}
 }
 

@@ -55,7 +55,10 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	}
 	rootKey := blueprints.EnvironmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID)
 	keys := []string{rootKey, descriptorKey, locatorKey}
-	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: descriptorRead.ReadRevision})
+	result, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: keys, Revision: descriptorRead.ReadRevision},
+	)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
 	}

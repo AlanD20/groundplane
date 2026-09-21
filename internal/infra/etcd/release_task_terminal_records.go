@@ -12,7 +12,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func decodeReleaseProjection(value *etcdstore.KeyValue, environmentID, serviceID string) (domain.ServiceProjection, error) {
+func decodeReleaseProjection(
+	value *etcdstore.KeyValue,
+	environmentID, serviceID string,
+) (domain.ServiceProjection, error) {
 	if value == nil {
 		return domain.ServiceProjection{}, nil
 	}
@@ -58,7 +61,10 @@ func releaseTerminalRecordMutations(
 			etcdstore.ZeroMutationBytes(mutations)
 			return nil, err
 		}
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[2], Value: projectionValue})
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[2], Value: projectionValue},
+		)
 	}
 	return mutations, nil
 }

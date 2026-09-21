@@ -29,7 +29,10 @@ import (
 )
 
 type routeMutationPlanStateReader interface {
-	GetRouteMutationIntent(context.Context, string) (etcdstore.Versioned[environmentchanges.RouteMutationIntent], bool, error)
+	GetRouteMutationIntent(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[environmentchanges.RouteMutationIntent], bool, error)
 }
 
 func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
@@ -114,7 +117,7 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 		taskjournal.TaskRouteEnvironmentParam:           intent.EnvironmentID,
 		taskjournal.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
 		blueprints.EnvironmentDesiredRevisionParam:      candidate.RevisionID,
-		EnvironmentBlueprintArtifactParam:               procedure.ArtifactID,
+		taskcontract.EnvironmentBlueprintArtifactParam:  procedure.ArtifactID,
 	}
 	task.Steps = []taskjournal.TaskStepRecord{
 		{Kind: taskjournal.TaskStepOperation, ID: procedure.MaterializeStepID},
@@ -274,7 +277,11 @@ func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 	if err != nil {
 		return nil, err
 	}
-	materializationStep, err := taskmaterialization.BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
+	materializationStep, err := taskmaterialization.BuildTaskMaterializationStep(
+		reference,
+		artifactID,
+		uint32(task.TimeoutSeconds),
+	)
 	if err != nil {
 		return nil, err
 	}

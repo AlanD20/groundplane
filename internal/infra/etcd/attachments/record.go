@@ -157,7 +157,7 @@ func NewAttachEncryptedFacts(
 
 func MarkAttachProvisioning(record Record, taskID string) (Record, error) {
 	if record.Status != core.AttachPending || record.Operation != AttachOperationProvision || record.TaskID != taskID {
-		return Record{}, attachStateError(record, "cannot start provisioning")
+		return Record{}, StateError(record, "cannot start provisioning")
 	}
 	record.Status = core.AttachProvisioning
 	if err := ValidateAttachRecord(record); err != nil {
@@ -168,7 +168,7 @@ func MarkAttachProvisioning(record Record, taskID string) (Record, error) {
 
 func AbortPendingAttachProvisioning(record Record, taskID string) (Record, error) {
 	if record.Status != core.AttachPending || record.Operation != AttachOperationProvision || record.TaskID != taskID {
-		return Record{}, attachStateError(record, "cannot abort pending provisioning")
+		return Record{}, StateError(record, "cannot abort pending provisioning")
 	}
 	record.Status = core.AttachFailed
 	if err := ValidateAttachRecord(record); err != nil {
@@ -180,7 +180,7 @@ func AbortPendingAttachProvisioning(record Record, taskID string) (Record, error
 func CompleteAttachProvisioning(record Record, taskID string, succeeded bool) (Record, error) {
 	if record.Status != core.AttachProvisioning || record.Operation != AttachOperationProvision ||
 		record.TaskID != taskID {
-		return Record{}, attachStateError(record, "cannot complete provisioning")
+		return Record{}, StateError(record, "cannot complete provisioning")
 	}
 	if succeeded {
 		record.Status = core.AttachReady
@@ -195,7 +195,7 @@ func CompleteAttachProvisioning(record Record, taskID string, succeeded bool) (R
 
 func RetryAttachOperation(record Record, taskID string) (Record, error) {
 	if record.Status != core.AttachFailed {
-		return Record{}, attachStateError(record, "cannot retry operation")
+		return Record{}, StateError(record, "cannot retry operation")
 	}
 	if err := validateAttachStableID(ids.KindTask, taskID, "Attach retry task"); err != nil {
 		return Record{}, err
@@ -207,7 +207,7 @@ func RetryAttachOperation(record Record, taskID string) (Record, error) {
 	case AttachOperationDetach:
 		record.Status = core.AttachDetaching
 	default:
-		return Record{}, attachStateError(record, "cannot retry unknown operation")
+		return Record{}, StateError(record, "cannot retry unknown operation")
 	}
 	if err := ValidateAttachRecord(record); err != nil {
 		return Record{}, err
@@ -218,7 +218,7 @@ func RetryAttachOperation(record Record, taskID string) (Record, error) {
 func BeginAttachDetaching(record Record, taskID string) (Record, error) {
 	if record.Status != core.AttachReady &&
 		(record.Status != core.AttachFailed || record.Operation != AttachOperationProvision) {
-		return Record{}, attachStateError(record, "cannot begin detaching")
+		return Record{}, StateError(record, "cannot begin detaching")
 	}
 	if err := validateAttachStableID(ids.KindTask, taskID, "Attach detach task"); err != nil {
 		return Record{}, err
@@ -234,7 +234,7 @@ func BeginAttachDetaching(record Record, taskID string) (Record, error) {
 
 func CompleteAttachDetaching(record Record, taskID string, succeeded bool) (Record, error) {
 	if record.Status != core.AttachDetaching || record.Operation != AttachOperationDetach || record.TaskID != taskID {
-		return Record{}, attachStateError(record, "cannot complete detaching")
+		return Record{}, StateError(record, "cannot complete detaching")
 	}
 	if succeeded {
 		record.Status = core.AttachDetached
@@ -302,22 +302,22 @@ func ValidateAttachRecord(record Record) error {
 	switch record.Status {
 	case core.AttachPending, core.AttachProvisioning:
 		if record.Operation != AttachOperationProvision {
-			return attachStateError(record, "provisioning state has the wrong operation")
+			return StateError(record, "provisioning state has the wrong operation")
 		}
 	case core.AttachReady:
 		if record.Operation != AttachOperationProvision {
-			return attachStateError(record, "ready state has the wrong operation")
+			return StateError(record, "ready state has the wrong operation")
 		}
 	case core.AttachDetaching, core.AttachDetached:
 		if record.Operation != AttachOperationDetach {
-			return attachStateError(record, "detach state has the wrong operation")
+			return StateError(record, "detach state has the wrong operation")
 		}
 	case core.AttachFailed:
 		if record.Operation != AttachOperationProvision && record.Operation != AttachOperationDetach {
-			return attachStateError(record, "failed state has an unknown operation")
+			return StateError(record, "failed state has an unknown operation")
 		}
 	default:
-		return attachStateError(record, "unknown lifecycle state")
+		return StateError(record, "unknown lifecycle state")
 	}
 	return nil
 }
@@ -423,7 +423,7 @@ func validateAttachStableID(kind ids.Kind, value string, field string) error {
 	return nil
 }
 
-func attachStateError(record Record, message string) error {
+func StateError(record Record, message string) error {
 	return errs.Newf(errs.KindStateConflict, "%s for Attach %s in state %s", message, record.ID, record.Status)
 }
 

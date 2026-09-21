@@ -23,7 +23,8 @@ func prepareBackupTerminalReceiptPruneCompanion(
 			"ordinary Task requested a Backup terminal receipt",
 		)
 	}
-	if value == nil || value.ModRevision != taskRevision || value.Key != backupruntime.BackupTerminalReceiptKey(task.ID) {
+	if value == nil || value.ModRevision != taskRevision ||
+		value.Key != backupruntime.BackupTerminalReceiptKey(task.ID) {
 		return backupTerminalReceiptPruneCompanion{}, taskjournal.CorruptPruneIntent()
 	}
 	receipt, err := backupruntime.DecodeBackupTerminalReceiptRecord(value.Value)

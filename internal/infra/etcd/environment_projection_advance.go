@@ -8,19 +8,6 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func validateEnvironmentComposeProjectionAdvance(
-	previous projectionrecord.EnvironmentComposeProjection,
-	hasPrevious bool,
-	next projectionrecord.EnvironmentComposeProjection,
-) error {
-	if err := projectionrecord.ValidateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
-		previous, hasPrevious, next, "",
-	); err != nil {
-		return err
-	}
-	return projectionrecord.PreserveEnvironmentNonEntryDesiredResources(previous, hasPrevious, next)
-}
-
 func validateEnvironmentComposeProjectionPublicationAdvance(
 	previous projectionrecord.EnvironmentComposeProjection,
 	hasPrevious bool,
@@ -28,7 +15,8 @@ func validateEnvironmentComposeProjectionPublicationAdvance(
 	task TaskRecord,
 ) error {
 	removedVolumeID := ""
-	if task.Type == taskjournal.TaskRemove && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
+	if task.Type == taskjournal.TaskRemove &&
+		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
 		removedVolumeID = task.Target
 		if recordcodec.ValidateID(ids.KindVolume, removedVolumeID) != nil {
 			return errs.New(errs.KindValidationFailed, "Volume removal Task target is invalid")

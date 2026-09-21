@@ -22,7 +22,10 @@ type BlueprintTaskTerminalTransaction struct {
 
 type blueprintTaskTerminalStore interface {
 	ValidateBlueprintTaskTerminal(context.Context, BlueprintTaskTerminalTransaction) error
-	TransactBlueprintTaskTerminal(context.Context, BlueprintTaskTerminalTransaction) (etcdstore.TransactionResult, error)
+	TransactBlueprintTaskTerminal(
+		context.Context,
+		BlueprintTaskTerminalTransaction,
+	) (etcdstore.TransactionResult, error)
 }
 
 // Operations exposes validated copies to implementations of the persistence
@@ -34,7 +37,11 @@ func (envelope BlueprintTaskTerminalTransaction) Operations() ([]etcdstore.Condi
 	if err := envelope.validate(); err != nil {
 		return nil, nil, err
 	}
-	return append([]etcdstore.Condition(nil), envelope.conditions...), cloneBlueprintCandidateMutations(envelope.mutations), nil
+	return append(
+			[]etcdstore.Condition(nil),
+			envelope.conditions...), cloneBlueprintCandidateMutations(
+			envelope.mutations,
+		), nil
 }
 
 // TaskRepositoryStore exposes the closed Blueprint completion path separately
@@ -42,14 +49,21 @@ func (envelope BlueprintTaskTerminalTransaction) Operations() ([]etcdstore.Condi
 type TaskRepositoryStore interface {
 	etcdstore.Store
 	ValidateBlueprintTaskTerminal(context.Context, BlueprintTaskTerminalTransaction) error
-	TransactBlueprintTaskTerminal(context.Context, BlueprintTaskTerminalTransaction) (etcdstore.TransactionResult, error)
+	TransactBlueprintTaskTerminal(
+		context.Context,
+		BlueprintTaskTerminalTransaction,
+	) (etcdstore.TransactionResult, error)
 }
 
 // EnvironmentBlueprintStore combines the store's closed Blueprint capabilities
 // for composition; the Task repository consumes only TaskRepositoryStore.
 type EnvironmentBlueprintStore interface {
 	TaskRepositoryStore
-	TransactEnvironmentBlueprint(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
+	TransactEnvironmentBlueprint(
+		context.Context,
+		[]etcdstore.Condition,
+		[]etcdstore.Mutation,
+	) (etcdstore.TransactionResult, error)
 }
 
 // NewTaskRepository wires terminal persistence explicitly at composition time.
@@ -117,7 +131,8 @@ func compileBlueprintTaskTerminalTransaction(
 	defer clear(value)
 	matched := false
 	for _, mutation := range mutations {
-		if mutation.Key == taskjournal.TaskStorageKey(task.ID) && mutation.Type == etcdstore.MutationPut && !mutation.Prefix {
+		if mutation.Key == taskjournal.TaskStorageKey(task.ID) && mutation.Type == etcdstore.MutationPut &&
+			!mutation.Prefix {
 			matched = bytes.Equal(value, mutation.Value)
 		}
 	}
@@ -176,7 +191,10 @@ func (s *store) TransactBlueprintTaskTerminal(
 	envelope BlueprintTaskTerminalTransaction,
 ) (etcdstore.TransactionResult, error) {
 	if envelope.projectionOnly {
-		return etcdstore.TransactionResult{}, errs.New(errs.KindInternal, "Blueprint terminal budget projection cannot execute")
+		return etcdstore.TransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Blueprint terminal budget projection cannot execute",
+		)
 	}
 	if err := envelope.validate(); err != nil {
 		return etcdstore.TransactionResult{}, err
@@ -213,7 +231,8 @@ func (repository *TaskRepository) transactTaskTerminal(
 	if isVolumeRemovalTerminalTask(task) {
 		return repository.transactVolumeRemovalTerminal(ctx, task, conditions, mutations)
 	}
-	if task.Type == taskjournal.TaskRemove && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
+	if task.Type == taskjournal.TaskRemove &&
+		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume {
 		return repository.transactVolumeRemovalAttemptTerminal(ctx, task, conditions, mutations)
 	}
 	if !isBlueprintCandidateTerminalTask(task) {
@@ -224,7 +243,10 @@ func (repository *TaskRepository) transactTaskTerminal(
 		return etcdstore.TransactionResult{}, err
 	}
 	if repository.blueprintTerminalStore == nil {
-		return etcdstore.TransactionResult{}, errs.New(errs.KindInternal, "Blueprint terminal transaction store is required")
+		return etcdstore.TransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Blueprint terminal transaction store is required",
+		)
 	}
 	if sourceAdvance != nil {
 		envelope.projectionOnly = true

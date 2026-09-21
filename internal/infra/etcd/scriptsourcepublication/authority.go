@@ -342,7 +342,8 @@ func (authority *Authority) validateMembers(
 	var candidateStage *scriptsourceevidence.ScriptCandidateSourceStage
 	stagedPredecessors := make(map[string]int64)
 	for index, member := range members {
-		if member.Reference.OperationID != operationID || scriptsourceevidence.ValidateScriptSourceReference(member.Reference) != nil {
+		if member.Reference.OperationID != operationID ||
+			scriptsourceevidence.ValidateScriptSourceReference(member.Reference) != nil {
 			return nil, errs.New(errs.KindValidationFailed, "Script source preparation member is invalid")
 		}
 		existing, staged := member.Evidence.Existing, member.Evidence.Staged
@@ -426,7 +427,9 @@ func (authority *Authority) validateExistingSource(ctx context.Context, member r
 		return nil
 	}
 	metadata, err := authority.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{secretrecord.RecordKey(member.Reference.Source.SecretID)}, Revision: member.Reference.SourceModRevision,
+		Keys: []string{
+			secretrecord.RecordKey(member.Reference.Source.SecretID),
+		}, Revision: member.Reference.SourceModRevision,
 	})
 	if err != nil {
 		return err

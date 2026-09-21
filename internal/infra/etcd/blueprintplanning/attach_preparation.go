@@ -83,7 +83,10 @@ func PrepareEnvironmentBlueprintAttachTask(
 	})
 	preparation.Intent.Candidates = make([]attachrecord.Record, 0, len(preparation.candidates))
 	for _, input := range preparation.candidates {
-		preparation.Intent.Candidates = append(preparation.Intent.Candidates, attachrecord.CloneAttachRecord(input.Record))
+		preparation.Intent.Candidates = append(
+			preparation.Intent.Candidates,
+			attachrecord.CloneAttachRecord(input.Record),
+		)
 	}
 	if err := validateBlueprintAttachTaskPreparation(preparation); err != nil {
 		ClearBlueprintAttachTaskPreparation(&preparation)

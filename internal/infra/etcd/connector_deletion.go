@@ -243,7 +243,8 @@ func validateConnectorDeletionEnvelope(
 		*marker.ReplayTarget != wantReplayTarget || marker.Response.Status != http.StatusAccepted ||
 		!idempotencyrecord.ValidTaskResponse(marker.Response, task.ID) ||
 		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) ||
-		!marker.TerminalAt.IsZero() || !marker.RetainUntil.IsZero() {
+		!marker.TerminalAt.IsZero() ||
+		!marker.RetainUntil.IsZero() {
 		return errs.New(
 			errs.KindValidationFailed,
 			"connector deletion marker does not match its task",

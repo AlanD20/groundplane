@@ -1,10 +1,10 @@
 package componentregistration
 
 import (
+	registeredcatalog "github.com/AlanD20/groundplane-component-sdk/catalog"
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	registeredcaddy "github.com/AlanD20/groundplane-registered-components/caddy"
-	registeredcatalog "github.com/AlanD20/groundplane-registered-components/catalog"
 	registeredtunnel "github.com/AlanD20/groundplane-registered-components/cloudflaretunnel"
 	registeredcoredns "github.com/AlanD20/groundplane-registered-components/coredns"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"

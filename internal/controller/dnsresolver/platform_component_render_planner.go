@@ -22,7 +22,9 @@ import (
 )
 
 type PlatformProjectionReader interface {
-	GetHostResolutionProjection(context.Context) (etcdstore.Versioned[resolutionrecord.HostResolutionProjectionRecord], bool, error)
+	GetHostResolutionProjection(
+		context.Context,
+	) (etcdstore.Versioned[resolutionrecord.HostResolutionProjectionRecord], bool, error)
 }
 
 type BaselineRepository interface {

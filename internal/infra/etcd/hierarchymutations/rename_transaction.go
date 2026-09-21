@@ -65,7 +65,10 @@ func renameRecord[T any](
 		{Key: oldSlugKey, ModRevision: secondary.Values[0].ModRevision},
 	}
 	for index, key := range membershipKeys {
-		conditions = append(conditions, etcdstore.Condition{Key: key, ModRevision: secondary.Values[index+1].ModRevision})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: key, ModRevision: secondary.Values[index+1].ModRevision},
+		)
 	}
 	conditions = append(conditions, etcdstore.Condition{Key: tombstoneKey})
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: primaryKey, Value: value}}

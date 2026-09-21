@@ -30,7 +30,10 @@ func EnvironmentBlueprintChunkKeys(descriptor EnvironmentBlueprintStageDescripto
 	return keys
 }
 
-func VerifyEnvironmentBlueprintChunks(descriptor EnvironmentBlueprintStageDescriptor, values []*etcdstore.KeyValue) error {
+func VerifyEnvironmentBlueprintChunks(
+	descriptor EnvironmentBlueprintStageDescriptor,
+	values []*etcdstore.KeyValue,
+) error {
 	if len(values) != int(descriptor.AuditChunks+descriptor.ProjectionChunks) {
 		return CorruptEnvironmentBlueprintStage()
 	}

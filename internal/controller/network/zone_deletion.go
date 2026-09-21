@@ -40,7 +40,10 @@ type zoneDeletionRepository interface {
 	GetZone(context.Context, string) (etcdstore.Versioned[zonerecord.Record], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironmentZoneRemovalAuthorities(context.Context, string) (environmentchanges.EnvironmentZoneRemovalAuthorities, bool, error)
+	GetEnvironmentZoneRemovalAuthorities(
+		context.Context,
+		string,
+	) (environmentchanges.EnvironmentZoneRemovalAuthorities, bool, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		blueprints.EnvironmentBlueprintStageClaimRequest,
@@ -229,7 +232,10 @@ func (service *zoneCreationService) RemoveZone(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.deletions == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion service is not configured")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Zone deletion service is not configured",
+		)
 	}
 	return service.RemoveZoneWithImpact(ctx, zoneID, idempotencyKey, "")
 }
@@ -241,7 +247,10 @@ func (service *zoneCreationService) RemoveZoneWithImpact(
 	impactToken string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.deletions == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion service is not configured")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Zone deletion service is not configured",
+		)
 	}
 	return service.deletions.RemoveZoneWithImpact(ctx, zoneID, idempotencyKey, impactToken)
 }
@@ -276,7 +285,10 @@ func (service *zoneDeletionService) RemoveZoneWithImpact(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Zone deletion retry bound was not enforced",
+	)
 }
 
 func (service *zoneDeletionService) removeZoneOnce(
@@ -312,7 +324,10 @@ func (service *zoneDeletionService) removeZoneOnce(
 			return idempotencyrecord.IdempotencyResponse{}, impactErr
 		}
 		if impactToken == "" || impact.ImpactToken != impactToken {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "backing Zone removal impact changed")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindStateConflict,
+				"backing Zone removal impact changed",
+			)
 		}
 	}
 	environment, err := service.repository.GetEnvironment(ctx, zone.Record.EnvironmentID)
@@ -320,7 +335,10 @@ func (service *zoneDeletionService) removeZoneOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if environment.Record.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Zone Environment is not ready")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindResourceInUse,
+			"Zone Environment is not ready",
+		)
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
@@ -335,14 +353,20 @@ func (service *zoneDeletionService) removeZoneOnce(
 	backingOwnership := project.Record.Kind == hierarchyrecord.ProjectKindBacking &&
 		zone.Record.Desired.OwnerKind == core.ZoneOwnerBackingProject && zone.Record.Desired.OwnerID == project.Record.ID
 	if (!backing && !ordinaryOwnership) || (backing && !backingOwnership) {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Zone ownership is inconsistent")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Zone ownership is inconsistent",
+		)
 	}
 	authorities, found, err := service.repository.GetEnvironmentZoneRemovalAuthorities(ctx, environment.Record.ID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !found {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Zone desired revision is missing")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Zone desired revision is missing",
+		)
 	}
 	projection := authorities.Desired
 	locator = idempotencyrecord.IdempotencyLocator{
@@ -360,7 +384,10 @@ func (service *zoneDeletionService) removeZoneOnce(
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Zone deletion replay resolution is invalid",
+			)
 		}
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
@@ -378,13 +405,16 @@ func (service *zoneDeletionService) removeZoneOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	claim, err := service.repository.ClaimEnvironmentBlueprintStage(ctx, blueprints.EnvironmentBlueprintStageClaimRequest{
-		EnvironmentID: environment.Record.ID, CandidateRevisionID: candidateRevisionID,
-		CandidateTaskID: candidateRevisionID, Locator: locator, Intent: evidence.durable,
-		BaselineHeadRevision: projection.Revision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
-		RenderGeneration: candidate.RenderGeneration, ProjectionSchema: blueprints.EnvironmentDesiredProjectionSchema,
-		CreatedAt: now,
-	})
+	claim, err := service.repository.ClaimEnvironmentBlueprintStage(
+		ctx,
+		blueprints.EnvironmentBlueprintStageClaimRequest{
+			EnvironmentID: environment.Record.ID, CandidateRevisionID: candidateRevisionID,
+			CandidateTaskID: candidateRevisionID, Locator: locator, Intent: evidence.durable,
+			BaselineHeadRevision: projection.Revision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
+			RenderGeneration: candidate.RenderGeneration, ProjectionSchema: blueprints.EnvironmentDesiredProjectionSchema,
+			CreatedAt: now,
+		},
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -515,7 +545,10 @@ func (service *zoneDeletionService) removeZoneOnce(
 	case requestidempotency.ResolutionReplay:
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Zone deletion resolution is invalid",
+		)
 	}
 }
 
@@ -550,7 +583,10 @@ func (service *zoneDeletionService) replayZoneDeletion(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone deletion replay target is inconsistent")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Zone deletion replay target is inconsistent",
+		)
 	}
 	return cloneIdempotencyResponse(resolution.Response), nil
 }

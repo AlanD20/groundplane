@@ -57,7 +57,10 @@ func (repository *Preparer) prepareHierarchyDeletionScriptFinalizer(
 	effects.values = append(effects.values, activeValue)
 	effects.conditions = append(
 		effects.conditions,
-		etcdstore.Condition{Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), ModRevision: storage.Active.Revision},
+		etcdstore.Condition{
+			Key:         scriptrecord.ScriptSetActiveKey(record.EnvironmentID),
+			ModRevision: storage.Active.Revision,
+		},
 		etcdstore.Condition{Key: scriptrecord.ScriptLocatorKey(action.TargetID), ModRevision: storage.Locator.Revision},
 		etcdstore.Condition{
 			Key:         scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID),
@@ -67,13 +70,24 @@ func (repository *Preparer) prepareHierarchyDeletionScriptFinalizer(
 	effects.mutations = append(
 		effects.mutations,
 		etcdstore.Mutation{
-			Type:   etcdstore.MutationDelete,
-			Key:    scriptrecord.ScriptSetBodyGenerationPrefix(record.EnvironmentID, record.ScriptSetGeneration, action.TargetID),
+			Type: etcdstore.MutationDelete,
+			Key: scriptrecord.ScriptSetBodyGenerationPrefix(
+				record.EnvironmentID,
+				record.ScriptSetGeneration,
+				action.TargetID,
+			),
 			Prefix: true,
 		},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptLocatorKey(action.TargetID)},
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID)},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(record.EnvironmentID), Value: activeValue},
+		etcdstore.Mutation{
+			Type: etcdstore.MutationDelete,
+			Key:  scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, action.TargetID),
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   scriptrecord.ScriptSetActiveKey(record.EnvironmentID),
+			Value: activeValue,
+		},
 	)
 	return effects, nil
 }

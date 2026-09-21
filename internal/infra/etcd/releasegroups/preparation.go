@@ -40,8 +40,16 @@ func (repository *Preparer) PrepareReleaseGroupCreate(
 		group.EnvironmentID, group.ID, 0, taskjournal.TaskCreate, evidence.conditions,
 		[]etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: ReleaseGroupRecordKey(group.ID), Value: value},
-			{Type: etcdstore.MutationPut, Key: ReleaseGroupOwnerKey(group.EnvironmentID, group.ID), Value: []byte(group.ID)},
-			{Type: etcdstore.MutationPut, Key: ReleaseGroupNameKey(group.EnvironmentID, group.Name), Value: []byte(group.ID)},
+			{
+				Type:  etcdstore.MutationPut,
+				Key:   ReleaseGroupOwnerKey(group.EnvironmentID, group.ID),
+				Value: []byte(group.ID),
+			},
+			{
+				Type:  etcdstore.MutationPut,
+				Key:   ReleaseGroupNameKey(group.EnvironmentID, group.Name),
+				Value: []byte(group.ID),
+			},
 			evidence.epochMutation,
 			evidence.collectionEpoch,
 		},
@@ -85,7 +93,10 @@ func (repository *Preparer) PrepareReleaseGroupUpdate(
 	if current.Name != replacement.Name {
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: ReleaseGroupNameKey(replacement.EnvironmentID, current.Name)},
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  ReleaseGroupNameKey(replacement.EnvironmentID, current.Name),
+			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
 				Key:   ReleaseGroupNameKey(replacement.EnvironmentID, replacement.Name),

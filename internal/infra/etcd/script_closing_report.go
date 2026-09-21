@@ -54,7 +54,8 @@ func scriptClosingReportEnvelope(task TaskRecord) string {
 }
 
 func taskHasScriptClosingReport(task TaskRecord) bool {
-	return task.Type == taskjournal.TaskScript || (task.Type == taskjournal.TaskUpdate && task.Params[releaserender.TaskReleasePublicationParam] != "")
+	return task.Type == taskjournal.TaskScript ||
+		(task.Type == taskjournal.TaskUpdate && task.Params[releaserender.TaskReleasePublicationParam] != "")
 }
 
 func (report scriptClosingReport) matches(status taskjournal.TaskStatus, result taskjournal.TaskResultRecord) bool {
@@ -77,7 +78,8 @@ func (report scriptClosingReport) validate(current TaskAssignment) error {
 		taskjournal.ValidateTaskResult(report.Result, task.Steps, report.Status) != nil ||
 		!taskjournal.IsTerminalTaskStatus(
 			report.Status,
-		) || recordcodec.ValidateTimestamp("Blueprint closing report observed_at", report.ObservedAt) != nil ||
+		) ||
+		recordcodec.ValidateTimestamp("Blueprint closing report observed_at", report.ObservedAt) != nil ||
 		report.ObservedAt.Before(task.UpdatedAt) {
 		return errs.New(errs.KindInternal, "Blueprint closing report authority is corrupt")
 	}
@@ -100,7 +102,10 @@ func (repository *TaskRepository) readScriptClosingReport(
 	if value == nil {
 		return scriptClosingReport{}, nil, nil
 	}
-	report, err := recordcodec.Decode[scriptClosingReport](value.Value, scriptClosingReportEnvelope(current.Task.Record))
+	report, err := recordcodec.Decode[scriptClosingReport](
+		value.Value,
+		scriptClosingReportEnvelope(current.Task.Record),
+	)
 	if err != nil {
 		return scriptClosingReport{}, nil, err
 	}
@@ -128,12 +133,12 @@ func (repository *TaskRepository) prepareScriptClosingReport(
 			)
 		}
 		return report, etcdstore.Condition{
-			Key:         key,
-			ModRevision: value.ModRevision,
-		}, etcdstore.Mutation{
-			Type: etcdstore.MutationDelete,
-			Key:  key,
-		}, nil
+				Key:         key,
+				ModRevision: value.ModRevision,
+			}, etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  key,
+			}, nil
 	}
 	if value != nil {
 		return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, taskassignments.CorruptTaskAssignment()
@@ -151,7 +156,13 @@ func (repository *TaskRepository) prepareScriptClosingReport(
 		return scriptClosingReport{}, etcdstore.Condition{}, etcdstore.Mutation{}, err
 	}
 	encoded, err := recordcodec.Encode(scriptClosingReportEnvelope(task), report)
-	return report, etcdstore.Condition{Key: key}, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded}, err
+	return report, etcdstore.Condition{
+			Key: key,
+		}, etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   key,
+			Value: encoded,
+		}, err
 }
 
 func (repository *TaskRepository) resumeScriptClosingReport(

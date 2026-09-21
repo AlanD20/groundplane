@@ -69,7 +69,8 @@ func DecodeTask(task etcd.TaskRecord, started, deadline time.Time) (upgrade.Jour
 		ids.Validate(ids.KindOperation, task.OperationID) != nil || ids.Validate(ids.KindPlan, task.PlanID) != nil ||
 		task.TimeoutSeconds != upgrade.TaskTimeoutSeconds || task.RenderGeneration != 1 || task.RetryOf != "" || len(task.Steps) != 0 ||
 		len(task.Materializations) != 0 ||
-		len(task.Params) != 2 || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceController ||
+		len(task.Params) != 2 ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceController ||
 		deadline.Sub(started) != upgrade.TaskTimeoutSeconds*time.Second {
 		return upgrade.Journal{}, errs.New(errs.KindValidationFailed, "controller update Task authority is invalid")
 	}

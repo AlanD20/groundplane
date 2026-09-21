@@ -38,7 +38,10 @@ func newPlatformDNSResolverTask(componentID string, createdAt time.Time) TaskRec
 			TaskAutomaticReconcileParam:       "true",
 		},
 		Steps: []taskjournal.TaskStepRecord{
-			{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}, {Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
+			{
+				Kind: taskjournal.TaskStepOperation,
+				ID:   ids.New(ids.KindStep),
+			}, {Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
 		}, TimeoutSeconds: 480,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
@@ -67,7 +70,8 @@ func isPlatformDNSResolverTask(task TaskRecord) bool {
 }
 
 func isPlatformDNSResolverTaskAttempt(task TaskRecord) bool {
-	if task.Owner != taskjournal.PlatformTaskOwner() || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate ||
+	if task.Owner != taskjournal.PlatformTaskOwner() || task.Executor != taskjournal.TaskExecutorAgent ||
+		task.Type != taskjournal.TaskUpdate ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceComponent ||
 		ids.Validate(ids.KindComponent, task.Target) != nil {
 		return false
@@ -255,7 +259,10 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 			change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
 				Key: active.Key, ModRevision: active.ModRevision,
 			})
-			change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key})
+			change.mutations = append(
+				change.mutations,
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key},
+			)
 		}
 		return change, nil
 	}
@@ -278,7 +285,10 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 			change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
 				Key: active.Key, ModRevision: active.ModRevision,
 			})
-			change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key})
+			change.mutations = append(
+				change.mutations,
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key},
+			)
 			return change, nil
 		}
 		successor := newPlatformDNSResolverTask(
@@ -297,7 +307,10 @@ func (repository *TaskRepository) prepareHostResolutionReconciliation(
 			change.conditions = appendHostResolutionCondition(change.conditions, etcdstore.Condition{
 				Key: active.Key, ModRevision: active.ModRevision,
 			})
-			change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key})
+			change.mutations = append(
+				change.mutations,
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: active.Key},
+			)
 			return change, nil
 		}
 		change.conditions = contribution.conditions

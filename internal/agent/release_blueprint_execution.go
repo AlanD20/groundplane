@@ -53,10 +53,18 @@ func (p *WorkerPool) executeBlueprintReleaseComponent(
 		)
 	}
 	if p.componentActions == nil {
-		return composeruntime.StepResult{}, errs.New(errs.KindInternal, "agent: Component action runtime is not configured")
+		return composeruntime.StepResult{}, errs.New(
+			errs.KindInternal,
+			"agent: Component action runtime is not configured",
+		)
 	}
 	result := composeruntime.StepResult{MutationAttempted: true}
-	observation, err := p.componentActions.ExecuteComponentAction(ctx, assignment, step, componentaction.ManagedConfigPayload{})
+	observation, err := p.componentActions.ExecuteComponentAction(
+		ctx,
+		assignment,
+		step,
+		componentaction.ManagedConfigPayload{},
+	)
 	if observation != nil && (observation.ManagedConfig != nil || observation.DNSResolverObservation != nil) {
 		err = errors.Join(
 			err,

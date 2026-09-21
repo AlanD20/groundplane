@@ -40,7 +40,8 @@ func (repository *TaskRepository) scanRoutesAtRevision(ctx context.Context, revi
 				return nil, errs.New(errs.KindInternal, "Applied Environment projection scan contains an invalid key")
 			}
 			environmentID := strings.TrimPrefix(value.Key, projectionrecord.EnvironmentComposeProjectionPrefix)
-			if strings.Contains(environmentID, "/") || recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
+			if strings.Contains(environmentID, "/") ||
+				recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 				recordquery.ClearRangeKeyValues(page.Values)
 				return nil, recordcodec.CorruptRecord()
 			}
@@ -129,7 +130,10 @@ func validHostResolutionProvider(record componentrecord.Record) bool {
 		!address.IsMulticast() && address.String() == record.Runtime.PinnedIPv4
 }
 
-func appendHostResolutionCondition(conditions []etcdstore.Condition, candidate etcdstore.Condition) []etcdstore.Condition {
+func appendHostResolutionCondition(
+	conditions []etcdstore.Condition,
+	candidate etcdstore.Condition,
+) []etcdstore.Condition {
 	for _, existing := range conditions {
 		if existing.Key != candidate.Key {
 			continue

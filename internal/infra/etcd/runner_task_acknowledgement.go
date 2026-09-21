@@ -76,7 +76,11 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 			)
 		}
 	}
-	replacement, err := runnerrecord.CompleteRunnerProvisioning(record, task.ID, terminalStatus == taskjournal.TaskStatusCompleted)
+	replacement, err := runnerrecord.CompleteRunnerProvisioning(
+		record,
+		task.ID,
+		terminalStatus == taskjournal.TaskStatusCompleted,
+	)
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
@@ -97,7 +101,11 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
 		{Key: runnerrecord.RunnerReadinessProofKey(task.ID), ModRevision: etcdstore.RevisionOf(proofValue)},
 		{
-			Key:         runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
+			Key: runnerrecord.RunnerOwnerKey(
+				record.Desired.OwnerKind,
+				record.Desired.OwnerID,
+				record.Desired.ID,
+			),
 			ModRevision: allocation.Owner.ModRevision,
 		},
 		{
@@ -108,12 +116,17 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.Host.ModRevision},
 		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.System.ModRevision},
 	}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerLifecycleKey(task.Target), Value: value}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerLifecycleKey(task.Target), Value: value},
+	}
 	if proofValue != nil {
 		conditions = append(conditions, etcdstore.Condition{
 			Key: runnerrecord.RunnerRuntimeOwnershipKey(task.Target), ModRevision: result.Values[3].ModRevision,
 		})
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerReadinessProofKey(task.ID)})
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerReadinessProofKey(task.ID)},
+		)
 	}
 	return runnerTaskChange{
 		applies:    true,
@@ -177,7 +190,10 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 			},
 			{Key: runnerrecord.RunnerRemovalIntentKey(task.Target), ModRevision: base.Values[3].ModRevision},
 			{Key: runnerrecord.RunnerObservationKey(task.Target), ModRevision: etcdstore.RevisionOf(base.Values[4])},
-			{Key: runnerrecord.RunnerRuntimeOwnershipKey(task.Target), ModRevision: etcdstore.RevisionOf(base.Values[5])},
+			{
+				Key:         runnerrecord.RunnerRuntimeOwnershipKey(task.Target),
+				ModRevision: etcdstore.RevisionOf(base.Values[5]),
+			},
 			{
 				Key:         runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, task.Target),
 				ModRevision: allocation.Owner.ModRevision,
@@ -186,12 +202,18 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 				Key:         runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
 				ModRevision: allocation.Slug.ModRevision,
 			},
-			{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.Quota.ModRevision},
+			{
+				Key:         runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID),
+				ModRevision: allocation.Quota.ModRevision,
+			},
 			{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.Host.ModRevision},
 			{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.System.ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationDelete, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
+			{
+				Type: etcdstore.MutationDelete,
+				Key:  deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target),
+			},
 			{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerRemovalIntentKey(task.Target)},
 		},
 	}
@@ -233,8 +255,15 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 			Type: etcdstore.MutationDelete,
 			Key:  runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, task.Target),
 		},
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), Value: quotaValue},
+		etcdstore.Mutation{
+			Type: etcdstore.MutationDelete,
+			Key:  runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID),
+			Value: quotaValue,
+		},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot)},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: runnerrecord.SystemPoolRegistryKey, Value: systemValue},
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerObservationKey(task.Target)},

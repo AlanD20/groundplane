@@ -15,7 +15,10 @@ func SelectZoneForDeletion(
 ) (etcdstore.Versioned[zonerecord.Record], error) {
 	if projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
 		supplied.Revision != projection.Revision || supplied.ReadRevision < supplied.Revision {
-		return etcdstore.Versioned[zonerecord.Record]{}, errs.New(errs.KindValidationFailed, "Zone deletion projection is invalid")
+		return etcdstore.Versioned[zonerecord.Record]{}, errs.New(
+			errs.KindValidationFailed,
+			"Zone deletion projection is invalid",
+		)
 	}
 	var selected *etcdstore.Versioned[zonerecord.Record]
 	for _, desired := range projection.Record.DesiredZones {

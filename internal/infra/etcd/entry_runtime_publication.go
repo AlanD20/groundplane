@@ -69,7 +69,8 @@ func EntryRuntimeEpochRevision(task TaskRecord) (int64, error) {
 }
 
 func validateEntryRuntimePublication(task TaskRecord, fence environmentfence.Evidence) error {
-	entryMutation := task.Type == taskjournal.TaskUpdate && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry
+	entryMutation := task.Type == taskjournal.TaskUpdate &&
+		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry
 	if !entryMutation && task.Params[taskjournal.TaskEntryRuntimeEpochParam] == "" && task.EntryRuntime == nil {
 		return nil
 	}
@@ -154,7 +155,8 @@ func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 	ctx context.Context, terminal TaskRecord, assignment taskassignments.TaskAssignmentRecord, revision int64,
 ) (taskMaterializationProjectionChange, error) {
 	if terminal.Type != taskjournal.TaskUpdate || terminal.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEntry ||
-		terminal.Status != taskjournal.TaskStatusCompleted || terminal.EntryRuntime == nil || len(terminal.EntryRuntime.Updates) == 0 {
+		terminal.Status != taskjournal.TaskStatusCompleted || terminal.EntryRuntime == nil ||
+		len(terminal.EntryRuntime.Updates) == 0 {
 		return taskMaterializationProjectionChange{}, nil
 	}
 	result := terminal.Result
@@ -254,7 +256,10 @@ func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 			clearTaskMaterializationProjectionChange(change)
 			return taskMaterializationProjectionChange{}, encodeErr
 		}
-		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[index], Value: encoded})
+		change.mutations = append(
+			change.mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[index], Value: encoded},
+		)
 	}
 	return change, nil
 }

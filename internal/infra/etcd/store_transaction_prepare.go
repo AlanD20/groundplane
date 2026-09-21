@@ -16,7 +16,10 @@ type preparedStoreTransaction struct {
 
 // prepareTransaction validates and encodes the exact physical request without
 // contacting etcd, then applies the etcdstore.Store-wide serialized-request ceiling.
-func (s *store) prepareTransaction(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) (preparedStoreTransaction, error) {
+func (s *store) prepareTransaction(
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) (preparedStoreTransaction, error) {
 	prepared, err := s.prepareTransactionWithoutLimit(conditions, mutations)
 	if err != nil {
 		return preparedStoreTransaction{}, err

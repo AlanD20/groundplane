@@ -39,11 +39,17 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 		base.Values[0] == nil || base.Values[1] == nil || base.Values[2] == nil {
 		return false, releases.CorruptReleaseRecord()
 	}
-	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](base.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		base.Values[0].Value,
+		"release-publication",
+	)
 	if err != nil {
 		return false, releases.CorruptReleaseRecord()
 	}
-	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](base.Values[1].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+		base.Values[1].Value,
+		"release-staged-manifest",
+	)
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
 		return false, releases.CorruptReleaseRecord()
 	}
@@ -71,7 +77,10 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	for index, member := range manifest.Members {
 		terminalKeys[index] = releases.ReleaseTerminalKey(member.ReleaseID)
 	}
-	terminals, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: terminalKeys, Revision: readRevision})
+	terminals, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: terminalKeys, Revision: readRevision},
+	)
 	if err != nil {
 		return false, err
 	}
@@ -213,7 +222,11 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 			// epoch; another runtime writer cannot publish under that ownership.
 			mutations = append(
 				mutations,
-				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: serviceruntimerecord.Key(member.ServiceID), Value: runtimeValue},
+				etcdstore.Mutation{
+					Type:  etcdstore.MutationPut,
+					Key:   serviceruntimerecord.Key(member.ServiceID),
+					Value: runtimeValue,
+				},
 			)
 		}
 	}

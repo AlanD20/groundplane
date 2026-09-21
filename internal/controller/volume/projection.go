@@ -162,7 +162,9 @@ func buildVolumeMutationProjection(
 	return candidate, oldArtifact, newArtifact, nil
 }
 
-func cloneVolumeMutationProjection(current projectionrecord.EnvironmentComposeProjection) projectionrecord.EnvironmentComposeProjection {
+func cloneVolumeMutationProjection(
+	current projectionrecord.EnvironmentComposeProjection,
+) projectionrecord.EnvironmentComposeProjection {
 	runtimeFiles := make([]core.BlueprintFile, len(current.RuntimeFiles))
 	for index, file := range current.RuntimeFiles {
 		runtimeFiles[index] = core.BlueprintFile{Path: file.Path, Content: append([]byte(nil), file.Content...)}
@@ -225,7 +227,10 @@ func buildVolumeMutationCandidate(
 	}
 	artifactBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(newArtifact)
 	if err != nil {
-		return volumeMutationRequest{}, projectionrecord.EnvironmentComposeProjection{}, nil, nil, errs.Wrap(errs.KindInternal, err)
+		return volumeMutationRequest{}, projectionrecord.EnvironmentComposeProjection{}, nil, nil, errs.Wrap(
+			errs.KindInternal,
+			err,
+		)
 	}
 	candidate.ComposeArtifact = artifactBytes
 	return request, candidate, oldArtifact, newArtifact, nil

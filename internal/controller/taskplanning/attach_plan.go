@@ -286,7 +286,9 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 	return plan, nil
 }
 
-func attachPlanServiceSnapshots(values []servicerecord.EnvironmentServiceProjection) []attachrender.AttachTaskServiceSnapshot {
+func attachPlanServiceSnapshots(
+	values []servicerecord.EnvironmentServiceProjection,
+) []attachrender.AttachTaskServiceSnapshot {
 	snapshots := make([]attachrender.AttachTaskServiceSnapshot, len(values))
 	for index, value := range values {
 		snapshots[index] = attachrender.AttachTaskServiceSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
@@ -294,7 +296,9 @@ func attachPlanServiceSnapshots(values []servicerecord.EnvironmentServiceProject
 	return snapshots
 }
 
-func attachPlanOwnedNetworkSnapshots(values []projectionrecord.EnvironmentZoneProjection) []attachrender.AttachTaskOwnedNetworkSnapshot {
+func attachPlanOwnedNetworkSnapshots(
+	values []projectionrecord.EnvironmentZoneProjection,
+) []attachrender.AttachTaskOwnedNetworkSnapshot {
 	snapshots := make([]attachrender.AttachTaskOwnedNetworkSnapshot, len(values))
 	for index, value := range values {
 		snapshots[index] = attachrender.AttachTaskOwnedNetworkSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}

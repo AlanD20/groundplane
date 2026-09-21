@@ -172,14 +172,29 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		}
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupKeyKey(task.Target), Value: recordValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backuppolicy.BackupKeyValueKey(task.Target), Value: valueValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: backupruntime.BackupKeyRotationKey(task.ID), Value: rotationValue},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   backuppolicy.BackupKeyKey(task.Target),
+				Value: recordValue,
+			},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   backuppolicy.BackupKeyValueKey(task.Target),
+				Value: valueValue,
+			},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   backupruntime.BackupKeyRotationKey(task.ID),
+				Value: rotationValue,
+			},
 		)
 	}
 	mutations = append(
 		mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(task.Target)},
+		etcdstore.Mutation{
+			Type: etcdstore.MutationDelete,
+			Key:  hierarchyrecord.EnvironmentOperationLockKey(task.Target),
+		},
 	)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {

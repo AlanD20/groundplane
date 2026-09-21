@@ -101,7 +101,10 @@ func (service *durableSecretCreationIdempotency) Prepare(
 			requestidempotency.Field{Name: "path", Value: requestidempotency.String(input.Path)},
 			requestidempotency.Field{Name: "platform", Value: requestidempotency.Bool(input.Platform)},
 			requestidempotency.Field{Name: "project_id", Value: requestidempotency.String(input.ProjectID)},
-			requestidempotency.Field{Name: "value_sha256", Value: requestidempotency.String(hex.EncodeToString(digest[:]))},
+			requestidempotency.Field{
+				Name:  "value_sha256",
+				Value: requestidempotency.String(hex.EncodeToString(digest[:])),
+			},
 		)),
 	})
 	if err != nil {
@@ -170,7 +173,10 @@ func (service *secretCreationService) CreateSecret(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Secret creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Secret creation context is required",
+		)
 	}
 	for attempt := 0; attempt < maximumSecretCreationAttempts; attempt++ {
 		response, err := service.createSecretOnce(ctx, input, idempotencyKey)

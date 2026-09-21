@@ -77,7 +77,10 @@ func (repository *TaskRepository) prepareRecoverySecretPinTerminal(
 			)
 		}
 		change.applies = true
-		change.conditions = append(change.conditions, etcdstore.Condition{Key: key, ModRevision: read.Values[0].ModRevision})
+		change.conditions = append(
+			change.conditions,
+			etcdstore.Condition{Key: key, ModRevision: read.Values[0].ModRevision},
+		)
 		change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: key})
 	}
 	if task.Configuration.SecretPins == nil {
@@ -153,8 +156,15 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 		_, err := pins.ResumeRelease(ctx)
 		return true, err
 	}
-	keys := []string{taskjournal.TaskActiveOperationKey(task.OperationID), taskjournal.TaskAssignmentIndexKey(root.AttemptID()),
-		taskjournal.TaskRecoveryProofRequiredKey(root.AttemptID()), taskassignments.ReleaseRecoveryKey(root.AttemptID()), taskjournal.TaskStorageKey(root.AttemptID())}
+	keys := []string{
+		taskjournal.TaskActiveOperationKey(task.OperationID),
+		taskjournal.TaskAssignmentIndexKey(root.AttemptID()),
+		taskjournal.TaskRecoveryProofRequiredKey(
+			root.AttemptID(),
+		),
+		taskassignments.ReleaseRecoveryKey(root.AttemptID()),
+		taskjournal.TaskStorageKey(root.AttemptID()),
+	}
 	hookInputIndex := -1
 	if task.Configuration.BackingHookInputs != nil {
 		hookInputIndex = len(keys)
@@ -221,8 +231,11 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	}
 	change := taskMaterializationProjectionChange{conditions: conditions, mutations: mutations}
 	defer clearTaskMaterializationProjectionChange(change)
-	change.conditions = append(change.conditions, etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
-		etcdstore.Condition{Key: retention.Key, ModRevision: retention.ModRevision})
+	change.conditions = append(
+		change.conditions,
+		etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
+		etcdstore.Condition{Key: retention.Key, ModRevision: retention.ModRevision},
+	)
 	for index, key := range keys {
 		change.conditions = append(
 			change.conditions,
@@ -292,7 +305,11 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 		{Key: keys[0]}, {Key: keys[1]},
 		{Key: keys[2], ModRevision: read.Values[2].ModRevision},
 	}
-	commit, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: keys[2]}})
+	commit, err := repository.store.Transact(
+		ctx,
+		conditions,
+		[]etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: keys[2]}},
+	)
 	etcdstore.ClearValues(commit.FailureReads)
 	if err != nil {
 		return true, err

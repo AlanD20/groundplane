@@ -90,7 +90,10 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionAgentTask(
 		assignment.AgentGeneration != agentGeneration || task.Status != taskjournal.TaskStatusRunning || task.StartedAt == nil ||
 		assignment.ClaimedTaskRevision >= assignmentValue.ModRevision ||
 		!assignment.AssignedAt.Equal(*task.StartedAt) {
-		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "hierarchy deletion child assignment changed")
+		return etcdstore.Versioned[TaskRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion child assignment changed",
+		)
 	}
 	terminalAt, err = nextTaskControllerTimestamp(task.UpdatedAt, terminalAt)
 	if err != nil {
@@ -229,7 +232,9 @@ func (repository *TaskRepository) ensureHierarchyDeletionReceiptForTask(
 	if err != nil {
 		return err
 	}
-	operation := hierarchydeletion.HierarchyDeletionOperation{Tombstone: hierarchydeletion.HierarchyDeletionTombstone{OperationID: parentOperationID}}
+	operation := hierarchydeletion.HierarchyDeletionOperation{
+		Tombstone: hierarchydeletion.HierarchyDeletionTombstone{OperationID: parentOperationID},
+	}
 	return hierarchy.ensureHierarchyDeletionTerminalReceipt(
 		ctx, operation, action, entry, read.Values[1].ModRevision, task, taskRevision,
 	)

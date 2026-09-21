@@ -28,7 +28,8 @@ func (repository *ConnectorRepository) CreateConnectorIdempotent(
 			"Connector encrypted credentials do not match the Connector",
 		)
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != record.Connector.EnvironmentID {
 		return IdempotencyTransactionResult{}, errs.New(

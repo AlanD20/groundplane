@@ -142,35 +142,35 @@ func (reader *Reader) ResolveBackupSecretEvidence(
 		backupruntime.BackupRunKey(request.TaskID),
 		backupruntime.BackupRecoveryPointPruneDispatchKey(request.TaskID),
 	}
-	base, err := reader.readFixed(ctx, baseKeys, fixedRevision)
+	read, err := reader.readFixed(ctx, baseKeys, fixedRevision)
 	if err != nil {
 		return Evidence{}, err
 	}
-	defer etcdstore.ClearValues(base.Values)
-	if base.Values[0] == nil {
+	defer etcdstore.ClearValues(read.Values)
+	if read.Values[0] == nil {
 		return Evidence{}, errs.New(
 			errs.KindTaskNotFound,
 			"backup task was not found",
 		)
 	}
-	if base.Values[1] == nil || base.Values[2] == nil || base.Values[3] == nil ||
-		base.Values[1].ModRevision != base.Values[2].ModRevision ||
-		base.Values[1].ModRevision != base.Values[3].ModRevision ||
-		!bytes.Equal(base.Values[1].Value, base.Values[2].Value) ||
-		!bytes.Equal(base.Values[1].Value, base.Values[3].Value) {
+	if read.Values[1] == nil || read.Values[2] == nil || read.Values[3] == nil ||
+		read.Values[1].ModRevision != read.Values[2].ModRevision ||
+		read.Values[1].ModRevision != read.Values[3].ModRevision ||
+		!bytes.Equal(read.Values[1].Value, read.Values[2].Value) ||
+		!bytes.Equal(read.Values[1].Value, read.Values[3].Value) {
 		return Evidence{}, errs.New(
 			errs.KindStateConflict,
 			"backup task assignment evidence changed",
 		)
 	}
-	task, err := base.DecodeTaskRecord(base.Values[0].Value)
+	task, err := base.DecodeTaskRecord(read.Values[0].Value)
 	if err != nil {
 		return Evidence{}, errs.New(
 			errs.KindInternal,
 			"backup task evidence is corrupt",
 		)
 	}
-	assignment, err := taskassignments.DecodeTaskAssignment(base.Values[1].Value)
+	assignment, err := taskassignments.DecodeTaskAssignment(read.Values[1].Value)
 	if err != nil {
 		return Evidence{}, errs.New(
 			errs.KindInternal,
@@ -228,13 +228,13 @@ func (reader *Reader) ResolveBackupSecretEvidence(
 		ReadRevision: fixedRevision, Task: task, Assignment: assignment,
 	}
 	if task.Type == taskjournal.TaskBackup {
-		if base.Values[4] == nil || base.Values[5] != nil {
+		if read.Values[4] == nil || read.Values[5] != nil {
 			return Evidence{}, errs.New(
 				errs.KindStateConflict,
 				"backup run evidence is unavailable",
 			)
 		}
-		run, decodeErr := backupruntime.DecodeBackupRunRecord(base.Values[4].Value)
+		run, decodeErr := backupruntime.DecodeBackupRunRecord(read.Values[4].Value)
 		if decodeErr != nil {
 			return Evidence{}, errs.New(
 				errs.KindInternal,
@@ -261,13 +261,13 @@ func (reader *Reader) ResolveBackupSecretEvidence(
 		}
 		evidence.Run = &run
 	} else {
-		if base.Values[4] != nil || base.Values[5] == nil {
+		if read.Values[4] != nil || read.Values[5] == nil {
 			return Evidence{}, errs.New(
 				errs.KindStateConflict,
 				"backup prune dispatch evidence is unavailable",
 			)
 		}
-		dispatch, decodeErr := backupruntime.DecodeBackupRecoveryPointPruneDispatchRecord(base.Values[5].Value)
+		dispatch, decodeErr := backupruntime.DecodeBackupRecoveryPointPruneDispatchRecord(read.Values[5].Value)
 		if decodeErr != nil {
 			return Evidence{}, errs.New(
 				errs.KindInternal,
@@ -284,7 +284,7 @@ func (reader *Reader) ResolveBackupSecretEvidence(
 			)
 		}
 		evidence.Dispatch = &dispatch
-		evidence.DispatchRevision = base.Values[5].ModRevision
+		evidence.DispatchRevision = read.Values[5].ModRevision
 	}
 
 	dynamic := newBackupSecretDynamicRead()

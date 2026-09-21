@@ -20,7 +20,11 @@ import (
 )
 
 func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
-	ctx context.Context, task TaskRecord, terminalStatus taskjournal.TaskStatus, terminalAt time.Time, readRevision int64,
+	ctx context.Context,
+	task TaskRecord,
+	terminalStatus taskjournal.TaskStatus,
+	terminalAt time.Time,
+	readRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	environmentID, operationID, err := zoneRemovalTaskIdentity(task)
 	if err != nil {
@@ -28,9 +32,13 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	}
 	keys := []string{
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
-		networkreservations.ZonePoolRegistryKey(environmentID), networkreservations.ComponentAddressRegistryKey(task.Target),
+		networkreservations.ZonePoolRegistryKey(
+			environmentID,
+		), networkreservations.ComponentAddressRegistryKey(task.Target),
 		environmentchanges.ZoneRemovalIntentKey(operationID), blueprints.EnvironmentBlueprintHeadKey(environmentID),
-		projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID), environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
+		projectionrecord.EnvironmentComposeProjectionStorageKey(
+			environmentID,
+		), environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
 	if err != nil {
@@ -71,7 +79,8 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal tombstone changed")
 	}
 	pool, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](state.Values[1].Value, "zone_pool_registry")
-	if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil || pool.Reservations[task.Target] != zone.Desired.Subnet {
+	if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil ||
+		pool.Reservations[task.Target] != zone.Desired.Subnet {
 		return nil, nil, errs.New(errs.KindInternal, "Zone subnet reservation is inconsistent")
 	}
 	if state.Values[2] != nil {
@@ -94,7 +103,11 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		{Key: keys[6], ModRevision: state.Values[6].ModRevision},
 	}
 	if terminalStatus != taskjournal.TaskStatusCompleted {
-		terminalIntent, transitionErr := environmentchanges.TerminalZoneRemovalIntent(intent, terminalStatus, terminalAt)
+		terminalIntent, transitionErr := environmentchanges.TerminalZoneRemovalIntent(
+			intent,
+			terminalStatus,
+			terminalAt,
+		)
 		if transitionErr != nil {
 			return nil, nil, transitionErr
 		}
@@ -110,10 +123,18 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	}
 	hierarchy := composeHierarchyRepository(repository.store)
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
-		ctx, intent.Claim,
-		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
+		ctx,
+		intent.Claim,
+		blueprints.EnvironmentDesiredRevisionIdentity{
+			EnvironmentID: intent.EnvironmentID,
+			RevisionID:    intent.Claim.RevisionID,
+		},
 		intent.CandidateProjection,
-		idempotencyrecord.IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent}, intent.DesiredHeadRevision,
+		idempotencyrecord.IdempotencyMarker{
+			Locator: intent.Claim.Locator,
+			Intent:  intent.Claim.Intent,
+		},
+		intent.DesiredHeadRevision,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -180,7 +201,9 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	keys := []string{
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		networkreservations.ZonePoolRegistryKey(environmentID), environmentchanges.ZoneRemovalIntentKey(operationID),
-		blueprints.EnvironmentBlueprintHeadKey(environmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
+		blueprints.EnvironmentBlueprintHeadKey(
+			environmentID,
+		), projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(environmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
@@ -205,7 +228,10 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 			return errs.New(errs.KindStateConflict, "completed Zone removal retained old desired state")
 		}
 		if state.Values[1] != nil {
-			pool, poolErr := recordcodec.Decode[networkreservations.ZonePoolRegistry](state.Values[1].Value, "zone_pool_registry")
+			pool, poolErr := recordcodec.Decode[networkreservations.ZonePoolRegistry](
+				state.Values[1].Value,
+				"zone_pool_registry",
+			)
 			if poolErr != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil {
 				return errs.New(errs.KindInternal, "Zone pool registry is inconsistent")
 			}
@@ -231,13 +257,17 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 		return err
 	}
 	pool, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](state.Values[1].Value, "zone_pool_registry")
-	if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil || pool.Reservations[task.Target] != zone.Desired.Subnet {
+	if err != nil || networkreservations.ValidateZonePoolRegistry(pool) != nil ||
+		pool.Reservations[task.Target] != zone.Desired.Subnet {
 		return errs.New(errs.KindStateConflict, "failed Zone removal changed its subnet reservation")
 	}
 	return nil
 }
 
-func projectedZoneRemovalTarget(intent environmentchanges.ZoneRemovalIntent, readRevision int64) (zonerecord.Record, error) {
+func projectedZoneRemovalTarget(
+	intent environmentchanges.ZoneRemovalIntent,
+	readRevision int64,
+) (zonerecord.Record, error) {
 	projection := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record: intent.DesiredProjection, Revision: intent.DesiredHeadRevision, ReadRevision: readRevision,
 	}

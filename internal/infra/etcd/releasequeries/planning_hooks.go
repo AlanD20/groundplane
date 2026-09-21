@@ -58,9 +58,14 @@ func (ledger *Reader) ListPlanningHookScriptIDs(
 				!bytes.Equal(value.Value, []byte(scriptID)) {
 				return nil, releases.CorruptReleaseRecord()
 			}
-			primary, readErr := scriptexecutions.ScriptExecutionValueAt(ctx, ledger.store, scriptrecord.ScriptSetScriptKey(
-				scope.Environment.Record.ID, active.Record.GenerationID, scriptID,
-			), scope.ReadRevision)
+			primary, readErr := scriptexecutions.ScriptExecutionValueAt(
+				ctx,
+				ledger.store,
+				scriptrecord.ScriptSetScriptKey(
+					scope.Environment.Record.ID, active.Record.GenerationID, scriptID,
+				),
+				scope.ReadRevision,
+			)
 			if readErr != nil {
 				return nil, readErr
 			}

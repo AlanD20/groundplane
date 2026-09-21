@@ -15,7 +15,10 @@ func (s *store) Transact(
 	mutations []etcdstore.Mutation,
 ) (etcdstore.TransactionResult, error) {
 	if len(mutations) == 0 {
-		return etcdstore.TransactionResult{}, errs.New(errs.KindValidationFailed, "etcd transaction requires a mutation")
+		return etcdstore.TransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"etcd transaction requires a mutation",
+		)
 	}
 	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return etcdstore.TransactionResult{}, errs.Newf(
@@ -51,7 +54,10 @@ func (s *store) transact(
 		return etcdstore.TransactionResult{}, wrap(ctx, err)
 	}
 	if response.Header == nil {
-		return etcdstore.TransactionResult{}, errs.New(errs.KindInternal, "etcd transaction response is missing its revision")
+		return etcdstore.TransactionResult{}, errs.New(
+			errs.KindInternal,
+			"etcd transaction response is missing its revision",
+		)
 	}
 	result := etcdstore.TransactionResult{Succeeded: response.Succeeded, Revision: response.Header.Revision}
 	if !response.Succeeded {

@@ -38,7 +38,10 @@ func (repository *Preparer) readHierarchyDeletionPrimary(
 	return result.Entry, nil
 }
 
-func hierarchyDeletionOriginalRootValue(action hierarchydeletion.HierarchyDeletionAction, value []byte) ([]byte, error) {
+func hierarchyDeletionOriginalRootValue(
+	action hierarchydeletion.HierarchyDeletionAction,
+	value []byte,
+) ([]byte, error) {
 	switch action.ActionKind {
 	case hierarchydeletion.HierarchyDeletionTenantFinalize:
 		record, err := hierarchyrecord.DecodeTenant(value)
@@ -103,7 +106,9 @@ func (repository *Preparer) prepareHierarchyDeletionIndexedDelete(
 	}
 	mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: primary.Key})
 	return Effects{
-		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(primary.Value), conditions: conditions, mutations: mutations,
+		fixedInputDigest: hierarchydeletion.HierarchyDeletionBytesDigest(
+			primary.Value,
+		), conditions: conditions, mutations: mutations,
 	}, nil
 }
 

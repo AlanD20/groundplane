@@ -56,11 +56,17 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 		read.Values[0] == nil || read.Values[1] == nil {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script publication authority is unavailable")
 	}
-	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		read.Values[0].Value,
+		"release-publication",
+	)
 	if err != nil {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script publication authority is corrupt")
 	}
-	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+		read.Values[1].Value,
+		"release-staged-manifest",
+	)
 	if err != nil || validateBlueprintCandidateManifest(task, marker, manifest) != nil {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script manifest authority is corrupt")
 	}
@@ -77,7 +83,10 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script execution is outside the candidate manifest")
 	}
 	intentKey := releases.ReleaseIntentStagingKey(publicationID, selected.ReleaseID)
-	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{intentKey}, Revision: revision})
+	intentRead, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{intentKey}, Revision: revision},
+	)
 	if err != nil {
 		return nil, err
 	}

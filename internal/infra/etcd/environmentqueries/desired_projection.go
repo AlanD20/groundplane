@@ -56,7 +56,9 @@ func (repository *ProjectionReader) GetEnvironmentComposeProjection(
 		)
 	}
 	if head.Entry == nil {
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: head.ReadRevision}, false, nil
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
+			ReadRevision: head.ReadRevision,
+		}, false, nil
 	}
 	revisionID, err := idempotencyrecord.DecodeTaskReference(head.Entry.Value)
 	if err != nil {
@@ -113,7 +115,9 @@ func (repository *ProjectionReader) GetEnvironmentComposeProjectionRevision(
 		if root != nil {
 			readRevision = root.ReadRevision
 		}
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: readRevision}, false, nil
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
+			ReadRevision: readRevision,
+		}, false, nil
 	}
 	seal, err := blueprints.DecodeEnvironmentBlueprintSeal(root.Entry.Value)
 	if err != nil || seal.EnvironmentID != environmentID || seal.RevisionID != revisionID {

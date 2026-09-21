@@ -145,18 +145,28 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		conditions: []etcdstore.Condition{
 			{Key: runnerrecord.RunnerKey(source.Target), ModRevision: result.Values[0].ModRevision},
 			{Key: runnerrecord.RunnerLifecycleKey(source.Target), ModRevision: result.Values[1].ModRevision},
-			{Key: runnerrecord.RunnerRuntimeOwnershipKey(source.Target), ModRevision: etcdstore.RevisionOf(result.Values[4])},
+			{
+				Key:         runnerrecord.RunnerRuntimeOwnershipKey(source.Target),
+				ModRevision: etcdstore.RevisionOf(result.Values[4]),
+			},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), source.Target)},
 			{Key: runnerrecord.RunnerRemovalIntentKey(source.Target)},
 			{
-				Key:         runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
+				Key: runnerrecord.RunnerOwnerKey(
+					record.Desired.OwnerKind,
+					record.Desired.OwnerID,
+					record.Desired.ID,
+				),
 				ModRevision: allocation.Owner.ModRevision,
 			},
 			{
 				Key:         runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
 				ModRevision: allocation.Slug.ModRevision,
 			},
-			{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.Quota.ModRevision},
+			{
+				Key:         runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID),
+				ModRevision: allocation.Quota.ModRevision,
+			},
 			{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.Host.ModRevision},
 			{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.System.ModRevision},
 			{Key: hierarchyrecord.TenantKey(record.Desired.TenantID), ModRevision: parents.Values[0].ModRevision},
@@ -173,9 +183,15 @@ func (repository *TaskRepository) prepareRunnerTaskRetry(
 		values: [][]byte{tombstoneValue, intentValue, lifecycleValue},
 	}
 	if record.Desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		change.conditions = append(change.conditions,
-			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(record.Desired.OwnerID), ModRevision: parents.Values[2].ModRevision},
-			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), record.Desired.OwnerID)},
+		change.conditions = append(
+			change.conditions,
+			etcdstore.Condition{
+				Key:         hierarchyrecord.ProjectKey(record.Desired.OwnerID),
+				ModRevision: parents.Values[2].ModRevision,
+			},
+			etcdstore.Condition{
+				Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), record.Desired.OwnerID),
+			},
 		)
 	}
 	return change, nil

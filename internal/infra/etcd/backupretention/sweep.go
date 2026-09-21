@@ -191,7 +191,10 @@ func (repository *Repository) AdvanceBackupRetentionSweep(
 			etcdstore.Condition{Key: companionKeys[position*3], ModRevision: pointValue.ModRevision},
 			etcdstore.Condition{Key: companionKeys[position*3+1], ModRevision: pointValue.ModRevision},
 			etcdstore.Condition{Key: companionKeys[position*3+2], ModRevision: pointValue.ModRevision},
-			etcdstore.Condition{Key: backupruntime.BackupRecoveryPointKey(pointID), ModRevision: pointValue.ModRevision},
+			etcdstore.Condition{
+				Key:         backupruntime.BackupRecoveryPointKey(pointID),
+				ModRevision: pointValue.ModRevision,
+			},
 		)
 		if pruneValue != nil {
 			prune, pruneErr := backupruntime.DecodeBackupRecoveryPointPruneRecord(pruneValue.Value)

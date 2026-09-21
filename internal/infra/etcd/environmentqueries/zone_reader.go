@@ -47,7 +47,10 @@ func (repository *ZoneReader) ListZones(
 		return etcdstore.Page[zonerecord.Record]{}, err
 	}
 	if !found {
-		return etcdstore.Page[zonerecord.Record]{Items: []etcdstore.Versioned[zonerecord.Record]{}, Revision: projection.ReadRevision}, nil
+		return etcdstore.Page[zonerecord.Record]{
+			Items:    []etcdstore.Versioned[zonerecord.Record]{},
+			Revision: projection.ReadRevision,
+		}, nil
 	}
 	desired := append([]projectionrecord.EnvironmentZoneProjection(nil), projection.Record.DesiredZones...)
 	sort.Slice(desired, func(left, right int) bool {

@@ -27,7 +27,8 @@ func (repository *Planner) RequireVolumeRemovalAbsent(
 			hierarchyrecord.ProjectTenantOwnerPrefix(targetID), hierarchyrecord.ProjectKey, ids.KindProject,
 			func(value []byte, id, owner string) error {
 				record, err := hierarchyrecord.DecodeProject(value)
-				if err != nil || record.ID != id || record.TenantID != owner || record.Kind != hierarchyrecord.ProjectKindTenant {
+				if err != nil || record.ID != id || record.TenantID != owner ||
+					record.Kind != hierarchyrecord.ProjectKindTenant {
 					return hierarchydeletion.CorruptHierarchyDeletion()
 				}
 				return nil

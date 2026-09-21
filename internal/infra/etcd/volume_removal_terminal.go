@@ -34,15 +34,24 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 	if err != nil || !volumeRemovalTerminalTaskMatches(task, runtime) {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	locator := idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
-		ScopeID: runtime.RootLocator.ScopeID, Method: runtime.RootLocator.Method,
-		Route: runtime.RootLocator.Route, Key: runtime.RootLocator.Key}
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
+		ScopeID:   runtime.RootLocator.ScopeID,
+		Method:    runtime.RootLocator.Method,
+		Route:     runtime.RootLocator.Route,
+		Key:       runtime.RootLocator.Key,
+	}
 	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(locator)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
-	replayKey, err := idempotencyrecord.IdempotencyReplayTargetKey(idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
-		ID: runtime.VolumeID}, locator.Method, locator.Route, locator.Key)
+	replayKey, err := idempotencyrecord.IdempotencyReplayTargetKey(
+		idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
+			ID: runtime.VolumeID},
+		locator.Method,
+		locator.Route,
+		locator.Key,
+	)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
@@ -100,8 +109,10 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 	defer clear(marker.Response.Body)
 	if marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
 		marker.TaskID != runtime.OriginTaskID || marker.Response.Status != http.StatusAccepted ||
-		marker.ReplayTarget == nil || marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume ||
-		marker.ReplayTarget.ID != runtime.VolumeID || sha256.Sum256(marker.Intent.Ciphertext) != runtime.IntentSHA256 ||
+		marker.ReplayTarget == nil ||
+		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume ||
+		marker.ReplayTarget.ID != runtime.VolumeID ||
+		sha256.Sum256(marker.Intent.Ciphertext) != runtime.IntentSHA256 ||
 		sha256.Sum256(marker.Response.Body) != runtime.RootResponseSHA256 ||
 		idempotencyrecord.DecodeReplayTargetReference(read.Values[6].Value, markerKey) != nil {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
@@ -158,8 +169,11 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 			return etcdstore.TransactionResult{}, err
 		}
 	}
-	conditions = append(conditions, etcdstore.Condition{Key: runtimeRead.Entry.Key, ModRevision: runtimeRead.Entry.ModRevision},
-		etcdstore.Condition{Key: completionKey, ModRevision: completionRead.Values[0].ModRevision})
+	conditions = append(
+		conditions,
+		etcdstore.Condition{Key: runtimeRead.Entry.Key, ModRevision: runtimeRead.Entry.ModRevision},
+		etcdstore.Condition{Key: completionKey, ModRevision: completionRead.Values[0].ModRevision},
+	)
 	ancestry, err := hierarchydeletion.BindMutationEpochs(ctx, repository.store, read.ReadRevision,
 		hierarchydeletion.MutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, nil, nil)
 	if err != nil {
@@ -170,14 +184,27 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 	conditions = append(
 		conditions,
 		etcdstore.Condition{
-			Key: hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), runtime.EnvironmentID),
+			Key: hierarchydeletion.HierarchyDeletionTombstoneKey(
+				string(hierarchydeletion.HierarchyDeletionTargetEnvironment),
+				runtime.EnvironmentID,
+			),
 		},
-		etcdstore.Condition{Key: hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetProject), task.Owner.ProjectID)},
+		etcdstore.Condition{
+			Key: hierarchydeletion.HierarchyDeletionTombstoneKey(
+				string(hierarchydeletion.HierarchyDeletionTargetProject),
+				task.Owner.ProjectID,
+			),
+		},
 	)
 	if task.Owner.TenantID != "" {
 		conditions = append(
 			conditions,
-			etcdstore.Condition{Key: hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetTenant), task.Owner.TenantID)},
+			etcdstore.Condition{
+				Key: hierarchydeletion.HierarchyDeletionTombstoneKey(
+					string(hierarchydeletion.HierarchyDeletionTargetTenant),
+					task.Owner.TenantID,
+				),
+			},
 		)
 	}
 	marker.State, marker.UpdatedAt, marker.TerminalAt = idempotencyrecord.IdempotencyMarkerCompleted, *task.FinishedAt, *task.FinishedAt
@@ -223,7 +250,8 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 }
 
 func isVolumeRemovalTerminalTask(task TaskRecord) bool {
-	return task.Type == taskjournal.TaskRemove && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume &&
+	return task.Type == taskjournal.TaskRemove &&
+		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume &&
 		task.Status == taskjournal.TaskStatusCompleted
 }
 
@@ -240,10 +268,12 @@ func volumeRemovalTaskMatchesRuntime(task TaskRecord, runtime removalrecord.Runt
 			runtime.UpdatedAt,
 		) || task.ID != runtime.CurrentTaskID || task.OperationID != runtime.OperationID ||
 		task.Target != runtime.VolumeID || task.Owner.EnvironmentID != runtime.EnvironmentID ||
-		task.RetryOf != runtime.PredecessorTaskID || !EnvironmentVolumeRemovalStepMatches(task.Steps, runtime.StepID) ||
+		task.RetryOf != runtime.PredecessorTaskID ||
+		!EnvironmentVolumeRemovalStepMatches(task.Steps, runtime.StepID) ||
 		task.RenderGeneration != int32(
 			runtime.DesiredGeneration,
-		) || task.TimeoutSeconds != removalrecord.TimeoutSeconds ||
+		) ||
+		task.TimeoutSeconds != removalrecord.TimeoutSeconds ||
 		task.IdempotencyKey != runtime.RootLocator.Key {
 		return false
 	}
@@ -285,9 +315,13 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 		runtime.Checkpoint < removalrecord.DesiredPublished || runtime.Checkpoint > removalrecord.DirectoryAbsent {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	locator := idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
-		ScopeID: runtime.RootLocator.ScopeID, Method: runtime.RootLocator.Method,
-		Route: runtime.RootLocator.Route, Key: runtime.RootLocator.Key}
+	locator := idempotencyrecord.IdempotencyLocator{
+		ScopeKind: idempotencyrecord.IdempotencyScopeKind(runtime.RootLocator.ScopeKind),
+		ScopeID:   runtime.RootLocator.ScopeID,
+		Method:    runtime.RootLocator.Method,
+		Route:     runtime.RootLocator.Route,
+		Key:       runtime.RootLocator.Key,
+	}
 	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(locator)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
@@ -295,16 +329,37 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 	keys := []string{removalrecord.OwnerKey(runtime.VolumeID), removalrecord.EnvironmentLockKey(runtime.EnvironmentID),
 		removalrecord.ProgressKey(runtime.OperationID), removalrecord.PendingPathKey(runtime.OperationID),
 		removalrecord.AttemptKey(runtime.OperationID, runtime.AttemptOrdinal), markerKey}
-	replayKey, err := idempotencyrecord.IdempotencyReplayTargetKey(idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
-		ID: runtime.VolumeID}, locator.Method, locator.Route, locator.Key)
+	replayKey, err := idempotencyrecord.IdempotencyReplayTargetKey(
+		idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetVolume,
+			ID: runtime.VolumeID},
+		locator.Method,
+		locator.Route,
+		locator.Key,
+	)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
-	keys = append(keys, blueprints.EnvironmentBlueprintHeadKey(runtime.EnvironmentID), replayKey,
-		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), runtime.EnvironmentID),
-		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetProject), task.Owner.ProjectID))
+	keys = append(
+		keys,
+		blueprints.EnvironmentBlueprintHeadKey(runtime.EnvironmentID),
+		replayKey,
+		hierarchydeletion.HierarchyDeletionTombstoneKey(
+			string(hierarchydeletion.HierarchyDeletionTargetEnvironment),
+			runtime.EnvironmentID,
+		),
+		hierarchydeletion.HierarchyDeletionTombstoneKey(
+			string(hierarchydeletion.HierarchyDeletionTargetProject),
+			task.Owner.ProjectID,
+		),
+	)
 	if task.Owner.TenantID != "" {
-		keys = append(keys, hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetTenant), task.Owner.TenantID))
+		keys = append(
+			keys,
+			hierarchydeletion.HierarchyDeletionTombstoneKey(
+				string(hierarchydeletion.HierarchyDeletionTargetTenant),
+				task.Owner.TenantID,
+			),
+		)
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: current.ReadRevision})
 	if err != nil {
@@ -365,8 +420,10 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
-		marker.TaskID != runtime.OriginTaskID || marker.Response.Status != http.StatusAccepted || marker.ReplayTarget == nil ||
-		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume || marker.ReplayTarget.ID != runtime.VolumeID ||
+		marker.TaskID != runtime.OriginTaskID || marker.Response.Status != http.StatusAccepted ||
+		marker.ReplayTarget == nil ||
+		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetVolume ||
+		marker.ReplayTarget.ID != runtime.VolumeID ||
 		sha256.Sum256(marker.Intent.Ciphertext) != runtime.IntentSHA256 ||
 		sha256.Sum256(marker.Response.Body) != runtime.RootResponseSHA256 ||
 		idempotencyrecord.DecodeReplayTargetReference(read.Values[7].Value, markerKey) != nil {
@@ -376,7 +433,10 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 	if err != nil || head != runtime.DesiredRevisionID {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	retentionKey, err := idempotencyrecord.IdempotencyRetentionKey(markerKey, task.FinishedAt.Add(idempotencyrecord.MarkerRetention))
+	retentionKey, err := idempotencyrecord.IdempotencyRetentionKey(
+		markerKey,
+		task.FinishedAt.Add(idempotencyrecord.MarkerRetention),
+	)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
@@ -386,8 +446,17 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 			filtered = append(filtered, mutation)
 		}
 	}
-	ancestry, err := hierarchydeletion.BindMutationEpochs(ctx, repository.store, read.ReadRevision,
-		hierarchydeletion.MutationScope{TenantID: task.Owner.TenantID, ProjectID: task.Owner.ProjectID}, conditions, filtered)
+	ancestry, err := hierarchydeletion.BindMutationEpochs(
+		ctx,
+		repository.store,
+		read.ReadRevision,
+		hierarchydeletion.MutationScope{
+			TenantID:  task.Owner.TenantID,
+			ProjectID: task.Owner.ProjectID,
+		},
+		conditions,
+		filtered,
+	)
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
@@ -404,7 +473,10 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 	return repository.store.Transact(ctx, ancestry.Conditions(), ancestry.Mutations())
 }
 
-func appendVolumeRemovalTerminalCondition(conditions []etcdstore.Condition, candidate etcdstore.Condition) ([]etcdstore.Condition, error) {
+func appendVolumeRemovalTerminalCondition(
+	conditions []etcdstore.Condition,
+	candidate etcdstore.Condition,
+) ([]etcdstore.Condition, error) {
 	for _, condition := range conditions {
 		if condition.Key == candidate.Key {
 			if condition != candidate {

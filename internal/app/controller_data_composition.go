@@ -64,7 +64,10 @@ func newControllerDataComposition(
 	entryValues, err := entryvalues.New(store)
 	if err != nil {
 		_ = store.Close()
-		return controllerDataComposition{}, fmt.Errorf("controller: initialize Entry value generation repository: %w", err)
+		return controllerDataComposition{}, fmt.Errorf(
+			"controller: initialize Entry value generation repository: %w",
+			err,
+		)
 	}
 	entryRecords, err := etcd.NewEntryRepository(store)
 	if err != nil {
@@ -96,7 +99,11 @@ func newControllerDataComposition(
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Script repository: %w", err)
 	}
-	scriptReadRepository, err := scriptoperations.NewReadRepository(authority.hierarchyRecords, serviceRecords, scriptRecords)
+	scriptReadRepository, err := scriptoperations.NewReadRepository(
+		authority.hierarchyRecords,
+		serviceRecords,
+		scriptRecords,
+	)
 	if err != nil {
 		_ = store.Close()
 		return controllerDataComposition{}, fmt.Errorf("controller: initialize Script read repositories: %w", err)
@@ -114,7 +121,10 @@ func newControllerDataComposition(
 	serviceDesiredRevisionRecords, err := desiredrevisionstore.NewRepository(store)
 	if err != nil {
 		_ = store.Close()
-		return controllerDataComposition{}, fmt.Errorf("controller: initialize Service desired revision repository: %w", err)
+		return controllerDataComposition{}, fmt.Errorf(
+			"controller: initialize Service desired revision repository: %w",
+			err,
+		)
 	}
 	serviceMutationRepository, err := serviceoperations.NewMutationRepository(
 		authority.hierarchyRecords, serviceRecords, zoneRecords, serviceDesiredRevisionRecords, authority.releaseLedger,
@@ -138,12 +148,18 @@ func newControllerDataComposition(
 	resolverBaselines, err := resolverbaseline.New(store)
 	if err != nil {
 		_ = store.Close()
-		return controllerDataComposition{}, fmt.Errorf("controller: initialize host resolver baseline repository: %w", err)
+		return controllerDataComposition{}, fmt.Errorf(
+			"controller: initialize host resolver baseline repository: %w",
+			err,
+		)
 	}
 	resolutionProjections, err := resolutionrecord.New(store)
 	if err != nil {
 		_ = store.Close()
-		return controllerDataComposition{}, fmt.Errorf("controller: initialize host-resolution projection repository: %w", err)
+		return controllerDataComposition{}, fmt.Errorf(
+			"controller: initialize host-resolution projection repository: %w",
+			err,
+		)
 	}
 	platformComponents, err := platformcomponents.DefaultPlatformComponents(detectTailnetDelegationDefault())
 	if err != nil {

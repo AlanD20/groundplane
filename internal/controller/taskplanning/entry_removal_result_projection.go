@@ -83,7 +83,9 @@ func entryRemovalMaterialization(
 	}, nil
 }
 
-func entryRemovalValueStorage(input materializationrecord.EntryValueStorage) (entrycapability.RemovalValueStorage, error) {
+func entryRemovalValueStorage(
+	input materializationrecord.EntryValueStorage,
+) (entrycapability.RemovalValueStorage, error) {
 	switch input {
 	case materializationrecord.EntryValueStoragePlain:
 		return entrycapability.RemovalValueStoragePlain, nil

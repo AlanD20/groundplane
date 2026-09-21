@@ -109,8 +109,14 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{Key: environmentchanges.ComponentTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision},
-			{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[0].ModRevision},
-			{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
+			{
+				Key:         environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
+				ModRevision: state.Values[0].ModRevision,
+			},
+			{
+				Key:         blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
+				ModRevision: state.Values[1].ModRevision,
+			},
 		},
 	}
 	if componentTaskAcknowledgementRequiresBlueprintRootCondition(task, terminalStatus, intent.EnvironmentID) {
@@ -232,10 +238,12 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		}
 		change.mutations = append(change.mutations, componentrecord.WriteFenceMutation(task.ID))
 	}
-	if terminalStatus == taskjournal.TaskStatusCompleted || task.Params[releaserender.TaskReleasePublicationParam] == "" {
-		routeObservationChange, routeErr := componentplanning.NewPlanner(repository.store).PrepareRouteObservationAcknowledgement(
-			ctx, intent, terminalStatus, revision,
-		)
+	if terminalStatus == taskjournal.TaskStatusCompleted ||
+		task.Params[releaserender.TaskReleasePublicationParam] == "" {
+		routeObservationChange, routeErr := componentplanning.NewPlanner(repository.store).
+			PrepareRouteObservationAcknowledgement(
+				ctx, intent, terminalStatus, revision,
+			)
 		if routeErr != nil {
 			clearComponentTaskChange(change)
 			return componentTaskChange{}, routeErr
@@ -275,9 +283,17 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		return componentTaskChange{}, err
 	}
 	change.values = append(change.values, intentBytes)
-	change.mutations = append(change.mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskIntentKey(task.ID), Value: intentBytes},
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)},
+	change.mutations = append(
+		change.mutations,
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   environmentchanges.ComponentTaskIntentKey(task.ID),
+			Value: intentBytes,
+		},
+		etcdstore.Mutation{
+			Type: etcdstore.MutationDelete,
+			Key:  environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
+		},
 	)
 	return change, nil
 }

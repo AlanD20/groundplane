@@ -136,14 +136,17 @@ func (resolver *TaskPlanResolver) buildReleasePlan(
 	}
 	releaseProjection := releaseWorkloadProjection(first.Projection)
 	artifact, err := resolver.renderPinnedEnvironmentArtifactWithReleases(
-		ctx, task,
+		ctx,
+		task,
 		pinnedEnvironmentIdentity{
 			TenantID: first.TenantID, TenantSlug: first.TenantSlug,
 			ProjectID: first.ProjectID, ProjectSlug: first.ProjectSlug,
 			EnvironmentID: first.EnvironmentID, EnvironmentName: first.EnvironmentName,
 			AuthorizedVolumeDir: first.AuthorizedVolumeDir,
 		},
-		first.Projection.RevisionID, first.ArtifactID, releaseProjection,
+		first.Projection.RevisionID,
+		first.ArtifactID,
+		releaseProjection,
 		func(project *composetypes.Project, _ projectionrecord.EnvironmentComposeProjection) ([]composeidentity.Resource, error) {
 			if err := projectReleaseWorkloadServices(project, releaseProjection); err != nil {
 				return nil, err
@@ -358,7 +361,9 @@ func releasePostHookAnchorStepID(task etcd.TaskRecord, memberIndex int, strategy
 // releaseWorkloadProjection narrows a Service release to durable workload
 // Services. Registered Component output is validated when the Environment
 // artifact is produced and is not part of a workload-targeted release.
-func releaseWorkloadProjection(projection projectionrecord.EnvironmentComposeProjection) projectionrecord.EnvironmentComposeProjection {
+func releaseWorkloadProjection(
+	projection projectionrecord.EnvironmentComposeProjection,
+) projectionrecord.EnvironmentComposeProjection {
 	projection.Components = nil
 	return projection
 }

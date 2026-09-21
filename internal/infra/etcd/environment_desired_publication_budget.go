@@ -5,7 +5,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func validateEnvironmentDesiredPublicationBudget(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
+func validateEnvironmentDesiredPublicationBudget(
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) error {
 	return validateEnvironmentDesiredPublicationPartitionCounts(len(conditions), len(mutations), len(conditions))
 }
 

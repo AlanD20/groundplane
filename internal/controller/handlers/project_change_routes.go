@@ -17,8 +17,18 @@ import (
 )
 
 type ProjectChanger interface {
-	EditProject(context.Context, string, hierarchy.EditProjectInput, string) (idempotencyrecord.IdempotencyResponse, error)
-	RenameProject(context.Context, string, hierarchy.RenameProjectInput, string) (idempotencyrecord.IdempotencyResponse, error)
+	EditProject(
+		context.Context,
+		string,
+		hierarchy.EditProjectInput,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	RenameProject(
+		context.Context,
+		string,
+		hierarchy.RenameProjectInput,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 func (s *Server) editProject(ctx context.Context, request *projectEditInput) (*projectMutationOutput, error) {

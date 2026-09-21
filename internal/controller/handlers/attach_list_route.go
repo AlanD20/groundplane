@@ -63,7 +63,10 @@ func attachListRequest(environmentID string, limit int, cursor string) (etcdstor
 		)
 	}
 	if limit < 0 {
-		return etcdstore.PageRequest{}, errs.New(errs.KindValidationFailed, "Attach list limit must be a positive integer")
+		return etcdstore.PageRequest{}, errs.New(
+			errs.KindValidationFailed,
+			"Attach list limit must be a positive integer",
+		)
 	}
 	return etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 }

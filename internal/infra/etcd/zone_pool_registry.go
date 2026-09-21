@@ -26,7 +26,10 @@ func (r *ZoneRepository) ListZoneSubnetReservationsAtRevision(
 	return reservations, nil
 }
 
-func (r *ZoneRepository) getZonePoolRegistry(ctx context.Context, id string) (etcdstore.Versioned[networkreservations.ZonePoolRegistry], error) {
+func (r *ZoneRepository) getZonePoolRegistry(
+	ctx context.Context,
+	id string,
+) (etcdstore.Versioned[networkreservations.ZonePoolRegistry], error) {
 	return r.getZonePoolRegistryAtRevision(ctx, id, 0)
 }
 
@@ -35,18 +38,29 @@ func (r *ZoneRepository) getZonePoolRegistryAtRevision(
 	id string, revision int64,
 ) (etcdstore.Versioned[networkreservations.ZonePoolRegistry], error) {
 	if r == nil || r.store == nil || ids.Validate(ids.KindEnvironment, id) != nil || revision < 0 {
-		return etcdstore.Versioned[networkreservations.ZonePoolRegistry]{}, errs.New(errs.KindInternal, "Environment capacity read is invalid")
+		return etcdstore.Versioned[networkreservations.ZonePoolRegistry]{}, errs.New(
+			errs.KindInternal,
+			"Environment capacity read is invalid",
+		)
 	}
-	result, err := r.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{networkreservations.ZonePoolRegistryKey(id)}, Revision: revision})
+	result, err := r.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{networkreservations.ZonePoolRegistryKey(id)}, Revision: revision},
+	)
 	if err != nil {
 		return etcdstore.Versioned[networkreservations.ZonePoolRegistry]{}, err
 	}
 	if len(result.Values) != 1 || result.Values[0] == nil {
 		return etcdstore.Versioned[networkreservations.ZonePoolRegistry]{
-			Record: networkreservations.ZonePoolRegistry{Reservations: map[string]string{}}, ReadRevision: result.ReadRevision,
+			Record: networkreservations.ZonePoolRegistry{
+				Reservations: map[string]string{},
+			}, ReadRevision: result.ReadRevision,
 		}, nil
 	}
-	registry, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](result.Values[0].Value, "zone_pool_registry")
+	registry, err := recordcodec.Decode[networkreservations.ZonePoolRegistry](
+		result.Values[0].Value,
+		"zone_pool_registry",
+	)
 	if err != nil || networkreservations.ValidateZonePoolRegistry(registry) != nil {
 		return etcdstore.Versioned[networkreservations.ZonePoolRegistry]{}, networkreservations.CorruptZonePoolRegistry()
 	}

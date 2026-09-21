@@ -15,7 +15,10 @@ import (
 // manualScriptRootMatches binds the source-set digest to the same durable
 // execution authority that seals the plan bytes and hash. Checkpoints and retry
 // may transfer execution ownership but never change this pair.
-func manualScriptRootMatches(execution scriptexecutions.ScriptExecutionRecord, root sourceref.OperationSourceRoot) bool {
+func manualScriptRootMatches(
+	execution scriptexecutions.ScriptExecutionRecord,
+	root sourceref.OperationSourceRoot,
+) bool {
 	return execution.SourceMembershipCount > 0 && execution.OperationID == root.OperationID &&
 		execution.SourceMembershipCount == root.MembershipCount &&
 		execution.SourceMembershipSHA256 == root.MembershipSHA256
@@ -27,7 +30,10 @@ func (repository *ScriptRepository) manualScriptExecutionAtRevision(
 	revision int64,
 ) (scriptexecutions.ScriptExecutionRecord, *etcdstore.KeyValue, error) {
 	if task.Type != taskjournal.TaskScript || len(task.Steps) != 1 || revision <= 0 {
-		return scriptexecutions.ScriptExecutionRecord{}, nil, errs.New(errs.KindInternal, "manual Script Task identity is corrupt")
+		return scriptexecutions.ScriptExecutionRecord{}, nil, errs.New(
+			errs.KindInternal,
+			"manual Script Task identity is corrupt",
+		)
 	}
 	key := scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam])
 	value, err := scriptexecutions.ScriptExecutionValueAt(ctx, repository.store, key, revision)
@@ -37,9 +43,13 @@ func (repository *ScriptRepository) manualScriptExecutionAtRevision(
 	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
 	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
 		execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
-		execution.EnvironmentID != task.Owner.EnvironmentID || execution.PlanHash != task.PlanHash ||
+		execution.EnvironmentID != task.Owner.EnvironmentID ||
+		execution.PlanHash != task.PlanHash ||
 		execution.SourceMembershipCount == 0 {
-		return scriptexecutions.ScriptExecutionRecord{}, nil, errs.New(errs.KindInternal, "manual Script execution authority is corrupt")
+		return scriptexecutions.ScriptExecutionRecord{}, nil, errs.New(
+			errs.KindInternal,
+			"manual Script execution authority is corrupt",
+		)
 	}
 	return execution, value, nil
 }
@@ -64,7 +74,8 @@ func (repository *ScriptRepository) manualScriptExecutionAuthority(
 	if err != nil || !manualScriptRootMatches(execution, root) {
 		return nil, errs.New(errs.KindInternal, "manual Script source root does not match its sealed plan")
 	}
-	if root.Phase != scriptsourceevidence.ScriptOperationSourceActive || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent ||
+	if root.Phase != scriptsourceevidence.ScriptOperationSourceActive ||
+		root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent ||
 		(root.RetryDisposition != sourceref.RetryDispositionUndecided && root.RetryDisposition != sourceref.RetryDispositionTransferred) {
 		return nil, errs.New(errs.KindStateConflict, "manual Script source authority is closed to execution")
 	}
@@ -79,7 +90,9 @@ func preparedScriptExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, 
 		!scriptexecutions.ValidRawScriptExecutionID(task.Params[scriptexecutions.ScriptExecutionIDParam]) {
 		return nil, errs.New(errs.KindInternal, "manual Script execution step is corrupt")
 	}
-	return []releaseHookExecutionStep{{stepID: task.Steps[0].ID, executionID: task.Params[scriptexecutions.ScriptExecutionIDParam]}}, nil
+	return []releaseHookExecutionStep{
+		{stepID: task.Steps[0].ID, executionID: task.Params[scriptexecutions.ScriptExecutionIDParam]},
+	}, nil
 }
 
 func pendingScriptCleanupAuthority(task TaskRecord) scriptexecutions.ScriptControllerCleanupAuthority {

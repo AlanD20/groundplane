@@ -34,7 +34,9 @@ func NextGeneration(
 	return head.Revision, projection.Record.RenderGeneration + 1, nil
 }
 
-func CloneProjection(current projectionrecord.EnvironmentComposeProjection) projectionrecord.EnvironmentComposeProjection {
+func CloneProjection(
+	current projectionrecord.EnvironmentComposeProjection,
+) projectionrecord.EnvironmentComposeProjection {
 	var runtimeFiles []core.BlueprintFile
 	if current.RuntimeFiles != nil {
 		runtimeFiles = make([]core.BlueprintFile, len(current.RuntimeFiles))

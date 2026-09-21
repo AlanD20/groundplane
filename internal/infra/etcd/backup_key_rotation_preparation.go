@@ -43,7 +43,9 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 		)
 	}
 	anchor, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		hierarchyrecord.EnvironmentKey(input.EnvironmentID), backuppolicy.BackupKeyKey(input.EnvironmentID), backuppolicy.BackupKeyValueKey(input.EnvironmentID),
+		hierarchyrecord.EnvironmentKey(
+			input.EnvironmentID,
+		), backuppolicy.BackupKeyKey(input.EnvironmentID), backuppolicy.BackupKeyValueKey(input.EnvironmentID),
 	}})
 	if err != nil {
 		return PreparedBackupKeyRotation{}, err
@@ -129,7 +131,11 @@ func (repository *BackupPolicyRepository) PrepareBackupKeyRotation(
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: backupruntime.BackupKeyRotationKey(input.TaskID), Value: rotationValue},
 		{Type: etcdstore.MutationPut, Key: indexKey, Value: []byte(input.TaskID)},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(input.EnvironmentID), Value: lockValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchyrecord.EnvironmentOperationLockKey(input.EnvironmentID),
+			Value: lockValue,
+		},
 	}
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {

@@ -62,7 +62,9 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 	}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			secretrecord.SecretOwnerKey(record.Secret), secretrecord.SecretScopedKey(record.Secret), secretrecord.ValueKey(record.Secret.ID),
+			secretrecord.SecretOwnerKey(
+				record.Secret,
+			), secretrecord.SecretScopedKey(record.Secret), secretrecord.ValueKey(record.Secret.ID),
 		},
 		Revision: revision,
 	})
@@ -104,13 +106,21 @@ func (repository *TaskRepository) prepareSecretTaskRetry(
 		if err != nil || project.ID != record.Secret.ProjectID {
 			return secretTaskChange{}, recordcodec.CorruptRecord()
 		}
-		change.conditions = append(change.conditions,
-			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
-			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.ID)},
+		change.conditions = append(
+			change.conditions,
+			etcdstore.Condition{
+				Key:         hierarchyrecord.ProjectKey(project.ID),
+				ModRevision: parents.Values[0].ModRevision,
+			},
+			etcdstore.Condition{
+				Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), project.ID),
+			},
 		)
 		if project.TenantID != "" {
 			tenantFence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-				Keys:     []string{deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)},
+				Keys: []string{
+					deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
+				},
 				Revision: revision,
 			})
 			if err != nil {
@@ -178,7 +188,9 @@ func (repository *TaskRepository) prepareSecretTaskAcknowledgement(
 	}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			secretrecord.SecretOwnerKey(record.Secret), secretrecord.SecretScopedKey(record.Secret), secretrecord.ValueKey(record.Secret.ID),
+			secretrecord.SecretOwnerKey(
+				record.Secret,
+			), secretrecord.SecretScopedKey(record.Secret), secretrecord.ValueKey(record.Secret.ID),
 		},
 		Revision: revision,
 	})
@@ -269,10 +281,12 @@ func (repository *TaskRepository) validateSecretTaskAcknowledgementReplay(
 }
 
 func taskOwnsSecretRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceSecret {
+	if task.Executor != taskjournal.TaskExecutorController ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceSecret {
 		return false, nil
 	}
-	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindSecret, task.Target) != nil {
+	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 ||
+		ids.Validate(ids.KindSecret, task.Target) != nil {
 		return false, errs.New(errs.KindInternal, "Secret deletion Task has invalid durable input")
 	}
 	return true, nil

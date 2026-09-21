@@ -40,14 +40,24 @@ func backingServiceCreationConditions(
 		{Key: hierarchyrecord.ProjectKey(creation.Project.ID)},
 		{Key: hierarchyrecord.ProjectSlugKey(creation.Project)},
 		{Key: hierarchyrecord.ProjectOwnerKey(creation.Project)},
-		{Key: hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), creation.Project.ID)},
+		{
+			Key: hierarchydeletion.HierarchyCoordinationKey(
+				string(hierarchydeletion.HierarchyDeletionTargetProject),
+				creation.Project.ID,
+			),
+		},
 		{Key: deletions.TombstoneKey("project", creation.Project.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(creation.Environment.ID)},
 		{Key: hierarchyrecord.EnvironmentNameKey(creation.Project.ID, creation.Environment.Name)},
 		{Key: hierarchyrecord.EnvironmentOwnerKey(creation.Project.ID, creation.Environment.ID)},
 		{Key: deletions.TombstoneKey("environment", creation.Environment.ID)},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(creation.Environment.ID)},
-		{Key: hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), creation.Environment.ID)},
+		{
+			Key: hierarchydeletion.HierarchyCoordinationKey(
+				string(hierarchydeletion.HierarchyDeletionTargetEnvironment),
+				creation.Environment.ID,
+			),
+		},
 		{Key: scriptrecord.ScriptSetActiveKey(creation.Environment.ID)},
 		{Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},
 		{Key: deletions.TombstoneKey("zone", creation.Zone.Desired.ID)},
@@ -56,10 +66,15 @@ func backingServiceCreationConditions(
 		{Key: deletions.TombstoneKey("service", creation.Service.Desired.ID)},
 	}
 	for _, component := range creation.Components {
-		conditions = append(conditions,
+		conditions = append(
+			conditions,
 			etcdstore.Condition{Key: componentrecord.RecordKey(component.Desired.ID)},
-			etcdstore.Condition{Key: componentrecord.EnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID)},
-			etcdstore.Condition{Key: componentrecord.EnvironmentKindKey(creation.Environment.ID, component.Desired.Kind)},
+			etcdstore.Condition{
+				Key: componentrecord.EnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID),
+			},
+			etcdstore.Condition{
+				Key: componentrecord.EnvironmentKindKey(creation.Environment.ID, component.Desired.Kind),
+			},
 		)
 	}
 	for index, entry := range creation.Entries {

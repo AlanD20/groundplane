@@ -59,7 +59,10 @@ func (p *WorkerPool) execute(runCtx context.Context, reservation *taskReservatio
 			)
 			if err == nil {
 				if p.materializer == nil {
-					err = filematerialization.CloseSourceWithError(payload.Source, "agent: materialization runtime is not configured")
+					err = filematerialization.CloseSourceWithError(
+						payload.Source,
+						"agent: materialization runtime is not configured",
+					)
 				} else {
 					err = p.materializer.ExecuteStep(stepCtx, reservation.assignment, step, payload)
 				}

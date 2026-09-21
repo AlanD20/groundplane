@@ -192,7 +192,10 @@ func (service *Service) validateEnvironmentBlueprintBackup(
 		if err != nil {
 			return err
 		}
-		sources[index] = blueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{Kind: source.Kind, TargetID: targetID}
+		sources[index] = blueprintplanning.EnvironmentBlueprintBackupPolicySourceInput{
+			Kind:     source.Kind,
+			TargetID: targetID,
+		}
 	}
 	return service.backups.ValidateEnvironmentBlueprintBackupPolicy(
 		ctx,

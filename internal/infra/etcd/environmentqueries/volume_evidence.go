@@ -37,7 +37,8 @@ func (repository *ProjectionReader) ResolveEnvironmentVolumeAtRevision(
 	}
 	if evidence.Projection.Record.RevisionID != revisionID {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
-			errs.KindStateConflict, "Volume desired revision changed",
+			errs.KindStateConflict,
+			"Volume desired revision changed",
 		)
 	}
 	return evidence.Projection, evidence.Volume, nil
@@ -57,7 +58,10 @@ func LoadBackupVolumeProjectionEvidence(
 		)
 	}
 	headRead, err := store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys:     []string{hierarchyrecord.EnvironmentKey(environmentID), blueprints.EnvironmentBlueprintHeadKey(environmentID)},
+		Keys: []string{
+			hierarchyrecord.EnvironmentKey(environmentID),
+			blueprints.EnvironmentBlueprintHeadKey(environmentID),
+		},
 		Revision: fixedRevision,
 	})
 	if err != nil {

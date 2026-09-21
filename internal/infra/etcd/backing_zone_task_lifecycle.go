@@ -48,7 +48,9 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry changed its pinned Task")
 	}
 	keys := []string{
-		environmentchanges.ZoneRemovalIntentKey(operationID), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
+		environmentchanges.ZoneRemovalIntentKey(
+			operationID,
+		), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
 		blueprints.EnvironmentBlueprintHeadKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 		environmentchanges.ComponentTaskActiveEnvironmentKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
@@ -173,10 +175,12 @@ func (repository *TaskRepository) validateBackingZoneTaskAcknowledgementReplay(
 }
 
 func taskOwnsBackingZoneCascade(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceBackingZone {
+	if task.Executor != taskjournal.TaskExecutorController ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceBackingZone {
 		return false, nil
 	}
-	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 5 ||
+	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil ||
+		len(task.Params) != 5 ||
 		ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskZoneEnvironmentParam]) != nil ||
 		ids.Validate(ids.KindOperation, task.Params[taskjournal.TaskZoneRemovalOperationParam]) != nil ||
 		ids.Validate(ids.KindTask, task.Params[blueprints.EnvironmentDesiredRevisionParam]) != nil ||

@@ -28,7 +28,13 @@ type applyPreflight struct {
 	workloads             blueprintrelease.WorkloadPreparation
 }
 
-func (service *Service) prepareApplyPreflight(ctx context.Context, environmentID string, bundle core.BlueprintBundle, baseline applyBaseline, preserveRoutes bool) (applyPreflight, error) {
+func (service *Service) prepareApplyPreflight(
+	ctx context.Context,
+	environmentID string,
+	bundle core.BlueprintBundle,
+	baseline applyBaseline,
+	preserveRoutes bool,
+) (applyPreflight, error) {
 	environment, project, tenant := baseline.environment, baseline.project, baseline.tenant
 	previousProjection, hasProjection, previous := baseline.previousProjection, baseline.hasProjection, baseline.previous
 	if preserveRoutes && hasProjection {
@@ -100,5 +106,15 @@ func (service *Service) prepareApplyPreflight(ctx context.Context, environmentID
 		return applyPreflight{}, err
 	}
 
-	return applyPreflight{bundle: bundle, parsed: parsed, currentAttaches: currentAttaches, attachReadRevision: attachReadRevision, requirements: requirements, submittedServiceNames: submittedServiceNames, priorProject: priorProject, desiredEnvironment: desiredEnvironment, workloads: workloads}, nil
+	return applyPreflight{
+		bundle:                bundle,
+		parsed:                parsed,
+		currentAttaches:       currentAttaches,
+		attachReadRevision:    attachReadRevision,
+		requirements:          requirements,
+		submittedServiceNames: submittedServiceNames,
+		priorProject:          priorProject,
+		desiredEnvironment:    desiredEnvironment,
+		workloads:             workloads,
+	}, nil
 }

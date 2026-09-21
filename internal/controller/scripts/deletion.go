@@ -195,7 +195,10 @@ func (service *scriptDeletionService) RemoveScript(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script deletion context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Script deletion context is required",
+		)
 	}
 	if ids.Validate(ids.KindScript, scriptID) != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Script id is invalid")
@@ -210,7 +213,10 @@ func (service *scriptDeletionService) RemoveScript(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script deletion retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Script deletion retry bound was not enforced",
+	)
 }
 
 func (service *scriptDeletionService) deleteScriptOnce(
@@ -218,7 +224,10 @@ func (service *scriptDeletionService) deleteScriptOnce(
 	scriptID string,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetScript, ID: scriptID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetScript,
+		ID:   scriptID,
+	}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, scriptDeletionRoute, idempotencyKey,
 	)
@@ -341,7 +350,10 @@ func (service *scriptDeletionService) deleteScriptOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Script deletion resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Script deletion resolution is invalid",
+		)
 	}
 }
 

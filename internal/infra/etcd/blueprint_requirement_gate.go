@@ -235,7 +235,9 @@ func prepareBlueprintRequirementGatePublication(
 	}
 	prepared := preparedBlueprintRequirementGatePublication{
 		conditions: make([]etcdstore.Condition, 0, len(gate.DAG.Requirements)+1),
-		mutations:  []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: blueprintRequirementGateKey(task.ID), Value: value}},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: blueprintRequirementGateKey(task.ID), Value: value},
+		},
 	}
 	prepared.conditions = append(prepared.conditions, etcdstore.Condition{Key: blueprintRequirementGateKey(task.ID)})
 	for _, requirement := range gate.DAG.Requirements {

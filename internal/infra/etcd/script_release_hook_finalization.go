@@ -70,7 +70,8 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 		record, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
 		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.ID != step.executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
-			record.StepID != step.stepID || record.PlanHash != task.PlanHash {
+			record.StepID != step.stepID ||
+			record.PlanHash != task.PlanHash {
 			return false, releases.CorruptReleaseRecord()
 		}
 		if _, duplicate := seenScripts[record.ScriptID]; duplicate {
@@ -80,7 +81,8 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 		if !record.ActiveReference {
 			continue
 		}
-		if record.State != scriptexecutions.ScriptExecutionNotStarted && record.State != scriptexecutions.ScriptExecutionCleanupProven {
+		if record.State != scriptexecutions.ScriptExecutionNotStarted &&
+			record.State != scriptexecutions.ScriptExecutionCleanupProven {
 			return false, errs.New(
 				errs.KindStateConflict,
 				"release hook execution has not reached a releasable checkpoint",
@@ -98,8 +100,13 @@ func (repository *TaskRepository) finalizeReleaseHookExecutionBatch(
 	}
 	detailKeys := make([]string, 0, len(active)*3)
 	for _, hook := range active {
-		detailKeys = append(detailKeys,
-			scriptrecord.ScriptSetScriptKey(hook.record.EnvironmentID, hook.record.ScriptSetGeneration, hook.record.ScriptID),
+		detailKeys = append(
+			detailKeys,
+			scriptrecord.ScriptSetScriptKey(
+				hook.record.EnvironmentID,
+				hook.record.ScriptSetGeneration,
+				hook.record.ScriptID,
+			),
 			scriptexecutions.ScriptSetBodyForwardReferenceKey(
 				hook.record.EnvironmentID,
 				hook.record.ScriptSetGeneration,

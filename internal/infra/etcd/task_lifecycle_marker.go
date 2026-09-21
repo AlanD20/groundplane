@@ -6,7 +6,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func validateTaskLifecycleCompanions(task TaskRecord, activeValue *etcdstore.KeyValue, markerValue *etcdstore.KeyValue) error {
+func validateTaskLifecycleCompanions(
+	task TaskRecord,
+	activeValue *etcdstore.KeyValue,
+	markerValue *etcdstore.KeyValue,
+) error {
 	activeTaskID, err := idempotencyrecord.DecodeTaskReference(activeValue.Value)
 	if err != nil || activeTaskID != task.ID {
 		return errs.New(errs.KindInternal, "active-operation record does not match its Task")
@@ -17,7 +21,8 @@ func validateTaskLifecycleCompanions(task TaskRecord, activeValue *etcdstore.Key
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID {
 		return errs.New(errs.KindInternal, "task idempotency marker is not pending for its Task")
 	}

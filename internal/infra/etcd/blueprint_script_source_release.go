@@ -129,11 +129,13 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		record, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
 		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || !taskOwnsScriptExecution(task, record) ||
 			record.ID != step.executionID || record.StepID != step.stepID || record.CurrentTaskID != task.ID ||
-			record.OperationID != task.OperationID || record.PlanHash != task.PlanHash {
+			record.OperationID != task.OperationID ||
+			record.PlanHash != task.PlanHash {
 			return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 		}
 		executions[index] = record
-		if root.Phase == scriptsourceevidence.ScriptOperationSourceActive && terminalStatus == taskjournal.TaskStatusCompleted &&
+		if root.Phase == scriptsourceevidence.ScriptOperationSourceActive &&
+			terminalStatus == taskjournal.TaskStatusCompleted &&
 			(record.State != scriptexecutions.ScriptExecutionCleanupProven || record.AssignmentID != assignment.AssignmentID || record.ReconciliationRequired) {
 			return scriptTerminalSourceRelease{}, false, errs.New(
 				errs.KindStateConflict,
@@ -157,7 +159,9 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	}
 	if materializes {
 		guards = append(guards, etcdstore.Condition{
-			Key: taskjournal.TaskMaterializationWriterKey(environmentID), ModRevision: read.Values[writerIndex].ModRevision,
+			Key: taskjournal.TaskMaterializationWriterKey(
+				environmentID,
+			), ModRevision: read.Values[writerIndex].ModRevision,
 		})
 	}
 	executionGuards := make([]etcdstore.Condition, 0, len(steps))
@@ -179,11 +183,23 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	var closingMutation etcdstore.Mutation
 	if task.Type == taskjournal.TaskUpdate {
 		current := TaskAssignment{
-			Task:       etcdstore.Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: revision},
-			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
+			Task: etcdstore.Versioned[TaskRecord]{
+				Record:       task,
+				Revision:     taskValue.ModRevision,
+				ReadRevision: revision,
+			},
+			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
+				Record:   assignment,
+				Revision: assignmentValue.ModRevision,
+			},
 		}
 		report, condition, mutation, reportErr := repository.prepareScriptClosingReport(
-			ctx, current, submittedStatus, submittedResult, *terminalAt, root.Phase == scriptsourceevidence.ScriptOperationSourceActive,
+			ctx,
+			current,
+			submittedStatus,
+			submittedResult,
+			*terminalAt,
+			root.Phase == scriptsourceevidence.ScriptOperationSourceActive,
 		)
 		if reportErr != nil {
 			return scriptTerminalSourceRelease{}, false, reportErr
@@ -224,7 +240,8 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		etcdstore.ClearValues(transaction.FailureReads)
 		return scriptTerminalSourceRelease{}, true, nil
 	}
-	if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseNormal ||
+	if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing ||
+		root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseNormal ||
 		root.RetryDisposition != sourceref.RetryDispositionForbidden {
 		return scriptTerminalSourceRelease{}, false, releases.CorruptReleaseRecord()
 	}
@@ -308,8 +325,15 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 					errs.KindStateConflict, "recovery parent Script execution may already have started",
 				)
 			}
-			outcome := scriptexecutions.ScriptOutcomeEvidence{Reason: scriptexecutions.ScriptOutcomeParentFailureBeforeStart, ObservedAt: terminalAt}
-			cleanup := scriptexecutions.ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
+			outcome := scriptexecutions.ScriptOutcomeEvidence{
+				Reason:     scriptexecutions.ScriptOutcomeParentFailureBeforeStart,
+				ObservedAt: terminalAt,
+			}
+			cleanup := scriptexecutions.ScriptCleanupEvidence{
+				ContainerAbsent:          true,
+				BodyAbsent:               true,
+				ExecutionDirectoryAbsent: true,
+			}
 			digest, digestErr := scriptControllerCleanupSHA256(outcome, cleanup)
 			if digestErr != nil {
 				etcdstore.ClearMutationValues(mutations)
@@ -345,8 +369,14 @@ func (repository *TaskRepository) beginBlueprintTerminalScriptSourceRelease(
 			etcdstore.ClearMutationValues(mutations)
 			return scriptTerminalSourceRelease{}, encodeErr
 		}
-		conditions = append(conditions, etcdstore.Condition{Key: values[index].Key, ModRevision: values[index].ModRevision})
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: values[index].Key, Value: encoded})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: values[index].Key, ModRevision: values[index].ModRevision},
+		)
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: values[index].Key, Value: encoded},
+		)
 	}
 	return scriptTerminalSourceRelease{conditions: conditions, mutations: mutations}, nil
 }
@@ -360,14 +390,18 @@ func releaseRecoveryParentFailureExecutionMatches(record scriptexecutions.Script
 		record.Outcome.OutputTruncated || record.Outcome.ObservedAt.IsZero() ||
 		!record.Cleanup.ContainerAbsent || !record.Cleanup.BodyAbsent || !record.Cleanup.ExecutionDirectoryAbsent ||
 		record.Cleanup.ContainerID != "" || record.Cleanup.BodyDevice != 0 || record.Cleanup.BodyInode != 0 ||
-		record.Cleanup.BodyLeaf != "" || !record.UpdatedAt.Equal(record.Outcome.ObservedAt) {
+		record.Cleanup.BodyLeaf != "" ||
+		!record.UpdatedAt.Equal(record.Outcome.ObservedAt) {
 		return false
 	}
 	digest, err := scriptControllerCleanupSHA256(*record.Outcome, *record.Cleanup)
 	return err == nil && record.LastCheckpointSHA256 == digest
 }
 
-func releaseRecoveryClosedScriptExecutionMatches(record scriptexecutions.ScriptExecutionRecord, assignmentID string) bool {
+func releaseRecoveryClosedScriptExecutionMatches(
+	record scriptexecutions.ScriptExecutionRecord,
+	assignmentID string,
+) bool {
 	if releaseRecoveryParentFailureExecutionMatches(record) {
 		return true
 	}

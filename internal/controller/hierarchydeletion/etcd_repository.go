@@ -472,7 +472,9 @@ func procedureInputFromEtcd(value hierarchydeletionplanning.HierarchyDeletionPro
 }
 
 func procedureInputToEtcd(value ProcedureInput) hierarchydeletionplanning.HierarchyDeletionProcedureInput {
-	input := hierarchydeletionplanning.HierarchyDeletionProcedureInput{Kind: hierarchydeletion.HierarchyDeletionProcedureKind(value.Kind)}
+	input := hierarchydeletionplanning.HierarchyDeletionProcedureInput{
+		Kind: hierarchydeletion.HierarchyDeletionProcedureKind(value.Kind),
+	}
 	if value.AgentChild != nil {
 		input.AgentChild = &hierarchydeletionplanning.HierarchyDeletionAgentInput{
 			TaskType: taskjournal.TaskType(value.AgentChild.TaskType), TypedProcedure: value.AgentChild.TypedProcedure,

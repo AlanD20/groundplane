@@ -92,7 +92,10 @@ func serviceLifecycleMutation(
 	case "destroy":
 		return mutator.DestroyService(ctx, serviceID, idempotencyKey)
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service lifecycle action is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Service lifecycle action is invalid",
+		)
 	}
 }
 

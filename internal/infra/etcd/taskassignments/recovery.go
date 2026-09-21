@@ -123,7 +123,9 @@ func ValidateReleaseRestorationAuthority(authority ReleaseRestorationAuthority) 
 	if predecessor := authority.AppliedPredecessor; predecessor != nil {
 		if predecessor.KeyRevision <= 0 || ids.Validate(ids.KindTask, predecessor.RevisionID) != nil ||
 			predecessor.RenderGeneration == 0 || !recordcodec.ValidSHA256(predecessor.ComposeArtifactSHA256) ||
-			len(predecessor.ComposeArtifact) == 0 || len(predecessor.ComposeArtifact) > taskjournal.MaximumTaskRecordBytes {
+			len(
+				predecessor.ComposeArtifact,
+			) == 0 || len(predecessor.ComposeArtifact) > taskjournal.MaximumTaskRecordBytes {
 			return CorruptTaskAssignment()
 		}
 		digest := sha256.Sum256(predecessor.ComposeArtifact)
@@ -141,7 +143,9 @@ func validateReleaseRecoveryRecord(record ReleaseRecoveryRecord) error {
 			record.AssignmentID,
 		) != nil || ids.Validate(ids.KindOperation, record.OperationID) != nil ||
 		!recordcodec.ValidSHA256(record.PlanHash) || !recordcodec.ValidSHA256(record.RestorationAuthoritySHA256) ||
-		!recordcodec.ValidSHA256(record.PrimaryReportSHA256) || record.PrimaryStatus == taskjournal.TaskStatusCompleted ||
+		!recordcodec.ValidSHA256(
+			record.PrimaryReportSHA256,
+		) || record.PrimaryStatus == taskjournal.TaskStatusCompleted ||
 		!ValidTerminalTaskStatus(record.PrimaryStatus) || len(record.RecoveryStepIDs) == 0 ||
 		!record.RecoveryDeadline.Equal(record.RecoveryDeadline.UTC()) || record.RecoveryDeadline.IsZero() ||
 		int(record.Cursor) > len(record.RecoveryStepIDs) || record.EvidenceRevision <= 0 {
@@ -252,7 +256,10 @@ func AdvanceReleaseRecoveryRecord(
 		)
 	}
 	switch input.State {
-	case taskjournal.TaskEventStateRunning, taskjournal.TaskEventStateFailed, taskjournal.TaskEventStateAborted, taskjournal.TaskEventStateTimedOut:
+	case taskjournal.TaskEventStateRunning,
+		taskjournal.TaskEventStateFailed,
+		taskjournal.TaskEventStateAborted,
+		taskjournal.TaskEventStateTimedOut:
 		return record, false, nil
 	case taskjournal.TaskEventStateCompleted:
 		next := record

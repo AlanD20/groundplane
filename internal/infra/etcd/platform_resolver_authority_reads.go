@@ -57,7 +57,10 @@ func (repository *TaskRepository) platformResolverAtRevision(
 			break
 		}
 		if len(page.Values) == 0 {
-			return etcdstore.Versioned[componentrecord.Record]{}, errs.New(errs.KindInternal, "platform Component scan did not advance")
+			return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
+				errs.KindInternal,
+				"platform Component scan did not advance",
+			)
 		}
 		start = page.Values[len(page.Values)-1].Key
 		recordquery.ClearRangeKeyValues(page.Values)
@@ -78,7 +81,10 @@ func (repository *TaskRepository) platformResolverAtRevision(
 		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if state == nil || state.ReadRevision != revision || len(state.Values) != len(keys) {
-		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(errs.KindInternal, "platform Component scan is incomplete")
+		return etcdstore.Versioned[componentrecord.Record]{}, errs.New(
+			errs.KindInternal,
+			"platform Component scan is incomplete",
+		)
 	}
 	candidates := make([]etcdstore.Versioned[componentrecord.Record], 0, len(componentIDs))
 	for index, componentValue := range state.Values {

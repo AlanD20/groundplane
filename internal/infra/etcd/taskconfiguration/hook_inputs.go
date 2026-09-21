@@ -71,7 +71,9 @@ func SameTaskBackingHookInputSet(left, right *TaskBackingHookInputSet) bool {
 func ValidateBackingHookEncryptedInputs(record BackingHookEncryptedInputs) error {
 	if ids.Validate(ids.KindOperation, record.OperationID) != nil || record.EnvelopeVersion != 1 ||
 		record.Cipher != "age-x25519" || record.DigestAlgorithm != "sha256" ||
-		!recordcodec.ValidSHA256(record.CiphertextSHA256) || len(record.Ciphertext) == 0 || len(record.Ciphertext) > 256<<10 {
+		!recordcodec.ValidSHA256(
+			record.CiphertextSHA256,
+		) || len(record.Ciphertext) == 0 || len(record.Ciphertext) > 256<<10 {
 		return errs.New(errs.KindValidationFailed, "Backing hook encrypted inputs are invalid")
 	}
 	want, _ := hex.DecodeString(record.CiphertextSHA256)

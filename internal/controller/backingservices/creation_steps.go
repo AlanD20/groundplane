@@ -84,7 +84,10 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 				},
 			},
 		})
-		stepRecords = append(stepRecords, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: volumeStepID})
+		stepRecords = append(
+			stepRecords,
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: volumeStepID},
+		)
 		taskParams[taskcontract.EnvironmentBlueprintManagedVolumesParam] = volumeID
 		taskParams[taskplanning.VolumeTaskIntentSHA256Param] = hex.EncodeToString(intentDigest)
 	}
@@ -120,9 +123,17 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 				WaitHealthy: &agentpb.WaitHealthy{ArtifactId: artifactID, ServiceIds: []string{serviceID}},
 			},
 		})
-		stepRecords = append(stepRecords, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: healthStepID})
+		stepRecords = append(
+			stepRecords,
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: healthStepID},
+		)
 		taskParams[taskjournal.TaskBackingServiceHealthParam] = serviceID
 	}
 
-	return backingCreationSteps{steps: steps, records: stepRecords, params: taskParams, materializations: materializations}, nil
+	return backingCreationSteps{
+		steps:            steps,
+		records:          stepRecords,
+		params:           taskParams,
+		materializations: materializations,
+	}, nil
 }

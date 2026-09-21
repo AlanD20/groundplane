@@ -18,7 +18,10 @@ func (service *routeMutationService) CreateRoute(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Route creation context is required",
+		)
 	}
 	if input.Path == "" {
 		input.Path = "/"
@@ -37,7 +40,10 @@ func (service *routeMutationService) CreateRoute(
 				Name:  "target_port",
 				Value: requestidempotency.UnsignedInteger(uint64(input.TargetPort)),
 			},
-			requestidempotency.Field{Name: "target_service_id", Value: requestidempotency.String(input.TargetServiceID)},
+			requestidempotency.Field{
+				Name:  "target_service_id",
+				Value: requestidempotency.String(input.TargetServiceID),
+			},
 		),
 	}
 	for attempt := 0; attempt < maximumRouteMutationAttempts; attempt++ {
@@ -50,7 +56,10 @@ func (service *routeMutationService) CreateRoute(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Route creation retry bound was not enforced",
+	)
 }
 
 func (service *routeMutationService) createRouteOnce(

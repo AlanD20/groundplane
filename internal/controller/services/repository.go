@@ -20,7 +20,10 @@ type serviceMutationRepository interface {
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironmentBlueprintHead(context.Context, string) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
+	GetEnvironmentBlueprintHead(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,

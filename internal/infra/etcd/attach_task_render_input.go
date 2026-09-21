@@ -70,8 +70,14 @@ func validateAttachTaskRenderInputScope(
 		input.RuntimeProjection.EnvironmentID != scope.ComposeProjection.Record.EnvironmentID ||
 		input.RuntimeProjection.RevisionID != scope.ComposeProjection.Record.RevisionID ||
 		input.RuntimeProjection.RenderGeneration != scope.ComposeProjection.Record.RenderGeneration ||
-		!slices.Equal(input.Services, attachrender.AttachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices)) ||
-		!slices.Equal(input.Networks, attachrender.AttachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones)) ||
+		!slices.Equal(
+			input.Services,
+			attachrender.AttachTaskServiceSnapshots(scope.ComposeProjection.Record.DesiredServices),
+		) ||
+		!slices.Equal(
+			input.Networks,
+			attachrender.AttachTaskOwnedNetworkSnapshots(scope.ComposeProjection.Record.DesiredZones),
+		) ||
 		!slices.Equal(input.Volumes, scope.ComposeProjection.Record.Volumes) ||
 		!slices.Equal(input.VolumeMounts, scope.ComposeProjection.Record.VolumeMounts) ||
 		!attachrender.EqualServiceDependencyPlans(

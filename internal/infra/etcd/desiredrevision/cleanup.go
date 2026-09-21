@@ -41,7 +41,9 @@ func (repository *Repository) AbandonEnvironmentBlueprintStage(
 	}
 	evidence, err := repository.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{descriptorKey, locatorKey, markerKey, taskjournal.TaskStorageKey(claim.TaskID)}},
+		etcdstore.GetManyRequest{
+			Keys: []string{descriptorKey, locatorKey, markerKey, taskjournal.TaskStorageKey(claim.TaskID)},
+		},
 	)
 	if err != nil {
 		return err
@@ -313,7 +315,10 @@ func (repository *Repository) cleanupAbandonedEnvironmentBlueprintDescriptor(
 		conditions = append(conditions, etcdstore.Condition{Key: entry.Key, ModRevision: entry.ModRevision})
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entry.Key})
 	}
-	conditions = append(conditions, etcdstore.Condition{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision})
+	conditions = append(
+		conditions,
+		etcdstore.Condition{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision},
+	)
 	if final {
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: descriptorKey})
 	} else {

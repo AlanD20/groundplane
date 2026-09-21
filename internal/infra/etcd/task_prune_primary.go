@@ -53,7 +53,9 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 		{Key: backupruntime.BackupCheckpointCursorTaskPrefix(current.Record.TaskID), Prefix: true},
 		{Key: backupruntime.BackupCheckpointDedupTaskPrefix(current.Record.TaskID), Prefix: true},
 	}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: taskjournal.TaskStorageKey(current.Record.TaskID)}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskStorageKey(current.Record.TaskID)},
+	}
 	for index, key := range ownerKeys {
 		value := ownerResult.Values[index]
 		if value == nil || value.Key != key || value.ModRevision <= 0 || string(value.Value) != task.ID {

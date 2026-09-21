@@ -59,7 +59,8 @@ func (repository *HierarchyDeletionRepository) GetDeletionTaskIDAtRevision(
 		taskID = record.DeletionTaskID
 	case hierarchydeletion.HierarchyDeletionTargetBacking:
 		record, decodeErr := hierarchyrecord.DecodeProject(stored.Values[0].Value)
-		if decodeErr != nil || record.ID != targetID || record.Kind != hierarchyrecord.ProjectKindBacking || record.TenantID != "" {
+		if decodeErr != nil || record.ID != targetID || record.Kind != hierarchyrecord.ProjectKindBacking ||
+			record.TenantID != "" {
 			return nil, hierarchydeletion.CorruptHierarchyDeletion()
 		}
 		taskID = record.DeletionTaskID
@@ -101,10 +102,14 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	if taskResult == nil || len(taskResult.Values) != 1 || taskResult.Values[0] == nil {
-		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(errs.KindTaskNotFound, "hierarchy deletion Task was not found")
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
+			errs.KindTaskNotFound,
+			"hierarchy deletion Task was not found",
+		)
 	}
 	task, err := DecodeTaskRecord(taskResult.Values[0].Value)
-	if err != nil || task.ID != taskID || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion {
+	if err != nil || task.ID != taskID ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceHierarchyDeletion {
 		return hierarchydeletion.HierarchyDeletionOperation{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	if task.idempotencyMarker == nil || idempotencyrecord.ValidateIdempotencyLocator(*task.idempotencyMarker) != nil {

@@ -44,7 +44,11 @@ func (adapter materializationContentStore) Transact(
 	}
 	writes := make([]etcdstore.Mutation, len(mutations))
 	for index, mutation := range mutations {
-		writes[index] = etcdstore.Mutation{Type: etcdstore.MutationType(mutation.Type), Key: mutation.Key, Value: mutation.Value}
+		writes[index] = etcdstore.Mutation{
+			Type:  etcdstore.MutationType(mutation.Type),
+			Key:   mutation.Key,
+			Value: mutation.Value,
+		}
 	}
 	result, err := adapter.store.Transact(ctx, compares, writes)
 	clearKeyValues(result.FailureReads)

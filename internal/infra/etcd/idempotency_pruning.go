@@ -163,7 +163,10 @@ func (repository *IdempotencyRepository) collectExpired(
 		targetIndexes = append(targetIndexes, index)
 	}
 	if len(targetKeys) != 0 {
-		targets, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: targetKeys, Revision: page.ReadRevision})
+		targets, err := repository.store.GetMany(
+			ctx,
+			etcdstore.GetManyRequest{Keys: targetKeys, Revision: page.ReadRevision},
+		)
 		if err != nil {
 			clearPruneCandidates(candidates)
 			return nil, scan, err
@@ -175,7 +178,9 @@ func (repository *IdempotencyRepository) collectExpired(
 		defer etcdstore.ClearValues(targets.Values)
 		for index, targetEntry := range targets.Values {
 			candidateIndex := targetIndexes[index]
-			markerKey, keyErr := idempotencyrecord.IdempotencyMarkerKey(candidates[candidateIndex].Marker.marker.Locator)
+			markerKey, keyErr := idempotencyrecord.IdempotencyMarkerKey(
+				candidates[candidateIndex].Marker.marker.Locator,
+			)
 			if keyErr != nil || targetEntry == nil || targetEntry.Key != targetKeys[index] ||
 				targetEntry.ModRevision <= 0 ||
 				idempotencyrecord.DecodeReplayTargetReference(targetEntry.Value, markerKey) != nil {
@@ -282,7 +287,10 @@ func (repository *IdempotencyRepository) pruneExpiredWithFences(
 			conditions = append(conditions, etcdstore.Condition{
 				Key: candidate.ReplayTargetKey, ModRevision: candidate.ReplayTargetModRevision,
 			})
-			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: candidate.ReplayTargetKey})
+			mutations = append(
+				mutations,
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: candidate.ReplayTargetKey},
+			)
 		} else if candidate.ReplayTargetKey != "" || candidate.ReplayTargetModRevision != 0 ||
 			len(candidate.ReplayTargetValue) != 0 {
 			return 0, idempotencyrecord.CorruptIdempotencyMarker()
@@ -377,7 +385,10 @@ func (repository *IdempotencyRepository) pruneRetainedBatch(
 			after = ""
 		}
 		if after != scan.After {
-			conditions = append(conditions, etcdstore.Condition{Key: idempotencyPruneCursorKey, ModRevision: scan.CursorRevision})
+			conditions = append(
+				conditions,
+				etcdstore.Condition{Key: idempotencyPruneCursorKey, ModRevision: scan.CursorRevision},
+			)
 			mutation := etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: idempotencyPruneCursorKey}
 			if after != "" {
 				value, err := recordcodec.Encode("idempotency_prune_cursor", idempotencyPruneCursor{After: after})
@@ -422,7 +433,8 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 	if err != nil || task.ID != marker.TaskID {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	if task.Type != taskjournal.TaskRemove || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceVolume {
+	if task.Type != taskjournal.TaskRemove ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceVolume {
 		return nil, false, nil
 	}
 	root := removalrecord.Root(task.OperationID)
@@ -482,7 +494,10 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 	if recordcodec.ValidateID(ids.KindTask, originID) != nil {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(originID)}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(originID)}, Revision: revision},
+	)
 	if err != nil {
 		return nil, false, err
 	}
@@ -490,7 +505,9 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer etcdstore.ClearValues(read.Values)
-	fences := []etcdstore.Condition{{Key: taskjournal.TaskStorageKey(originID), ModRevision: etcdstore.RevisionOf(read.Values[0])}}
+	fences := []etcdstore.Condition{
+		{Key: taskjournal.TaskStorageKey(originID), ModRevision: etcdstore.RevisionOf(read.Values[0])},
+	}
 	if read.Values[0] == nil {
 		return fences, false, nil // Marker-first GC already removed the original Task.
 	}
@@ -522,5 +539,8 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 			return nil, true, nil
 		}
 	}
-	return append(fences, etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(markerRead.Values[0])}), false, nil
+	return append(
+		fences,
+		etcdstore.Condition{Key: key, ModRevision: etcdstore.RevisionOf(markerRead.Values[0])},
+	), false, nil
 }

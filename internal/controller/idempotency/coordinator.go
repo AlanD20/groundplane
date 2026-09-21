@@ -53,7 +53,7 @@ type Coordinator struct {
 // EvidenceRepository is the consumer-owned read seam used to classify a
 // durable idempotency marker without depending on a concrete repository.
 type EvidenceRepository interface {
-	Read(context.Context, idempotencyrecord.IdempotencyLocator) (*etcd.IdempotencyEvidence, error)
+	Read(context.Context, idempotencyrecord.IdempotencyLocator) (*infraetcd.IdempotencyEvidence, error)
 }
 
 func NewCoordinator(protector *secretvalue.Protector) (*Coordinator, error) {
@@ -294,7 +294,8 @@ func (coordinator *Coordinator) classifyMarker(
 	if !matched {
 		return Resolution{}, errs.New(errs.KindIdempotencyMismatch, "idempotency key was used for a different request")
 	}
-	if marker.Kind == idempotencyrecord.IdempotencyMarkerTask && marker.State == idempotencyrecord.IdempotencyMarkerPending {
+	if marker.Kind == idempotencyrecord.IdempotencyMarkerTask &&
+		marker.State == idempotencyrecord.IdempotencyMarkerPending {
 		return Resolution{}, errs.New(errs.KindIdempotencyInProgress, "the original task is still active")
 	}
 	return Resolution{

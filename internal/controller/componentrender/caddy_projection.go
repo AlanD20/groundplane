@@ -1,106 +1,50 @@
-package componentregistration
+package componentrender
 
 import (
-	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
-	"net/netip"
-
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
-	registeredcaddy "github.com/AlanD20/groundplane-registered-components/caddy"
-
 	"github.com/AlanD20/groundplane/internal/common/ipam"
-
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
+	"net/netip"
 )
 
-func registeredCaddyEnvironmentComponent(
-	actionCatalog Catalog,
-) (componentrender.EnvironmentComponentRegistration, error) {
-	definition, err := registeredcaddy.Definition()
-	if err != nil {
-		return componentrender.EnvironmentComponentRegistration{}, errs.Wrap(errs.KindInternal, err)
-	}
-	return componentrender.EnvironmentComponentRegistration{
-		Kind: core.ComponentKindIngressCaddy, Definition: definition, CatalogDigest: actionCatalog.Digest(),
-		ManagedConfiguration: &componentrender.EnvironmentManagedConfigurationRegistration{
-			SourcePath: registeredcaddy.CaddyfileSource,
-			ActionID:   registeredcaddy.ActivateConfigAction,
-		},
-		Plan: func(environment core.Environment, instance core.Component) (componentsdk.EnvironmentPlan, error) {
-			input, config, err := projectRegisteredCaddyInput(environment, instance)
-			if err != nil {
-				return componentsdk.EnvironmentPlan{}, err
-			}
-			plan, err := registeredcaddy.Plan(input, config)
-			if err != nil {
-				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindValidationFailed, err)
-			}
-			if err := actionCatalog.catalog.ValidateEnvironmentPlanImages(definition.Implementation(), plan); err != nil {
-				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindInternal, err)
-			}
-			return plan, nil
-		},
-		ProjectHTTPRouter: func(environment core.Environment, instance core.Component) (componentsdk.HTTPRouterInput, error) {
-			input, _, err := projectRegisteredCaddyInput(environment, instance)
-			return input, err
-		},
-		PlanHTTPRouter: func(input componentsdk.HTTPRouterInput, instance core.Component) (componentsdk.EnvironmentPlan, error) {
-			if instance.Config.Caddy == nil {
-				return componentsdk.EnvironmentPlan{}, errs.New(
-					errs.KindValidationFailed,
-					"caddy: typed config is required",
-				)
-			}
-			plan, err := registeredcaddy.Plan(input, registeredcaddy.Config{
-				CaddyfileTemplate: instance.Config.Caddy.CaddyfileTemplate, Alias: instance.Config.Caddy.Alias,
-			})
-			if err != nil {
-				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindValidationFailed, err)
-			}
-			if err := actionCatalog.catalog.ValidateEnvironmentPlanImages(definition.Implementation(), plan); err != nil {
-				return componentsdk.EnvironmentPlan{}, errs.Wrap(errs.KindInternal, err)
-			}
-			return plan, nil
-		},
-	}, nil
-}
-
-func projectRegisteredCaddyInput(
+func ProjectCaddyInput(
 	environment core.Environment,
 	instance core.Component,
-) (componentsdk.HTTPRouterInput, registeredcaddy.Config, error) {
+	origin componentsdk.HTTPRouterOrigin,
+) (componentsdk.HTTPRouterInput, core.CaddyComponentConfig, error) {
 	if environment.ID == "" || instance.ID == "" || instance.Owner != core.ComponentOwnerEnvironment ||
 		instance.OwnerID != environment.ID || instance.Kind != core.ComponentKindIngressCaddy || instance.Validate() != nil {
-		return componentsdk.HTTPRouterInput{}, registeredcaddy.Config{}, errs.New(
+		return componentsdk.HTTPRouterInput{}, core.CaddyComponentConfig{}, errs.New(
 			errs.KindValidationFailed,
 			"caddy: component ownership or kind is invalid",
 		)
 	}
 	if !instance.Enabled {
-		return componentsdk.HTTPRouterInput{ComponentID: instance.ID}, registeredcaddy.Config{}, nil
+		return componentsdk.HTTPRouterInput{ComponentID: instance.ID}, core.CaddyComponentConfig{}, nil
 	}
 	if instance.Config.Caddy == nil {
-		return componentsdk.HTTPRouterInput{}, registeredcaddy.Config{}, errs.New(
+		return componentsdk.HTTPRouterInput{}, core.CaddyComponentConfig{}, errs.New(
 			errs.KindValidationFailed,
 			"caddy: typed config is required",
 		)
 	}
 	zones, err := projectRegisteredCaddyZones(environment, instance.Config.Caddy.ZoneIDs)
 	if err != nil {
-		return componentsdk.HTTPRouterInput{}, registeredcaddy.Config{}, err
+		return componentsdk.HTTPRouterInput{}, core.CaddyComponentConfig{}, err
 	}
 	prefix, err := ipam.ParseIPv4Prefix(environment.Zones[zones[0].Name].Subnet)
 	address, addressErr := netip.ParseAddr(instance.PinnedIPv4)
 	if err != nil || prefix.String() != environment.Zones[zones[0].Name].Subnet || addressErr != nil ||
 		ipam.ValidateUsableIPv4(prefix, address) != nil {
-		return componentsdk.HTTPRouterInput{}, registeredcaddy.Config{}, errs.New(
+		return componentsdk.HTTPRouterInput{}, core.CaddyComponentConfig{}, errs.New(
 			errs.KindValidationFailed,
 			"caddy: pinned IPv4 is not usable in the selected Zone",
 		)
 	}
 	zones[0].StaticIPv4 = instance.PinnedIPv4
 	if len(instance.GeneratedServices) != 1 || instance.GeneratedServices[0] == "" {
-		return componentsdk.HTTPRouterInput{}, registeredcaddy.Config{}, errs.New(
+		return componentsdk.HTTPRouterInput{}, core.CaddyComponentConfig{}, errs.New(
 			errs.KindValidationFailed,
 			"caddy: one stable generated Service id is required",
 		)
@@ -117,12 +61,15 @@ func projectRegisteredCaddyInput(
 	}
 	for _, route := range environment.Routes {
 		if err := route.Validate(); err != nil {
-			return componentsdk.HTTPRouterInput{}, registeredcaddy.Config{}, errs.Wrap(errs.KindValidationFailed, err)
+			return componentsdk.HTTPRouterInput{}, core.CaddyComponentConfig{}, errs.Wrap(
+				errs.KindValidationFailed,
+				err,
+			)
 		}
 		service, found := services[route.TargetServiceID]
 		if !found || !sharesSelectedZone(service.Zones, selectedZoneNames) ||
 			!core.ServiceExposesTCPPort(service.Expose, route.TargetPort) {
-			return componentsdk.HTTPRouterInput{}, registeredcaddy.Config{}, errs.New(
+			return componentsdk.HTTPRouterInput{}, core.CaddyComponentConfig{}, errs.New(
 				errs.KindValidationFailed,
 				"caddy: Route target Service is not reachable through the selected Zone and port",
 			)
@@ -136,11 +83,8 @@ func projectRegisteredCaddyInput(
 	return componentsdk.HTTPRouterInput{
 		ComponentID: instance.ID, Enabled: true, GeneratedServiceID: instance.GeneratedServices[0],
 		Zones: zones, Routes: routes,
-		Origin: componentsdk.HTTPRouterOrigin{
-			ServiceName: registeredcaddy.ServiceName,
-			URL:         registeredcaddy.OriginURL,
-		},
-	}, registeredcaddy.Config{CaddyfileTemplate: template, Alias: instance.Config.Caddy.Alias}, nil
+		Origin: origin,
+	}, core.CaddyComponentConfig{CaddyfileTemplate: template, Alias: instance.Config.Caddy.Alias}, nil
 }
 
 func projectRegisteredCaddyZones(

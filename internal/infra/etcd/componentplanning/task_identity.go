@@ -10,7 +10,8 @@ import (
 
 func ValidateComponentTaskOwner(task TaskIdentity, intent environmentchanges.ComponentTaskIntent) error {
 	if task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskUpdate || task.ID != intent.TaskID ||
-		task.Target != intent.EnvironmentID || !task.CreatedAt.Equal(intent.CreatedAt) {
+		task.Target != intent.EnvironmentID ||
+		!task.CreatedAt.Equal(intent.CreatedAt) {
 		return errs.New(errs.KindStateConflict, "Component candidate does not belong to its Task")
 	}
 	return nil

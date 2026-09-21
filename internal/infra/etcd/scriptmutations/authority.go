@@ -13,7 +13,8 @@ import (
 
 func ValidateScriptMutationMarker(marker idempotencyrecord.IdempotencyMarker, environmentID string) error {
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || marker.Locator.ScopeID != environmentID {
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != environmentID {
 		return errs.New(
 			errs.KindValidationFailed,
 			"Script mutation marker must be a completed Environment-scoped direct mutation",
@@ -66,7 +67,10 @@ func scriptWriteConditions(
 		)
 	}
 	if project.Record.TenantID != "" {
-		conditions = append(conditions, etcdstore.Condition{Key: deletions.TombstoneKey("tenant", project.Record.TenantID)})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: deletions.TombstoneKey("tenant", project.Record.TenantID)},
+		)
 	}
 	return conditions
 }

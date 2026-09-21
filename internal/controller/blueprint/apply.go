@@ -118,13 +118,19 @@ func (service *Service) applyBlueprint(
 	preserveRoutes bool,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Environment Blueprint context is required",
+		)
 	}
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Environment id is invalid")
 	}
 	if err := bundle.Validate(); err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Blueprint bundle is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Blueprint bundle is invalid",
+		)
 	}
 	for attempt := 0; attempt < maximumEnvironmentBlueprintAttempts; attempt++ {
 		response, err := service.applyBlueprintOnce(
@@ -144,5 +150,8 @@ func (service *Service) applyBlueprint(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment Blueprint retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Environment Blueprint retry bound was not enforced",
+	)
 }

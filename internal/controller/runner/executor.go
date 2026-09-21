@@ -137,7 +137,8 @@ func (executor *Executor) ExecuteRemove(ctx context.Context, task etcd.TaskRecor
 		return err
 	}
 	if !exists {
-		if current.Record.ProvisioningState != runnerrecord.RunnerProvisioningFailed || current.Record.ContainerID != "" {
+		if current.Record.ProvisioningState != runnerrecord.RunnerProvisioningFailed ||
+			current.Record.ContainerID != "" {
 			return errs.New(errs.KindStateConflict, "Runner removal lost runtime ownership")
 		}
 		return nil

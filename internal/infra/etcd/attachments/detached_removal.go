@@ -121,8 +121,14 @@ func PrepareAttachRemoval(
 		{Type: etcdstore.MutationDelete, Key: AttachKey(current.Record.ID)},
 		{Type: etcdstore.MutationDelete, Key: AttachNameKey(current.Record.EnvironmentID, current.Record.Name)},
 		{Type: etcdstore.MutationDelete, Key: AttachOwnerKey(current.Record.EnvironmentID, current.Record.ID)},
-		{Type: etcdstore.MutationDelete, Key: AttachBackingServiceKey(current.Record.BackingServiceID, current.Record.ID)},
-		{Type: etcdstore.MutationDelete, Key: AttachBackingProjectKey(current.Record.BackingProjectID, current.Record.ID)},
+		{
+			Type: etcdstore.MutationDelete,
+			Key:  AttachBackingServiceKey(current.Record.BackingServiceID, current.Record.ID),
+		},
+		{
+			Type: etcdstore.MutationDelete,
+			Key:  AttachBackingProjectKey(current.Record.BackingProjectID, current.Record.ID),
+		},
 		{Type: etcdstore.MutationDelete, Key: AttachFactsKey(current.Record.ID)},
 	}
 	mutations = append(mutations, etcdstore.Mutation{
@@ -248,7 +254,8 @@ func ClassifyAttachBackupSourceExclusionEvidence(evidence *etcdstore.KeyValue, a
 		return errs.New(errs.KindInternal, "attach backup source exclusion is misbucketed")
 	}
 	exclusion, decodeErr := backupruntime.DecodeBackupSourceTargetExclusionRecord(evidence.Value)
-	if decodeErr != nil || exclusion.TargetKind != backupruntime.BackupSourceTargetAttach || exclusion.TargetID != attachID {
+	if decodeErr != nil || exclusion.TargetKind != backupruntime.BackupSourceTargetAttach ||
+		exclusion.TargetID != attachID {
 		return errs.New(errs.KindInternal, "attach backup source exclusion is corrupt")
 	}
 	return errs.New(errs.KindResourceInUse, "attach is an active backup source")

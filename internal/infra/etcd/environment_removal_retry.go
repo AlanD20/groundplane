@@ -158,7 +158,11 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 				Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), source.Target),
 				Value: tombstoneValue,
 			},
-			{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOperationLockKey(source.Target), Value: lockValue},
+			{
+				Type:  etcdstore.MutationPut,
+				Key:   hierarchyrecord.EnvironmentOperationLockKey(source.Target),
+				Value: lockValue,
+			},
 			{
 				Type:  etcdstore.MutationPut,
 				Key:   deletionrecord.EnvironmentDeletionIntentKey(source.OperationID),

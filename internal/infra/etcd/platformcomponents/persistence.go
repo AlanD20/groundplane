@@ -52,8 +52,16 @@ func (repository *Persistence) createPlatformComponent(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(record.Desired.ID), Value: value},
-		{Type: etcdstore.MutationPut, Key: PlatformComponentOwnerKey(record.Desired.ID), Value: []byte(record.Desired.ID)},
-		{Type: etcdstore.MutationPut, Key: PlatformComponentKindKey(record.Desired.Kind), Value: []byte(record.Desired.ID)},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   PlatformComponentOwnerKey(record.Desired.ID),
+			Value: []byte(record.Desired.ID),
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   PlatformComponentKindKey(record.Desired.Kind),
+			Value: []byte(record.Desired.ID),
+		},
 		componentrecord.WriteFenceMutation(record.Desired.ID),
 	}
 	if bootstrap {
@@ -73,7 +81,11 @@ func (repository *Persistence) createPlatformComponent(
 			"platform Component stable identity is already in use",
 		)
 	}
-	return etcdstore.Versioned[componentrecord.Record]{Record: record, Revision: result.Revision, ReadRevision: result.Revision}, nil
+	return etcdstore.Versioned[componentrecord.Record]{
+		Record:       record,
+		Revision:     result.Revision,
+		ReadRevision: result.Revision,
+	}, nil
 }
 
 func (repository *Persistence) ListPlatformComponents(
@@ -174,7 +186,10 @@ func (repository *Persistence) replacePlatform(
 		return etcdstore.Versioned[componentrecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		return etcdstore.Versioned[componentrecord.Record]{}, recordcodec.StateConflict("platform component", current.Record.Desired.ID)
+		return etcdstore.Versioned[componentrecord.Record]{}, recordcodec.StateConflict(
+			"platform component",
+			current.Record.Desired.ID,
+		)
 	}
 	return etcdstore.Versioned[componentrecord.Record]{
 		Record:       replacement,
@@ -202,7 +217,10 @@ func (repository *Persistence) PutPlatformComponentObservation(
 	}
 	if component.Record.Desired.Owner != core.ComponentOwnerPlatform || component.Record.Desired.OwnerID != "" ||
 		component.Revision != expectedComponentRevision {
-		return etcdstore.Versioned[ComponentObservationRecord]{}, recordcodec.StateConflict("platform component", record.ComponentID)
+		return etcdstore.Versioned[ComponentObservationRecord]{}, recordcodec.StateConflict(
+			"platform component",
+			record.ComponentID,
+		)
 	}
 	current, err := repository.store.Get(ctx, ComponentObservationKey(record.ComponentID))
 	if err != nil {
@@ -226,7 +244,9 @@ func (repository *Persistence) PutPlatformComponentObservation(
 			{Key: ComponentObservationKey(record.ComponentID), ModRevision: expectedObservationRevision},
 			{Key: deletions.TombstoneKey("component", record.ComponentID)},
 		},
-		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: ComponentObservationKey(record.ComponentID), Value: value}},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: ComponentObservationKey(record.ComponentID), Value: value},
+		},
 	)
 	if err != nil {
 		return etcdstore.Versioned[ComponentObservationRecord]{}, err
@@ -252,7 +272,10 @@ func (repository *Persistence) GetPlatformComponentObservation(
 		return etcdstore.Versioned[ComponentObservationRecord]{}, false, err
 	}
 	if err := ids.Validate(ids.KindComponent, componentID); err != nil {
-		return etcdstore.Versioned[ComponentObservationRecord]{}, false, errs.New(errs.KindValidationFailed, err.Error())
+		return etcdstore.Versioned[ComponentObservationRecord]{}, false, errs.New(
+			errs.KindValidationFailed,
+			err.Error(),
+		)
 	}
 	result, err := repository.store.Get(ctx, ComponentObservationKey(componentID))
 	if err != nil {

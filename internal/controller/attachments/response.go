@@ -17,7 +17,10 @@ func newAttachMutationResponse(
 ) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {
 	body, err := json.Marshal(apiTypes.TaskAccepted{TaskID: task.ID})
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(
+			errs.KindInternal,
+			err,
+		)
 	}
 	response := idempotencyrecord.IdempotencyResponse{
 		Status: http.StatusAccepted, ContentKind: "application/json", Body: body,

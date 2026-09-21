@@ -90,7 +90,10 @@ func (service *PlatformMutationService) mutatePlatformComponentLifecycle(
 	route string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "CoreDNS lifecycle context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"CoreDNS lifecycle context is required",
+		)
 	}
 	intent, err := platformComponentLifecycleIntent(ctx, service.coordinator, componentID, action, route)
 	if err != nil {
@@ -243,7 +246,10 @@ func (service *PlatformMutationService) ReplacePlatformComponentConfig(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "CoreDNS config mutation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"CoreDNS config mutation context is required",
+		)
 	}
 	config, err := coreDNSConfigMutation(request.Config)
 	if err != nil {
@@ -551,7 +557,10 @@ func newPlatformComponentLifecycleTask(
 	}
 	task := newPlatformComponentConfigTask(componentID, idempotencyKey, createdAt, false)
 	task.Steps = task.Steps[:1]
-	task.Steps = append(task.Steps, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)})
+	task.Steps = append(
+		task.Steps,
+		taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)},
+	)
 	return task
 }
 

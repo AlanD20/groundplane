@@ -104,7 +104,10 @@ func BindMutationEpochs(
 		}
 		binding.values = append(binding.values, encoded)
 		binding.conditions = append(binding.conditions, etcdstore.Condition{Key: key, ModRevision: value.ModRevision})
-		binding.mutations = append(binding.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded})
+		binding.mutations = append(
+			binding.mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded},
+		)
 	}
 	if err := ValidateHierarchyDeletionTransaction(binding.conditions, binding.mutations, etcdstore.MaximumOperations); err != nil {
 		binding.Clear()

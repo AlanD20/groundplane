@@ -172,7 +172,10 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	var credentialReferenceCondition *etcdstore.Condition
 	if !current.Record.OwnsCredential() {
 		key := attachrecord.AttachCredentialByKey(current.Record.CredentialAttachID, current.Record.ID)
-		read, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
+		read, readErr := repository.store.GetMany(
+			ctx,
+			etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision},
+		)
 		if readErr != nil {
 			return IdempotencyTransactionResult{}, readErr
 		}
@@ -253,7 +256,10 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: attachrecord.AttachCredentialByPrefix(current.Record.ID), Prefix: true},
 		{Key: hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID), ModRevision: scope.Environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
-		{Key: hierarchyrecord.EnvironmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
+		{
+			Key:         hierarchyrecord.EnvironmentKey(scope.BackingEnvironment.Record.ID),
+			ModRevision: scope.BackingEnvironment.Revision,
+		},
 		{Key: hierarchyrecord.ProjectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
 		{Key: deletions.TombstoneKey("attach", current.Record.ID)},
 		{Key: deletions.TombstoneKey("environment", current.Record.EnvironmentID)},
@@ -266,20 +272,31 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		{Key: planReferenceKey},
 		{Key: hierarchyrecord.TenantKey(scope.Tenant.Record.ID), ModRevision: scope.Tenant.Revision},
 		{
-			Key:         blueprints.EnvironmentBlueprintRootKey(current.Record.EnvironmentID, renderInput.DesiredRevisionID),
+			Key: blueprints.EnvironmentBlueprintRootKey(
+				current.Record.EnvironmentID,
+				renderInput.DesiredRevisionID,
+			),
 			ModRevision: scope.ComposeProjection.Revision,
 		},
 	}
 	conditions = append(conditions, desiredHeadConditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: taskReference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(detaching.ID), Value: attachValue},
 		{Type: etcdstore.MutationPut, Key: attachrender.AttachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
 		{Type: etcdstore.MutationPut, Key: planReferenceKey, Value: planReferenceValue},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID), Value: environmentValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID),
+			Value: environmentValue,
+		},
 	}
 	for _, service := range scope.Services {
 		serviceID := service.Record.Desired.ID
@@ -352,11 +369,13 @@ func validateAttachDetachScope(
 		return errs.New(errs.KindValidationFailed, "Attach detach scope records must be versioned")
 	}
 	if scope.Tenant.Record.ID != scope.Project.Record.TenantID || scope.Project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
-		scope.Project.Record.TenantID == "" || scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
+		scope.Project.Record.TenantID == "" ||
+		scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
 		record.EnvironmentID != scope.Environment.Record.ID {
 		return errs.New(errs.KindScopeUnauthorized, "Attach detach consumer hierarchy is invalid")
 	}
-	if scope.BackingProject.Record.Kind != hierarchyrecord.ProjectKindBacking || scope.BackingProject.Record.TenantID != "" ||
+	if scope.BackingProject.Record.Kind != hierarchyrecord.ProjectKindBacking ||
+		scope.BackingProject.Record.TenantID != "" ||
 		scope.BackingEnvironment.Record.ProjectID != scope.BackingProject.Record.ID ||
 		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
 		record.BackingProjectID != scope.BackingProject.Record.ID ||
@@ -415,9 +434,11 @@ func validateAttachDetachTask(
 	marker idempotencyrecord.IdempotencyMarker,
 ) error {
 	validOwnership := detaching.Status == core.AttachDetaching && detaching.Operation == attachrecord.AttachOperationDetach &&
-		detaching.TaskID == task.ID && attachrecord.AttachImmutableEqual(current, detaching)
+		detaching.TaskID == task.ID &&
+		attachrecord.AttachImmutableEqual(current, detaching)
 	validTaskShape := task.Type == taskjournal.TaskDetach && task.Target == current.ID && task.Executor == taskjournal.TaskExecutorAgent &&
-		task.Status == taskjournal.TaskStatusPending && len(task.Params) == 1 && len(task.Materializations) == 0 &&
+		task.Status == taskjournal.TaskStatusPending && len(task.Params) == 1 &&
+		len(task.Materializations) == 0 &&
 		task.Params[taskjournal.TaskMutationEnvironmentParam] == current.EnvironmentID
 	if !validOwnership || !validTaskShape {
 		return errs.New(errs.KindValidationFailed, "Attach detach Task does not own its detaching Attach")
@@ -426,7 +447,8 @@ func validateAttachDetachTask(
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != current.EnvironmentID || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || marker.ReplayTarget == nil ||
-		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetAttach || marker.ReplayTarget.ID != current.ID {
+		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetAttach ||
+		marker.ReplayTarget.ID != current.ID {
 		return errs.New(errs.KindValidationFailed, "Attach detach marker does not match its Environment-scoped Task")
 	}
 	return nil

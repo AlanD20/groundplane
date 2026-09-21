@@ -74,7 +74,8 @@ func runnerStringMapsEqual(left map[string]string, right map[string]string) bool
 }
 
 func taskOwnsRunner(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner {
+	if task.Executor != taskjournal.TaskExecutorController ||
+		task.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner {
 		return false, nil
 	}
 	switch task.Type {
@@ -89,7 +90,8 @@ func taskOwnsRunner(task TaskRecord) (bool, error) {
 }
 
 func taskOwnsRunnerCreation(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner {
+	if task.Executor != taskjournal.TaskExecutorController ||
+		task.Params[taskjournal.TaskResourceKindParam] != runnerrecord.TaskResourceRunner {
 		return false, nil
 	}
 	if task.Type != taskjournal.TaskCreate || ids.Validate(ids.KindRunner, task.Target) != nil ||
@@ -100,7 +102,8 @@ func taskOwnsRunnerCreation(task TaskRecord) (bool, error) {
 }
 
 func runnerRetryableTerminal(status taskjournal.TaskStatus) bool {
-	return status == taskjournal.TaskStatusFailed || status == taskjournal.TaskStatusAborted || status == taskjournal.TaskStatusTimedOut
+	return status == taskjournal.TaskStatusFailed || status == taskjournal.TaskStatusAborted ||
+		status == taskjournal.TaskStatusTimedOut
 }
 
 func runnerTerminal(status taskjournal.TaskStatus) bool {

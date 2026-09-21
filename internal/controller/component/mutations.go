@@ -174,7 +174,10 @@ func (service *MutationService) SetComponentConfig(
 	}
 	var accepted apiTypes.TaskAccepted
 	if err := json.Unmarshal(response.Body, &accepted); err != nil || accepted.TaskID == "" {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Component Blueprint Task response is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Component Blueprint Task response is invalid",
+		)
 	}
 	body, err := json.Marshal(apiTypes.ComponentConfigMutationResult{
 		Resource: publicConfig, ReconcileTaskID: &accepted.TaskID,
@@ -182,7 +185,11 @@ func (service *MutationService) SetComponentConfig(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return idempotencyrecord.IdempotencyResponse{Status: http.StatusOK, ContentKind: "application/json", Body: body}, nil
+	return idempotencyrecord.IdempotencyResponse{
+		Status:      http.StatusOK,
+		ContentKind: "application/json",
+		Body:        body,
+	}, nil
 }
 
 func (service *MutationService) mutateComponent(
@@ -192,7 +199,10 @@ func (service *MutationService) mutateComponent(
 	mutate func(*yaml.Node) error,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Component mutation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Component mutation context is required",
+		)
 	}
 	component, err := service.components.GetComponent(ctx, componentID)
 	if err != nil {

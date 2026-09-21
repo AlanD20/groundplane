@@ -20,7 +20,8 @@ func (repository *TaskRepository) CreateTask(
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != record.ID || !marker.CreatedAt.Equal(record.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) || record.Status != taskjournal.TaskStatusPending {
+		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
+		record.Status != taskjournal.TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"task creation marker does not match its Task",
@@ -66,7 +67,11 @@ func (repository *TaskRepository) CreateTask(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(record.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(record.OperationID, record.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(record.OperationID, record.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(record.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(record.Executor, record.ID), Value: reference},
 	}

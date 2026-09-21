@@ -3,7 +3,7 @@ package app
 import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/agent/componentfilevalidation"
-	"github.com/AlanD20/groundplane/internal/componentregistration"
+	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 )
 
 func newComponentFileValidator(

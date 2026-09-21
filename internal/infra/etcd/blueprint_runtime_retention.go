@@ -48,7 +48,9 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 	}
 	scope := releasequeries.ReleasePlanningScope{
 		ReadRevision: captured.ReadRevision,
-		Environment:  etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{Record: hierarchyrecord.EnvironmentRecord{ID: environmentID}},
+		Environment: etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{
+			Record: hierarchyrecord.EnvironmentRecord{ID: environmentID},
+		},
 	}
 	actual, found, err := ledger.GetPlanningAppliedProjection(ctx, scope)
 	if err != nil {
@@ -90,7 +92,12 @@ func (ledger *ReleaseLedger) PrepareBlueprintRuntimeRetention(
 		)
 	}
 	conditions = append(
-		[]etcdstore.Condition{{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID), ModRevision: captured.Revision}},
+		[]etcdstore.Condition{
+			{
+				Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
+				ModRevision: captured.Revision,
+			},
+		},
 		conditions...)
 	if !publication.IsZero() {
 		if err := publication.validate(environmentID, task); err != nil {

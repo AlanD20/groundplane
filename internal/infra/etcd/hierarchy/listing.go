@@ -60,7 +60,10 @@ func (repository *Reader) ListProjects(
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[ProjectRecord], error) {
 	if filter.Kind != "" && filter.Kind != ProjectKindTenant && filter.Kind != ProjectKindBacking {
-		return etcdstore.Page[ProjectRecord]{}, errs.New(errs.KindValidationFailed, "project kind must be tenant or backing")
+		return etcdstore.Page[ProjectRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"project kind must be tenant or backing",
+		)
 	}
 	if filter.TenantID != "" {
 		if err := recordcodec.ValidateID(ids.KindTenant, filter.TenantID); err != nil {

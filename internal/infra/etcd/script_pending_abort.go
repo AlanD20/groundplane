@@ -78,25 +78,30 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 	if err != nil || root.OperationID != task.OperationID {
 		return scriptClaimSourceChange{}, false, releases.CorruptReleaseRecord()
 	}
-	if root.Phase == scriptsourceevidence.ScriptOperationSourceReleasing && root.ReleasePath == scriptsourceevidence.ScriptSourceReleaseNormal &&
+	if root.Phase == scriptsourceevidence.ScriptOperationSourceReleasing &&
+		root.ReleasePath == scriptsourceevidence.ScriptSourceReleaseNormal &&
 		(root.RetryDisposition == sourceref.RetryDispositionAbandoned ||
 			root.RetryDisposition == sourceref.RetryDispositionForbidden) {
 		return scriptClaimSourceChange{}, false, nil
 	}
-	if root.Phase != scriptsourceevidence.ScriptOperationSourceActive || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent ||
+	if root.Phase != scriptsourceevidence.ScriptOperationSourceActive ||
+		root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseAbsent ||
 		(root.RetryDisposition != sourceref.RetryDispositionUndecided &&
 			root.RetryDisposition != sourceref.RetryDispositionTransferred) ||
 		read.Values[0].ModRevision != taskRevision {
 		return scriptClaimSourceChange{}, false, releases.CorruptReleaseRecord()
 	}
-	change := scriptClaimSourceChange{conditions: []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}}}
+	change := scriptClaimSourceChange{
+		conditions: []etcdstore.Condition{{Key: key, ModRevision: read.Values[0].ModRevision}},
+	}
 	if task.Type == taskjournal.TaskScript {
 		execution, value, err := (composeScriptRepository(repository.store)).manualScriptExecutionAtRevision(
 			ctx,
 			task,
 			revision,
 		)
-		if err != nil || !manualScriptRootMatches(execution, root) || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
+		if err != nil || !manualScriptRootMatches(execution, root) ||
+			execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			!execution.ActiveReference {
 			return scriptClaimSourceChange{}, false, errs.New(
 				errs.KindInternal,
@@ -114,7 +119,10 @@ func (repository *TaskRepository) prepareScriptTaskClaimSourceAuthority(
 			}
 			change = scriptClaimSourceChange{conditions: activation.Conditions(), mutations: activation.Mutations()}
 		}
-		change.conditions = append(change.conditions, etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision})
+		change.conditions = append(
+			change.conditions,
+			etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision},
+		)
 	}
 	return change, true, nil
 }
@@ -155,7 +163,8 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
-	if task.Record.Type == taskjournal.TaskScript && (len(executions) != 1 || !manualScriptRootMatches(executions[0], root)) {
+	if task.Record.Type == taskjournal.TaskScript &&
+		(len(executions) != 1 || !manualScriptRootMatches(executions[0], root)) {
 		return pendingScriptAbortChange{}, errs.New(
 			errs.KindInternal,
 			"manual Script Abort source authority is corrupt",
@@ -170,7 +179,8 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 		}
 		return repository.beginPendingScriptAbort(ctx, task, requestedTerminalAt, steps, executions, read.Values)
 	}
-	if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseNormal ||
+	if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing ||
+		root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseNormal ||
 		root.RetryDisposition != sourceref.RetryDispositionAbandoned {
 		return pendingScriptAbortChange{}, releases.CorruptReleaseRecord()
 	}
@@ -183,9 +193,15 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 		return pendingScriptAbortChange{}, err
 	}
 	guards := make([]etcdstore.Condition, 0, len(executions)+1)
-	guards = append(guards, etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.Record.ID), ModRevision: task.Revision})
+	guards = append(
+		guards,
+		etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.Record.ID), ModRevision: task.Revision},
+	)
 	for index := range executions {
-		guards = append(guards, etcdstore.Condition{Key: read.Values[index+1].Key, ModRevision: read.Values[index+1].ModRevision})
+		guards = append(
+			guards,
+			etcdstore.Condition{Key: read.Values[index+1].Key, ModRevision: read.Values[index+1].ModRevision},
+		)
 	}
 	processed, drained, err := authority.ReleaseNext(ctx, task.Record.OperationID, guards)
 	if err != nil {
@@ -221,7 +237,12 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 	executions []scriptexecutions.ScriptExecutionRecord,
 	values []*etcdstore.KeyValue,
 ) (pendingScriptAbortChange, error) {
-	terminal, err := TransitionTaskStatus(task.Record, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, requestedTerminalAt)
+	terminal, err := TransitionTaskStatus(
+		task.Record,
+		taskjournal.TaskStatusPending,
+		taskjournal.TaskStatusAborted,
+		requestedTerminalAt,
+	)
 	if err != nil {
 		return pendingScriptAbortChange{}, err
 	}
@@ -242,7 +263,9 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 	if len(release.Conditions()) == 0 || len(release.Mutations()) == 0 {
 		return pendingScriptAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
 	}
-	conditions := append([]etcdstore.Condition{{Key: taskjournal.TaskStorageKey(task.Record.ID), ModRevision: task.Revision}}, release.Conditions()...)
+	conditions := append(
+		[]etcdstore.Condition{{Key: taskjournal.TaskStorageKey(task.Record.ID), ModRevision: task.Revision}},
+		release.Conditions()...)
 	mutations := append([]etcdstore.Mutation(nil), release.Mutations()...)
 	defer etcdstore.ClearMutationValues(mutations)
 	for index, execution := range executions {
@@ -256,8 +279,14 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 		if encodeErr != nil {
 			return pendingScriptAbortChange{}, encodeErr
 		}
-		conditions = append(conditions, etcdstore.Condition{Key: values[index+1].Key, ModRevision: values[index+1].ModRevision})
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: values[index+1].Key, Value: encoded})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: values[index+1].Key, ModRevision: values[index+1].ModRevision},
+		)
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: values[index+1].Key, Value: encoded},
+		)
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {
@@ -283,7 +312,8 @@ func decodePendingScriptAbortExecutions(
 		record, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
 		if err != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
-			record.StepID != steps[index].stepID || record.PlanHash != task.PlanHash {
+			record.StepID != steps[index].stepID ||
+			record.PlanHash != task.PlanHash {
 			return nil, releases.CorruptReleaseRecord()
 		}
 		result[index] = record
@@ -312,8 +342,15 @@ func abortScriptExecutionBeforeStart(
 			"pending Blueprint Script execution is not abortable before start",
 		)
 	}
-	outcome := scriptexecutions.ScriptOutcomeEvidence{Reason: scriptexecutions.ScriptOutcomeAbortBeforeStart, ObservedAt: terminalAt}
-	cleanup := scriptexecutions.ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
+	outcome := scriptexecutions.ScriptOutcomeEvidence{
+		Reason:     scriptexecutions.ScriptOutcomeAbortBeforeStart,
+		ObservedAt: terminalAt,
+	}
+	cleanup := scriptexecutions.ScriptCleanupEvidence{
+		ContainerAbsent:          true,
+		BodyAbsent:               true,
+		ExecutionDirectoryAbsent: true,
+	}
 	digest, err := scriptControllerCleanupSHA256(outcome, cleanup)
 	if err != nil {
 		return scriptexecutions.ScriptExecutionRecord{}, err

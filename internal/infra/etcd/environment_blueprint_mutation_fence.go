@@ -61,7 +61,10 @@ func (repository *HierarchyRepository) loadEnvironmentBlueprintMutationFence(
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 ) (environmentfence.Evidence, error) {
-	keys := []string{hierarchyrecord.EnvironmentKey(environment.Record.ID), hierarchyrecord.ProjectKey(project.Record.ID)}
+	keys := []string{
+		hierarchyrecord.EnvironmentKey(environment.Record.ID),
+		hierarchyrecord.ProjectKey(project.Record.ID),
+	}
 	anchor, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return environmentfence.Evidence{}, err

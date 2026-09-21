@@ -98,8 +98,14 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 		read.Values[0] == nil || read.Values[1] == nil {
 		return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 	}
-	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
-	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		read.Values[0].Value,
+		"release-publication",
+	)
+	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+		read.Values[1].Value,
+		"release-staged-manifest",
+	)
 	procedure, descriptorErr := validateReleaseCandidateMarker(task, marker, manifest)
 	if markerErr != nil || manifestErr != nil || descriptorErr != nil {
 		return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
@@ -215,8 +221,14 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 		read.Values[0] == nil || read.Values[1] == nil || writer.BlueprintAppliedPredecessor == nil {
 		return taskassignments.ReleaseRestorationAuthority{}, "", nil, releases.CorruptReleaseRecord()
 	}
-	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
-	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		read.Values[0].Value,
+		"release-publication",
+	)
+	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+		read.Values[1].Value,
+		"release-staged-manifest",
+	)
 	procedure, descriptorErr := validateReleaseCandidateDescriptor(marker.CandidateReleaseDescriptor, task, manifest)
 	if markerErr != nil || manifestErr != nil || descriptorErr != nil ||
 		validateBlueprintCandidateManifest(task, marker, manifest) != nil {
@@ -289,8 +301,10 @@ func validateSelectedRestorationTargets(
 	for index, member := range procedure.GetMembers() {
 		candidate := candidates[index]
 		if candidate.ServiceID != member.GetServiceId() || candidate.ReleaseID != member.GetCandidateReleaseId() ||
-			candidate.Target == taskassignments.ReleaseRestorationServingPredecessor && member.GetServingPredecessor() == nil ||
-			candidate.Target == taskassignments.ReleaseRestorationCandidateAbsence && member.GetCandidateAbsence() == nil ||
+			candidate.Target == taskassignments.ReleaseRestorationServingPredecessor &&
+				member.GetServingPredecessor() == nil ||
+			candidate.Target == taskassignments.ReleaseRestorationCandidateAbsence &&
+				member.GetCandidateAbsence() == nil ||
 			candidate.Target != taskassignments.ReleaseRestorationServingPredecessor &&
 				candidate.Target != taskassignments.ReleaseRestorationCandidateAbsence {
 			return taskassignments.CorruptTaskAssignment()
@@ -346,8 +360,14 @@ func (repository *TaskRepository) candidateReleaseDescriptorAtRevision(
 		read.Values[1] == nil {
 		return executionplan.CandidateReleaseDescriptor{}, nil, releases.CorruptReleaseRecord()
 	}
-	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
-	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](read.Values[1].Value, "release-staged-manifest")
+	marker, markerErr := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		read.Values[0].Value,
+		"release-publication",
+	)
+	manifest, manifestErr := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+		read.Values[1].Value,
+		"release-staged-manifest",
+	)
 	if markerErr != nil || manifestErr != nil {
 		return executionplan.CandidateReleaseDescriptor{}, nil, releases.CorruptReleaseRecord()
 	}
@@ -390,7 +410,8 @@ func validateAssignmentRestorationDescriptor(
 			return taskassignments.CorruptTaskAssignment()
 		}
 	}
-	if taskHasBlueprintCandidateAppliedAuthority(task) || task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback {
+	if taskHasBlueprintCandidateAppliedAuthority(task) || task.Type == taskjournal.TaskDeploy ||
+		task.Type == taskjournal.TaskRollback {
 		if err := validateNativeRestorationDescriptor(*authority, procedure); err != nil {
 			return err
 		}

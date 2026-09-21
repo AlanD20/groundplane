@@ -147,7 +147,10 @@ func (service *projectCreationService) CreateProject(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Project creation context is required",
+		)
 	}
 	for attempt := 0; attempt < maximumProjectCreationAttempts; attempt++ {
 		response, err := service.createProjectOnce(ctx, input, idempotencyKey)
@@ -159,7 +162,10 @@ func (service *projectCreationService) CreateProject(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Project creation retry bound was not enforced",
+	)
 }
 
 func (service *projectCreationService) createProjectOnce(
@@ -205,7 +211,12 @@ func (service *projectCreationService) createProjectOnce(
 		Status: http.StatusCreated, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
+		locator,
+		evidence.durable,
+		response,
+		service.now().UTC(),
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -232,7 +243,10 @@ func (service *projectCreationService) createProjectOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Project creation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Project creation resolution is invalid",
+		)
 	}
 }
 

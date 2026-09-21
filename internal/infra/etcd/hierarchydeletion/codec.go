@@ -261,7 +261,11 @@ func hierarchyDeletionTransactionSize(conditions []etcdstore.Condition, mutation
 	return total
 }
 
-func ValidateHierarchyDeletionTransaction(conditions []etcdstore.Condition, mutations []etcdstore.Mutation, operationLimit int) error {
+func ValidateHierarchyDeletionTransaction(
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+	operationLimit int,
+) error {
 	if operationLimit <= 0 || len(conditions)+len(mutations) > operationLimit ||
 		len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return errs.New(errs.KindValidationFailed, "hierarchy deletion transaction exceeds its operation limit")

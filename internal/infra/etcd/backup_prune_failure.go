@@ -120,7 +120,10 @@ func (repository *BackupRuntimeRepository) prepareBackupPruneFailure(
 	mutations = append(
 		mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[0]},
-		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(dispatch.Record.EnvironmentID)},
+		etcdstore.Mutation{
+			Type: etcdstore.MutationDelete,
+			Key:  hierarchyrecord.EnvironmentOperationLockKey(dispatch.Record.EnvironmentID),
+		},
 	)
 	epoch, err := fence.EpochRewriteMutation()
 	if err != nil {

@@ -74,7 +74,10 @@ func (repository *AttachRepository) GetBackingHookTaskInputs(
 		return taskconfiguration.BackingHookEncryptedInputs{}, err
 	}
 	if result == nil || len(result.Values) != 1 || result.Values[0] == nil {
-		return taskconfiguration.BackingHookEncryptedInputs{}, errs.New(errs.KindStateConflict, "Backing hook Task inputs are unavailable")
+		return taskconfiguration.BackingHookEncryptedInputs{}, errs.New(
+			errs.KindStateConflict,
+			"Backing hook Task inputs are unavailable",
+		)
 	}
 	defer etcdstore.ClearValues(result.Values)
 	record, err := taskconfiguration.DecodeBackingHookEncryptedInputs(result.Values[0].Value)
@@ -84,7 +87,10 @@ func (repository *AttachRepository) GetBackingHookTaskInputs(
 	if record.OperationID != task.OperationID ||
 		record.CiphertextSHA256 != task.Configuration.BackingHookInputs.CiphertextSHA256 {
 		clear(record.Ciphertext)
-		return taskconfiguration.BackingHookEncryptedInputs{}, errs.New(errs.KindStateConflict, "Backing hook Task input authority changed")
+		return taskconfiguration.BackingHookEncryptedInputs{}, errs.New(
+			errs.KindStateConflict,
+			"Backing hook Task input authority changed",
+		)
 	}
 	return record, nil
 }

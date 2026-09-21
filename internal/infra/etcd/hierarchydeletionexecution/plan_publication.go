@@ -66,12 +66,18 @@ func (repository *Executor) AppendActions(
 		return current, nil
 	}
 	if current.PlanCursor != start {
-		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion plan cursor changed")
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion plan cursor changed",
+		)
 	}
 	if len(actions) > 0 {
 		nextTombstone := current.Tombstone
 		nextTombstone.Checkpoint.NextOrdinal = start + int64(len(actions))
-		tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
+		tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+			nextTombstone,
+			hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+		)
 		if err != nil {
 			return hierarchydeletion.HierarchyDeletionOperation{}, err
 		}
@@ -87,11 +93,17 @@ func (repository *Executor) AppendActions(
 		mutations := make([]etcdstore.Mutation, 0, len(actions)+1)
 		for index, key := range keys {
 			conditions = append(conditions, etcdstore.Condition{Key: key})
-			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded[index]})
+			mutations = append(
+				mutations,
+				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: encoded[index]},
+			)
 		}
 		mutations = append(mutations, etcdstore.Mutation{
-			Type:  etcdstore.MutationPut,
-			Key:   hierarchydeletion.HierarchyDeletionTombstoneKey(string(current.Tombstone.TargetKind), current.Tombstone.TargetID),
+			Type: etcdstore.MutationPut,
+			Key: hierarchydeletion.HierarchyDeletionTombstoneKey(
+				string(current.Tombstone.TargetKind),
+				current.Tombstone.TargetID,
+			),
 			Value: tombstoneValue,
 		})
 		if err := hierarchydeletion.ValidateHierarchyDeletionTransaction(
@@ -204,17 +216,26 @@ func (repository *Executor) sealPlan(
 	nextFence.Generation++
 	nextFence.Phase = hierarchydeletion.HierarchyDeletionExecuting
 	nextFence.UpdatedAt = nextFence.UpdatedAt.Add(1)
-	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
+	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		nextTombstone,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+	)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(tombstoneValue)
-	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		nextFence,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(fenceValue)
-	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(current.Tombstone.TargetKind), current.Tombstone.TargetID)
+	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(
+		string(current.Tombstone.TargetKind),
+		current.Tombstone.TargetID,
+	)
 	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(current.Tombstone.OperationID)
 	transaction, err := repository.store.Transact(
 		ctx,
@@ -230,7 +251,10 @@ func (repository *Executor) sealPlan(
 	}
 	etcdstore.ClearValues(transaction.FailureReads)
 	if !transaction.Succeeded {
-		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(errs.KindStateConflict, "hierarchy deletion plan seal changed")
+		return hierarchydeletion.HierarchyDeletionOperation{}, errs.New(
+			errs.KindStateConflict,
+			"hierarchy deletion plan seal changed",
+		)
 	}
 	current.Tombstone = nextTombstone
 	current.TombstoneRevision = transaction.Revision

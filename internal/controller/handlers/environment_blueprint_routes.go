@@ -27,7 +27,13 @@ type EnvironmentBlueprintService interface {
 		core.BlueprintBundle,
 		string,
 	) (apiTypes.EnvironmentBlueprintValidation, error)
-	ApplyBlueprint(context.Context, string, core.BlueprintBundle, string, string) (idempotencyrecord.IdempotencyResponse, error)
+	ApplyBlueprint(
+		context.Context,
+		string,
+		core.BlueprintBundle,
+		string,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type environmentBlueprintApplyInput struct {

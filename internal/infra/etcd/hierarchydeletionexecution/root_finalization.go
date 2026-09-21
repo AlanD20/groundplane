@@ -56,14 +56,23 @@ func (repository *Executor) PrepareRootFinalization(
 	nextFence.Dispatch = hierarchydeletion.HierarchyDeletionDispatchRetiring
 	nextFence.Generation++
 	nextFence.UpdatedAt = preparedAt
-	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(current.Tombstone.TargetKind), current.Tombstone.TargetID)
+	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(
+		string(current.Tombstone.TargetKind),
+		current.Tombstone.TargetID,
+	)
 	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(current.Tombstone.OperationID)
-	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
+	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		nextTombstone,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+	)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
 	defer clear(tombstoneValue)
-	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		nextFence,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionOperation{}, err
 	}

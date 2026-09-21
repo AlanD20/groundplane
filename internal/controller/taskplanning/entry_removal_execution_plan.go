@@ -71,7 +71,11 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 		if !found || !sameEntryRemovalMaterializationTemplate(reference, templates[index]) {
 			return nil, errs.New(errs.KindInternal, "durable Entry removal materialization changed")
 		}
-		steps[index], err = taskmaterialization.BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
+		steps[index], err = taskmaterialization.BuildTaskMaterializationStep(
+			reference,
+			artifactID,
+			uint32(task.TimeoutSeconds),
+		)
 		if err != nil {
 			return nil, err
 		}

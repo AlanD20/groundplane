@@ -184,7 +184,10 @@ func (repository *EvidenceRepository) Stage(
 		}
 		keys[index] = removal.EvidenceRowKey(manifest.OperationID, row.Ordinal)
 	}
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: state.Cursor.ReadRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: keys, Revision: state.Cursor.ReadRevision},
+	)
 	if err != nil {
 		return EvidenceStageResult{}, err
 	}
@@ -228,7 +231,10 @@ func (repository *EvidenceRepository) Stage(
 		progress[index] = cursor
 		condition := etcdstore.Condition{Key: keys[index]}
 		if read.Values[index] == nil {
-			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[index], Value: values[index]})
+			mutations = append(
+				mutations,
+				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[index], Value: values[index]},
+			)
 		} else {
 			condition.ModRevision = read.Values[index].ModRevision
 		}

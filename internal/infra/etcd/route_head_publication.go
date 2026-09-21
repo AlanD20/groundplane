@@ -97,7 +97,7 @@ func prepareRouteHeadPublication(
 		if current != nil {
 			previous = *current
 		}
-		if err := validateEnvironmentComposeProjectionAdvance(previous, current != nil, candidate); err != nil {
+		if err := projectionrecord.ValidateEnvironmentComposeProjectionAdvance(previous, current != nil, candidate); err != nil {
 			return routeHeadPublication{}, err
 		}
 	}
@@ -146,7 +146,10 @@ func prepareRouteHeadPublication(
 			}
 			key := blueprints.EnvironmentBlueprintChunkKeyFor(claim.EnvironmentID, claim.RevisionID, family, index)
 			publication.conditions = append(publication.conditions, etcdstore.Condition{Key: key})
-			publication.mutations = append(publication.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value})
+			publication.mutations = append(
+				publication.mutations,
+				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: key, Value: value},
+			)
 			publication.values = append(publication.values, value)
 		}
 	}
@@ -299,7 +302,8 @@ func validateCompletedRouteHeadReplay(
 	revision int64,
 ) error {
 	environmentID := task.Params[taskjournal.TaskRouteEnvironmentParam]
-	if task.Type != taskjournal.TaskRemove || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceRoute ||
+	if task.Type != taskjournal.TaskRemove ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceRoute ||
 		recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil {
 		return nil
 	}
@@ -373,7 +377,9 @@ func validateCompletedRouteHeadReplay(
 		descriptor.Claim.RevisionID != candidateRevisionID ||
 		descriptor.Claim.TaskID != candidateRevisionID ||
 		descriptor.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation ||
-		seal != blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor) || headRevisionID != candidateRevisionID ||
+		seal != blueprints.EnvironmentBlueprintSealFromDescriptor(
+			descriptor,
+		) || headRevisionID != candidateRevisionID ||
 		selected.Revision != state.Values[2].ModRevision || projection.EnvironmentID != environmentID || projection.RevisionID != candidateRevisionID ||
 		uint64(len(encoded)) != descriptor.ProjectionBytes || projectionDigest != descriptor.ProjectionSHA256 ||
 		dependencyDigest != descriptor.DependencyDigest {

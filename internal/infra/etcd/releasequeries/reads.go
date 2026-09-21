@@ -110,7 +110,10 @@ func (ledger *Reader) ResolveCurrentSuccessful(
 		intent.EnvironmentID != environmentID || intent.ServiceID != serviceID {
 		return CurrentSuccessfulRelease{}, releases.CorruptReleaseRecord()
 	}
-	terminal, err := releases.DecodeReleaseRecord[domain.TerminalSummary](intentRead.Values[1].Value, "release-terminal-summary")
+	terminal, err := releases.DecodeReleaseRecord[domain.TerminalSummary](
+		intentRead.Values[1].Value,
+		"release-terminal-summary",
+	)
 	if err != nil || terminal.ReleaseID != intent.ID || terminal.FinalServingReleaseID != intent.ID {
 		return CurrentSuccessfulRelease{}, releases.CorruptReleaseRecord()
 	}
@@ -154,7 +157,9 @@ func (ledger *Reader) ResolveServing(
 		return ServingRelease{}, releases.CorruptReleaseRecord()
 	}
 	intentRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{releases.ReleaseIntentStagingKey("", projection.ServingReleaseID)}, Revision: projectionRead.ReadRevision,
+		Keys: []string{
+			releases.ReleaseIntentStagingKey("", projection.ServingReleaseID),
+		}, Revision: projectionRead.ReadRevision,
 	})
 	if err != nil {
 		return ServingRelease{}, err
@@ -227,7 +232,10 @@ func (ledger *Reader) Get(ctx context.Context, releaseID string) (ReleaseView, e
 		}
 		return ledger.ReadViewAt(ctx, publicationID, releaseID, intentRead.ReadRevision)
 	}
-	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](headRead.Values[0].Value, "release-operation")
+	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](
+		headRead.Values[0].Value,
+		"release-operation",
+	)
 	if err != nil || head.OperationID != intent.OperationID {
 		return ReleaseView{}, releases.CorruptReleaseRecord()
 	}
@@ -256,7 +264,12 @@ func (ledger *Reader) List(ctx context.Context, request ReleasePageRequest) (Rel
 	}
 	page, err := ledger.store.Range(
 		ctx,
-		etcdstore.RangeRequest{Prefix: prefix, StartExclusive: start, Limit: int64(request.Limit + 1), Revision: revision},
+		etcdstore.RangeRequest{
+			Prefix:         prefix,
+			StartExclusive: start,
+			Limit:          int64(request.Limit + 1),
+			Revision:       revision,
+		},
 	)
 	if err != nil {
 		return ReleasePage{}, err
@@ -312,8 +325,13 @@ func (ledger *Reader) ReadViewAt(
 	revision int64,
 ) (ReleaseView, error) {
 	keys := []string{
-		releases.ReleaseIntentStagingKey(publicationID, releaseID), releases.ReleaseCheckpointStagingKey(publicationID, releaseID),
-		releases.ReleasePublicationKey(publicationID), releases.ReleaseTerminalKey(releaseID), releases.ReleaseRetentionKey(releaseID),
+		releases.ReleaseIntentStagingKey(
+			publicationID,
+			releaseID,
+		), releases.ReleaseCheckpointStagingKey(publicationID, releaseID),
+		releases.ReleasePublicationKey(
+			publicationID,
+		), releases.ReleaseTerminalKey(releaseID), releases.ReleaseRetentionKey(releaseID),
 	}
 	read, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -331,20 +349,29 @@ func (ledger *Reader) ReadViewAt(
 	if err != nil || checkpoint.ReleaseID != releaseID || domain.ValidateCheckpoint(checkpoint) != nil {
 		return ReleaseView{}, releases.CorruptReleaseRecord()
 	}
-	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[2].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		read.Values[2].Value,
+		"release-publication",
+	)
 	if err != nil || marker.PublicationID != publicationID || marker.OperationID != intent.OperationID {
 		return ReleaseView{}, releases.CorruptReleaseRecord()
 	}
 	view := ReleaseView{Intent: intent, Checkpoint: checkpoint, Revision: read.ReadRevision}
 	if read.Values[3] != nil {
-		terminal, err := releases.DecodeReleaseRecord[domain.TerminalSummary](read.Values[3].Value, "release-terminal-summary")
+		terminal, err := releases.DecodeReleaseRecord[domain.TerminalSummary](
+			read.Values[3].Value,
+			"release-terminal-summary",
+		)
 		if err != nil || terminal.ReleaseID != releaseID {
 			return ReleaseView{}, releases.CorruptReleaseRecord()
 		}
 		view.Terminal = &terminal
 	}
 	if read.Values[4] != nil {
-		retention, err := releases.DecodeReleaseRecord[domain.RollbackMaterial](read.Values[4].Value, "release-retention")
+		retention, err := releases.DecodeReleaseRecord[domain.RollbackMaterial](
+			read.Values[4].Value,
+			"release-retention",
+		)
 		if err != nil || retention.ReleaseID != releaseID {
 			return ReleaseView{}, releases.CorruptReleaseRecord()
 		}
@@ -377,7 +404,10 @@ func (ledger *Reader) ReadViewAt(
 		}
 		return view, nil
 	}
-	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](projectionRead.Values[1].Value, "release-operation")
+	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](
+		projectionRead.Values[1].Value,
+		"release-operation",
+	)
 	if err != nil {
 		return ReleaseView{}, err
 	}
@@ -436,7 +466,8 @@ func decodeReleaseCursor(value string) (releaseCursor, error) {
 		ids.Validate(
 			ids.KindDeployment,
 			cursor.LastReleaseID,
-		) != nil || cursor.Direction != "ascending" || cursor.Limit < 1 || cursor.Limit > 200 {
+		) != nil || cursor.Direction != "ascending" || cursor.Limit < 1 ||
+		cursor.Limit > 200 {
 		return releaseCursor{}, errs.New(errs.KindMalformedRequest, "release cursor is invalid")
 	}
 	return cursor, nil

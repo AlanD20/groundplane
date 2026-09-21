@@ -19,7 +19,10 @@ func ZonePoolRegistryKey(environmentID string) string {
 	return "/v1/indexes/zones/by-subnet/environment/" + environmentID
 }
 
-func (registry ZonePoolRegistry) Reserve(environment hierarchyrecord.EnvironmentRecord, zone zonerecord.Record) (ZonePoolRegistry, error) {
+func (registry ZonePoolRegistry) Reserve(
+	environment hierarchyrecord.EnvironmentRecord,
+	zone zonerecord.Record,
+) (ZonePoolRegistry, error) {
 	parent, err := ipam.ParseIPv4Prefix(environment.NetworkPool)
 	if err != nil || parent.String() != environment.NetworkPool {
 		return ZonePoolRegistry{}, errs.New(errs.KindValidationFailed, "Environment network pool is invalid")

@@ -97,7 +97,8 @@ func (ledger *Reader) loadPlanningScope(
 		return ReleasePlanningScope{}, errs.New(errs.KindEnvironmentNotFound, "environment was not found")
 	}
 	environment, err := hierarchyrecord.DecodeEnvironment(initial.Entry.Value)
-	if err != nil || environment.ID != environmentID || environment.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
+	if err != nil || environment.ID != environmentID ||
+		environment.ProvisioningState != hierarchyrecord.EnvironmentProvisioningReady {
 		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	projectRead, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -122,7 +123,9 @@ func (ledger *Reader) loadPlanningScope(
 		return ReleasePlanningScope{}, releases.CorruptReleaseRecord()
 	}
 	keys := []string{
-		hierarchyrecord.EnvironmentKey(environmentID), hierarchyrecord.ProjectKey(project.ID), hierarchyrecord.TenantKey(project.TenantID),
+		hierarchyrecord.EnvironmentKey(
+			environmentID,
+		), hierarchyrecord.ProjectKey(project.ID), hierarchyrecord.TenantKey(project.TenantID),
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(environmentID), releases.ReleaseFenceSetKey(environmentID),
 		deletions.TombstoneKey("environment", environmentID), deletions.TombstoneKey("project", project.ID),
@@ -220,7 +223,12 @@ func (ledger *Reader) LoadPlanningServices(
 		if loaded.Values[base] != nil {
 			return nil, errs.New(errs.KindResourceInUse, "release service ownership changed or is deleting")
 		}
-		service, serviceErr := environmentqueries.FindServiceAtRevision(ctx, ledger.store, serviceID, scope.ReadRevision)
+		service, serviceErr := environmentqueries.FindServiceAtRevision(
+			ctx,
+			ledger.store,
+			serviceID,
+			scope.ReadRevision,
+		)
 		if serviceErr != nil {
 			return nil, serviceErr
 		}
@@ -321,9 +329,16 @@ func (ledger *Reader) rejectSelectedHooks(
 					!bytes.Equal(value.Value, []byte(scriptID)) {
 					return releases.CorruptReleaseRecord()
 				}
-				keys[index] = scriptrecord.ScriptSetScriptKey(scope.Environment.Record.ID, active.Record.GenerationID, scriptID)
+				keys[index] = scriptrecord.ScriptSetScriptKey(
+					scope.Environment.Record.ID,
+					active.Record.GenerationID,
+					scriptID,
+				)
 			}
-			records, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: scope.ReadRevision})
+			records, err := ledger.store.GetMany(
+				ctx,
+				etcdstore.GetManyRequest{Keys: keys, Revision: scope.ReadRevision},
+			)
 			if err != nil {
 				return err
 			}

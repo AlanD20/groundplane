@@ -90,18 +90,34 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 	layout := newRunnerCreateEvidence(desired, parents, allocationState, task)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: values.task},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: values.reference},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: values.reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: values.reference,
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskActiveOperationKey(task.OperationID),
+			Value: values.reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: values.reference},
 		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerKey(desired.ID), Value: values.runner},
 		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerLifecycleKey(desired.ID), Value: values.lifecycle},
-		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerTenantSlugKey(desired.TenantID, desired.Slug), Value: []byte(desired.ID)},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   runnerrecord.RunnerTenantSlugKey(desired.TenantID, desired.Slug),
+			Value: []byte(desired.ID),
+		},
 		{
 			Type: etcdstore.MutationPut, Key: runnerrecord.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID),
 			Value: []byte(desired.ID),
 		},
 		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerTenantQuotaKey(desired.TenantID), Value: values.quota},
-		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerHostSlotKey(allocationState.host.slot), Value: values.host},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   runnerrecord.RunnerHostSlotKey(allocationState.host.slot),
+			Value: values.host,
+		},
 		{Type: etcdstore.MutationPut, Key: runnerrecord.SystemPoolRegistryKey, Value: values.system},
 	}
 	initiation, err := newRunnerTaskInitiation(desired, parents, taskjournal.TaskActorOperator)
@@ -221,16 +237,40 @@ func newRunnerCreateEvidence(
 	evidence.runner = add(etcdstore.Condition{Key: runnerrecord.RunnerKey(desired.ID)})
 	evidence.lifecycle = add(etcdstore.Condition{Key: runnerrecord.RunnerLifecycleKey(desired.ID)})
 	evidence.slug = add(etcdstore.Condition{Key: runnerrecord.RunnerTenantSlugKey(desired.TenantID, desired.Slug)})
-	evidence.owner = add(etcdstore.Condition{Key: runnerrecord.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)})
-	evidence.quota = add(etcdstore.Condition{Key: runnerrecord.RunnerTenantQuotaKey(desired.TenantID), ModRevision: allocation.quota.Revision})
-	evidence.system = add(etcdstore.Condition{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.Revision})
-	evidence.tenant = add(etcdstore.Condition{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.Tenant().Revision})
-	evidence.runnerDeletion = add(etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), desired.ID)})
-	evidence.tenantDeletion = add(etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), desired.TenantID)})
+	evidence.owner = add(
+		etcdstore.Condition{Key: runnerrecord.RunnerOwnerKey(desired.OwnerKind, desired.OwnerID, desired.ID)},
+	)
+	evidence.quota = add(
+		etcdstore.Condition{
+			Key:         runnerrecord.RunnerTenantQuotaKey(desired.TenantID),
+			ModRevision: allocation.quota.Revision,
+		},
+	)
+	evidence.system = add(
+		etcdstore.Condition{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.Revision},
+	)
+	evidence.tenant = add(
+		etcdstore.Condition{Key: hierarchyrecord.TenantKey(desired.TenantID), ModRevision: parents.Tenant().Revision},
+	)
+	evidence.runnerDeletion = add(
+		etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), desired.ID)},
+	)
+	evidence.tenantDeletion = add(
+		etcdstore.Condition{
+			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), desired.TenantID),
+		},
+	)
 	if desired.OwnerKind == runnerrecord.RunnerOwnerProject {
-		evidence.project = add(etcdstore.Condition{Key: hierarchyrecord.ProjectKey(desired.OwnerID), ModRevision: parents.Project().Revision})
+		evidence.project = add(
+			etcdstore.Condition{
+				Key:         hierarchyrecord.ProjectKey(desired.OwnerID),
+				ModRevision: parents.Project().Revision,
+			},
+		)
 		evidence.projectDeletion = add(
-			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), desired.OwnerID)},
+			etcdstore.Condition{
+				Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), desired.OwnerID),
+			},
 		)
 	}
 	evidence.host = add(allocation.host.condition)

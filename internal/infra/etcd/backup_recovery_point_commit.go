@@ -101,7 +101,11 @@ func (repository *BackupRuntimeRepository) CommitBackupRecoveryPoint(
 		{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(point.ID)},
 		{Type: etcdstore.MutationPut, Key: sourceIndex, Value: []byte(point.ID)},
 		{Type: etcdstore.MutationPut, Key: connectorIndex, Value: []byte(point.ID)},
-		{Type: etcdstore.MutationPut, Key: backupruntime.BackupRetentionKey(point.SourceID, point.ID), Value: sweepValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   backupruntime.BackupRetentionKey(point.SourceID, point.ID),
+			Value: sweepValue,
+		},
 	}
 	if orphan != nil {
 		conditions = append(conditions,

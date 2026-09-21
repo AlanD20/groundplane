@@ -324,7 +324,8 @@ func (p *WorkerPool) runReleaseStep(
 	err = state.recordAbsenceResult(&result, err)
 	pair := executionplan.ConfigurationFilePair(reservation.assignment.Plan, step.GetStepId())
 	if err == nil && step.GetPolicy() == agentpb.ExecutionStepPolicy_EXECUTION_STEP_POLICY_RELEASE_COMPENSATE {
-		state.restored = pair != nil || composeruntime.ReleaseRestorationEvidenceProven(reservation.assignment, step, result)
+		state.restored = pair != nil ||
+			composeruntime.ReleaseRestorationEvidenceProven(reservation.assignment, step, result)
 		if !state.restored {
 			err = errs.New(errs.KindInternal, "agent: release compensation returned no exact restoration proof")
 			result.ReconciliationRequired = true

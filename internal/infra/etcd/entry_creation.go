@@ -23,7 +23,8 @@ func (repository *EntryRepository) CreateEntryIdempotent(
 	if err := entryrecord.ValidateEntryHierarchy(ctx, environment, project, record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Entry creation marker must be a completed direct mutation",

@@ -84,7 +84,10 @@ func bindNativePredecessor(
 	return captured, nil
 }
 
-func nativePredecessors(input PrepareInput, members []releaserender.ReleaseTaskRenderMember) []etcd.BlueprintNativePredecessor {
+func nativePredecessors(
+	input PrepareInput,
+	members []releaserender.ReleaseTaskRenderMember,
+) []etcd.BlueprintNativePredecessor {
 	captures := nativePredecessorCaptures(input, members)
 	result := make([]etcd.BlueprintNativePredecessor, len(captures))
 	for index, capture := range captures {

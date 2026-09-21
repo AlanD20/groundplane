@@ -267,7 +267,9 @@ func ChunkCount32(length int) uint32 {
 	return uint32((length + EnvironmentBlueprintChunkBytes - 1) / EnvironmentBlueprintChunkBytes)
 }
 
-func EnvironmentBlueprintDependencyDigest(projection projectionrecord.EnvironmentComposeProjection) ([sha256.Size]byte, error) {
+func EnvironmentBlueprintDependencyDigest(
+	projection projectionrecord.EnvironmentComposeProjection,
+) ([sha256.Size]byte, error) {
 	digest, _, err := EnvironmentBlueprintProjectionEvidence(projection)
 	return digest, err
 }

@@ -24,7 +24,9 @@ func NewVolumeInbox() *VolumeInbox {
 }
 
 // Register owns correlation state for an already validated checkpoint request.
-func (inbox *VolumeInbox) Register(owned *agentpb.VolumeRemovalCheckpointRequest) (<-chan *agentpb.VolumeRemovalCheckpointAck, func(), error) {
+func (inbox *VolumeInbox) Register(
+	owned *agentpb.VolumeRemovalCheckpointRequest,
+) (<-chan *agentpb.VolumeRemovalCheckpointAck, func(), error) {
 	waiter := &volumeCheckpointWaiter{request: owned, ack: make(chan *agentpb.VolumeRemovalCheckpointAck, 1)}
 	inbox.mu.Lock()
 	if inbox.pending[owned.RequestId] != nil {

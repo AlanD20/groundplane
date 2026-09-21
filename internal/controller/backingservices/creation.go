@@ -2,6 +2,7 @@ package backingservices
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -43,7 +44,9 @@ const backingServiceCreateRoute = "/backing-services"
 
 type backingServiceCreationRepository interface {
 	desiredrevision.Repository
-	GetEnvironmentPoolRegistry(context.Context) (etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry], error)
+	GetEnvironmentPoolRegistry(
+		context.Context,
+	) (etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry], error)
 	ClaimBackingServiceCreationStage(
 		context.Context,
 		etcd.BackingServiceCreationStage,
@@ -55,7 +58,12 @@ type backingServiceCreationRepository interface {
 }
 
 type backingServiceHookInputs interface {
-	SealBackingHookTaskInputs(context.Context, string, string, backinghook.Configuration) (*taskconfiguration.BackingHookEncryptedInputs, error)
+	SealBackingHookTaskInputs(
+		context.Context,
+		string,
+		string,
+		backinghook.Configuration,
+	) (*taskconfiguration.BackingHookEncryptedInputs, error)
 }
 
 type CreationService struct {
@@ -101,7 +109,10 @@ func (service *CreationService) CreateBackingService(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if idempotencyKey == "" {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Idempotency-Key is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"Idempotency-Key is required",
+		)
 	}
 	adapter, ok := adapters.Get(input.Adapter)
 	if !ok {
@@ -490,7 +501,10 @@ func (service *CreationService) createBackingServiceFromStage(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(outcome.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Backing-service creation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Backing-service creation resolution is invalid",
+		)
 	}
 }
 

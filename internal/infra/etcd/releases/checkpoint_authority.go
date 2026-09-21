@@ -218,7 +218,11 @@ func (authority *ReleaseCheckpointAuthority) prepareAdvance(
 	if input.NextState == domain.StateServing {
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: ReleaseProjectionKey(member.ServiceID), Value: projectionValue},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   ReleaseProjectionKey(member.ServiceID),
+				Value: projectionValue,
+			},
 		)
 	} else {
 		clear(projectionValue)

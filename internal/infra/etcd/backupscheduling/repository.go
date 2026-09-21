@@ -218,7 +218,11 @@ func (repository *Repository) SkipScheduledBackup(
 		coordinationrecord.Key(evaluation.EnvironmentID),
 		hierarchyrecord.EnvironmentOperationLockKey(evaluation.EnvironmentID),
 	}
-	dueKey, err := backupruntime.BackupDueOutcomeKey(evaluation.EnvironmentID, evaluation.PolicyRevision, evaluation.ScheduledAt)
+	dueKey, err := backupruntime.BackupDueOutcomeKey(
+		evaluation.EnvironmentID,
+		evaluation.PolicyRevision,
+		evaluation.ScheduledAt,
+	)
 	if err != nil {
 		return err
 	}
@@ -318,7 +322,10 @@ func (repository *Repository) PreparePublication(
 	if err != nil {
 		return nil, nil, err
 	}
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: append(keys, dueKey), Revision: fixedRevision})
+	read, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: append(keys, dueKey), Revision: fixedRevision},
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -367,14 +374,14 @@ func (repository *Repository) PreparePublication(
 		return nil, nil, err
 	}
 	return []etcdstore.Condition{
-		{Key: keys[1], ModRevision: read.Values[1].ModRevision},
-		{Key: dueKey},
-		{Key: retentionKey},
-	}, []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: dueKey, Value: dueValue},
-		{Type: etcdstore.MutationPut, Key: retentionKey, Value: []byte(dueKey)},
-		{Type: etcdstore.MutationPut, Key: keys[1], Value: coordValue},
-	}, nil
+			{Key: keys[1], ModRevision: read.Values[1].ModRevision},
+			{Key: dueKey},
+			{Key: retentionKey},
+		}, []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: dueKey, Value: dueValue},
+			{Type: etcdstore.MutationPut, Key: retentionKey, Value: []byte(dueKey)},
+			{Type: etcdstore.MutationPut, Key: keys[1], Value: coordValue},
+		}, nil
 }
 
 func (repository *Repository) HasExactPublishedOutcome(
@@ -416,7 +423,9 @@ func (repository *Repository) HasExactPublishedOutcome(
 	}
 	due, err := backupruntime.DecodeBackupDueOutcomeRecord(read.Values[1].Value)
 	if err != nil || due.EnvironmentID != run.EnvironmentID || due.PolicyRevision != run.PolicyRevision ||
-		!due.ScheduledAt.Equal(*run.ScheduledAt) || due.Outcome != backupruntime.BackupDueDispatched || due.TaskID != run.TaskID ||
+		!due.ScheduledAt.Equal(
+			*run.ScheduledAt,
+		) || due.Outcome != backupruntime.BackupDueDispatched || due.TaskID != run.TaskID ||
 		!due.CreatedAt.Equal(run.CreatedAt) || !due.RetainUntil.Equal(retainUntil) {
 		return false
 	}

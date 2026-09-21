@@ -28,8 +28,13 @@ type environmentChangeRepository interface {
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	MutateEnvironmentIdempotent(context.Context, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		hierarchyrecord.EnvironmentRecord, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
-	ReplaceEnvironmentPoolIdempotent(context.Context, netip.Prefix, etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		hierarchyrecord.EnvironmentRecord, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	ReplaceEnvironmentPoolIdempotent(
+		context.Context,
+		netip.Prefix,
+		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
+		hierarchyrecord.EnvironmentRecord,
+		idempotencyrecord.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 }
 
 // environmentCapacityRepository supplies the fixed revision used to seal a
@@ -249,7 +254,10 @@ func (service *environmentChangeService) changeEnvironment(
 	mutate environmentChangeMutation,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment change context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Environment change context is required",
+		)
 	}
 	locator := idempotencyrecord.IdempotencyLocator{
 		ScopeKind: idempotencyrecord.IdempotencyScopeEnvironment, ScopeID: id,

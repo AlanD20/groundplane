@@ -117,12 +117,17 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 		return routeTaskChange{}, err
 	}
 	change.values = append(change.values, tombstoneValue, intentBytes)
-	change.mutations = append(change.mutations,
+	change.mutations = append(
+		change.mutations,
 		etcdstore.Mutation{
 			Type: etcdstore.MutationPut, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
 			Value: tombstoneValue,
 		},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.RouteRemovalIntentKey(retry.ID), Value: intentBytes},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   environmentchanges.RouteRemovalIntentKey(retry.ID),
+			Value: intentBytes,
+		},
 	)
 	if intent.CurrentProjection != nil {
 		change.mutations = append(change.mutations, etcdstore.Mutation{
@@ -196,7 +201,11 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 		conditions: conditions,
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: environmentchanges.RouteMutationIntentKey(retry.ID), Value: encoded},
-			{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID)},
+			{
+				Type:  etcdstore.MutationPut,
+				Key:   environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
+				Value: []byte(retry.ID),
+			},
 		},
 		values: [][]byte{encoded},
 	}, nil
@@ -208,7 +217,12 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 	intent environmentchanges.RouteRemovalIntent,
 	revision int64,
 ) (*etcdstore.GetManyResult, []string, error) {
-	service, err := environmentqueries.FindServiceAtRevision(ctx, repository.store, route.Desired.TargetServiceID, revision)
+	service, err := environmentqueries.FindServiceAtRevision(
+		ctx,
+		repository.store,
+		route.Desired.TargetServiceID,
+		revision,
+	)
 	if err != nil || service.Record.EnvironmentID != route.EnvironmentID {
 		return nil, nil, errs.New(errs.KindResourceInUse, "Route retry target Service is unavailable")
 	}

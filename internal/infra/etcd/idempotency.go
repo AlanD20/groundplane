@@ -128,7 +128,8 @@ func newIdempotencyMutationPlanForMarker(
 	mutations []etcdstore.Mutation,
 	classify idempotencyPlanClassifier,
 ) (*idempotencyMutationPlan, error) {
-	if markerKind != idempotencyrecord.IdempotencyMarkerDirect && markerKind != idempotencyrecord.IdempotencyMarkerTask {
+	if markerKind != idempotencyrecord.IdempotencyMarkerDirect &&
+		markerKind != idempotencyrecord.IdempotencyMarkerTask {
 		return nil, errs.New(errs.KindInternal, "idempotency mutation plan marker kind is invalid")
 	}
 	if classify == nil || markerKind == idempotencyrecord.IdempotencyMarkerTask && len(mutations) == 0 {
@@ -354,8 +355,13 @@ func (repository *IdempotencyRepository) apply(
 			return IdempotencyTransactionResult{}, targetErr
 		}
 		defer clear(targetValue)
-		conditions = append(conditions[:1], append([]etcdstore.Condition{{Key: targetKey, ModRevision: 0}}, conditions[1:]...)...)
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: targetKey, Value: targetValue})
+		conditions = append(
+			conditions[:1],
+			append([]etcdstore.Condition{{Key: targetKey, ModRevision: 0}}, conditions[1:]...)...)
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: targetKey, Value: targetValue},
+		)
 	}
 	if !marker.RetainUntil.IsZero() {
 		retentionKey, err := idempotencyrecord.IdempotencyRetentionKey(markerKey, marker.RetainUntil)
@@ -366,7 +372,10 @@ func (repository *IdempotencyRepository) apply(
 		if err != nil {
 			return IdempotencyTransactionResult{}, errs.Wrap(errs.KindInternal, err)
 		}
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue})
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
+		)
 	}
 	if validateTransaction != nil {
 		if err := validateTransaction(conditions, mutations); err != nil {
@@ -428,7 +437,8 @@ func (repository *IdempotencyRepository) apply(
 }
 
 func (evidence *IdempotencyEvidence) Marker() (idempotencyrecord.IdempotencyMarker, error) {
-	if evidence == nil || evidence.modRevision <= 0 || idempotencyrecord.ValidateIdempotencyMarker(evidence.marker) != nil {
+	if evidence == nil || evidence.modRevision <= 0 ||
+		idempotencyrecord.ValidateIdempotencyMarker(evidence.marker) != nil {
 		return idempotencyrecord.IdempotencyMarker{}, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	marker := idempotencyrecord.CloneIdempotencyMarker(evidence.marker)

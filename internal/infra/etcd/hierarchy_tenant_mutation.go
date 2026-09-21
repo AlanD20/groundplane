@@ -33,7 +33,8 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 			"Tenant mutation revision is invalid",
 		)
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Tenant mutation marker must be a completed direct mutation",
@@ -73,13 +74,19 @@ func (repository *HierarchyRepository) MutateTenantIdempotent(
 		{Key: hierarchyrecord.TenantSlugKey(current.Record.Slug), ModRevision: secondary.Values[0].ModRevision},
 		{Key: deletions.TombstoneKey("tenant", current.Record.ID)},
 	}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: hierarchyrecord.TenantKey(current.Record.ID), Value: value}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.TenantKey(current.Record.ID), Value: value},
+	}
 	if renaming {
 		conditions = append(conditions, etcdstore.Condition{Key: hierarchyrecord.TenantSlugKey(replacement.Slug)})
 		mutations = append(
 			mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: hierarchyrecord.TenantSlugKey(current.Record.Slug)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.TenantSlugKey(replacement.Slug), Value: []byte(current.Record.ID)},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   hierarchyrecord.TenantSlugKey(replacement.Slug),
+				Value: []byte(current.Record.ID),
+			},
 		)
 	}
 	plan, err := NewIdempotencyMutationPlan(

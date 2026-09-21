@@ -46,7 +46,11 @@ func (repository *TaskRepository) prepareEnvironmentCreationAcknowledgement(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(record.ID), Value: encoded},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(record.ID), Value: state.EpochValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchyrecord.EnvironmentMutationEpochKey(record.ID),
+			Value: state.EpochValue,
+		},
 	}
 	return conditions, mutations, encoded, nil
 }

@@ -244,7 +244,11 @@ func backingEnvironmentMaterialization(
 			},
 		},
 	}
-	step, err := taskmaterialization.BuildTaskMaterializationStep(record, artifactID, uint32(desiredrevision.TaskTimeoutSeconds))
+	step, err := taskmaterialization.BuildTaskMaterializationStep(
+		record,
+		artifactID,
+		uint32(desiredrevision.TaskTimeoutSeconds),
+	)
 	if err != nil {
 		return materializationrecord.Record{}, nil, err
 	}

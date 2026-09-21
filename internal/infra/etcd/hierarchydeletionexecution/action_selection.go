@@ -54,7 +54,10 @@ func (repository *Executor) ReadyAction(
 	}
 	nextFence.UpdatedAt = nextFence.UpdatedAt.Add(1)
 	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(current.Tombstone.OperationID)
-	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		nextFence,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		return nil, hierarchydeletion.HierarchyDeletionOperation{}, err
 	}
@@ -65,14 +68,23 @@ func (repository *Executor) ReadyAction(
 	if action.ProcedureKind == hierarchydeletion.HierarchyDeletionProcedureAgent {
 		nextTombstone = current.Tombstone
 		nextTombstone.Checkpoint.ActiveChildOperationID = action.AgentProcedure.ChildOperationID
-		tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(current.Tombstone.TargetKind), current.Tombstone.TargetID)
-		tombstoneValue, encodeErr := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
+		tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(
+			string(current.Tombstone.TargetKind),
+			current.Tombstone.TargetID,
+		)
+		tombstoneValue, encodeErr := hierarchydeletion.EncodeHierarchyDeletionRecord(
+			nextTombstone,
+			hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+		)
 		if encodeErr != nil {
 			return nil, hierarchydeletion.HierarchyDeletionOperation{}, encodeErr
 		}
 		defer clear(tombstoneValue)
 		conditions = append(conditions, etcdstore.Condition{Key: tombstoneKey, ModRevision: current.TombstoneRevision})
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue})
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
+		)
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, mutations)
 	if err != nil {

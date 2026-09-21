@@ -41,7 +41,8 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 	if err := secretrecord.ValidateSecretValueBinding(record, value); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
+	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Secret creation marker must be a completed direct mutation",
@@ -64,8 +65,16 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 		secretrecord.SecretCreateConditions(owner, record),
 		[]etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: secretrecord.RecordKey(record.Secret.ID), Value: primaryValue},
-			{Type: etcdstore.MutationPut, Key: secretrecord.SecretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
-			{Type: etcdstore.MutationPut, Key: secretrecord.SecretScopedKey(record.Secret), Value: []byte(record.Secret.ID)},
+			{
+				Type:  etcdstore.MutationPut,
+				Key:   secretrecord.SecretOwnerKey(record.Secret),
+				Value: []byte(record.Secret.ID),
+			},
+			{
+				Type:  etcdstore.MutationPut,
+				Key:   secretrecord.SecretScopedKey(record.Secret),
+				Value: []byte(record.Secret.ID),
+			},
 			{Type: etcdstore.MutationPut, Key: secretrecord.ValueKey(record.Secret.ID), Value: encryptedValue},
 		},
 		func(_ int64, values []*etcdstore.KeyValue) error {

@@ -80,7 +80,11 @@ func (adapter recoverySecretPinStore) Transact(
 func EtcdFragment(fragment Fragment) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	conditions := make([]etcdstore.Condition, len(fragment.Conditions))
 	for index, condition := range fragment.Conditions {
-		conditions[index] = etcdstore.Condition{Key: condition.Key, ModRevision: condition.ModRevision, Prefix: condition.Prefix}
+		conditions[index] = etcdstore.Condition{
+			Key:         condition.Key,
+			ModRevision: condition.ModRevision,
+			Prefix:      condition.Prefix,
+		}
 	}
 	mutations := make([]etcdstore.Mutation, len(fragment.Mutations))
 	for index, mutation := range fragment.Mutations {
@@ -93,7 +97,12 @@ func EtcdFragment(fragment Fragment) ([]etcdstore.Condition, []etcdstore.Mutatio
 		default:
 			return nil, nil, errs.New(errs.KindInternal, "unknown recovery Secret pin mutation")
 		}
-		mutations[index] = etcdstore.Mutation{Type: kind, Key: mutation.Key, Value: mutation.Value, Prefix: mutation.Prefix}
+		mutations[index] = etcdstore.Mutation{
+			Type:   kind,
+			Key:    mutation.Key,
+			Value:  mutation.Value,
+			Prefix: mutation.Prefix,
+		}
 	}
 	return conditions, mutations, nil
 }
@@ -150,7 +159,10 @@ func (adapter recoverySecretPinStore) VerifySecret(
 		)
 	}
 	ownerKey := hierarchyrecord.ProjectKey(adapter.projectID)
-	owners, err := adapter.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{ownerKey}, Revision: read.ReadRevision})
+	owners, err := adapter.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{ownerKey}, Revision: read.ReadRevision},
+	)
 	if err != nil {
 		return SecretAuthority{}, err
 	}

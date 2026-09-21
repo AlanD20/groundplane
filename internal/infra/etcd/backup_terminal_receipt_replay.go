@@ -13,7 +13,8 @@ func (repository *TaskRepository) validateBackupTerminalReceiptReplay(
 	ctx context.Context,
 	task etcdstore.Versioned[TaskRecord],
 ) error {
-	if task.Revision <= 0 || (task.Record.Type != taskjournal.TaskBackup && task.Record.Type != taskjournal.TaskBackupPrune) ||
+	if task.Revision <= 0 ||
+		(task.Record.Type != taskjournal.TaskBackup && task.Record.Type != taskjournal.TaskBackupPrune) ||
 		!taskjournal.IsTerminalTaskStatus(task.Record.Status) {
 		return errs.New(errs.KindInternal, "terminal backup Task is invalid")
 	}

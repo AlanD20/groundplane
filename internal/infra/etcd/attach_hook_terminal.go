@@ -72,8 +72,14 @@ func (repository *TaskRepository) applyBackingHookTerminal(
 	if err != nil {
 		return err
 	}
-	change.conditions = append(change.conditions, etcdstore.Condition{Key: factKey, ModRevision: current.Values[0].ModRevision})
-	change.mutations = append(change.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: factKey, Value: value})
+	change.conditions = append(
+		change.conditions,
+		etcdstore.Condition{Key: factKey, ModRevision: current.Values[0].ModRevision},
+	)
+	change.mutations = append(
+		change.mutations,
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: factKey, Value: value},
+	)
 	change.values = append(change.values, value)
 	change.mutates = true
 	return nil
@@ -89,7 +95,10 @@ func (repository *TaskRepository) requireBackingHookResultCheckpoint(
 	revision int64,
 ) (backinghooks.CheckpointRecord, etcdstore.Condition, error) {
 	key := backinghooks.CheckpointKey(task.ID, stepID)
-	checkpointResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
+	checkpointResult, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision},
+	)
 	if err != nil {
 		return backinghooks.CheckpointRecord{}, etcdstore.Condition{}, err
 	}

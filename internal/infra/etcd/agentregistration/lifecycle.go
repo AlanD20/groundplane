@@ -180,7 +180,10 @@ func (repository *Repository) transitionPhase(
 		}, nil
 	}
 	if evidence.record.Phase != expected {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent phase changed")
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"local Agent phase changed",
+		)
 	}
 	replacement := localagentrecord.CloneLocalAgentRecord(evidence.record)
 	replacement.Phase = next
@@ -200,7 +203,10 @@ func (repository *Repository) transitionPhase(
 	}
 	etcdstore.ClearValues(result.FailureReads)
 	if !result.Succeeded {
-		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "local Agent phase changed")
+		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(
+			errs.KindStateConflict,
+			"local Agent phase changed",
+		)
 	}
 	return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{
 		Record: replacement, Revision: result.Revision, ReadRevision: result.Revision,

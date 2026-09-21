@@ -35,7 +35,10 @@ func (repository *BackupPolicyRepository) loadVolumeRemovalPolicySources(
 				return backupruntime.CorruptBackupRuntimeRecord()
 			}
 			state.sources = append(state.sources, source)
-			state.conditions = append(state.conditions, etcdstore.Condition{Key: keys[index], ModRevision: value.ModRevision})
+			state.conditions = append(
+				state.conditions,
+				etcdstore.Condition{Key: keys[index], ModRevision: value.ModRevision},
+			)
 		}
 	}
 	keys := make([]string, 0, len(state.sources)*2+1)

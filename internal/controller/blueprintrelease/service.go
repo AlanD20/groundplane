@@ -185,8 +185,12 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	}
 	task.Params[releaserender.TaskReleasePublicationParam] = publicationID
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
-	stage := releases.ReleaseStage{PublicationID: publicationID, OperationID: task.OperationID, CreatedAt: input.CreatedAt,
-		Members: make([]releases.ReleaseStageMember, len(candidates))}
+	stage := releases.ReleaseStage{
+		PublicationID: publicationID,
+		OperationID:   task.OperationID,
+		CreatedAt:     input.CreatedAt,
+		Members:       make([]releases.ReleaseStageMember, len(candidates)),
+	}
 	members := make([]releaserender.ReleaseTaskRenderMember, len(candidates))
 	for index, candidate := range candidates {
 		releaseID := input.AllocateNamed(ids.KindDeployment, "blueprint-release/"+candidate.Record.Desired.ID)

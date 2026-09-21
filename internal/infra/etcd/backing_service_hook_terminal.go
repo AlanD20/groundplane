@@ -21,7 +21,8 @@ func (repository *TaskRepository) prepareBackingServiceCreationHookAcknowledgeme
 	if !hooked || task.Status != taskjournal.TaskStatusCompleted {
 		return taskMaterializationProjectionChange{}, nil
 	}
-	if serviceID == "" || task.Params[taskjournal.TaskBackingServiceCreationParam] != serviceID || len(task.Steps) == 0 {
+	if serviceID == "" || task.Params[taskjournal.TaskBackingServiceCreationParam] != serviceID ||
+		len(task.Steps) == 0 {
 		return taskMaterializationProjectionChange{}, errs.New(
 			errs.KindInternal,
 			"Backing-service after-start terminal Task is incomplete",

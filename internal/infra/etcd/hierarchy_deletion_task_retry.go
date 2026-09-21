@@ -49,7 +49,8 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != retry.ID || !marker.CreatedAt.Equal(retry.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) || idempotencyrecord.ValidateIdempotencyMarker(marker) != nil {
+		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
+		idempotencyrecord.ValidateIdempotencyMarker(marker) != nil {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"hierarchy Task retry marker is invalid",
@@ -78,14 +79,23 @@ func (repository *TaskRepository) retryHierarchyDeletionTask(
 	}
 	defer change.clear()
 	conditions := []etcdstore.Condition{
-		{Key: taskjournal.TaskStorageKey(source.Record.ID), ModRevision: source.Revision}, {Key: taskjournal.TaskStorageKey(retry.ID)},
-		{Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID)}, {Key: taskjournal.TaskActiveOperationKey(retry.OperationID)},
+		{
+			Key:         taskjournal.TaskStorageKey(source.Record.ID),
+			ModRevision: source.Revision,
+		}, {Key: taskjournal.TaskStorageKey(retry.ID)},
+		{
+			Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID),
+		}, {Key: taskjournal.TaskActiveOperationKey(retry.OperationID)},
 		{Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID)},
 	}
 	conditions = append(conditions, change.conditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(retry.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(retry.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID), Value: reference},
 	}
@@ -146,10 +156,16 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 		)
 	}
 	targetKey := hierarchyDeletionPrimaryKey(operation.Tombstone.TargetKind, operation.Tombstone.TargetID)
-	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
+	tombstoneKey := hierarchydeletion.HierarchyDeletionTombstoneKey(
+		string(operation.Tombstone.TargetKind),
+		operation.Tombstone.TargetID,
+	)
 	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(operation.Tombstone.OperationID)
 	replayKey, _ := hierarchydeletion.HierarchyDeletionReplayTargetKey(operation.Tombstone.OperationID)
-	lockKey := hierarchydeletion.HierarchyDeletionLockKey(string(operation.Tombstone.TargetKind), operation.Tombstone.TargetID)
+	lockKey := hierarchydeletion.HierarchyDeletionLockKey(
+		string(operation.Tombstone.TargetKind),
+		operation.Tombstone.TargetID,
+	)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{targetKey, replayKey, lockKey}, Revision: source.ReadRevision,
 	})
@@ -169,7 +185,8 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 	var lock hierarchydeletion.HierarchyDeletionLock
 	if hierarchydeletion.DecodeHierarchyDeletionRecord(read.Values[1].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &replay) != nil ||
 		hierarchydeletion.DecodeHierarchyDeletionRecord(read.Values[2].Value, hierarchydeletion.HierarchyDeletionSmallRecordBytes, &lock) != nil ||
-		replay.ParentOperationID != operation.Tombstone.OperationID || replay.CurrentTaskID != source.Record.ID ||
+		replay.ParentOperationID != operation.Tombstone.OperationID ||
+		replay.CurrentTaskID != source.Record.ID ||
 		lock.ParentOperationID != operation.Tombstone.OperationID {
 		clear(targetValue)
 		return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
@@ -189,18 +206,27 @@ func (repository *TaskRepository) prepareHierarchyDeletionRetry(
 	}
 	replay.CurrentTaskID = retry.ID
 	replay.RetainUntil = nil
-	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextTombstone, hierarchydeletion.HierarchyDeletionLargeRecordBytes)
+	tombstoneValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		nextTombstone,
+		hierarchydeletion.HierarchyDeletionLargeRecordBytes,
+	)
 	if err != nil {
 		clear(targetValue)
 		return hierarchyDeletionRootAckChange{}, err
 	}
-	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(nextFence, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	fenceValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		nextFence,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		clear(targetValue)
 		clear(tombstoneValue)
 		return hierarchyDeletionRootAckChange{}, err
 	}
-	replayValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(replay, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	replayValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		replay,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		clear(targetValue)
 		clear(tombstoneValue)

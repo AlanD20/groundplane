@@ -99,7 +99,9 @@ func (repository *Reader) LoadSecretReferenceFence(
 		)
 	}
 	defer etcdstore.ClearValues(values.Values)
-	fence := connectorSecretReferenceFence{conditions: make([]etcdstore.Condition, 0, len(candidateKeys)+len(indexKeys))}
+	fence := connectorSecretReferenceFence{
+		conditions: make([]etcdstore.Condition, 0, len(candidateKeys)+len(indexKeys)),
+	}
 	offset := 0
 	for _, candidate := range candidates {
 		projectIndexKey := secretrecord.SecretKeyIndexKey(core.SecretScopeProject, projectID, candidate.reference)

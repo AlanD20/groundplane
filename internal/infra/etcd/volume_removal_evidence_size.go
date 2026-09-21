@@ -10,7 +10,10 @@ import (
 // enforcing evidence-specific physical key and value bounds. It does not write
 // records or authorize publication. The staging owner selects its row prefix
 // using the returned size and the unchanged 900-KiB ceiling.
-func (s *store) VolumeRemovalEvidenceTransactionSize(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) (int, error) {
+func (s *store) VolumeRemovalEvidenceTransactionSize(
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) (int, error) {
 	if len(conditions)+len(mutations) > removalrecord.EvidenceTransactionOperations {
 		return 0, errs.New(errs.KindInternal, "volume removal evidence operation budget exceeded")
 	}

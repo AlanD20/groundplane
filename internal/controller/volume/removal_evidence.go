@@ -13,7 +13,10 @@ import (
 // volumeRemovalEvidence materializes only the accepted Volume's mount intent.
 // The desired projection remains the source of truth; these rows authorize no
 // execution until the existing staging, sealing and publication path accepts it.
-func volumeRemovalEvidence(runtime removal.Runtime, source etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]) (
+func volumeRemovalEvidence(
+	runtime removal.Runtime,
+	source etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+) (
 	removal.EvidenceManifest, []removal.EvidenceRow, error,
 ) {
 	if source.Revision <= 0 || source.ReadRevision < source.Revision ||

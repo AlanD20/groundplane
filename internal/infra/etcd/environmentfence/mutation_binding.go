@@ -207,7 +207,8 @@ func (mutationContext *MutationContext) PrepareBinding(
 	mutations = append([]etcdstore.Mutation(nil), mutations...)
 	filteredMutations := mutations[:0]
 	for _, mutation := range mutations {
-		if mutation.Type == etcdstore.MutationPut && mutation.Key == hierarchyrecord.EnvironmentKey(mutationContext.environmentID) {
+		if mutation.Type == etcdstore.MutationPut &&
+			mutation.Key == hierarchyrecord.EnvironmentKey(mutationContext.environmentID) {
 			continue
 		}
 		filteredMutations = append(filteredMutations, mutation)

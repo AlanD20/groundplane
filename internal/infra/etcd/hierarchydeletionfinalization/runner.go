@@ -52,7 +52,10 @@ func (repository *Preparer) prepareHierarchyDeletionReservationFinalizer(
 		fixedInputDigest = hierarchydeletion.HierarchyDeletionBytesDigest(frozenValue)
 		clear(frozenValue)
 	}
-	registry, err := recordcodec.Decode[networkreservations.EnvironmentPoolRegistry](result.Values[1].Value, "environment_pool_registry")
+	registry, err := recordcodec.Decode[networkreservations.EnvironmentPoolRegistry](
+		result.Values[1].Value,
+		"environment_pool_registry",
+	)
 	if err != nil || networkreservations.ValidateEnvironmentPoolRegistry(registry) != nil {
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
@@ -68,7 +71,11 @@ func (repository *Preparer) prepareHierarchyDeletionReservationFinalizer(
 			return Effects{}, encodeErr
 		}
 		values = append(values, value)
-		mutation = etcdstore.Mutation{Type: etcdstore.MutationPut, Key: networkreservations.EnvironmentPoolRegistryKey, Value: value}
+		mutation = etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   networkreservations.EnvironmentPoolRegistryKey,
+			Value: value,
+		}
 	}
 	return Effects{
 		fixedInputDigest: fixedInputDigest,
@@ -154,9 +161,19 @@ func (repository *Preparer) prepareHierarchyDeletionRunnerFinalizer(
 		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.System.ModRevision},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID)},
-		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug)},
-		{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), Value: quotaValue},
+		{
+			Type: etcdstore.MutationDelete,
+			Key:  runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID),
+		},
+		{
+			Type: etcdstore.MutationDelete,
+			Key:  runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID),
+			Value: quotaValue,
+		},
 		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot)},
 		{Type: etcdstore.MutationPut, Key: runnerrecord.SystemPoolRegistryKey, Value: systemValue},
 		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerObservationKey(action.TargetID)},

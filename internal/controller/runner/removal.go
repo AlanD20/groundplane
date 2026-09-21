@@ -65,12 +65,18 @@ func (service *RemovalService) RemoveRunner(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner removal context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Runner removal context is required",
+		)
 	}
 	if ids.Validate(ids.KindRunner, runnerID) != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "Runner id is invalid")
 	}
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetRunner, ID: runnerID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetRunner,
+		ID:   runnerID,
+	}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, runnerRemoveRoute, idempotencyKey,
 	)
@@ -104,7 +110,10 @@ func (service *RemovalService) RemoveRunner(
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner removal replay is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Runner removal replay is invalid",
+			)
 		}
 		return cloneResponse(resolution.Response), nil
 	}
@@ -155,7 +164,10 @@ func (service *RemovalService) RemoveRunner(
 	case requestidempotency.ResolutionReplay:
 		return cloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner removal resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Runner removal resolution is invalid",
+		)
 	}
 }
 
@@ -176,7 +188,10 @@ func (service *RemovalService) replay(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner removal replay index is inconsistent")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Runner removal replay index is inconsistent",
+		)
 	}
 	return cloneResponse(resolution.Response), nil
 }

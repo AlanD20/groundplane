@@ -107,8 +107,16 @@ func PrepareComponentTaskSecretReferences(
 		)
 		conditions = append(
 			conditions,
-			etcdstore.Condition{Key: secretrecord.RecordKey(references[index].secretID), ModRevision: recordValue.ModRevision},
-			etcdstore.Condition{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetSecret), references[index].secretID)},
+			etcdstore.Condition{
+				Key:         secretrecord.RecordKey(references[index].secretID),
+				ModRevision: recordValue.ModRevision,
+			},
+			etcdstore.Condition{
+				Key: deletionrecord.TombstoneKey(
+					string(deletionrecord.DeletionTargetSecret),
+					references[index].secretID,
+				),
+			},
 			etcdstore.Condition{Key: candidateKey},
 		)
 		mutations = append(mutations, etcdstore.Mutation{
@@ -139,7 +147,8 @@ func ComponentTaskTerminalSecretMutations(
 				Key:  componentCandidateSecretReferenceKey(nextID, taskID, candidate.Candidate.Desired.ID),
 			})
 		}
-		if terminalStatus != taskjournal.TaskStatusCompleted || componentrecord.EqualSecretReferences(currentIDs, nextIDs) {
+		if terminalStatus != taskjournal.TaskStatusCompleted ||
+			componentrecord.EqualSecretReferences(currentIDs, nextIDs) {
 			continue
 		}
 		for _, currentID := range currentIDs {

@@ -20,7 +20,11 @@ type BackingServiceReader interface {
 }
 
 type BackingServiceMutator interface {
-	CreateBackingService(context.Context, apiTypes.BackingServiceCreate, string) (idempotencyrecord.IdempotencyResponse, error)
+	CreateBackingService(
+		context.Context,
+		apiTypes.BackingServiceCreate,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 	StartBackingService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 	StopBackingService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 	DestroyBackingService(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)

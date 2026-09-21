@@ -47,7 +47,15 @@ func (repository *TaskRepository) bindOrdinaryTaskEnvironmentMutation(
 	if err != nil {
 		return nil, err
 	}
-	return bindTaskLifecycleEnvironment(ctx, fence.MutationContext(), repository.store, task, conditions, mutations, advanceEpoch)
+	return bindTaskLifecycleEnvironment(
+		ctx,
+		fence.MutationContext(),
+		repository.store,
+		task,
+		conditions,
+		mutations,
+		advanceEpoch,
+	)
 }
 
 func prepareTerminalTaskMarker(
@@ -63,7 +71,10 @@ func prepareTerminalTaskMarker(
 	}
 	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(*task.idempotencyMarker)
 	if err != nil {
-		return idempotencyrecord.IdempotencyMarker{}, "", "", errs.New(errs.KindInternal, "task idempotency marker locator is corrupt")
+		return idempotencyrecord.IdempotencyMarker{}, "", "", errs.New(
+			errs.KindInternal,
+			"task idempotency marker locator is corrupt",
+		)
 	}
 	state := idempotencyrecord.IdempotencyMarkerFailed
 	if status == taskjournal.TaskStatusCompleted {

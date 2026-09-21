@@ -63,7 +63,8 @@ func (repository *Repository) loadBackupPolicyReplacementBase(
 		return ReplacementCandidate{}, false, errs.New(errs.KindProjectNotFound, "project was not found")
 	}
 	project, err := hierarchyrecord.DecodeProject(result.Values[1].Value)
-	if err != nil || project.ID != projectID || project.TenantID != tenantID || project.Kind != hierarchyrecord.ProjectKindTenant {
+	if err != nil || project.ID != projectID || project.TenantID != tenantID ||
+		project.Kind != hierarchyrecord.ProjectKindTenant {
 		return ReplacementCandidate{}, false, recordcodec.CorruptRecord()
 	}
 	for _, index := range []int{7, 8, 9} {

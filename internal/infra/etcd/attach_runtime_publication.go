@@ -13,9 +13,15 @@ import (
 // publishAttachRuntimeTask keeps the acknowledged source fences in the same
 // publication as the Task, immutable preparation, Attach and Environment epoch.
 func (repository *AttachRepository) publishAttachRuntimeTask(
-	ctx context.Context, task TaskRecord, input attachrender.AttachTaskRenderInput, initiation TaskInitiation,
-	marker idempotencyrecord.IdempotencyMarker, mutationContext *environmentfence.MutationContext,
-	conditions []etcdstore.Condition, mutations []etcdstore.Mutation, classifyConflict func(int64, []*etcdstore.KeyValue) error,
+	ctx context.Context,
+	task TaskRecord,
+	input attachrender.AttachTaskRenderInput,
+	initiation TaskInitiation,
+	marker idempotencyrecord.IdempotencyMarker,
+	mutationContext *environmentfence.MutationContext,
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+	classifyConflict func(int64, []*etcdstore.KeyValue) error,
 ) (IdempotencyTransactionResult, error) {
 	conditions = append(conditions, attachRuntimeSourceConditions(input)...)
 	binding, err := mutationContext.Bind(ctx, repository.store, conditions, mutations, true)

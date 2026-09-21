@@ -18,8 +18,14 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 	revision int64,
 ) (hierarchyDeletionRootAckChange, error) {
 	count := *operation.Tombstone.PlanCount
-	completionDigest := hierarchydeletion.HierarchyDeletionFoldDigest("gp-deletion-completion-set-v1", operation.Tombstone.OperationID)
-	receiptDigest := hierarchydeletion.HierarchyDeletionFoldDigest("gp-deletion-receipt-set-v1", operation.Tombstone.OperationID)
+	completionDigest := hierarchydeletion.HierarchyDeletionFoldDigest(
+		"gp-deletion-completion-set-v1",
+		operation.Tombstone.OperationID,
+	)
+	receiptDigest := hierarchydeletion.HierarchyDeletionFoldDigest(
+		"gp-deletion-receipt-set-v1",
+		operation.Tombstone.OperationID,
+	)
 	childCount := int64(0)
 	for begin := int64(0); begin < count-1; begin += hierarchydeletion.PlanBatchSize {
 		end := min(begin+hierarchydeletion.PlanBatchSize, count-1)
@@ -40,9 +46,14 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 				return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			var completion hierarchydeletion.HierarchyDeletionActionCompletion
-			if hierarchydeletion.DecodeHierarchyDeletionRecord(value.Value, hierarchydeletion.HierarchyDeletionCompletionRecordBytes, &completion) != nil ||
+			if hierarchydeletion.DecodeHierarchyDeletionRecord(
+				value.Value,
+				hierarchydeletion.HierarchyDeletionCompletionRecordBytes,
+				&completion,
+			) != nil ||
 				completion.ParentOperationID != operation.Tombstone.OperationID ||
-				completion.DeletionEpoch != operation.Tombstone.DeletionEpoch || completion.Ordinal != ordinal {
+				completion.DeletionEpoch != operation.Tombstone.DeletionEpoch ||
+				completion.Ordinal != ordinal {
 				return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			valueDigest := hierarchydeletion.HierarchyDeletionBytesDigest(value.Value)
@@ -74,7 +85,10 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 		DeletionEpoch: operation.Tombstone.DeletionEpoch, ChildCount: childCount,
 		OrderedReceiptSetDigest: receiptDigest, FinalCheckpointDigest: finalCheckpoint, CompletedAt: completedAt,
 	}
-	receiptSummaryValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(receiptSummary, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	receiptSummaryValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		receiptSummary,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		return hierarchyDeletionRootAckChange{}, err
 	}
@@ -85,7 +99,10 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 		AgentReceiptSummaryDigest:  hierarchydeletion.HierarchyDeletionBytesDigest(receiptSummaryValue),
 		FinalCheckpointDigest:      finalCheckpoint, CompletedAt: completedAt, RetainUntil: completedAt.Add(taskjournal.TaskRetention),
 	}
-	completionSummaryValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(completionSummary, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	completionSummaryValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		completionSummary,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		clear(receiptSummaryValue)
 		return hierarchyDeletionRootAckChange{}, err
@@ -100,13 +117,19 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 		TaskID: operation.Tombstone.CurrentTaskID, NextOrdinal: count, Count: count,
 		OrderedSetDigest: completionDigest, UpdatedAt: completedAt,
 	}
-	receiptCursorValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(receiptCursor, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	receiptCursorValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		receiptCursor,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		clear(receiptSummaryValue)
 		clear(completionSummaryValue)
 		return hierarchyDeletionRootAckChange{}, err
 	}
-	completionCursorValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(completionCursor, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
+	completionCursorValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		completionCursor,
+		hierarchydeletion.HierarchyDeletionSmallRecordBytes,
+	)
 	if err != nil {
 		clear(receiptSummaryValue)
 		clear(completionSummaryValue)

@@ -302,7 +302,10 @@ func volumeMountImpactItems(
 	return items
 }
 
-func volumeConsumerServiceNames(projection projectionrecord.EnvironmentComposeProjection, volumeID string) map[string]string {
+func volumeConsumerServiceNames(
+	projection projectionrecord.EnvironmentComposeProjection,
+	volumeID string,
+) map[string]string {
 	addressed := make(map[string]struct{})
 	for _, mount := range projection.VolumeMounts {
 		if mount.VolumeID == volumeID {

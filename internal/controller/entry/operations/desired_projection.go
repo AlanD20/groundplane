@@ -137,7 +137,11 @@ func (service *entryDesiredMutationService) validateExposure(
 	}
 	cursor := ""
 	for {
-		page, err := service.repository.ListServices(ctx, environmentID, etcdstore.PageRequest{Limit: 200, Cursor: cursor})
+		page, err := service.repository.ListServices(
+			ctx,
+			environmentID,
+			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
+		)
 		if err != nil {
 			return err
 		}

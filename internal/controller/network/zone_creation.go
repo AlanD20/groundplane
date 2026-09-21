@@ -197,7 +197,10 @@ func (service *zoneCreationService) CreateZone(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Zone creation retry bound was not enforced",
+	)
 }
 
 func (service *zoneCreationService) createZoneOnce(
@@ -265,7 +268,10 @@ func (service *zoneCreationService) createZoneOnce(
 	}
 	environmentPool, err := ipam.ParseIPv4Prefix(environment.Record.NetworkPool)
 	if err != nil || environmentPool.String() != environment.Record.NetworkPool {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Environment network pool is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Environment network pool is invalid",
+		)
 	}
 	requestedSubnet, _ := ipam.ParseIPv4Prefix(input.Subnet)
 	if requestedSubnet.Bits() < environmentPool.Bits() || !environmentPool.Contains(requestedSubnet.Addr()) {
@@ -348,7 +354,12 @@ func (service *zoneCreationService) createZoneOnce(
 		Status: http.StatusCreated, ContentKind: "application/json",
 		Body: append([]byte(nil), responseBody...),
 	}
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, claim.CreatedAt)
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
+		locator,
+		evidence.durable,
+		response,
+		claim.CreatedAt,
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -382,7 +393,10 @@ func (service *zoneCreationService) createZoneOnce(
 	case requestidempotency.ResolutionReplay:
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Zone creation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Zone creation resolution is invalid",
+		)
 	}
 }
 

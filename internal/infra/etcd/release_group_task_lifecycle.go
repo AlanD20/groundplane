@@ -35,7 +35,9 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 		return releaseGroupTaskChange{}, errs.New(errs.KindInternal, "release group retry changed its durable target")
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		groupstore.ReleaseGroupRecordKey(source.Target), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), source.Target),
+		groupstore.ReleaseGroupRecordKey(
+			source.Target,
+		), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), source.Target),
 	}, Revision: revision})
 	if err != nil {
 		return releaseGroupTaskChange{}, err
@@ -51,8 +53,13 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 		return releaseGroupTaskChange{}, recordcodec.CorruptRecord()
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		groupstore.ReleaseGroupOwnerKey(group.EnvironmentID, group.ID), groupstore.ReleaseGroupNameKey(group.EnvironmentID, group.Name),
-		hierarchyrecord.EnvironmentKey(group.EnvironmentID), hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID),
+		groupstore.ReleaseGroupOwnerKey(
+			group.EnvironmentID,
+			group.ID,
+		), groupstore.ReleaseGroupNameKey(group.EnvironmentID, group.Name),
+		hierarchyrecord.EnvironmentKey(
+			group.EnvironmentID,
+		), hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), group.EnvironmentID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), source.Owner.ProjectID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), source.Owner.TenantID),
@@ -82,17 +89,30 @@ func (repository *TaskRepository) prepareReleaseGroupTaskRetry(
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{Key: groupstore.ReleaseGroupRecordKey(group.ID), ModRevision: stored.Values[0].ModRevision},
-			{Key: groupstore.ReleaseGroupOwnerKey(group.EnvironmentID, group.ID), ModRevision: indexes.Values[0].ModRevision},
-			{Key: groupstore.ReleaseGroupNameKey(group.EnvironmentID, group.Name), ModRevision: indexes.Values[1].ModRevision},
+			{
+				Key:         groupstore.ReleaseGroupOwnerKey(group.EnvironmentID, group.ID),
+				ModRevision: indexes.Values[0].ModRevision,
+			},
+			{
+				Key:         groupstore.ReleaseGroupNameKey(group.EnvironmentID, group.Name),
+				ModRevision: indexes.Values[1].ModRevision,
+			},
 			{Key: hierarchyrecord.EnvironmentKey(group.EnvironmentID), ModRevision: indexes.Values[2].ModRevision},
-			{Key: hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID), ModRevision: indexes.Values[3].ModRevision},
+			{
+				Key:         hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID),
+				ModRevision: indexes.Values[3].ModRevision,
+			},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), group.EnvironmentID)},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), source.Owner.ProjectID)},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), source.Owner.TenantID)},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), group.ID)},
 		},
 		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), group.ID), Value: value},
+			{
+				Type:  etcdstore.MutationPut,
+				Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), group.ID),
+				Value: value,
+			},
 		},
 		values: [][]byte{value},
 	}, nil
@@ -109,7 +129,9 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 		return releaseGroupTaskChange{}, err
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		groupstore.ReleaseGroupRecordKey(task.Target), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), task.Target),
+		groupstore.ReleaseGroupRecordKey(
+			task.Target,
+		), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), task.Target),
 	}, Revision: revision})
 	if err != nil {
 		return releaseGroupTaskChange{}, err
@@ -123,15 +145,21 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(stored.Values[1].Value)
 	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetReleaseGroup || tombstone.TargetID != task.Target ||
-		tombstone.TargetRevision != stored.Values[0].ModRevision || tombstone.TaskID != task.ID || tombstone.Phase != deletionrecord.DeletionPhaseFinalizing {
+		tombstone.TargetRevision != stored.Values[0].ModRevision || tombstone.TaskID != task.ID ||
+		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing {
 		return releaseGroupTaskChange{}, errs.New(
 			errs.KindStateConflict,
 			"release group deletion tombstone does not match its task",
 		)
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		groupstore.ReleaseGroupOwnerKey(group.EnvironmentID, group.ID), groupstore.ReleaseGroupNameKey(group.EnvironmentID, group.Name),
-		hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID), hierarchyrecord.EnvironmentKey(group.EnvironmentID),
+		groupstore.ReleaseGroupOwnerKey(
+			group.EnvironmentID,
+			group.ID,
+		), groupstore.ReleaseGroupNameKey(group.EnvironmentID, group.Name),
+		hierarchyrecord.EnvironmentMutationEpochKey(
+			group.EnvironmentID,
+		), hierarchyrecord.EnvironmentKey(group.EnvironmentID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), group.EnvironmentID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), task.Owner.ProjectID),
 		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), task.Owner.TenantID),
@@ -166,15 +194,24 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 				Key:         deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), group.ID),
 				ModRevision: stored.Values[1].ModRevision,
 			},
-			{Key: groupstore.ReleaseGroupOwnerKey(group.EnvironmentID, group.ID), ModRevision: indexes.Values[0].ModRevision},
-			{Key: groupstore.ReleaseGroupNameKey(group.EnvironmentID, group.Name), ModRevision: indexes.Values[1].ModRevision},
+			{
+				Key:         groupstore.ReleaseGroupOwnerKey(group.EnvironmentID, group.ID),
+				ModRevision: indexes.Values[0].ModRevision,
+			},
+			{
+				Key:         groupstore.ReleaseGroupNameKey(group.EnvironmentID, group.Name),
+				ModRevision: indexes.Values[1].ModRevision,
+			},
 			{Key: hierarchyrecord.EnvironmentKey(group.EnvironmentID), ModRevision: indexes.Values[3].ModRevision},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEnvironment), group.EnvironmentID)},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetProject), task.Owner.ProjectID)},
 			{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), task.Owner.TenantID)},
 		},
 		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationDelete, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), group.ID)},
+			{
+				Type: etcdstore.MutationDelete,
+				Key:  deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), group.ID),
+			},
 		},
 	}
 	if terminal == taskjournal.TaskStatusCompleted {
@@ -196,11 +233,22 @@ func (repository *TaskRepository) prepareReleaseGroupTaskAcknowledgement(
 			},
 			collectionCondition,
 		)
-		change.mutations = append(change.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: groupstore.ReleaseGroupOwnerKey(group.EnvironmentID, group.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: groupstore.ReleaseGroupNameKey(group.EnvironmentID, group.Name)},
+		change.mutations = append(
+			change.mutations,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  groupstore.ReleaseGroupOwnerKey(group.EnvironmentID, group.ID),
+			},
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  groupstore.ReleaseGroupNameKey(group.EnvironmentID, group.Name),
+			},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: groupstore.ReleaseGroupRecordKey(group.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID), Value: epochValue},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   hierarchyrecord.EnvironmentMutationEpochKey(group.EnvironmentID),
+				Value: epochValue,
+			},
 			collectionMutation,
 		)
 		change.values = append(change.values, epochValue, collectionMutation.Value)
@@ -221,7 +269,9 @@ func (repository *TaskRepository) validateReleaseGroupTaskAcknowledgementReplay(
 		return err
 	}
 	stored, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		groupstore.ReleaseGroupRecordKey(task.Target), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), task.Target),
+		groupstore.ReleaseGroupRecordKey(
+			task.Target,
+		), deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetReleaseGroup), task.Target),
 	}, Revision: revision})
 	if err != nil {
 		return err
@@ -239,10 +289,12 @@ func (repository *TaskRepository) validateReleaseGroupTaskAcknowledgementReplay(
 }
 
 func taskOwnsReleaseGroupRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceReleaseGroup {
+	if task.Executor != taskjournal.TaskExecutorController ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceReleaseGroup {
 		return false, nil
 	}
-	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 || ids.Validate(ids.KindReleaseGroup, task.Target) != nil {
+	if task.Type != taskjournal.TaskRemove || len(task.Params) != 1 ||
+		ids.Validate(ids.KindReleaseGroup, task.Target) != nil {
 		return false, errs.New(errs.KindInternal, "release group deletion task has invalid durable input")
 	}
 	return true, nil

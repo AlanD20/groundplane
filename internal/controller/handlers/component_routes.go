@@ -23,7 +23,12 @@ type ComponentReader interface {
 }
 
 type ComponentMutator interface {
-	EnableComponent(context.Context, string, apiTypes.ComponentEnableRequest, string) (idempotencyrecord.IdempotencyResponse, error)
+	EnableComponent(
+		context.Context,
+		string,
+		apiTypes.ComponentEnableRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 	DisableComponent(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 	UpdateComponent(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
 	SetComponentConfig(

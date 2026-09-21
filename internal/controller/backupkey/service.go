@@ -271,7 +271,10 @@ func (service *Service) RotateBackupKey(
 	if resolution.Kind == requestidempotency.ResolutionReplay {
 		return cloneIdempotencyResponse(resolution.Response), nil
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "backup key rotation resolution is invalid")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"backup key rotation resolution is invalid",
+	)
 }
 
 func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error {

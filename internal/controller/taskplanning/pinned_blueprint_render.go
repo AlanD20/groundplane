@@ -44,7 +44,8 @@ func (resolver *TaskPlanResolver) renderPinnedEnvironmentBlueprintArtifact(
 	if err != nil {
 		return pinnedEnvironmentBlueprintArtifact{}, err
 	}
-	if project.Record.Kind != hierarchyrecord.ProjectKindTenant && project.Record.Kind != hierarchyrecord.ProjectKindBacking {
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant &&
+		project.Record.Kind != hierarchyrecord.ProjectKindBacking {
 		return pinnedEnvironmentBlueprintArtifact{}, errs.New(
 			errs.KindInternal,
 			"Blueprint Task Project kind is invalid",

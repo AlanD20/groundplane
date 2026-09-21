@@ -36,7 +36,9 @@ func (repository *HierarchyRepository) GetDeletionTombstone(
 		)
 	}
 	if result.Entry == nil {
-		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{ReadRevision: result.ReadRevision}, false, nil
+		return etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord]{
+			ReadRevision: result.ReadRevision,
+		}, false, nil
 	}
 	record, err := deletionrecord.DecodeDeletionTombstone(result.Entry.Value)
 	if err != nil || record.TargetKind != targetKind || record.TargetID != targetID {
@@ -87,7 +89,8 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment || tombstone.TargetID != environment.Record.ID ||
+	if tombstone.TargetKind != deletionrecord.DeletionTargetEnvironment ||
+		tombstone.TargetID != environment.Record.ID ||
 		tombstone.TargetRevision != environment.Revision ||
 		tombstone.TaskID != task.ID ||
 		tombstone.Phase != deletionrecord.DeletionPhaseHostEffects ||
@@ -104,7 +107,8 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != environment.Record.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
+		marker.Locator.ScopeID != environment.Record.ID ||
+		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -362,7 +366,10 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(intentValue)
-	conditions = append(conditions, etcdstore.Condition{Key: deletionrecord.EnvironmentDeletionIntentKey(task.OperationID)})
+	conditions = append(
+		conditions,
+		etcdstore.Condition{Key: deletionrecord.EnvironmentDeletionIntentKey(task.OperationID)},
+	)
 	mutations = append(mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationPut, Key: deletionrecord.EnvironmentDeletionIntentKey(task.OperationID), Value: intentValue,
 	})

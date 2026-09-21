@@ -63,7 +63,10 @@ func PrepareServiceScriptAbsence(
 		(revision > 0 && count.ReadRevision != revision) {
 		return nil, errs.New(errs.KindInternal, "Service Script count evidence is incomplete")
 	}
-	members, err := store.Range(ctx, etcdstore.RangeRequest{Prefix: conditions[1].Key, Limit: 1, Revision: count.ReadRevision})
+	members, err := store.Range(
+		ctx,
+		etcdstore.RangeRequest{Prefix: conditions[1].Key, Limit: 1, Revision: count.ReadRevision},
+	)
 	if err != nil {
 		return nil, err
 	}

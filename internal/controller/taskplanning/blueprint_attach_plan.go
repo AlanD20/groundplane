@@ -33,7 +33,8 @@ func (resolver *TaskPlanResolver) blueprintAttachPlanCandidates(
 		return nil, 0, err
 	}
 	intent := versionedIntent.Record
-	if intent.TaskID != task.ID || intent.EnvironmentID != task.Target || intent.Status != taskjournal.TaskStatusPending {
+	if intent.TaskID != task.ID || intent.EnvironmentID != task.Target ||
+		intent.Status != taskjournal.TaskStatusPending {
 		return nil, 0, errs.New(errs.KindStateConflict, "Blueprint Attach intent does not own the active Task")
 	}
 	if resolver.services == nil || resolver.attachIdentities == nil {

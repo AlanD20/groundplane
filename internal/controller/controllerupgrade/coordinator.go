@@ -195,7 +195,10 @@ func (coordinator *Coordinator) current(
 	return journal, true, nil
 }
 
-func (coordinator *Coordinator) settle(operation *nativeOperation, status taskjournal.TaskStatus) taskjournal.TaskStatus {
+func (coordinator *Coordinator) settle(
+	operation *nativeOperation,
+	status taskjournal.TaskStatus,
+) taskjournal.TaskStatus {
 	coordinator.mu.Lock()
 	defer coordinator.mu.Unlock()
 	if operation.aborted && status != taskjournal.TaskStatusCompleted {
@@ -208,7 +211,10 @@ func (coordinator *Coordinator) settle(operation *nativeOperation, status taskjo
 	return status
 }
 
-func (coordinator *Coordinator) handoff(ctx context.Context, operation *nativeOperation) (taskjournal.TaskStatus, error) {
+func (coordinator *Coordinator) handoff(
+	ctx context.Context,
+	operation *nativeOperation,
+) (taskjournal.TaskStatus, error) {
 	// The transient predecessor service must stop this process. Never ACK from
 	// the outgoing process, and never wait unboundedly if the manager is down.
 	duration := max(operation.expected.Deadline.Sub(coordinator.now()), upgrade.RecoveryReserveSeconds*time.Second)

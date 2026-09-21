@@ -135,7 +135,9 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(zoneRegistryValue)
-	serviceValue, err := servicerecord.EncodeServiceRuntimeRecord(servicerecord.NewServiceRuntimeRecord(creation.Service))
+	serviceValue, err := servicerecord.EncodeServiceRuntimeRecord(
+		servicerecord.NewServiceRuntimeRecord(creation.Service),
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -211,20 +213,47 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 			Key:   taskjournal.TaskOperationIndexKey(creation.Task.OperationID, creation.Task.ID),
 			Value: taskReference,
 		},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(creation.Task.OperationID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(creation.Task.Executor, creation.Task.ID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
-		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
-		{Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(creation.Environment.ID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(creation.Project.ID), Value: projectValue},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectSlugKey(creation.Project), Value: []byte(creation.Project.ID)},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectOwnerKey(creation.Project), Value: []byte(creation.Project.ID)},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetProject), creation.Project.ID),
+			Key:   taskjournal.TaskActiveOperationKey(creation.Task.OperationID),
+			Value: taskReference,
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskQueueKey(creation.Task.Executor, creation.Task.ID),
+			Value: taskReference,
+		},
+		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
+		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   blueprints.EnvironmentBlueprintHeadKey(creation.Environment.ID),
+			Value: taskReference,
+		},
+		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(creation.Project.ID), Value: projectValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchyrecord.ProjectSlugKey(creation.Project),
+			Value: []byte(creation.Project.ID),
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchyrecord.ProjectOwnerKey(creation.Project),
+			Value: []byte(creation.Project.ID),
+		},
+		{
+			Type: etcdstore.MutationPut,
+			Key: hierarchydeletion.HierarchyCoordinationKey(
+				string(hierarchydeletion.HierarchyDeletionTargetProject),
+				creation.Project.ID,
+			),
 			Value: projectCoordinationValue,
 		},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(creation.Environment.ID), Value: environmentValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchyrecord.EnvironmentKey(creation.Environment.ID),
+			Value: environmentValue,
+		},
 		{
 			Type:  etcdstore.MutationPut,
 			Key:   hierarchyrecord.EnvironmentNameKey(creation.Project.ID, creation.Environment.Name),
@@ -235,21 +264,44 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 			Key:   hierarchyrecord.EnvironmentOwnerKey(creation.Project.ID, creation.Environment.ID),
 			Value: []byte(creation.Environment.ID),
 		},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(creation.Environment.ID), Value: epochValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), creation.Environment.ID),
+			Key:   hierarchyrecord.EnvironmentMutationEpochKey(creation.Environment.ID),
+			Value: epochValue,
+		},
+		{
+			Type: etcdstore.MutationPut,
+			Key: hierarchydeletion.HierarchyCoordinationKey(
+				string(hierarchydeletion.HierarchyDeletionTargetEnvironment),
+				creation.Environment.ID,
+			),
 			Value: environmentCoordinationValue,
 		},
-		{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(creation.Environment.ID), Value: scriptSetValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   scriptrecord.ScriptSetActiveKey(creation.Environment.ID),
+			Value: scriptSetValue,
+		},
 		{Type: etcdstore.MutationPut, Key: networkreservations.EnvironmentPoolRegistryKey, Value: poolRegistryValue},
-		{Type: etcdstore.MutationPut, Key: networkreservations.ZonePoolRegistryKey(creation.Environment.ID), Value: zoneRegistryValue},
-		{Type: etcdstore.MutationPut, Key: servicerecord.ServiceRuntimeKey(creation.Service.Desired.ID), Value: serviceValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   networkreservations.ZonePoolRegistryKey(creation.Environment.ID),
+			Value: zoneRegistryValue,
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   servicerecord.ServiceRuntimeKey(creation.Service.Desired.ID),
+			Value: serviceValue,
+		},
 	}
 	for index, component := range creation.Components {
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(component.Desired.ID), Value: componentValues[index]},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   componentrecord.RecordKey(component.Desired.ID),
+				Value: componentValues[index],
+			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
 				Key:   componentrecord.EnvironmentOwnerKey(creation.Environment.ID, component.Desired.ID),
@@ -268,21 +320,46 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	for index, entry := range creation.Entries {
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: entryrecord.RecordKey(entry.Entry.ID), Value: entryValues[index]},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   entryrecord.RecordKey(entry.Entry.ID),
+				Value: entryValues[index],
+			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
 				Key:   entryrecord.EntryOwnerKey(creation.Environment.ID, entry.Entry.ID),
 				Value: []byte(entry.Entry.ID),
 			},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: entryGenerationKeys[index], Value: entryGenerationValues[index]},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   entryGenerationKeys[index],
+				Value: entryGenerationValues[index],
+			},
 		)
 	}
 	for index, secret := range creation.Secrets {
-		mutations = append(mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretrecord.RecordKey(secret.Secret.ID), Value: secretValues[index]},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretrecord.SecretOwnerKey(secret.Secret), Value: []byte(secret.Secret.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretrecord.SecretScopedKey(secret.Secret), Value: []byte(secret.Secret.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: secretrecord.ValueKey(secret.Secret.ID), Value: secretEncryptedValues[index]},
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   secretrecord.RecordKey(secret.Secret.ID),
+				Value: secretValues[index],
+			},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   secretrecord.SecretOwnerKey(secret.Secret),
+				Value: []byte(secret.Secret.ID),
+			},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   secretrecord.SecretScopedKey(secret.Secret),
+				Value: []byte(secret.Secret.ID),
+			},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   secretrecord.ValueKey(secret.Secret.ID),
+				Value: secretEncryptedValues[index],
+			},
 		)
 	}
 	classifier := classifyBackingServiceCreation(creation, publication, len(conditions))

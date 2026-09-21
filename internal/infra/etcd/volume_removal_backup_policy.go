@@ -96,7 +96,8 @@ func (repository *BackupPolicyRepository) PrepareVolumeRemovalBackupPolicy(
 		return VolumeRemovalBackupPolicyPreparation{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	policy, err := backuppolicy.DecodeBackupPolicyRecord(read.Values[0].Value)
-	if err != nil || policy.EnvironmentID != environmentID || len(policy.SourceIDs) > backuppolicy.MaximumBackupPolicySources {
+	if err != nil || policy.EnvironmentID != environmentID ||
+		len(policy.SourceIDs) > backuppolicy.MaximumBackupPolicySources {
 		return VolumeRemovalBackupPolicyPreparation{}, backupruntime.CorruptBackupRuntimeRecord()
 	}
 	state.policy = &policy
@@ -124,7 +125,9 @@ func prepareVolumeRemovalBackupPolicyPublication(
 			"Volume policy preparation is required",
 		)
 	}
-	publication := volumeRemovalBackupPolicyPublication{conditions: append([]etcdstore.Condition(nil), state.conditions...)}
+	publication := volumeRemovalBackupPolicyPublication{
+		conditions: append([]etcdstore.Condition(nil), state.conditions...),
+	}
 	if state.policy == nil {
 		return publication, nil
 	}

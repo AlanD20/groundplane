@@ -308,14 +308,18 @@ func (resolver *TaskPlanResolver) renderServiceLifecycleArtifact(
 		Strategy: source.Strategy,
 	}
 	artifact, err := resolver.renderPinnedEnvironmentArtifactForPhaseWithReleases(
-		ctx, sourceTask,
+		ctx,
+		sourceTask,
 		pinnedEnvironmentIdentity{
 			TenantID: source.TenantID, TenantSlug: source.TenantSlug,
 			ProjectID: source.ProjectID, ProjectSlug: source.ProjectSlug,
 			EnvironmentID: source.EnvironmentID, EnvironmentName: source.EnvironmentName,
 			AuthorizedVolumeDir: source.AuthorizedVolumeDir,
 		},
-		projection.RevisionID, source.ArtifactID, projection, phase,
+		projection.RevisionID,
+		source.ArtifactID,
+		projection,
+		phase,
 		func(project *composetypes.Project, _ projectionrecord.EnvironmentComposeProjection) ([]composeidentity.Resource, error) {
 			if err := projectReleaseWorkloadServices(project, projection); err != nil {
 				return nil, err

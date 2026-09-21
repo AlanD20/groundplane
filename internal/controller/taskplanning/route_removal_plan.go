@@ -28,7 +28,10 @@ import (
 )
 
 type routeRemovalPlanStateReader interface {
-	GetRouteRemovalIntent(context.Context, string) (etcdstore.Versioned[environmentchanges.RouteRemovalIntent], bool, error)
+	GetRouteRemovalIntent(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[environmentchanges.RouteRemovalIntent], bool, error)
 }
 
 type RouteRemovalTaskProcedureIDs struct {
@@ -92,7 +95,7 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 		taskjournal.TaskRouteEnvironmentParam:           intent.EnvironmentID,
 		taskjournal.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
 		blueprints.EnvironmentDesiredRevisionParam:      intent.CandidateProjection.RevisionID,
-		EnvironmentBlueprintArtifactParam:               procedure.ArtifactID,
+		taskcontract.EnvironmentBlueprintArtifactParam:  procedure.ArtifactID,
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	task.Steps = []taskjournal.TaskStepRecord{
@@ -254,7 +257,11 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 	if err != nil {
 		return nil, err
 	}
-	materializationStep, err := taskmaterialization.BuildTaskMaterializationStep(reference, artifactID, uint32(task.TimeoutSeconds))
+	materializationStep, err := taskmaterialization.BuildTaskMaterializationStep(
+		reference,
+		artifactID,
+		uint32(task.TimeoutSeconds),
+	)
 	if err != nil {
 		return nil, err
 	}

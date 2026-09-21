@@ -68,7 +68,10 @@ func newControllerAuthorityComposition(
 	environmentBlueprintRecords, err := etcd.NewEnvironmentBlueprintRepository(store)
 	if err != nil {
 		_ = store.Close()
-		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize Environment Blueprint repository: %w", err)
+		return controllerAuthorityComposition{}, fmt.Errorf(
+			"controller: initialize Environment Blueprint repository: %w",
+			err,
+		)
 	}
 	releaseGroups, err := etcdreleasegroup.New(store)
 	if err != nil {
@@ -82,7 +85,10 @@ func newControllerAuthorityComposition(
 	}
 	if err := hierarchyRecords.ValidateEnvironmentVolumeDirs(ctx, cfg.Storage.VolumeRoot); err != nil {
 		_ = store.Close()
-		return controllerAuthorityComposition{}, fmt.Errorf("controller: validate persisted environment volume directories: %w", err)
+		return controllerAuthorityComposition{}, fmt.Errorf(
+			"controller: validate persisted environment volume directories: %w",
+			err,
+		)
 	}
 	hierarchyRepository, err := hierarchycontroller.NewEtcdRepository(hierarchyRecords)
 	if err != nil {
@@ -102,7 +108,10 @@ func newControllerAuthorityComposition(
 	authenticator, err := channeltransport.NewAuthenticator(agents)
 	if err != nil {
 		_ = store.Close()
-		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize Agent channel authenticator: %w", err)
+		return controllerAuthorityComposition{}, fmt.Errorf(
+			"controller: initialize Agent channel authenticator: %w",
+			err,
+		)
 	}
 	controllerKey := &ageinfra.ControllerKey{Path: cfg.AgeKeyPath}
 	if err := controllerKey.Load(ctx); err != nil {
@@ -112,12 +121,18 @@ func newControllerAuthorityComposition(
 	intentProtector, err := secretvalue.NewControllerKeyProtector(controllerKey)
 	if err != nil {
 		_ = store.Close()
-		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize idempotent intent protector: %w", err)
+		return controllerAuthorityComposition{}, fmt.Errorf(
+			"controller: initialize idempotent intent protector: %w",
+			err,
+		)
 	}
 	intentCoordinator, err := requestidempotency.NewCoordinator(intentProtector)
 	if err != nil {
 		_ = store.Close()
-		return controllerAuthorityComposition{}, fmt.Errorf("controller: initialize idempotent intent coordinator: %w", err)
+		return controllerAuthorityComposition{}, fmt.Errorf(
+			"controller: initialize idempotent intent coordinator: %w",
+			err,
+		)
 	}
 	return controllerAuthorityComposition{
 		runnerRecords:               runnerRecords,

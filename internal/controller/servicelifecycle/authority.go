@@ -16,7 +16,11 @@ import (
 
 type ReleaseReader interface {
 	ResolveServing(context.Context, string, string, int64) (releasequeries.ServingRelease, error)
-	GetReleaseRenderInputAt(context.Context, string, int64) (etcdstore.Versioned[releaserender.ReleaseRenderInput], error)
+	GetReleaseRenderInputAt(
+		context.Context,
+		string,
+		int64,
+	) (etcdstore.Versioned[releaserender.ReleaseRenderInput], error)
 }
 
 func CaptureRelease(

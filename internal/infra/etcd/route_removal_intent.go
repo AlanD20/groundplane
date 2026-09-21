@@ -33,7 +33,10 @@ func (repository *HierarchyRepository) GetRouteRemovalIntent(
 		return etcdstore.Versioned[environmentchanges.RouteRemovalIntent]{}, false, err
 	}
 	if result == nil {
-		return etcdstore.Versioned[environmentchanges.RouteRemovalIntent]{}, false, errs.New(errs.KindInternal, "Route removal intent read is empty")
+		return etcdstore.Versioned[environmentchanges.RouteRemovalIntent]{}, false, errs.New(
+			errs.KindInternal,
+			"Route removal intent read is empty",
+		)
 	}
 	if result.Entry == nil {
 		return etcdstore.Versioned[environmentchanges.RouteRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil

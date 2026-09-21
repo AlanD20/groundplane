@@ -52,7 +52,10 @@ func (service *MutationService) detachAttach(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Attach detach retry bound was not enforced",
+	)
 }
 
 func (service *MutationService) detachAttachOnce(
@@ -61,7 +64,10 @@ func (service *MutationService) detachAttachOnce(
 	idempotencyKey string,
 	initiation *etcd.TaskInitiation,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetAttach, ID: attachID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetAttach,
+		ID:   attachID,
+	}
 	replayLocator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, attachDeletionRoute, idempotencyKey,
 	)
@@ -79,7 +85,10 @@ func (service *MutationService) detachAttachOnce(
 			return idempotencyrecord.IdempotencyResponse{}, resolveErr
 		}
 		if !exists || resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach detach replay index is inconsistent")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Attach detach replay index is inconsistent",
+			)
 		}
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}

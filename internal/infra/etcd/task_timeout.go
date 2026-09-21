@@ -101,7 +101,10 @@ func (repository *TaskRepository) ExpireTimedOutTasks(ctx context.Context, now t
 	if err := recordcodec.ValidateTimestamp("task timeout collector", now); err != nil {
 		return 0, err
 	}
-	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskjournal.TaskTimeoutIndexPrefix, Limit: 24})
+	page, err := repository.store.Range(
+		ctx,
+		etcdstore.RangeRequest{Prefix: taskjournal.TaskTimeoutIndexPrefix, Limit: 24},
+	)
 	if err != nil {
 		return 0, err
 	}

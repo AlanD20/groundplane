@@ -24,7 +24,11 @@ type ReleaseGroupReader interface {
 }
 
 type ReleaseGroupMutator interface {
-	AddReleaseGroup(context.Context, apiTypes.ReleaseGroupAddRequest, string) (idempotencyrecord.IdempotencyResponse, error)
+	AddReleaseGroup(
+		context.Context,
+		apiTypes.ReleaseGroupAddRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 	EditReleaseGroup(
 		context.Context,
 		string,
@@ -35,10 +39,30 @@ type ReleaseGroupMutator interface {
 }
 
 type ReleaseOperator interface {
-	DeployService(context.Context, string, domain.ServiceDeployInput, string) (idempotencyrecord.IdempotencyResponse, error)
-	RollbackService(context.Context, string, domain.ServiceRollbackInput, string) (idempotencyrecord.IdempotencyResponse, error)
-	DeployReleaseGroup(context.Context, string, domain.GroupDeployInput, string) (idempotencyrecord.IdempotencyResponse, error)
-	RollbackReleaseGroup(context.Context, string, domain.GroupRollbackInput, string) (idempotencyrecord.IdempotencyResponse, error)
+	DeployService(
+		context.Context,
+		string,
+		domain.ServiceDeployInput,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	RollbackService(
+		context.Context,
+		string,
+		domain.ServiceRollbackInput,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	DeployReleaseGroup(
+		context.Context,
+		string,
+		domain.GroupDeployInput,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	RollbackReleaseGroup(
+		context.Context,
+		string,
+		domain.GroupRollbackInput,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 	PreviewReleaseGroupRollback(
 		context.Context,
 		string,
@@ -369,7 +393,9 @@ func (s *Server) writeReleaseGroupProblem(ctx huma.Context, detail string) {
 	}
 }
 
-func (s *Server) releaseGroupMutationResponse(response idempotencyrecord.IdempotencyResponse) *releaseGroupMutationOutput {
+func (s *Server) releaseGroupMutationResponse(
+	response idempotencyrecord.IdempotencyResponse,
+) *releaseGroupMutationOutput {
 	return &releaseGroupMutationOutput{
 		Status: response.Status, ContentType: response.ContentKind,
 		Body: func(ctx huma.Context) {

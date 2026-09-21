@@ -112,7 +112,10 @@ func (service *Service) PrepareRuntimeArtifact(
 		return nil, err
 	}
 	if workloads.retained != nil {
-		return composerender.RetainEnvironmentComponentRuntime(artifact, workloads.retained.applied.Record.ComposeArtifact)
+		return composerender.RetainEnvironmentComponentRuntime(
+			artifact,
+			workloads.retained.applied.Record.ComposeArtifact,
+		)
 	}
 	for _, predecessor := range workloads.predecessors {
 		// All captures share one planning revision; each is checked again by

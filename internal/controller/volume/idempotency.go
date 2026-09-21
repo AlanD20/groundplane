@@ -135,7 +135,10 @@ func mutationLocator(intent mutationIntent, idempotencyKey string) idempotencyre
 
 func replayResponse(resolution requestidempotency.Resolution) (idempotencyrecord.IdempotencyResponse, error) {
 	if resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Volume replay resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Volume replay resolution is invalid",
+		)
 	}
 	return cloneResponse(resolution.Response), nil
 }

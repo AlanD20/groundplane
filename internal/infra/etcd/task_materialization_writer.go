@@ -77,7 +77,8 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 		return taskMaterializationWriterRecord{}, nil, err
 	}
 	conditions := append(entryRuntimeConditions, predecessorCondition)
-	if record.RetryOf != "" && record.Type == taskjournal.TaskUpdate && record.Params[releaserender.TaskReleasePublicationParam] != "" {
+	if record.RetryOf != "" && record.Type == taskjournal.TaskUpdate &&
+		record.Params[releaserender.TaskReleasePublicationParam] != "" {
 		authority, authorityCondition, authorityErr := repository.blueprintCandidateAttemptAuthority(
 			ctx, record, readRevision,
 		)
@@ -188,7 +189,8 @@ func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
 		recordcodec.ValidateID(ids.KindRoute, record.Target) == nil &&
 		(record.Type == taskjournal.TaskCreate || record.Type == taskjournal.TaskUpdate) &&
 		record.Params[taskjournal.TaskRouteEnvironmentParam] == environmentID && record.Owner.EnvironmentID == environmentID
-	if record.Executor != taskjournal.TaskExecutorAgent || recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
+	if record.Executor != taskjournal.TaskExecutorAgent ||
+		recordcodec.ValidateID(ids.KindEnvironment, environmentID) != nil ||
 		(record.Target != environmentID && !resourceRemoval && !volumeMutation && !routeMutation) {
 		return "", false, errs.New(errs.KindValidationFailed, "task materialization Environment is invalid")
 	}
@@ -288,7 +290,8 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	// Blueprint Apply can execute Components even without native Releases.
 	volumeIdentity := record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceVolume &&
 		(record.Type == taskjournal.TaskCreate || record.Type == taskjournal.TaskUpdate)
-	entryMutation := record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry && record.Type == taskjournal.TaskUpdate
+	entryMutation := record.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry &&
+		record.Type == taskjournal.TaskUpdate
 	configuredApply := record.Params[componentTaskBlueprintProcedureParam] == componentTaskBlueprintProcedureNone
 	if volumeIdentity ||
 		record.Type == taskjournal.TaskUpdate && !entryMutation && !configuredApply && !taskHasBlueprintCandidateAppliedAuthority(record) &&
@@ -418,7 +421,8 @@ func taskEnvironmentWriter(record TaskRecord) (string, bool, error) {
 	if !mutates {
 		return "", false, nil
 	}
-	if record.Executor != taskjournal.TaskExecutorAgent || recordcodec.ValidateID(ids.KindEnvironment, mutationEnvironment) != nil ||
+	if record.Executor != taskjournal.TaskExecutorAgent ||
+		recordcodec.ValidateID(ids.KindEnvironment, mutationEnvironment) != nil ||
 		(record.Type != taskjournal.TaskAttach && record.Type != taskjournal.TaskDetach) {
 		return "", false, errs.New(errs.KindValidationFailed, "task mutation Environment is invalid")
 	}

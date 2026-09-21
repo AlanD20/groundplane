@@ -66,7 +66,8 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	}
 	preparedAbort := false
 	if root.Phase == scriptsourceevidence.ScriptOperationSourceActive && execution.State == scriptexecutions.ScriptExecutionNotStarted &&
-		status == taskjournal.TaskStatusAborted && !result.ReconciliationRequired {
+		status == taskjournal.TaskStatusAborted &&
+		!result.ReconciliationRequired {
 		execution, err = abortAssignedManualScriptBeforeStart(execution, *terminalAt)
 		if err != nil {
 			return scriptTerminalSourceRelease{}, false, err
@@ -88,8 +89,15 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		return scriptTerminalSourceRelease{}, false, err
 	}
 	current := TaskAssignment{
-		Task:       etcdstore.Versioned[TaskRecord]{Record: task, Revision: taskValue.ModRevision, ReadRevision: revision},
-		Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
+		Task: etcdstore.Versioned[TaskRecord]{
+			Record:       task,
+			Revision:     taskValue.ModRevision,
+			ReadRevision: revision,
+		},
+		Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
+			Record:   assignment,
+			Revision: assignmentValue.ModRevision,
+		},
 	}
 	report, reportCondition, reportMutation, err := repository.prepareScriptClosingReport(ctx,
 		current, status, result, *terminalAt, root.Phase == scriptsourceevidence.ScriptOperationSourceActive)
@@ -149,7 +157,8 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 		return scriptTerminalSourceRelease{}, true, nil
 	}
 	if root.Phase != scriptsourceevidence.ScriptOperationSourceReleasing || root.ReleasePath != scriptsourceevidence.ScriptSourceReleaseNormal ||
-		root.RetryDisposition != disposition || execution.ActiveReference || !execution.UpdatedAt.Equal(*terminalAt) {
+		root.RetryDisposition != disposition || execution.ActiveReference ||
+		!execution.UpdatedAt.Equal(*terminalAt) {
 		return scriptTerminalSourceRelease{}, false, taskassignments.CorruptTaskAssignment()
 	}
 	processed, drained, err := authority.ReleaseNext(ctx, task.OperationID, guards)
@@ -171,7 +180,11 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	}
 	defer final.Clear()
 	return scriptTerminalSourceRelease{
-		conditions: append(append([]etcdstore.Condition(nil), final.Conditions()...), executionCondition, reportCondition),
-		mutations:  append(cloneBlueprintCandidateMutations(final.Mutations()), reportMutation),
+		conditions: append(
+			append([]etcdstore.Condition(nil), final.Conditions()...),
+			executionCondition,
+			reportCondition,
+		),
+		mutations: append(cloneBlueprintCandidateMutations(final.Mutations()), reportMutation),
 	}, false, nil
 }

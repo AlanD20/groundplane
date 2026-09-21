@@ -33,7 +33,10 @@ func FindRouteAtRevision(
 			return etcdstore.Versioned[routerecord.Record]{}, err
 		}
 		if page == nil || page.ReadRevision <= 0 {
-			return etcdstore.Versioned[routerecord.Record]{}, errs.New(errs.KindInternal, "Environment desired head scan is invalid")
+			return etcdstore.Versioned[routerecord.Record]{}, errs.New(
+				errs.KindInternal,
+				"Environment desired head scan is invalid",
+			)
 		}
 		if fixedRevision == 0 {
 			fixedRevision = page.ReadRevision
@@ -116,7 +119,10 @@ func ListRoutes(
 		return etcdstore.Page[routerecord.Record]{}, err
 	}
 	if !found {
-		return etcdstore.Page[routerecord.Record]{Items: []etcdstore.Versioned[routerecord.Record]{}, Revision: projection.ReadRevision}, nil
+		return etcdstore.Page[routerecord.Record]{
+			Items:    []etcdstore.Versioned[routerecord.Record]{},
+			Revision: projection.ReadRevision,
+		}, nil
 	}
 	desired := append([]projectionrecord.EnvironmentRouteProjection(nil), projection.Record.DesiredRoutes...)
 	sort.Slice(desired, func(left, right int) bool { return desired[left].Desired.ID < desired[right].Desired.ID })

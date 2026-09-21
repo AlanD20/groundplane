@@ -75,7 +75,10 @@ func ServiceDesiredCondition(service etcdstore.Versioned[ServiceRecord]) etcdsto
 }
 
 func ServiceRuntimeCondition(service etcdstore.Versioned[ServiceRecord]) etcdstore.Condition {
-	return etcdstore.Condition{Key: ServiceRuntimeKey(service.Record.Desired.ID), ModRevision: service.Record.runtimeRevision}
+	return etcdstore.Condition{
+		Key:         ServiceRuntimeKey(service.Record.Desired.ID),
+		ModRevision: service.Record.runtimeRevision,
+	}
 }
 
 func ServiceRuntimeRevision(service etcdstore.Versioned[ServiceRecord]) int64 {

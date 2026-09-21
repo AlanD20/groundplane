@@ -164,7 +164,10 @@ func newControllerPlatform(
 	}
 	defaults := localagent.Config{PullIntervalSeconds: cfg.Agent.Runtime.PullIntervalSeconds,
 		MaxConcurrentTasks: cfg.Agent.Runtime.MaxConcurrentTasks, Labels: cfg.Agent.Runtime.Labels}
-	enrollmentIdempotency, err := agentmanagement.NewEnrollmentIdempotency(dependencies.Intents, dependencies.Idempotency)
+	enrollmentIdempotency, err := agentmanagement.NewEnrollmentIdempotency(
+		dependencies.Intents,
+		dependencies.Idempotency,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +200,11 @@ func newControllerPlatform(
 	if err != nil {
 		return nil, err
 	}
-	platform.reconciliation, err = agentruntime.NewReconciliation(platform.agents, dependencies.Tick, dependencies.Logger)
+	platform.reconciliation, err = agentruntime.NewReconciliation(
+		platform.agents,
+		dependencies.Tick,
+		dependencies.Logger,
+	)
 	if err != nil {
 		return nil, err
 	}

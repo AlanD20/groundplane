@@ -72,7 +72,12 @@ func (planner *EntryRemovalPlanner) PrepareDesiredEntryRemoval(
 			}
 		}
 	}
-	intent, err := environmentchanges.NewDesiredEntryRemovalIntent(task.Target, desired.Record.RevisionID, claim, cleanup)
+	intent, err := environmentchanges.NewDesiredEntryRemovalIntent(
+		task.Target,
+		desired.Record.RevisionID,
+		claim,
+		cleanup,
+	)
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}

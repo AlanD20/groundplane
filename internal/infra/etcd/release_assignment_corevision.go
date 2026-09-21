@@ -69,7 +69,11 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(record.TaskID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID), Value: encoded},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID),
+			Value: encoded,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskAssignmentIndexKey(record.TaskID), Value: encoded},
 		{Type: etcdstore.MutationPut, Key: lifecycleKey, Value: encoded},
 	})

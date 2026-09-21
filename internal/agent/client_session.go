@@ -198,7 +198,9 @@ func (c *Client) runSession(
 				continue
 			}
 			if output.VolumeCheckpoint != nil {
-				if output.BackingHookCheckpoint != nil || output.ScriptCheckpoint != nil || output.BackupCheckpoint != nil || output.Progress != nil ||
+				if output.BackingHookCheckpoint != nil || output.ScriptCheckpoint != nil ||
+					output.BackupCheckpoint != nil ||
+					output.Progress != nil ||
 					output.Result != nil {
 					return false, errs.New(errs.KindInternal, "agent: worker returned an invalid output union")
 				}

@@ -30,7 +30,10 @@ func (service *Service) captureDesiredProjection(
 	}
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil {
-		return projectionrecord.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "release desired artifact is corrupt")
+		return projectionrecord.EnvironmentComposeProjection{}, errs.New(
+			errs.KindInternal,
+			"release desired artifact is corrupt",
+		)
 	}
 	bound, err := taskplanning.MutateAttachNetworkArtifact(ctx, artifact, projection, joins, artifact.ArtifactId)
 	if err != nil {

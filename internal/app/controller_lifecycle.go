@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 

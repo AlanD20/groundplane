@@ -184,8 +184,14 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	if retrySource != nil {
 		conditions = append(
 			conditions,
-			etcdstore.Condition{Key: taskjournal.TaskStorageKey(retrySource.task.Record.ID), ModRevision: retrySource.task.Revision},
-			etcdstore.Condition{Key: backupruntime.BackupRunKey(retrySource.run.Record.TaskID), ModRevision: retrySource.run.Revision},
+			etcdstore.Condition{
+				Key:         taskjournal.TaskStorageKey(retrySource.task.Record.ID),
+				ModRevision: retrySource.task.Revision,
+			},
+			etcdstore.Condition{
+				Key:         backupruntime.BackupRunKey(retrySource.run.Record.TaskID),
+				ModRevision: retrySource.run.Revision,
+			},
 			etcdstore.Condition{
 				Key:         backupruntime.BackupTerminalReceiptKey(retrySource.task.Record.ID),
 				ModRevision: retrySource.receiptRevision,

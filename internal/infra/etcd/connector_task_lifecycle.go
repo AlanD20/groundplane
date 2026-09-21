@@ -170,7 +170,9 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 	change.conditions = append(change.conditions, referenceConditions...)
 	if project.TenantID != "" {
 		tenantFence, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys:     []string{deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)},
+			Keys: []string{
+				deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID),
+			},
 			Revision: revision,
 		})
 		if err != nil {
@@ -207,13 +209,18 @@ func (repository *TaskRepository) prepareConnectorTaskRetry(
 		return connectorTaskChange{}, err
 	}
 	change.values = append(change.values, tombstoneValue, intentValue)
-	change.mutations = append(change.mutations,
+	change.mutations = append(
+		change.mutations,
 		etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
 			Key:   deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
 			Value: tombstoneValue,
 		},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: connectorrecord.RemovalIntentKey(retry.ID), Value: intentValue},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   connectorrecord.RemovalIntentKey(retry.ID),
+			Value: intentValue,
+		},
 	)
 	return change, nil
 }
@@ -257,7 +264,8 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(stored.Values[1].Value)
 	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetConnector || tombstone.TargetID != task.Target ||
-		tombstone.TargetRevision != stored.Values[0].ModRevision || tombstone.TaskID != task.ID ||
+		tombstone.TargetRevision != stored.Values[0].ModRevision ||
+		tombstone.TaskID != task.ID ||
 		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing {
 		return connectorTaskChange{}, errs.New(
 			errs.KindStateConflict,
@@ -331,15 +339,25 @@ func (repository *TaskRepository) prepareConnectorTaskAcknowledgement(
 			{Key: connectorrecord.CredentialValueKey(connector.ID), ModRevision: dependencies.Values[2].ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationDelete, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target)},
+			{
+				Type: etcdstore.MutationDelete,
+				Key:  deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), task.Target),
+			},
 			{Type: etcdstore.MutationDelete, Key: connectorrecord.RemovalIntentKey(task.ID)},
 		},
 	}
 	change.conditions = append(change.conditions, referenceConditions...)
 	if terminalStatus == taskjournal.TaskStatusCompleted {
-		change.mutations = append(change.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorrecord.ConnectorEnvironmentKey(connector.EnvironmentID, connector.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name)},
+		change.mutations = append(
+			change.mutations,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  connectorrecord.ConnectorEnvironmentKey(connector.EnvironmentID, connector.ID),
+			},
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  connectorrecord.ConnectorNameKey(connector.EnvironmentID, connector.Name),
+			},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorrecord.CredentialValueKey(connector.ID)},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: connectorrecord.RecordKey(connector.ID)},
 		)
@@ -380,7 +398,10 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 			return err
 		}
 		replayTargetKey, keyErr := idempotencyrecord.IdempotencyReplayTargetKey(
-			idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetConnector, ID: task.Target},
+			idempotencyrecord.IdempotencyReplayTarget{
+				Kind: idempotencyrecord.IdempotencyReplayTargetConnector,
+				ID:   task.Target,
+			},
 			http.MethodDelete,
 			connectorDeletionRoute,
 			task.IdempotencyKey,
@@ -452,7 +473,8 @@ func (repository *TaskRepository) validateConnectorTaskAcknowledgementReplay(
 }
 
 func taskOwnsConnectorRemoval(task TaskRecord) (bool, error) {
-	if task.Executor != taskjournal.TaskExecutorController || task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceConnector {
+	if task.Executor != taskjournal.TaskExecutorController ||
+		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceConnector {
 		return false, nil
 	}
 	if task.Type != taskjournal.TaskRemove || task.TimeoutSeconds != connectorDeletionTimeoutSeconds ||

@@ -32,7 +32,10 @@ func FindServiceAtRevision(
 			return etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
 		}
 		if page == nil || page.ReadRevision <= 0 {
-			return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(errs.KindInternal, "Environment desired head scan is invalid")
+			return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(
+				errs.KindInternal,
+				"Environment desired head scan is invalid",
+			)
 		}
 		if fixedRevision == 0 {
 			fixedRevision = page.ReadRevision
@@ -72,8 +75,17 @@ func FindServiceAtRevision(
 				if matched != nil {
 					return etcdstore.Versioned[servicerecord.ServiceRecord]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 				}
-				joined, joinErr := servicerecord.ReadJoined(ctx, store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, serviceID,
-					blueprints.EnvironmentBlueprintHeadKey(environmentID))
+				joined, joinErr := servicerecord.ReadJoined(
+					ctx,
+					store,
+					servicerecord.DesiredSelection{
+						Services:     projection.Record.DesiredServices,
+						Revision:     projection.Revision,
+						ReadRevision: projection.ReadRevision,
+					},
+					serviceID,
+					blueprints.EnvironmentBlueprintHeadKey(environmentID),
+				)
 				if joinErr != nil {
 					return etcdstore.Versioned[servicerecord.ServiceRecord]{}, joinErr
 				}
@@ -91,12 +103,17 @@ func FindServiceAtRevision(
 		}
 	}
 	if matched == nil {
-		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
+		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(
+			errs.KindServiceNotFound,
+			"Service was not found",
+		)
 	}
 	return *matched, nil
 }
 
-func OrdinaryServices(projection projectionrecord.EnvironmentComposeProjection) []servicerecord.EnvironmentServiceProjection {
+func OrdinaryServices(
+	projection projectionrecord.EnvironmentComposeProjection,
+) []servicerecord.EnvironmentServiceProjection {
 	result := make([]servicerecord.EnvironmentServiceProjection, 0, len(projection.DesiredServices))
 	for _, service := range projection.DesiredServices {
 		if IsComponentService(projection.Components, service.Desired.ID) {

@@ -165,12 +165,29 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		etcdstore.Condition{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		etcdstore.Condition{Key: environmentchanges.RouteMutationIntentKey(task.ID)},
 	)
-	mutations = append(mutations,
+	mutations = append(
+		mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.RouteMutationIntentKey(task.ID), Value: intentValue},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskActiveOperationKey(task.OperationID),
+			Value: reference,
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskQueueKey(task.Executor, task.ID),
+			Value: reference,
+		},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   environmentchanges.RouteMutationIntentKey(task.ID),
+			Value: intentValue,
+		},
 	)
 	conditions = append(conditions, publication.conditions...)
 	conditions, err = routeHeadTargetConditions(conditions, servicerecord.ServiceDesiredCondition(target))
@@ -215,7 +232,10 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 
 // A Blueprint-owned target Service and its Route may share the same desired
 // head. One exact comparison fences both; different revisions are a conflict.
-func routeHeadTargetConditions(conditions []etcdstore.Condition, target etcdstore.Condition) ([]etcdstore.Condition, error) {
+func routeHeadTargetConditions(
+	conditions []etcdstore.Condition,
+	target etcdstore.Condition,
+) ([]etcdstore.Condition, error) {
 	for _, condition := range conditions {
 		if condition.Key != target.Key {
 			continue
@@ -230,13 +250,17 @@ func routeHeadTargetConditions(conditions []etcdstore.Condition, target etcdstor
 
 func validateRouteTaskAcceptanceMarker(marker idempotencyrecord.IdempotencyMarker, environmentID string) error {
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
-		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || marker.Locator.ScopeID != environmentID {
+		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
+		marker.Locator.ScopeID != environmentID {
 		return errs.New(errs.KindValidationFailed, "Route Task acceptance marker is invalid")
 	}
 	return idempotencyrecord.ValidateIdempotencyMarker(marker)
 }
 
-func routeMutationTaskMarker(directMarker idempotencyrecord.IdempotencyMarker, task TaskRecord) idempotencyrecord.IdempotencyMarker {
+func routeMutationTaskMarker(
+	directMarker idempotencyrecord.IdempotencyMarker,
+	task TaskRecord,
+) idempotencyrecord.IdempotencyMarker {
 	body, _ := json.Marshal(struct {
 		TaskID string `json:"task_id"`
 	}{TaskID: task.ID})
@@ -307,11 +331,16 @@ func applyRouteMutationTaskMarkers(
 		if err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
-		retentionValue, err := json.Marshal(idempotencyrecord.RetentionReferenceJSON{Schema: 1, MarkerKey: directKeyValue})
+		retentionValue, err := json.Marshal(
+			idempotencyrecord.RetentionReferenceJSON{Schema: 1, MarkerKey: directKeyValue},
+		)
 		if err != nil {
 			return IdempotencyTransactionResult{}, errs.Wrap(errs.KindInternal, err)
 		}
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue})
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
+		)
 	}
 	if validate := plan.transactionValidator(); validate != nil {
 		if err := validate(conditions, mutations); err != nil {

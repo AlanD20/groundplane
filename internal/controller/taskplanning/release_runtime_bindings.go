@@ -49,7 +49,9 @@ func loadPinnedEnvironmentProject(
 	return entries.Project, nil
 }
 
-func sealedReleaseAttachJoins(projection projectionrecord.EnvironmentComposeProjection) ([]attachrender.AttachTaskNetworkJoin, error) {
+func sealedReleaseAttachJoins(
+	projection projectionrecord.EnvironmentComposeProjection,
+) ([]attachrender.AttachTaskNetworkJoin, error) {
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(projection.ComposeArtifact, artifact); err != nil ||
 		artifact.OwnerId != projection.EnvironmentID ||

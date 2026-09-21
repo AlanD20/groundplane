@@ -38,10 +38,22 @@ func (repository *ServiceReader) GetServiceRevision(
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
 	}
 	if !found {
-		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
+		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(
+			errs.KindServiceNotFound,
+			"Service was not found",
+		)
 	}
-	return servicerecord.ReadJoined(ctx, repository.store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, serviceID,
-		blueprints.EnvironmentBlueprintRootKey(environmentID, revisionID))
+	return servicerecord.ReadJoined(
+		ctx,
+		repository.store,
+		servicerecord.DesiredSelection{
+			Services:     projection.Record.DesiredServices,
+			Revision:     projection.Revision,
+			ReadRevision: projection.ReadRevision,
+		},
+		serviceID,
+		blueprints.EnvironmentBlueprintRootKey(environmentID, revisionID),
+	)
 }
 
 func (repository *ServiceReader) GetServiceByName(
@@ -50,23 +62,41 @@ func (repository *ServiceReader) GetServiceByName(
 	name string,
 ) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
 	if name == "" {
-		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(errs.KindValidationFailed, "Service name is required")
+		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(
+			errs.KindValidationFailed,
+			"Service name is required",
+		)
 	}
 	projection, found, err := blueprints.ReadCurrentProjection(ctx, repository.store, environmentID, 0)
 	if err != nil {
 		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
 	}
 	if !found {
-		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
+		return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(
+			errs.KindServiceNotFound,
+			"Service was not found",
+		)
 	}
 	for _, service := range projection.Record.DesiredServices {
 		if service.Desired.Name == name &&
 			!IsComponentService(projection.Record.Components, service.Desired.ID) {
-			return servicerecord.ReadJoined(ctx, repository.store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, service.Desired.ID,
-				blueprints.EnvironmentBlueprintHeadKey(environmentID))
+			return servicerecord.ReadJoined(
+				ctx,
+				repository.store,
+				servicerecord.DesiredSelection{
+					Services:     projection.Record.DesiredServices,
+					Revision:     projection.Revision,
+					ReadRevision: projection.ReadRevision,
+				},
+				service.Desired.ID,
+				blueprints.EnvironmentBlueprintHeadKey(environmentID),
+			)
 		}
 	}
-	return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
+	return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(
+		errs.KindServiceNotFound,
+		"Service was not found",
+	)
 }
 
 func (repository *ServiceReader) ListServices(
@@ -91,7 +121,10 @@ func (repository *ServiceReader) ListServices(
 		return etcdstore.Page[servicerecord.ServiceRecord]{}, err
 	}
 	if !found {
-		return etcdstore.Page[servicerecord.ServiceRecord]{Items: []etcdstore.Versioned[servicerecord.ServiceRecord]{}, Revision: projection.ReadRevision}, nil
+		return etcdstore.Page[servicerecord.ServiceRecord]{
+			Items:    []etcdstore.Versioned[servicerecord.ServiceRecord]{},
+			Revision: projection.ReadRevision,
+		}, nil
 	}
 	desired := OrdinaryServices(projection.Record)
 	sort.Slice(desired, func(left, right int) bool { return desired[left].Desired.ID < desired[right].Desired.ID })
@@ -99,8 +132,17 @@ func (repository *ServiceReader) ListServices(
 	end := min(start+limit, len(desired))
 	items := make([]etcdstore.Versioned[servicerecord.ServiceRecord], 0, end-start)
 	for _, service := range desired[start:end] {
-		joined, joinErr := servicerecord.ReadJoined(ctx, repository.store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, service.Desired.ID,
-			blueprints.EnvironmentBlueprintHeadKey(environmentID))
+		joined, joinErr := servicerecord.ReadJoined(
+			ctx,
+			repository.store,
+			servicerecord.DesiredSelection{
+				Services:     projection.Record.DesiredServices,
+				Revision:     projection.Revision,
+				ReadRevision: projection.ReadRevision,
+			},
+			service.Desired.ID,
+			blueprints.EnvironmentBlueprintHeadKey(environmentID),
+		)
 		if joinErr != nil {
 			return etcdstore.Page[servicerecord.ServiceRecord]{}, joinErr
 		}
@@ -116,5 +158,9 @@ func (repository *ServiceReader) ListServices(
 			return etcdstore.Page[servicerecord.ServiceRecord]{}, err
 		}
 	}
-	return etcdstore.Page[servicerecord.ServiceRecord]{Items: items, NextCursor: next, Revision: projection.ReadRevision}, nil
+	return etcdstore.Page[servicerecord.ServiceRecord]{
+		Items:      items,
+		NextCursor: next,
+		Revision:   projection.ReadRevision,
+	}, nil
 }

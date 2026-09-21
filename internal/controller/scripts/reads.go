@@ -70,7 +70,10 @@ func (service *scriptReadService) GetScript(
 	scriptID string,
 ) (etcdstore.Versioned[scriptrecord.Record], error) {
 	if ctx == nil {
-		return etcdstore.Versioned[scriptrecord.Record]{}, errs.New(errs.KindInternal, "Script read context is required")
+		return etcdstore.Versioned[scriptrecord.Record]{}, errs.New(
+			errs.KindInternal,
+			"Script read context is required",
+		)
 	}
 	if ids.Validate(ids.KindScript, scriptID) != nil {
 		return etcdstore.Versioned[scriptrecord.Record]{}, errs.New(

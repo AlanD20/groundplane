@@ -80,7 +80,10 @@ func (service *Service) resolvePublication(
 		}
 		return acceptedReplay(replay)
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "native update publication outcome is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"native update publication outcome is invalid",
+		)
 	}
 }
 

@@ -110,23 +110,40 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 
 	conditions := []etcdstore.Condition{
 		{
-			Key:         blueprints.EnvironmentBlueprintRootKey(input.Revision.EnvironmentID, input.Revision.RevisionID),
+			Key: blueprints.EnvironmentBlueprintRootKey(
+				input.Revision.EnvironmentID,
+				input.Revision.RevisionID,
+			),
 			ModRevision: publication.rootRevision,
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
-		{Key: blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
+		{
+			Key:         blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID),
+			ModRevision: input.ExpectedHeadRevision,
+		},
 		{Key: networkreservations.ZonePoolRegistryKey(input.Environment.Record.ID), ModRevision: registry.Revision},
 	}
 	removalLockIndex := len(conditions)
-	conditions = append(conditions, etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)})
+	conditions = append(
+		conditions,
+		etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)},
+	)
 	fenceOffset := len(conditions)
 	conditions = append(conditions, fence.TransactionConditions()...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
-		{Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
-		{Type: etcdstore.MutationPut, Key: networkreservations.ZonePoolRegistryKey(input.Environment.Record.ID), Value: registryValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID),
+			Value: headReference,
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   networkreservations.ZonePoolRegistryKey(input.Environment.Record.ID),
+			Value: registryValue,
+		},
 		epochMutation,
 	}
 	classifier := func(_ int64, values []*etcdstore.KeyValue) error {
@@ -200,7 +217,8 @@ func validateDirectZoneDesiredPublicationInput(input EnvironmentZoneDesiredPubli
 			input.Zone.Desired.OwnerID != input.Project.Record.ID) {
 		return errs.New(errs.KindValidationFailed, "backing Project Zone ownership is invalid")
 	}
-	if input.Marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || input.Marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
+	if input.Marker.Kind != idempotencyrecord.IdempotencyMarkerDirect ||
+		input.Marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		input.Marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		input.Marker.Locator.ScopeID != input.Environment.Record.ID {
 		return errs.New(errs.KindValidationFailed, "direct Zone desired publication marker is invalid")
@@ -224,7 +242,7 @@ func validateDirectZoneProjection(
 	if !hasPrevious {
 		return errs.New(errs.KindStateConflict, "Zone desired revision is missing")
 	}
-	if err := validateEnvironmentComposeProjectionAdvance(previous, true, input.Projection); err != nil {
+	if err := projectionrecord.ValidateEnvironmentComposeProjectionAdvance(previous, true, input.Projection); err != nil {
 		return err
 	}
 	if len(input.Projection.DesiredZones) != len(previous.DesiredZones)+1 {
@@ -261,7 +279,10 @@ func validateDirectZoneProjection(
 	return nil
 }
 
-func sameDirectZoneFinalProjection(left projectionrecord.EnvironmentComposeProjection, right projectionrecord.EnvironmentComposeProjection) bool {
+func sameDirectZoneFinalProjection(
+	left projectionrecord.EnvironmentComposeProjection,
+	right projectionrecord.EnvironmentComposeProjection,
+) bool {
 	return left.EnvironmentID == right.EnvironmentID && left.RevisionID == right.RevisionID &&
 		left.RenderGeneration == right.RenderGeneration &&
 		environmentchanges.SameServiceRemovalBytes(left.ComposeArtifact, right.ComposeArtifact) &&

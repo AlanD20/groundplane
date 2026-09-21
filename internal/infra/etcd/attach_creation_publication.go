@@ -152,7 +152,10 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 		{Key: attachrecord.AttachBackingProjectKey(record.BackingProjectID, record.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID), ModRevision: scope.Environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(scope.Project.Record.ID), ModRevision: scope.Project.Revision},
-		{Key: hierarchyrecord.EnvironmentKey(scope.BackingEnvironment.Record.ID), ModRevision: scope.BackingEnvironment.Revision},
+		{
+			Key:         hierarchyrecord.EnvironmentKey(scope.BackingEnvironment.Record.ID),
+			ModRevision: scope.BackingEnvironment.Revision,
+		},
 		{Key: hierarchyrecord.ProjectKey(scope.BackingProject.Record.ID), ModRevision: scope.BackingProject.Revision},
 		{Key: deletionrecord.TombstoneKey("attach", record.ID)},
 		{Key: deletionrecord.TombstoneKey("environment", record.EnvironmentID)},
@@ -173,17 +176,41 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	conditions = append(conditions, desiredHeadConditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: taskReference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(record.ID), Value: recordValue},
-		{Type: etcdstore.MutationPut, Key: attachrecord.AttachNameKey(record.EnvironmentID, record.Name), Value: []byte(record.ID)},
-		{Type: etcdstore.MutationPut, Key: attachrecord.AttachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},
-		{Type: etcdstore.MutationPut, Key: attachrecord.AttachBackingServiceKey(record.BackingServiceID, record.ID), Value: []byte(record.ID)},
-		{Type: etcdstore.MutationPut, Key: attachrecord.AttachBackingProjectKey(record.BackingProjectID, record.ID), Value: []byte(record.ID)},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   attachrecord.AttachNameKey(record.EnvironmentID, record.Name),
+			Value: []byte(record.ID),
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   attachrecord.AttachOwnerKey(record.EnvironmentID, record.ID),
+			Value: []byte(record.ID),
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   attachrecord.AttachBackingServiceKey(record.BackingServiceID, record.ID),
+			Value: []byte(record.ID),
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   attachrecord.AttachBackingProjectKey(record.BackingProjectID, record.ID),
+			Value: []byte(record.ID),
+		},
 		{Type: etcdstore.MutationPut, Key: attachrender.AttachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
 		{Type: etcdstore.MutationPut, Key: planReferenceKey, Value: planReferenceValue},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID), Value: environmentValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchyrecord.EnvironmentKey(scope.Environment.Record.ID),
+			Value: environmentValue,
+		},
 	}
 	for _, service := range scope.Services {
 		serviceID := service.Record.Desired.ID
@@ -213,8 +240,13 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 			etcdstore.Condition{Key: attachrecord.AttachGrantedByKey(grantID, record.ID)},
 			etcdstore.Condition{Key: deletionrecord.TombstoneKey("attach", grantID)},
 		)
-		mutations = append(mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachGrantedByKey(grantID, record.ID), Value: []byte(record.ID)},
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   attachrecord.AttachGrantedByKey(grantID, record.ID),
+				Value: []byte(record.ID),
+			},
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(grantID), Value: grantValue},
 		)
 	}
@@ -238,7 +270,11 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 				Key:   attachrecord.AttachCredentialByKey(owner.Record.ID, record.ID),
 				Value: []byte(record.ID),
 			},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(owner.Record.ID), Value: credentialOwnerValue},
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   attachrecord.AttachKey(owner.Record.ID),
+				Value: credentialOwnerValue,
+			},
 		)
 	}
 	if len(record.GrantAttachIDs) != 0 {
@@ -261,7 +297,14 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 			return IdempotencyTransactionResult{}, err
 		}
 		defer clear(factValue)
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachFactsKey(record.ID), Value: factValue})
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   attachrecord.AttachFactsKey(record.ID),
+				Value: factValue,
+			},
+		)
 	}
 	initiation, err := newEnvironmentTaskInitiation(
 		versionedTenant,
@@ -300,13 +343,15 @@ func validateAttachCreateScope(
 		scope.BackingEnvironment.Revision <= 0 || scope.BackingService.Revision <= 0 {
 		return errs.New(errs.KindValidationFailed, "Attach scope records must be versioned")
 	}
-	if scope.Tenant.Record.ID != scope.Project.Record.TenantID || scope.Project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
+	if scope.Tenant.Record.ID != scope.Project.Record.TenantID ||
+		scope.Project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
 		scope.Project.Record.TenantID == "" ||
 		scope.Environment.Record.ProjectID != scope.Project.Record.ID ||
 		record.EnvironmentID != scope.Environment.Record.ID {
 		return errs.New(errs.KindScopeUnauthorized, "Attach consumer hierarchy is invalid")
 	}
-	if scope.BackingProject.Record.Kind != hierarchyrecord.ProjectKindBacking || scope.BackingProject.Record.TenantID != "" ||
+	if scope.BackingProject.Record.Kind != hierarchyrecord.ProjectKindBacking ||
+		scope.BackingProject.Record.TenantID != "" ||
 		scope.BackingEnvironment.Record.ProjectID != scope.BackingProject.Record.ID ||
 		scope.BackingService.Record.EnvironmentID != scope.BackingEnvironment.Record.ID ||
 		record.BackingProjectID != scope.BackingProject.Record.ID ||
@@ -393,19 +438,29 @@ func validateAttachCreateScope(
 	return attachrecord.ValidateAttachEncryptedFacts(*facts)
 }
 
-func validateAttachCreationTask(record attachrecord.Record, task TaskRecord, marker idempotencyrecord.IdempotencyMarker) error {
-	pendingAttachOwned := record.Status == core.AttachPending && record.Operation == attachrecord.AttachOperationProvision &&
-		record.TaskID == task.ID && record.CreatedAt.Equal(task.CreatedAt)
+func validateAttachCreationTask(
+	record attachrecord.Record,
+	task TaskRecord,
+	marker idempotencyrecord.IdempotencyMarker,
+) error {
+	pendingAttachOwned := record.Status == core.AttachPending &&
+		record.Operation == attachrecord.AttachOperationProvision &&
+		record.TaskID == task.ID &&
+		record.CreatedAt.Equal(task.CreatedAt)
 	validTaskShape := task.Type == taskjournal.TaskAttach && task.Target == record.ID && task.Executor == taskjournal.TaskExecutorAgent &&
-		task.Status == taskjournal.TaskStatusPending && len(task.Params) == 1 && len(task.Materializations) == 0 &&
+		task.Status == taskjournal.TaskStatusPending &&
+		len(task.Params) == 1 &&
+		len(task.Materializations) == 0 &&
 		task.Params[taskjournal.TaskMutationEnvironmentParam] == record.EnvironmentID
 	if !pendingAttachOwned || !validTaskShape {
 		return errs.New(errs.KindValidationFailed, "Attach creation Task does not own its pending Attach")
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
-		marker.Locator.ScopeID != record.EnvironmentID || !marker.CreatedAt.Equal(task.CreatedAt) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) || marker.ReplayTarget != nil {
+		marker.Locator.ScopeID != record.EnvironmentID ||
+		!marker.CreatedAt.Equal(task.CreatedAt) ||
+		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
+		marker.ReplayTarget != nil {
 		return errs.New(
 			errs.KindValidationFailed,
 			"Attach creation marker does not match its Environment-scoped Task",

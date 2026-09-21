@@ -17,7 +17,11 @@ type store interface {
 	Get(context.Context, string) (*etcdstore.GetResult, error)
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
-	MeasureTransaction(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionBudget, error)
+	MeasureTransaction(
+		context.Context,
+		[]etcdstore.Condition,
+		[]etcdstore.Mutation,
+	) (etcdstore.TransactionBudget, error)
 	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
 }
 
@@ -419,7 +423,8 @@ func (repository *Repository) sealEnvironmentBlueprintStage(
 		descriptor.State == blueprints.EnvironmentBlueprintStagePublished {
 		return repository.requireEnvironmentBlueprintSeal(ctx, seal)
 	}
-	if descriptor.State != blueprints.EnvironmentBlueprintStageOpen || descriptor.NextAuditChunk != descriptor.AuditChunks ||
+	if descriptor.State != blueprints.EnvironmentBlueprintStageOpen ||
+		descriptor.NextAuditChunk != descriptor.AuditChunks ||
 		descriptor.NextProjectionChunk != descriptor.ProjectionChunks {
 		return blueprints.EnvironmentBlueprintSeal{}, errs.New(
 			errs.KindStateConflict,
@@ -485,12 +490,18 @@ func (repository *Repository) requireEnvironmentBlueprintSeal(
 	ctx context.Context,
 	want blueprints.EnvironmentBlueprintSeal,
 ) (blueprints.EnvironmentBlueprintSeal, error) {
-	result, err := repository.store.Get(ctx, blueprints.EnvironmentBlueprintRootKey(want.EnvironmentID, want.RevisionID))
+	result, err := repository.store.Get(
+		ctx,
+		blueprints.EnvironmentBlueprintRootKey(want.EnvironmentID, want.RevisionID),
+	)
 	if err != nil {
 		return blueprints.EnvironmentBlueprintSeal{}, err
 	}
 	if result == nil || result.Entry == nil {
-		return blueprints.EnvironmentBlueprintSeal{}, errs.New(errs.KindStateConflict, "Blueprint sealed root is unavailable")
+		return blueprints.EnvironmentBlueprintSeal{}, errs.New(
+			errs.KindStateConflict,
+			"Blueprint sealed root is unavailable",
+		)
 	}
 	defer clear(result.Entry.Value)
 	stored, err := blueprints.DecodeEnvironmentBlueprintSeal(result.Entry.Value)

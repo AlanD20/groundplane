@@ -45,7 +45,12 @@ func (repository *Repository) PrepareScriptCreation(
 	if err := ValidateScriptHierarchy(ctx, environment, project, target, record); err != nil {
 		return nil, nil, nil, err
 	}
-	active, err := scriptrecord.ReadActiveScriptSet(ctx, repository.store, record.EnvironmentID, environment.ReadRevision)
+	active, err := scriptrecord.ReadActiveScriptSet(
+		ctx,
+		repository.store,
+		record.EnvironmentID,
+		environment.ReadRevision,
+	)
 	if err != nil {
 		return nil, nil, nil, err
 	}

@@ -17,13 +17,28 @@ import (
 
 type RunnerReader interface {
 	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
-	ListRunners(context.Context, runnerrecord.RunnerFilter, etcdstore.PageRequest) (etcdstore.Page[runnerrecord.RunnerRecord], error)
-	GetRunnerObservation(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], bool, error)
-	GetRunnerDeletionTombstone(context.Context, string) (etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord], bool, error)
+	ListRunners(
+		context.Context,
+		runnerrecord.RunnerFilter,
+		etcdstore.PageRequest,
+	) (etcdstore.Page[runnerrecord.RunnerRecord], error)
+	GetRunnerObservation(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], bool, error)
+	GetRunnerDeletionTombstone(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord], bool, error)
 }
 
 type RunnerMutator interface {
-	RenameRunner(context.Context, string, apiTypes.RunnerEditRequest, string) (idempotencyrecord.IdempotencyResponse, error)
+	RenameRunner(
+		context.Context,
+		string,
+		apiTypes.RunnerEditRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type RunnerRemover interface {
@@ -32,7 +47,12 @@ type RunnerRemover interface {
 
 type RunnerProvisioner interface {
 	CreateRunner(context.Context, apiTypes.RunnerCreateRequest, string) (idempotencyrecord.IdempotencyResponse, error)
-	RetryRunner(context.Context, string, apiTypes.RunnerRetryRequest, string) (idempotencyrecord.IdempotencyResponse, error)
+	RetryRunner(
+		context.Context,
+		string,
+		apiTypes.RunnerRetryRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type runnerListInput struct {

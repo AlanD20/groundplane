@@ -28,7 +28,9 @@ func entryDesiredResponse(
 	return idempotencyrecord.IdempotencyResponse{Status: status, ContentKind: "application/json", Body: body}, nil
 }
 
-func entryDesiredRemovalOutcome(response idempotencyrecord.IdempotencyResponse) (entrycontroller.RemovalOutcome, error) {
+func entryDesiredRemovalOutcome(
+	response idempotencyrecord.IdempotencyResponse,
+) (entrycontroller.RemovalOutcome, error) {
 	if response.Status != http.StatusAccepted {
 		return entrycontroller.RemovalOutcome{}, errs.New(errs.KindInternal, "Entry removal response status is invalid")
 	}

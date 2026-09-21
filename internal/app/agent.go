@@ -7,7 +7,7 @@ import (
 	directoryruntime "github.com/AlanD20/groundplane/internal/agent/environmentdirectory"
 	filematerialization "github.com/AlanD20/groundplane/internal/agent/materialization"
 	scriptruntime "github.com/AlanD20/groundplane/internal/agent/scriptruntime"
-	"github.com/AlanD20/groundplane/internal/componentregistration"
+	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"io"
 	"log/slog"

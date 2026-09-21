@@ -149,7 +149,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		transaction, err := runtime.transact(ctx, conditions, mutations)
+		transaction, err := runtime.TransactRuntime(ctx, conditions, mutations)
 		etcdstore.ClearMutationValues(mutations)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err

@@ -2,7 +2,7 @@ package app
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/componentregistration"
+	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	"io"
 
 	"github.com/AlanD20/groundplane/internal/common/runner"

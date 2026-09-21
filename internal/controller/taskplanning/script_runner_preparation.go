@@ -109,7 +109,9 @@ func (prepared ScriptRunnerPreparation) validateSources(sources scriptsourcequer
 	return nil
 }
 
-func scriptExplicitAuthority(sources scriptsourcequeries.ScriptExecutionSources) (*agentpb.ScriptExplicitExecutionAuthority, error) {
+func scriptExplicitAuthority(
+	sources scriptsourcequeries.ScriptExecutionSources,
+) (*agentpb.ScriptExplicitExecutionAuthority, error) {
 	desired := sources.Script.Record.Desired.Execution
 	if desired == nil || desired.Mode == core.ScriptExecutionInherited {
 		return nil, nil
@@ -142,7 +144,9 @@ func scriptExplicitAuthority(sources scriptsourcequeries.ScriptExecutionSources)
 }
 
 func scriptPreparationSourceDigest(
-	sources scriptsourcequeries.ScriptExecutionSources, entries []entryrecord.Record, explicit *agentpb.ScriptExplicitExecutionAuthority,
+	sources scriptsourcequeries.ScriptExecutionSources,
+	entries []entryrecord.Record,
+	explicit *agentpb.ScriptExplicitExecutionAuthority,
 ) ([sha256.Size]byte, error) {
 	metadata := make([]*agentpb.ScriptRunnerEntryBinding, 0, len(entries))
 	for _, entry := range entries {

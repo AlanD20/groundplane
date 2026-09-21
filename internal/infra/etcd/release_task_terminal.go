@@ -60,7 +60,9 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	}
 	baseKeys := []string{
 		releases.ReleasePublicationKey(publicationID), releases.ReleaseOperationKey(task.OperationID),
-		releases.ReleaseFenceSetKey(task.Owner.EnvironmentID), hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
+		releases.ReleaseFenceSetKey(
+			task.Owner.EnvironmentID,
+		), hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
 	}
 	base, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: baseKeys, Revision: readRevision})
 	if err != nil {
@@ -70,7 +72,10 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 		base.Values[3] == nil {
 		return false, releases.CorruptReleaseRecord()
 	}
-	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](base.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		base.Values[0].Value,
+		"release-publication",
+	)
 	if err != nil || marker.PublicationID != publicationID || marker.OperationID != task.OperationID {
 		return false, releases.CorruptReleaseRecord()
 	}
@@ -103,7 +108,10 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	for index, member := range head.Members {
 		terminalKeys[index] = releases.ReleaseTerminalKey(member.ReleaseID)
 	}
-	terminalRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: terminalKeys, Revision: readRevision})
+	terminalRead, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: terminalKeys, Revision: readRevision},
+	)
 	if err != nil {
 		return false, err
 	}
@@ -320,8 +328,14 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 			if err != nil {
 				return false, err
 			}
-			conditions = append(conditions, etcdstore.Condition{Key: keys[5], ModRevision: etcdstore.RevisionOf(values[5])})
-			mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[5], Value: runtimeValue})
+			conditions = append(
+				conditions,
+				etcdstore.Condition{Key: keys[5], ModRevision: etcdstore.RevisionOf(values[5])},
+			)
+			mutations = append(
+				mutations,
+				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: keys[5], Value: runtimeValue},
+			)
 		}
 		budget, err := repository.store.MeasureTransaction(
 			ctx,

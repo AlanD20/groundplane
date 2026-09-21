@@ -17,7 +17,10 @@ func (s *store) TransactEnvironmentBlueprint(
 	return s.transact(ctx, conditions, mutations)
 }
 
-func validateEnvironmentBlueprintTransactionBudget(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) error {
+func validateEnvironmentBlueprintTransactionBudget(
+	conditions []etcdstore.Condition,
+	mutations []etcdstore.Mutation,
+) error {
 	if len(conditions) <= maximumEnvironmentBlueprintTransactionOperationsPerArm &&
 		len(mutations) <= maximumEnvironmentBlueprintTransactionOperationsPerArm {
 		return nil
@@ -31,7 +34,11 @@ func validateEnvironmentBlueprintTransactionBudget(conditions []etcdstore.Condit
 }
 
 type environmentBlueprintTransactionStore interface {
-	TransactEnvironmentBlueprint(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
+	TransactEnvironmentBlueprint(
+		context.Context,
+		[]etcdstore.Condition,
+		[]etcdstore.Mutation,
+	) (etcdstore.TransactionResult, error)
 }
 
 func executeEnvironmentBlueprintTransaction(
@@ -41,13 +48,19 @@ func executeEnvironmentBlueprintTransaction(
 	mutations []etcdstore.Mutation,
 ) (etcdstore.TransactionResult, error) {
 	if store == nil {
-		return etcdstore.TransactionResult{}, errs.New(errs.KindInternal, "Environment Blueprint transaction store is required")
+		return etcdstore.TransactionResult{}, errs.New(
+			errs.KindInternal,
+			"Environment Blueprint transaction store is required",
+		)
 	}
 	if err := validateEnvironmentBlueprintTransactionBudget(conditions, mutations); err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
 	if len(mutations) == 0 {
-		return etcdstore.TransactionResult{}, errs.New(errs.KindValidationFailed, "etcd transaction requires a mutation")
+		return etcdstore.TransactionResult{}, errs.New(
+			errs.KindValidationFailed,
+			"etcd transaction requires a mutation",
+		)
 	}
 	physicalConditions := make([]string, len(conditions))
 	for index := range conditions {

@@ -19,11 +19,19 @@ func (resolver *TaskPlanResolver) configurationRecoverySteps(ctx context.Context
 	}
 	steps := make([]*agentpb.ExecutionStep, 0, len(prepared.Files)*2)
 	for index, file := range prepared.Files {
-		probe, err := taskmaterialization.BuildTaskMaterializationStep(file.Probe, artifactID, uint32(task.TimeoutSeconds))
+		probe, err := taskmaterialization.BuildTaskMaterializationStep(
+			file.Probe,
+			artifactID,
+			uint32(task.TimeoutSeconds),
+		)
 		if err != nil {
 			return nil, nil, err
 		}
-		compensate, err := taskmaterialization.BuildTaskMaterializationStep(file.Compensate, artifactID, uint32(task.TimeoutSeconds))
+		compensate, err := taskmaterialization.BuildTaskMaterializationStep(
+			file.Compensate,
+			artifactID,
+			uint32(task.TimeoutSeconds),
+		)
 		if err != nil {
 			return nil, nil, err
 		}

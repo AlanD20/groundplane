@@ -82,7 +82,9 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskAcknowledgement(
 	})
 	if intent.OwnsEnvironmentFence {
 		active, activeErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID)}, Revision: revision,
+			Keys: []string{
+				environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
+			}, Revision: revision,
 		})
 		if activeErr != nil || active == nil || len(active.Values) != 1 ||
 			active.Values[0] == nil || !bytes.Equal(active.Values[0].Value, []byte(task.ID)) {
@@ -96,7 +98,9 @@ func (repository *TaskRepository) prepareBlueprintAttachTaskAcknowledgement(
 			)
 		}
 		change.conditions = append(change.conditions, etcdstore.Condition{
-			Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: active.Values[0].ModRevision,
+			Key: environmentchanges.ComponentTaskActiveEnvironmentKey(
+				intent.EnvironmentID,
+			), ModRevision: active.Values[0].ModRevision,
 		})
 		change.mutations = append(change.mutations, etcdstore.Mutation{
 			Type: etcdstore.MutationDelete, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(intent.EnvironmentID),
@@ -287,8 +291,10 @@ func (repository *TaskRepository) prepareBlueprintAttachCandidateTransition(
 		return blueprintAttachTaskChange{}, errs.New(errs.KindInternal, "Blueprint Attach candidate read is incomplete")
 	}
 	change := blueprintAttachTaskChange{
-		applies:    true,
-		conditions: []etcdstore.Condition{{Key: attachrecord.BlueprintAttachTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision}},
+		applies: true,
+		conditions: []etcdstore.Condition{
+			{Key: attachrecord.BlueprintAttachTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision},
+		},
 	}
 	for index, candidate := range intent.Candidates {
 		value := state.Values[index]

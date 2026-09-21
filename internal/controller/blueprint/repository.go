@@ -29,7 +29,10 @@ type environmentBlueprintRepository interface {
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetEnvironmentBlueprintHead(context.Context, string) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
+	GetEnvironmentBlueprintHead(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentBlueprintRevision(
 		context.Context,
 		string,
@@ -54,7 +57,11 @@ type environmentBlueprintRepository interface {
 	CreateBlueprintEntryValueGeneration(context.Context, entryrecord.EntryValueGeneration) error
 	BindBlueprintEntryEnvironment(context.Context, string, string) error
 	ListAttaches(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[attachrecord.Record], error)
-	ListEnvironmentComponents(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[componentrecord.Record], error)
+	ListEnvironmentComponents(
+		context.Context,
+		string,
+		etcdstore.PageRequest,
+	) (etcdstore.Page[componentrecord.Record], error)
 	PrepareEnvironmentComponentTask(
 		context.Context,
 		string,

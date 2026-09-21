@@ -231,12 +231,20 @@ func (repository *EtcdRepository) protectBegin(
 	if err != nil {
 		protected.Destroy()
 		clear(durable.Ciphertext)
-		return requestidempotency.ProtectedEvidence{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
+		return requestidempotency.ProtectedEvidence{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(
+			errs.KindInternal,
+			err,
+		)
 	}
 	marker := idempotencyrecord.IdempotencyMarker{
 		Kind: idempotencyrecord.IdempotencyMarkerTask, State: idempotencyrecord.IdempotencyMarkerPending,
-		Locator: idempotencyrecord.IdempotencyLocator{ScopeKind: idempotencyrecord.IdempotencyScopeKind(scopeKind), ScopeID: scopeID,
-			Method: begin.IdempotencyIntent.Method, Route: begin.IdempotencyIntent.RouteTemplate, Key: begin.IdempotencyKey},
+		Locator: idempotencyrecord.IdempotencyLocator{
+			ScopeKind: idempotencyrecord.IdempotencyScopeKind(scopeKind),
+			ScopeID:   scopeID,
+			Method:    begin.IdempotencyIntent.Method,
+			Route:     begin.IdempotencyIntent.RouteTemplate,
+			Key:       begin.IdempotencyKey,
+		},
 		ReplayTarget: &replayTarget, Intent: durable,
 		Response: idempotencyrecord.IdempotencyResponse{
 			Status:      http.StatusAccepted,
@@ -307,7 +315,10 @@ func (repository *EtcdRepository) replayedBeginAtRevision(
 	return BeginResult{Operation: converted, Existing: true}, nil
 }
 
-func replayScopeMatches(locator idempotencyrecord.IdempotencyLocator, operation hierarchydeletion.HierarchyDeletionOperation) bool {
+func replayScopeMatches(
+	locator idempotencyrecord.IdempotencyLocator,
+	operation hierarchydeletion.HierarchyDeletionOperation,
+) bool {
 	owner := operation.Owner
 	if owner.WorkspaceType == taskjournal.TaskWorkspacePlatform {
 		return locator.ScopeKind == idempotencyrecord.IdempotencyScopePlatform && locator.ScopeID == "-"
@@ -365,7 +376,10 @@ func domainScopeFromMarker(locator idempotencyrecord.IdempotencyLocator) (Target
 	return scope, locator.ScopeID, nil
 }
 
-func replayTargetForIntent(intent IdempotencyIntent, targetID string) (idempotencyrecord.IdempotencyReplayTarget, error) {
+func replayTargetForIntent(
+	intent IdempotencyIntent,
+	targetID string,
+) (idempotencyrecord.IdempotencyReplayTarget, error) {
 	var kind idempotencyrecord.IdempotencyReplayTargetKind
 	switch intent.RouteTemplate {
 	case TenantDeleteRoute:

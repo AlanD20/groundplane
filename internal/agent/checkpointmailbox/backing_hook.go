@@ -31,7 +31,9 @@ func NewBackingHookInbox() *BackingHookInbox {
 }
 
 // Register owns correlation state for an already validated checkpoint request.
-func (inbox *BackingHookInbox) Register(validated *agentpb.BackingHookCheckpointRequest) (<-chan *agentpb.BackingHookCheckpointAck, func(), error) {
+func (inbox *BackingHookInbox) Register(
+	validated *agentpb.BackingHookCheckpointRequest,
+) (<-chan *agentpb.BackingHookCheckpointAck, func(), error) {
 	key := backingHookCheckpointKey{
 		taskID: validated.GetTaskId(), assignmentID: validated.GetAssignmentId(),
 		stepID: validated.GetStepId(), state: validated.GetState(),

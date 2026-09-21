@@ -24,7 +24,10 @@ func (ledger *Reader) VerifySuccessfulRelease(
 	if read == nil || read.ReadRevision != revision || len(read.Values) != 1 || read.Values[0] == nil {
 		return releases.CorruptReleaseRecord()
 	}
-	terminal, err := releases.DecodeReleaseRecord[domain.TerminalSummary](read.Values[0].Value, "release-terminal-summary")
+	terminal, err := releases.DecodeReleaseRecord[domain.TerminalSummary](
+		read.Values[0].Value,
+		"release-terminal-summary",
+	)
 	if err != nil || terminal.ReleaseID != intent.ID || terminal.FinalServingReleaseID != intent.ID {
 		return releases.CorruptReleaseRecord()
 	}

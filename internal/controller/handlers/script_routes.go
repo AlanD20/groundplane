@@ -240,10 +240,16 @@ func (s *Server) scriptMutationResponse(response idempotencyrecord.IdempotencyRe
 
 func scriptListRequest(environmentID string, limit int, cursor string) (etcdstore.PageRequest, error) {
 	if ids.Validate(ids.KindEnvironment, environmentID) != nil {
-		return etcdstore.PageRequest{}, errs.New(errs.KindValidationFailed, "Script list requires a stable Environment id")
+		return etcdstore.PageRequest{}, errs.New(
+			errs.KindValidationFailed,
+			"Script list requires a stable Environment id",
+		)
 	}
 	if limit < 0 {
-		return etcdstore.PageRequest{}, errs.New(errs.KindValidationFailed, "Script list limit must be a positive integer")
+		return etcdstore.PageRequest{}, errs.New(
+			errs.KindValidationFailed,
+			"Script list limit must be a positive integer",
+		)
 	}
 	return etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 }

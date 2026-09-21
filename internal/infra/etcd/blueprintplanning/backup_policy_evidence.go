@@ -147,7 +147,9 @@ func (repository *BackupPolicyPlanner) loadRetainedBlueprintBackupSources(
 	result := make([]blueprintBackupPolicySourceEvidence, len(policy.SourceIDs))
 	for index, sourceID := range policy.SourceIDs {
 		values, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-			backuppolicy.BackupSourceKey(sourceID), backuppolicy.BackupSourceEnvironmentKey(policy.EnvironmentID, sourceID),
+			backuppolicy.BackupSourceKey(
+				sourceID,
+			), backuppolicy.BackupSourceEnvironmentKey(policy.EnvironmentID, sourceID),
 		}, Revision: revision})
 		if err != nil {
 			return nil, err
@@ -245,7 +247,10 @@ func (repository *BackupPolicyPlanner) loadBlueprintBackupSources(
 			return nil, err
 		}
 		identityKey := backuppolicy.BackupSourceIdentityKey(input.EnvironmentID, selection.Kind, selection.TargetID)
-		identity, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{identityKey}, Revision: revision})
+		identity, err := repository.store.GetMany(
+			ctx,
+			etcdstore.GetManyRequest{Keys: []string{identityKey}, Revision: revision},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -269,7 +274,9 @@ func (repository *BackupPolicyPlanner) loadBlueprintBackupSources(
 		}
 		if identity.Values[0] != nil {
 			triples, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-				backuppolicy.BackupSourceKey(sourceID), backuppolicy.BackupSourceEnvironmentKey(input.EnvironmentID, sourceID),
+				backuppolicy.BackupSourceKey(
+					sourceID,
+				), backuppolicy.BackupSourceEnvironmentKey(input.EnvironmentID, sourceID),
 			}, Revision: revision})
 			if readErr != nil {
 				return nil, readErr

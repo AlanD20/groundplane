@@ -112,7 +112,10 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 		)
 	}
 	claimKey := taskjournal.TaskExecutionClaimKey(taskjournal.TaskExecutorAgent, input.AgentID, input.TaskID)
-	claim, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{claimKey}, Revision: primary.ReadRevision})
+	claim, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{claimKey}, Revision: primary.ReadRevision},
+	)
 	if err != nil {
 		return backingHookCheckpointAnchor{}, err
 	}
@@ -145,6 +148,9 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 	}
 	anchor.current = &record
 	anchor.checkpointRevision = primary.Values[2].ModRevision
-	anchor.conditions = append(anchor.conditions, etcdstore.Condition{Key: checkpointKey, ModRevision: primary.Values[2].ModRevision})
+	anchor.conditions = append(
+		anchor.conditions,
+		etcdstore.Condition{Key: checkpointKey, ModRevision: primary.Values[2].ModRevision},
+	)
 	return anchor, nil
 }

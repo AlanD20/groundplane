@@ -29,7 +29,10 @@ func (repository *Reader) ResolveRunner(
 			return etcdstore.Versioned[RunnerRecord]{}, err
 		}
 		if current.Record.Desired.TenantID != tenantID {
-			return etcdstore.Versioned[RunnerRecord]{}, errs.New(errs.KindScopeUnauthorized, "Runner is outside the Tenant scope")
+			return etcdstore.Versioned[RunnerRecord]{}, errs.New(
+				errs.KindScopeUnauthorized,
+				"Runner is outside the Tenant scope",
+			)
 		}
 		return current, nil
 	}
@@ -88,11 +91,17 @@ func (repository *Reader) GetRunner(ctx context.Context, id string) (etcdstore.V
 		return etcdstore.Versioned[RunnerRecord]{}, errs.New(errs.KindRunnerNotFound, "Runner was not found")
 	}
 	if result.Values[0] == nil || result.Values[1] == nil {
-		return etcdstore.Versioned[RunnerRecord]{}, errs.New(errs.KindInternal, "runner desired/lifecycle pair is incomplete")
+		return etcdstore.Versioned[RunnerRecord]{}, errs.New(
+			errs.KindInternal,
+			"runner desired/lifecycle pair is incomplete",
+		)
 	}
 	record, err := DecodeRunnerAggregate(result.Values[0], result.Values[1])
 	if err != nil || record.Desired.ID != id {
-		return etcdstore.Versioned[RunnerRecord]{}, errs.New(errs.KindInternal, "runner desired/lifecycle pair is corrupt")
+		return etcdstore.Versioned[RunnerRecord]{}, errs.New(
+			errs.KindInternal,
+			"runner desired/lifecycle pair is corrupt",
+		)
 	}
 	return etcdstore.Versioned[RunnerRecord]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,
@@ -211,11 +220,17 @@ func (repository *Reader) listTenantRunners(
 		}
 		for index, value := range records.Values {
 			if value == nil {
-				return etcdstore.Page[RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant membership is corrupt")
+				return etcdstore.Page[RunnerRecord]{}, errs.New(
+					errs.KindInternal,
+					"runner tenant membership is corrupt",
+				)
 			}
 			record, err := DecodeRunnerDesiredAggregate(value.Value)
 			if err != nil || record.Desired.ID != idsPage[index] || record.Desired.TenantID != tenantID {
-				return etcdstore.Page[RunnerRecord]{}, errs.New(errs.KindInternal, "runner tenant membership is corrupt")
+				return etcdstore.Page[RunnerRecord]{}, errs.New(
+					errs.KindInternal,
+					"runner tenant membership is corrupt",
+				)
 			}
 			page.Items = append(page.Items, etcdstore.Versioned[RunnerRecord]{
 				Record: record, Revision: value.ModRevision, ReadRevision: records.ReadRevision,

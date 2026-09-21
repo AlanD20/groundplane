@@ -38,7 +38,10 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 	}
 	rootOrdinal := *operation.Tombstone.PlanCount - 1
 	actionKey, _ := hierarchydeletion.HierarchyDeletionActionKey(operation.Tombstone.OperationID, rootOrdinal)
-	actionRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{actionKey}, Revision: revision})
+	actionRead, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{actionKey}, Revision: revision},
+	)
 	if err != nil {
 		return hierarchyDeletionRootAckChange{}, err
 	}
@@ -102,7 +105,10 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 		},
 		CompletedAt: terminalAt,
 	}
-	completionValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(completion, hierarchydeletion.HierarchyDeletionCompletionRecordBytes)
+	completionValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(
+		completion,
+		hierarchydeletion.HierarchyDeletionCompletionRecordBytes,
+	)
 	if err != nil {
 		change.clear()
 		return hierarchyDeletionRootAckChange{}, err

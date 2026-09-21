@@ -103,7 +103,12 @@ func (repository *TaskRepository) claimNextTask(
 			}
 			continue
 		}
-		running, err := TransitionTaskStatus(task, taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, claimAt)
+		running, err := TransitionTaskStatus(
+			task,
+			taskjournal.TaskStatusPending,
+			taskjournal.TaskStatusRunning,
+			claimAt,
+		)
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
@@ -223,7 +228,8 @@ func (repository *TaskRepository) claimNextTask(
 				mutations = append(mutations, epochMutation)
 			}
 		}
-		if !taskHasBlueprintCandidateAppliedAuthority(task) && task.Params[releaserender.TaskReleasePublicationParam] != "" {
+		if !taskHasBlueprintCandidateAppliedAuthority(task) &&
+			task.Params[releaserender.TaskReleasePublicationParam] != "" {
 			authority, authorityDigest, authorityConditions, authorityErr := repository.prepareOrdinaryRestorationAuthority(
 				ctx,
 				task,

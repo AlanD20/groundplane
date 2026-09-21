@@ -31,7 +31,12 @@ func (p *WorkerPool) observeComponentRollback(
 	if len(assignment.Plan.GetSteps()) != 0 {
 		step.StepId = assignment.Plan.GetSteps()[0].GetStepId()
 	}
-	result, err := p.componentActions.ExecuteComponentAction(ctx, assignment, step, componentaction.ManagedConfigPayload{})
+	result, err := p.componentActions.ExecuteComponentAction(
+		ctx,
+		assignment,
+		step,
+		componentaction.ManagedConfigPayload{},
+	)
 	if err != nil {
 		return nil, err
 	}

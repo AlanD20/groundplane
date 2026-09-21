@@ -24,7 +24,9 @@ func (repository *Preparer) prepareHierarchyDeletionTenantFinalizer(
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	prefixes := []string{
-		hierarchyrecord.ProjectTenantOwnerPrefix(record.ID), runnerrecord.RunnerOwnerPrefix(runnerrecord.RunnerOwnerTenant, record.ID),
+		hierarchyrecord.ProjectTenantOwnerPrefix(
+			record.ID,
+		), runnerrecord.RunnerOwnerPrefix(runnerrecord.RunnerOwnerTenant, record.ID),
 	}
 	if _, err := repository.requireHierarchyDeletionPrefixesEmpty(ctx, prefixes); err != nil {
 		return Effects{}, err
@@ -71,7 +73,9 @@ func (repository *Preparer) prepareHierarchyDeletionProjectFinalizer(
 		return Effects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
 	prefixes := []string{
-		hierarchyrecord.EnvironmentOwnerPrefix(record.ID), runnerrecord.RunnerOwnerPrefix(runnerrecord.RunnerOwnerProject, record.ID),
+		hierarchyrecord.EnvironmentOwnerPrefix(
+			record.ID,
+		), runnerrecord.RunnerOwnerPrefix(runnerrecord.RunnerOwnerProject, record.ID),
 		secrets.SecretOwnerCollectionPrefix(core.SecretScopeProject, record.ID),
 	}
 	if _, err := repository.requireHierarchyDeletionPrefixesEmpty(ctx, prefixes); err != nil {
@@ -79,7 +83,9 @@ func (repository *Preparer) prepareHierarchyDeletionProjectFinalizer(
 	}
 	indexes, err := repository.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{hierarchyrecord.ProjectSlugKey(record), hierarchyrecord.ProjectOwnerKey(record)}},
+		etcdstore.GetManyRequest{
+			Keys: []string{hierarchyrecord.ProjectSlugKey(record), hierarchyrecord.ProjectOwnerKey(record)},
+		},
 	)
 	if err != nil {
 		return Effects{}, err

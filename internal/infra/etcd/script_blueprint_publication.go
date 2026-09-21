@@ -189,8 +189,12 @@ func (repository *ScriptRepository) PrepareBlueprintScriptPublication(
 	}
 	return BlueprintScriptPublication{
 		environmentID: environmentID,
-		conditions:    []etcdstore.Condition{{Key: scriptrecord.ScriptSetActiveKey(environmentID), ModRevision: active.Revision}},
-		mutations:     []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(environmentID), Value: nextValue}},
+		conditions: []etcdstore.Condition{
+			{Key: scriptrecord.ScriptSetActiveKey(environmentID), ModRevision: active.Revision},
+		},
+		mutations: []etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(environmentID), Value: nextValue},
+		},
 	}, nil
 }
 
@@ -237,7 +241,10 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			deletions.TombstoneKey("script", record.Desired.ID),
 		)
 	}
-	lookups, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: lookupKeys, Revision: active.ReadRevision})
+	lookups, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: lookupKeys, Revision: active.ReadRevision},
+	)
 	if err != nil {
 		return false, err
 	}
@@ -280,16 +287,27 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			return false, errs.New(errs.KindInternal, "Script Environment locator is missing")
 		}
 
-		primaryKey := scriptrecord.ScriptSetScriptKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID)
+		primaryKey := scriptrecord.ScriptSetScriptKey(
+			record.EnvironmentID,
+			record.ScriptSetGeneration,
+			record.Desired.ID,
+		)
 		bodyKey := scriptrecord.ScriptSetBodyGenerationKey(
 			record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID, record.ActiveGeneration,
 		)
 		ownerKey := scriptrecord.ScriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID)
 		slugKey := scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug)
-		conditions = append(conditions,
-			locatorCondition, environmentLocatorCondition,
+		conditions = append(
+			conditions,
+			locatorCondition,
+			environmentLocatorCondition,
 			etcdstore.Condition{Key: deletions.TombstoneKey("script", record.Desired.ID)},
-			etcdstore.Condition{Key: primaryKey}, etcdstore.Condition{Key: bodyKey}, etcdstore.Condition{Key: ownerKey}, etcdstore.Condition{Key: slugKey},
+			etcdstore.Condition{
+				Key: primaryKey,
+			},
+			etcdstore.Condition{Key: bodyKey},
+			etcdstore.Condition{Key: ownerKey},
+			etcdstore.Condition{Key: slugKey},
 		)
 		primary, encodeErr := scriptrecord.EncodeRecord(record)
 		if encodeErr != nil {
@@ -324,7 +342,11 @@ func (repository *ScriptRepository) stageBlueprintScriptBatch(
 			}
 			mutations = append(
 				mutations,
-				etcdstore.Mutation{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptLocatorKey(record.Desired.ID), Value: locator},
+				etcdstore.Mutation{
+					Type:  etcdstore.MutationPut,
+					Key:   scriptrecord.ScriptLocatorKey(record.Desired.ID),
+					Value: locator,
+				},
 			)
 			mutations = append(mutations, etcdstore.Mutation{
 				Type: etcdstore.MutationPut, Key: scriptrecord.ScriptEnvironmentLocatorKey(record.EnvironmentID, record.Desired.ID),

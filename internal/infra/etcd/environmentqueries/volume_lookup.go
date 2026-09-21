@@ -35,7 +35,8 @@ func (repository *ProjectionReader) FindEnvironmentVolume(
 		}
 		if page == nil {
 			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
-				errs.KindInternal, "Environment desired-head scan is empty",
+				errs.KindInternal,
+				"Environment desired-head scan is empty",
 			)
 		}
 		for _, entry := range page.Values {
@@ -70,11 +71,13 @@ func (repository *ProjectionReader) FindEnvironmentVolume(
 		}
 		if len(page.Values) == 0 {
 			return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
-				errs.KindInternal, "Environment desired-head pagination did not advance",
+				errs.KindInternal,
+				"Environment desired-head pagination did not advance",
 			)
 		}
 	}
 	return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, projectionrecord.EnvironmentVolumeIdentity{}, errs.New(
-		errs.KindVolumeNotFound, "volume was not found",
+		errs.KindVolumeNotFound,
+		"volume was not found",
 	)
 }

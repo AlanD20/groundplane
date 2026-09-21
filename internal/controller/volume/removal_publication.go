@@ -15,8 +15,11 @@ import (
 )
 
 func (service *MutationService) prepareRemoval(
-	ctx context.Context, source etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], request volumeMutationRequest,
-	task *etcd.TaskRecord, marker idempotencyrecord.IdempotencyMarker,
+	ctx context.Context,
+	source etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	request volumeMutationRequest,
+	task *etcd.TaskRecord,
+	marker idempotencyrecord.IdempotencyMarker,
 ) (removal.InitialPublication, error) {
 	impact, err := hex.DecodeString(request.impactToken)
 	if err != nil || len(impact) != sha256.Size || len(task.Steps) == 0 {

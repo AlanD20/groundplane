@@ -178,7 +178,10 @@ func (service *connectorDeletionService) DeleteConnector(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "connector deletion context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"connector deletion context is required",
+		)
 	}
 	if ids.Validate(ids.KindConnector, connectorID) != nil {
 		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "connector id is invalid")
@@ -193,7 +196,10 @@ func (service *connectorDeletionService) DeleteConnector(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "connector deletion retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"connector deletion retry bound was not enforced",
+	)
 }
 
 func (service *connectorDeletionService) deleteConnectorOnce(
@@ -201,7 +207,10 @@ func (service *connectorDeletionService) deleteConnectorOnce(
 	connectorID string,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetConnector, ID: connectorID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetConnector,
+		ID:   connectorID,
+	}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodDelete, connectorDeletionRoute, idempotencyKey,
 	)
@@ -302,7 +311,10 @@ func (service *connectorDeletionService) deleteConnectorOnce(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "connector deletion resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"connector deletion resolution is invalid",
+		)
 	}
 }
 

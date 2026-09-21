@@ -61,7 +61,9 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 	if task.Type != taskjournal.TaskRotate || task.Executor != taskjournal.TaskExecutorController || task.Status != taskjournal.TaskStatusPending ||
 		task.Target != plan.record.EnvironmentID || task.ID != plan.record.TaskID || task.OperationID != plan.record.OperationID ||
 		task.Owner.EnvironmentID != plan.record.EnvironmentID || task.CreatedAt.UTC() != plan.record.CreatedAt ||
-		marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != task.ID {
+		marker.Kind != idempotencyrecord.IdempotencyMarkerTask ||
+		marker.State != idempotencyrecord.IdempotencyMarkerPending ||
+		marker.TaskID != task.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"backup key rotation Task publication is invalid",
@@ -91,12 +93,18 @@ func (publication *PreparedBackupKeyRotationPublication) publish(
 	defer clear(reference)
 	taskConditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID)}, {Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
+		{
+			Key: taskjournal.TaskActiveOperationKey(task.OperationID),
+		}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 	}
 	conditions := append(taskConditions, plan.conditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 	}

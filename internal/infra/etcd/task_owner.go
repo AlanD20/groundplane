@@ -50,7 +50,11 @@ func taskOwnerRetryScope(owner taskjournal.TaskOwner) (TaskRetryScope, error) {
 	}
 }
 
-func newTaskInitiation(owner taskjournal.TaskOwner, actor taskjournal.TaskActor, fences ...etcdstore.Condition) (TaskInitiation, error) {
+func newTaskInitiation(
+	owner taskjournal.TaskOwner,
+	actor taskjournal.TaskActor,
+	fences ...etcdstore.Condition,
+) (TaskInitiation, error) {
 	if err := taskjournal.ValidateOwner(owner); err != nil {
 		return TaskInitiation{}, err
 	}
@@ -85,7 +89,10 @@ func newProjectTaskInitiation(
 	if err != nil {
 		return TaskInitiation{}, err
 	}
-	ancestry = append(ancestry, etcdstore.Condition{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision})
+	ancestry = append(
+		ancestry,
+		etcdstore.Condition{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
+	)
 	return newTaskInitiation(owner, actor, ancestry...)
 }
 
@@ -109,7 +116,10 @@ func newEnvironmentTaskInitiation(
 	ancestry = append(
 		ancestry,
 		etcdstore.Condition{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		etcdstore.Condition{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
+		etcdstore.Condition{
+			Key:         hierarchyrecord.EnvironmentKey(environment.Record.ID),
+			ModRevision: environment.Revision,
+		},
 	)
 	return newTaskInitiation(owner, actor, ancestry...)
 }
@@ -131,7 +141,10 @@ func newEnvironmentCreationTaskInitiation(
 	if err != nil {
 		return TaskInitiation{}, err
 	}
-	ancestry = append(ancestry, etcdstore.Condition{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision})
+	ancestry = append(
+		ancestry,
+		etcdstore.Condition{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
+	)
 	return newTaskInitiation(owner, actor, ancestry...)
 }
 
@@ -145,7 +158,8 @@ func loadTaskInitiationTenant(
 	if project.Record.Kind == hierarchyrecord.ProjectKindBacking {
 		return nil, nil
 	}
-	if project.Record.Kind != hierarchyrecord.ProjectKindTenant || ids.Validate(ids.KindTenant, project.Record.TenantID) != nil {
+	if project.Record.Kind != hierarchyrecord.ProjectKindTenant ||
+		ids.Validate(ids.KindTenant, project.Record.TenantID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "task initiation project ancestry is invalid")
 	}
 	result, err := store.Get(ctx, hierarchyrecord.TenantKey(project.Record.TenantID))
@@ -179,7 +193,9 @@ func taskInitiationTenantFence(
 		if tenant == nil || tenant.Record.ID != project.Record.TenantID || tenant.Revision <= 0 {
 			return nil, errs.New(errs.KindValidationFailed, "task initiation tenant ancestry is invalid")
 		}
-		return []etcdstore.Condition{{Key: hierarchyrecord.TenantKey(tenant.Record.ID), ModRevision: tenant.Revision}}, nil
+		return []etcdstore.Condition{
+			{Key: hierarchyrecord.TenantKey(tenant.Record.ID), ModRevision: tenant.Revision},
+		}, nil
 	case hierarchyrecord.ProjectKindBacking:
 		if tenant != nil || project.Record.TenantID != "" {
 			return nil, errs.New(errs.KindValidationFailed, "task initiation backing project ancestry is invalid")
@@ -311,7 +327,8 @@ func prepareTaskOwnerIndexPlan(
 		if mutation.Key != taskjournal.TaskStorageKey(record.ID) {
 			continue
 		}
-		if matchedMutation || mutation.Type != etcdstore.MutationPut || mutation.Prefix || !bytes.Equal(mutation.Value, encoded) {
+		if matchedMutation || mutation.Type != etcdstore.MutationPut || mutation.Prefix ||
+			!bytes.Equal(mutation.Value, encoded) {
 			return nil, nil, nil, errs.New(errs.KindInternal, "task publication mutation is invalid")
 		}
 		matchedMutation = true

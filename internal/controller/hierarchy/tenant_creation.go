@@ -136,7 +136,10 @@ func (service *tenantCreationService) CreateTenant(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Tenant creation context is required",
+		)
 	}
 	tenant, err := PrepareTenant(input)
 	if err != nil {
@@ -162,7 +165,12 @@ func (service *tenantCreationService) CreateTenant(
 		ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
 		Method: http.MethodPost, Route: tenantCreationRoute, Key: idempotencyKey,
 	}
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, evidence.durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
+		locator,
+		evidence.durable,
+		response,
+		service.now().UTC(),
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -189,7 +197,10 @@ func (service *tenantCreationService) CreateTenant(
 	case requestidempotency.ResolutionReplay:
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Tenant creation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Tenant creation resolution is invalid",
+		)
 	}
 }
 

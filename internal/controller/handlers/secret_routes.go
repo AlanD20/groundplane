@@ -26,7 +26,12 @@ import (
 
 type SecretReader interface {
 	GetSecret(context.Context, string) (etcdstore.Versioned[secretrecord.Record], error)
-	ListSecrets(context.Context, core.SecretScope, string, etcdstore.PageRequest) (etcdstore.Page[secretrecord.Record], error)
+	ListSecrets(
+		context.Context,
+		core.SecretScope,
+		string,
+		etcdstore.PageRequest,
+	) (etcdstore.Page[secretrecord.Record], error)
 	RevealSecret(context.Context, string) (string, error)
 }
 

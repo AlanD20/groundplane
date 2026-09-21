@@ -17,7 +17,11 @@ func (repository *BackupRuntimeRepository) CreateBackupOrphan(
 ) (etcdstore.Versioned[backupruntime.BackupRunRecord], error) {
 	changedOrdinal, changed := backupruntime.ChangedBackupSourceOrdinal(current.Record, next)
 	if int(ordinal) >= len(current.Record.Sources) || !changed || changedOrdinal != ordinal ||
-		backupruntime.ValidateBackupRunTransition(current.Record, next, backupruntime.BackupRunTransitionOrphanCreate) != nil ||
+		backupruntime.ValidateBackupRunTransition(
+			current.Record,
+			next,
+			backupruntime.BackupRunTransitionOrphanCreate,
+		) != nil ||
 		!backupruntime.BackupPointMatchesRunSource(orphan.Point, next, ordinal) || orphan.TaskID != next.TaskID ||
 		orphan.State != backupruntime.BackupOrphanInspect {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(

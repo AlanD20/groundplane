@@ -24,5 +24,9 @@ func newComponentRepository(store hierarchyStore) (*ComponentRepository, error) 
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "Component store is required")
 	}
-	return &ComponentRepository{Persistence: platformcomponents.NewPersistence(store), Repository: componentrecord.NewRepository(store), store: store}, nil
+	return &ComponentRepository{
+		Persistence: platformcomponents.NewPersistence(store),
+		Repository:  componentrecord.NewRepository(store),
+		store:       store,
+	}, nil
 }

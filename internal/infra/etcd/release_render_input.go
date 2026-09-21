@@ -45,16 +45,25 @@ func (ledger *ReleaseLedger) GetTaskRenderInput(
 		loaded.Values[2] == nil {
 		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 	}
-	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](loaded.Values[0].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+		loaded.Values[0].Value,
+		"release-staged-manifest",
+	)
 	if err != nil || manifest.PublicationID != publicationID || manifest.OperationID != task.OperationID {
 		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 	}
-	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](loaded.Values[1].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		loaded.Values[1].Value,
+		"release-publication",
+	)
 	if err != nil || marker.PublicationID != publicationID || marker.OperationID != task.OperationID ||
 		marker.ManifestDigest != manifest.Digest {
 		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 	}
-	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](loaded.Values[2].Value, "release-operation")
+	head, err := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](
+		loaded.Values[2].Value,
+		"release-operation",
+	)
 	if err != nil || head.OperationID != task.OperationID || head.PublicationID != publicationID ||
 		head.LatestTaskID != task.ID {
 		return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()

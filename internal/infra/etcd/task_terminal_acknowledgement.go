@@ -38,23 +38,11 @@ func (repository *TaskRepository) acknowledgeTask(
 	for {
 		terminalStatus = submittedTerminalStatus
 		result = taskjournal.CloneTaskResult(submittedResult)
-		primaryAndAssignment, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-			taskjournal.TaskStorageKey(taskID), claimKey, taskjournal.TaskAssignmentIndexKey(taskID),
-		}})
+		source, err := repository.readTaskAcknowledgementSource(ctx, executor, taskID, claimKey)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
-		if len(primaryAndAssignment.Values) != 3 || primaryAndAssignment.Values[0] == nil {
-			return etcdstore.Versioned[TaskRecord]{}, errs.Newf(errs.KindTaskNotFound, "task not found: %s", taskID)
-		}
-		taskValue := primaryAndAssignment.Values[0]
-		task, err := DecodeTaskRecord(taskValue.Value)
-		if err != nil {
-			return etcdstore.Versioned[TaskRecord]{}, err
-		}
-		if task.Executor != executor {
-			return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindStateConflict, "task execution authority changed")
-		}
+		primaryAndAssignment, taskValue, task := source.read, source.value, source.task
 		if acknowledged, handled, err := repository.acknowledgeSpecializedTask(
 			ctx, task, executor, agentID, agentGeneration, taskID, assignmentID,
 			terminalStatus, result, terminalAt,
@@ -68,7 +56,10 @@ func (repository *TaskRepository) acknowledgeTask(
 		environmentRemoval := executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskRemove &&
 			recordcodec.ValidateID(ids.KindEnvironment, task.Target) == nil
 		zoneRemoval := executor == taskjournal.TaskExecutorAgent && task.Type == taskjournal.TaskRemove &&
-			recordcodec.ValidateID(ids.KindNetwork, task.Target) == nil && task.Params[taskjournal.TaskZoneRemovalOperationParam] != ""
+			recordcodec.ValidateID(
+				ids.KindNetwork,
+				task.Target,
+			) == nil && task.Params[taskjournal.TaskZoneRemovalOperationParam] != ""
 		if environmentCreation != (environmentID != "") || (environmentCreation && task.Target != environmentID) {
 			return etcdstore.Versioned[TaskRecord]{}, errs.New(
 				errs.KindStateConflict,
@@ -103,14 +94,18 @@ func (repository *TaskRepository) acknowledgeTask(
 				Revision:     taskValue.ModRevision,
 				ReadRevision: primaryAndAssignment.ReadRevision,
 			},
-			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{Record: assignment, Revision: assignmentValue.ModRevision},
+			Assignment: etcdstore.Versioned[taskassignments.TaskAssignmentRecord]{
+				Record:   assignment,
+				Revision: assignmentValue.ModRevision,
+			},
 		}, terminalStatus, result)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		var recoveryAcknowledgement releaseRecoveryAcknowledgement
 		var terminalScriptSourceRelease scriptTerminalSourceRelease
-		if executor == taskjournal.TaskExecutorAgent && result != nil && task.Params[releaserender.TaskReleasePublicationParam] != "" &&
+		if executor == taskjournal.TaskExecutorAgent && result != nil &&
+			task.Params[releaserender.TaskReleasePublicationParam] != "" &&
 			assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 			recoveryAcknowledgement, err = repository.releaseRecoveryAcknowledgementAtRevision(
 				ctx, task, assignment, terminalStatus, *result, primaryAndAssignment.ReadRevision,
@@ -145,7 +140,8 @@ func (repository *TaskRepository) acknowledgeTask(
 			}
 			defer terminalScriptSourceRelease.clear()
 		}
-		if executor == taskjournal.TaskExecutorAgent && result != nil && task.Params[releaserender.TaskReleasePublicationParam] != "" &&
+		if executor == taskjournal.TaskExecutorAgent && result != nil &&
+			task.Params[releaserender.TaskReleasePublicationParam] != "" &&
 			result.ReconciliationRequired {
 			transitioned, processed, transitionErr := repository.transitionReleaseAcknowledgementToRecovery(
 				ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,

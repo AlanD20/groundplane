@@ -37,7 +37,7 @@ func seedManagedComponentRuntimeSources(
 		if !component.Desired.Enabled {
 			continue
 		}
-		source, err := ManagedComponentRuntimeSource(projection, component, artifact)
+		source, err := PrepareManagedComponentRuntimeSource(projection, component, artifact)
 		if err != nil {
 			return nil, err
 		}
@@ -49,7 +49,7 @@ func seedManagedComponentRuntimeSources(
 	return result, nil
 }
 
-func ManagedComponentRuntimeSource(
+func PrepareManagedComponentRuntimeSource(
 	projection EnvironmentComposeProjection,
 	component componentrecord.Record,
 	artifact *agentpb.ComposeArtifact,

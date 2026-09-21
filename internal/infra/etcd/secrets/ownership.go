@@ -102,13 +102,20 @@ func SecretCreateConditions(owner Owner, record Record) []etcdstore.Condition {
 		{Key: ValueKey(record.Secret.ID)},
 	}
 	if owner.Project != nil {
-		conditions = append(conditions,
-			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
+		conditions = append(
+			conditions,
+			etcdstore.Condition{
+				Key:         hierarchyrecord.ProjectKey(owner.Project.Record.ID),
+				ModRevision: owner.Project.Revision,
+			},
 		)
 	}
 	conditions = append(conditions, etcdstore.Condition{Key: deletionrecord.TombstoneKey("secret", record.Secret.ID)})
 	if owner.Project != nil {
-		conditions = append(conditions, etcdstore.Condition{Key: deletionrecord.TombstoneKey("project", owner.Project.Record.ID)})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: deletionrecord.TombstoneKey("project", owner.Project.Record.ID)},
+		)
 		if owner.Project.Record.TenantID != "" {
 			conditions = append(
 				conditions,
@@ -131,8 +138,12 @@ func SecretDeleteConditions(
 		{Key: ValueKey(current.Record.Secret.ID), ModRevision: dependencies[2].ModRevision},
 	}
 	if owner.Project != nil {
-		conditions = append(conditions,
-			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
+		conditions = append(
+			conditions,
+			etcdstore.Condition{
+				Key:         hierarchyrecord.ProjectKey(owner.Project.Record.ID),
+				ModRevision: owner.Project.Revision,
+			},
 		)
 	}
 	conditions = append(
@@ -140,7 +151,10 @@ func SecretDeleteConditions(
 		etcdstore.Condition{Key: deletionrecord.TombstoneKey("secret", current.Record.Secret.ID)},
 	)
 	if owner.Project != nil {
-		conditions = append(conditions, etcdstore.Condition{Key: deletionrecord.TombstoneKey("project", owner.Project.Record.ID)})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: deletionrecord.TombstoneKey("project", owner.Project.Record.ID)},
+		)
 		if owner.Project.Record.TenantID != "" {
 			conditions = append(
 				conditions,

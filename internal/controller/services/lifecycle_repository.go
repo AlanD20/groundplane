@@ -23,7 +23,11 @@ type serviceLifecycleRepository interface {
 		string,
 	) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error)
 	ResolveServing(context.Context, string, string, int64) (releasequeries.ServingRelease, error)
-	GetReleaseRenderInputAt(context.Context, string, int64) (etcdstore.Versioned[releaserender.ReleaseRenderInput], error)
+	GetReleaseRenderInputAt(
+		context.Context,
+		string,
+		int64,
+	) (etcdstore.Versioned[releaserender.ReleaseRenderInput], error)
 	BeginServiceLifecycleWithTaskHookInputs(
 		context.Context,
 		*etcdstore.Versioned[hierarchyrecord.TenantRecord],

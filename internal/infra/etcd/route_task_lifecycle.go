@@ -65,7 +65,8 @@ func sameRouteDesiredVersion(left routerecord.Record, right routerecord.Record) 
 
 func validateRouteRemovalTaskOwner(task TaskRecord, intent environmentchanges.RouteRemovalIntent) error {
 	expectedExecutor := taskjournal.TaskExecutorController
-	validParams := len(task.Params) == 2 && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceRoute &&
+	validParams := len(task.Params) == 2 &&
+		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceRoute &&
 		task.Params[taskjournal.TaskRouteEnvironmentParam] == intent.EnvironmentID
 	if intent.Provider != nil {
 		expectedExecutor = taskjournal.TaskExecutorAgent

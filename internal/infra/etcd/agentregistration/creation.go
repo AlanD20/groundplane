@@ -49,7 +49,10 @@ func (repository *Repository) CreateSingleton(
 	etcdstore.ClearValues(result.FailureReads)
 	if !result.Succeeded {
 		if len(result.FailureReads) == len(conditions) && result.FailureReads[0] != nil {
-			return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(errs.KindStateConflict, "the local Agent already exists")
+			return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(
+				errs.KindStateConflict,
+				"the local Agent already exists",
+			)
 		}
 		return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{}, errs.New(
 			errs.KindInternal,
@@ -57,6 +60,8 @@ func (repository *Repository) CreateSingleton(
 		)
 	}
 	return etcdstore.Versioned[localagentrecord.LocalAgentRecord]{
-		Record: localagentrecord.CloneLocalAgentRecord(record), Revision: result.Revision, ReadRevision: result.Revision,
+		Record: localagentrecord.CloneLocalAgentRecord(
+			record,
+		), Revision: result.Revision, ReadRevision: result.Revision,
 	}, nil
 }

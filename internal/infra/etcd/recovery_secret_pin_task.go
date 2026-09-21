@@ -55,7 +55,7 @@ func prepareRecoverySecretPins(
 		)
 	}
 	defer etcdstore.ClearValues(read.Values)
-	configuration, err := runtimeconfiguration.NewRepository(runtimeConfigurationStore{store: store})
+	configuration, err := runtimeconfiguration.New(store)
 	if err != nil {
 		return TaskRecord{}, tasksecretpins.Prepared{}, err
 	}

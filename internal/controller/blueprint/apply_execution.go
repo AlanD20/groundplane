@@ -232,7 +232,14 @@ func (service *Service) applyBlueprintOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	reconciledRoutes, routeChanges, err := service.prepareApplyRoutes(ctx, environmentID, &parsed, desiredServices, preserveRoutes, allocator.New)
+	reconciledRoutes, routeChanges, err := service.prepareApplyRoutes(
+		ctx,
+		environmentID,
+		&parsed,
+		desiredServices,
+		preserveRoutes,
+		allocator.New,
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -369,7 +376,10 @@ func (service *Service) applyBlueprintOnce(
 	steps := append([]*agentpb.ExecutionStep(nil), materializationSteps...)
 	stepRecords := make([]taskjournal.TaskStepRecord, 0, len(materializationSteps)+4)
 	for _, step := range materializationSteps {
-		stepRecords = append(stepRecords, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: step.StepId})
+		stepRecords = append(
+			stepRecords,
+			taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: step.StepId},
+		)
 	}
 	managedVolumeIDs := managedEnvironmentVolumeIDs(changes.Current.Volumes)
 	var volumeIntentDigest []byte
@@ -489,7 +499,12 @@ func (service *Service) applyBlueprintOnce(
 		AllocateNamed: allocator.Named, CreatedAt: now,
 	})
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, desiredrevision.Abandon(ctx, service.repository, stagedPublication, err)
+		return idempotencyrecord.IdempotencyResponse{}, desiredrevision.Abandon(
+			ctx,
+			service.repository,
+			stagedPublication,
+			err,
+		)
 	}
 	task = preparedRelease.Task
 	abandonPrepared := func(cause error) error {

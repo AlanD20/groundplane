@@ -121,7 +121,8 @@ func (repository *Repository) composeBackingService(
 	ctx context.Context,
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 ) (etcdstore.Versioned[Record], error) {
-	if project.ReadRevision <= 0 || project.Record.Kind != hierarchyrecord.ProjectKindBacking || project.Record.TenantID != "" {
+	if project.ReadRevision <= 0 || project.Record.Kind != hierarchyrecord.ProjectKindBacking ||
+		project.Record.TenantID != "" {
 		return etcdstore.Versioned[Record]{}, errs.New(
 			errs.KindInternal,
 			"Backing-service Project projection is inconsistent",
@@ -164,7 +165,17 @@ func (repository *Repository) composeBackingService(
 		)
 	}
 	serviceID := projection.Record.DesiredServices[0].Desired.ID
-	service, err := servicerecord.ReadJoined(ctx, repository.store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, serviceID, blueprints.EnvironmentBlueprintHeadKey(environmentID))
+	service, err := servicerecord.ReadJoined(
+		ctx,
+		repository.store,
+		servicerecord.DesiredSelection{
+			Services:     projection.Record.DesiredServices,
+			Revision:     projection.Revision,
+			ReadRevision: projection.ReadRevision,
+		},
+		serviceID,
+		blueprints.EnvironmentBlueprintHeadKey(environmentID),
+	)
 	if err != nil {
 		return etcdstore.Versioned[Record]{}, err
 	}

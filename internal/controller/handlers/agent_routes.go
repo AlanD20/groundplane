@@ -21,7 +21,12 @@ type AgentReader interface {
 	ListAgents(context.Context) ([]apiTypes.Agent, error)
 	GetAgent(context.Context, string) (apiTypes.Agent, error)
 	GetAgentConfig(context.Context, string) (apiTypes.AgentConfig, error)
-	UpdateAgentConfig(context.Context, string, apiTypes.AgentConfig, string) (idempotencyrecord.IdempotencyResponse, error)
+	UpdateAgentConfig(
+		context.Context,
+		string,
+		apiTypes.AgentConfig,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type AgentMutator interface {
@@ -241,7 +246,10 @@ func (s *Server) replaceAgentConfig(
 	return s.agentMutationResponse(response, "config replacement"), nil
 }
 
-func (s *Server) agentMutationResponse(response idempotencyrecord.IdempotencyResponse, action string) *agentMutationOutput {
+func (s *Server) agentMutationResponse(
+	response idempotencyrecord.IdempotencyResponse,
+	action string,
+) *agentMutationOutput {
 	return &agentMutationOutput{
 		Status: response.Status, ContentType: response.ContentKind,
 		Body: func(ctx huma.Context) {

@@ -78,7 +78,8 @@ func (handler *ResourceHandler) Execute(
 			return errs.New(errs.KindValidationFailed, "Controller Task Agent target is invalid")
 		}
 	case taskjournal.TaskResourceSecret:
-		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindSecret, task.Target) != nil || len(task.Params) != 1 {
+		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindSecret, task.Target) != nil ||
+			len(task.Params) != 1 {
 			return errs.New(errs.KindValidationFailed, "Controller Task Secret removal is invalid")
 		}
 		return nil
@@ -91,7 +92,8 @@ func (handler *ResourceHandler) Execute(
 		}
 		return nil
 	case taskjournal.TaskResourceScript:
-		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindScript, task.Target) != nil || len(task.Params) != 1 {
+		if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindScript, task.Target) != nil ||
+			len(task.Params) != 1 {
 			return errs.New(errs.KindValidationFailed, "Controller Task Script removal is invalid")
 		}
 		return nil
@@ -104,21 +106,24 @@ func (handler *ResourceHandler) Execute(
 		return nil
 	case taskjournal.TaskResourceRoute:
 		if (task.Type != taskjournal.TaskCreate && task.Type != taskjournal.TaskUpdate && task.Type != taskjournal.TaskRemove) ||
-			ids.Validate(ids.KindRoute, task.Target) != nil || len(task.Params) != 2 ||
+			ids.Validate(ids.KindRoute, task.Target) != nil ||
+			len(task.Params) != 2 ||
 			ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskRouteEnvironmentParam]) != nil {
 			return errs.New(errs.KindValidationFailed, "Controller Task Route mutation is invalid")
 		}
 		return nil
 	case taskjournal.TaskResourceService:
 		if (task.Type != taskjournal.TaskStart && task.Type != taskjournal.TaskStop && task.Type != taskjournal.TaskDestroy) ||
-			ids.Validate(ids.KindService, task.Target) != nil || len(task.Params) != 2 ||
+			ids.Validate(ids.KindService, task.Target) != nil ||
+			len(task.Params) != 2 ||
 			ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskServiceEnvironmentParam]) != nil {
 			return errs.New(errs.KindValidationFailed, "Controller Task Service lifecycle is invalid")
 		}
 		return nil
 	case taskjournal.TaskResourceReleaseGroup:
 		if (task.Type != taskjournal.TaskCreate && task.Type != taskjournal.TaskUpdate && task.Type != taskjournal.TaskRemove) ||
-			ids.Validate(ids.KindReleaseGroup, task.Target) != nil || len(task.Params) != 1 {
+			ids.Validate(ids.KindReleaseGroup, task.Target) != nil ||
+			len(task.Params) != 1 {
 			return errs.New(errs.KindValidationFailed, "controller Task release group mutation is invalid")
 		}
 		return nil
@@ -151,7 +156,8 @@ func (handler *ResourceHandler) Execute(
 }
 
 func (handler *ResourceHandler) executeRunnerRemoval(ctx context.Context, task etcd.TaskRecord) error {
-	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindRunner, task.Target) != nil || len(task.Params) != 6 {
+	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindRunner, task.Target) != nil ||
+		len(task.Params) != 6 {
 		return errs.New(errs.KindValidationFailed, "Controller Task Runner removal is invalid")
 	}
 	current, err := handler.runners.GetRunner(ctx, task.Target)

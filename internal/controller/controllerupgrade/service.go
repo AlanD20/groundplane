@@ -33,7 +33,11 @@ type AgentInventory interface {
 	ListHealth(context.Context) ([]localagent.Health, error)
 }
 type UpdateTaskStore interface {
-	CreateTask(context.Context, etcd.TaskRecord, idempotencyrecord.IdempotencyMarker) (etcd.IdempotencyTransactionResult, error)
+	CreateTask(
+		context.Context,
+		etcd.TaskRecord,
+		idempotencyrecord.IdempotencyMarker,
+	) (etcd.IdempotencyTransactionResult, error)
 	LatestControllerUpdate(context.Context) (etcdstore.Versioned[etcd.TaskRecord], bool, error)
 }
 
@@ -75,13 +79,22 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 		process: dependencies.ProcessDigest, bootstrapImage: dependencies.BootstrapAgentImage, now: time.Now}, nil
 }
 
-func (service *Service) UpdateController(ctx context.Context, release, key string) (idempotencyrecord.IdempotencyResponse, error) {
+func (service *Service) UpdateController(
+	ctx context.Context,
+	release, key string,
+) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "controller update context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"controller update context is required",
+		)
 	}
 	id := upgrade.Digest(release)
 	if !id.Valid() {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindValidationFailed, "controller release digest is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindValidationFailed,
+			"controller release digest is invalid",
+		)
 	}
 	evidence, err := service.protect(ctx, release)
 	if err != nil {
@@ -111,7 +124,11 @@ func (service *Service) UpdateController(ctx context.Context, release, key strin
 		return idempotencyrecord.IdempotencyResponse{}, errs.Wrap(errs.KindInternal, err)
 	}
 	defer clear(raw)
-	response := idempotencyrecord.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: raw}
+	response := idempotencyrecord.IdempotencyResponse{
+		Status:      http.StatusAccepted,
+		ContentKind: "application/json",
+		Body:        raw,
+	}
 	intent, err := evidence.DurableRecord()
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err

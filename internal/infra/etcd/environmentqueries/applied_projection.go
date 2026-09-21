@@ -86,7 +86,9 @@ func (repository *ProjectionReader) GetEnvironmentAppliedComposeProjection(
 		if result != nil {
 			readRevision = result.ReadRevision
 		}
-		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{ReadRevision: readRevision}, false, nil
+		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
+			ReadRevision: readRevision,
+		}, false, nil
 	}
 	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(result.Entry.Value)
 	if err != nil || projection.EnvironmentID != environmentID {

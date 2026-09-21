@@ -34,8 +34,10 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	if task.Params[releaserender.TaskReleasePublicationParam] == "" || !result.ReconciliationRequired {
 		return etcdstore.Versioned[TaskRecord]{}, false, nil
 	}
-	if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward || result.ExecutionEpoch != assignment.ExecutionEpoch ||
-		result.ReleaseRecoveryRecordSHA256 != "" || assignment.ExecutionEpoch == math.MaxUint32 ||
+	if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward ||
+		result.ExecutionEpoch != assignment.ExecutionEpoch ||
+		result.ReleaseRecoveryRecordSHA256 != "" ||
+		assignment.ExecutionEpoch == math.MaxUint32 ||
 		assignment.RestorationAuthority == nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, errs.New(
 			errs.KindStateConflict,
@@ -91,7 +93,10 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	}
 	defer clear(nextValue)
 	timeoutKey := taskjournal.TaskTimeoutIndexKey(task.ID, assignment.Deadline)
-	timeoutRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{timeoutKey}, Revision: revision})
+	timeoutRead, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{timeoutKey}, Revision: revision},
+	)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, true, err
 	}
@@ -118,7 +123,11 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 		{Type: etcdstore.MutationPut, Key: assignmentValue.Key, Value: nextValue},
 		{Type: etcdstore.MutationPut, Key: assignmentIndexValue.Key, Value: nextValue},
 		{Type: etcdstore.MutationDelete, Key: timeoutKey},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskTimeoutIndexKey(task.ID, assignment.RecoveryDeadline), Value: nextValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskTimeoutIndexKey(task.ID, assignment.RecoveryDeadline),
+			Value: nextValue,
+		},
 		{Type: etcdstore.MutationPut, Key: taskassignments.ReleaseRecoveryKey(task.ID), Value: recoveryValue},
 	})
 	if err != nil {
@@ -314,7 +323,10 @@ func (repository *TaskRepository) normalizeReleaseRecoveryTerminalReplay(
 			"terminal release recovery replay recreate evidence changed",
 		)
 	}
-	if !taskjournal.TaskCandidateAbsenceEvidenceEqual(task.Result.CandidateAbsenceEvidence, result.CandidateAbsenceEvidence) {
+	if !taskjournal.TaskCandidateAbsenceEvidenceEqual(
+		task.Result.CandidateAbsenceEvidence,
+		result.CandidateAbsenceEvidence,
+	) {
 		return status, nil, true, errs.New(
 			errs.KindStateConflict,
 			"terminal release recovery replay absence evidence changed",
@@ -383,7 +395,10 @@ func (repository *TaskRepository) assignmentLifecycleIndexAtRevision(
 	}
 	timeoutKey := taskjournal.TaskTimeoutIndexKey(assignment.TaskID, deadline)
 	proofKey := taskjournal.TaskRecoveryProofRequiredKey(assignment.TaskID)
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{timeoutKey, proofKey}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{timeoutKey, proofKey}, Revision: revision},
+	)
 	if err != nil {
 		return "", nil, false, err
 	}
@@ -413,7 +428,8 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 	revision int64,
 	observedAt time.Time,
 ) (bool, error) {
-	if assignment.ExecutionMode != taskassignments.TaskExecutionModeRecoveryOnly || assignment.RestorationAuthority == nil ||
+	if assignment.ExecutionMode != taskassignments.TaskExecutionModeRecoveryOnly ||
+		assignment.RestorationAuthority == nil ||
 		revision <= 0 ||
 		!observedAt.Equal(observedAt.UTC()) ||
 		observedAt.Before(assignment.RecoveryDeadline) {
@@ -429,7 +445,9 @@ func (repository *TaskRepository) markReleaseRecoveryProofRequired(
 	timeoutKey := taskjournal.TaskTimeoutIndexKey(assignment.TaskID, assignment.RecoveryDeadline)
 	proofKey := taskjournal.TaskRecoveryProofRequiredKey(assignment.TaskID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		taskjournal.TaskStorageKey(assignment.TaskID), claimKey, indexKey, timeoutKey, proofKey, taskassignments.ReleaseRecoveryKey(assignment.TaskID),
+		taskjournal.TaskStorageKey(
+			assignment.TaskID,
+		), claimKey, indexKey, timeoutKey, proofKey, taskassignments.ReleaseRecoveryKey(assignment.TaskID),
 	}, Revision: revision})
 	if err != nil {
 		return false, err

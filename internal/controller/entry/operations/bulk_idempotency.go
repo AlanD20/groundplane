@@ -61,7 +61,10 @@ func (service *durableEntryBulkUpsertIdempotency) Prepare(
 		digest := sha256.Sum256([]byte(entry.value))
 		items[index] = requestidempotency.Object(
 			requestidempotency.Field{Name: "key", Value: requestidempotency.String(entry.key)},
-			requestidempotency.Field{Name: "value_sha256", Value: requestidempotency.String(hex.EncodeToString(digest[:]))},
+			requestidempotency.Field{
+				Name:  "value_sha256",
+				Value: requestidempotency.String(hex.EncodeToString(digest[:])),
+			},
 		)
 	}
 	version, digest, err := requestidempotency.Canonicalize(ctx, requestidempotency.CanonicalIntentV1{

@@ -14,7 +14,8 @@ import (
 func unassignedReleaseAbort(task TaskRecord, status taskjournal.TaskStatus) bool {
 	return status == taskjournal.TaskStatusAborted && task.Status == taskjournal.TaskStatusAborted && task.StartedAt == nil &&
 		task.FinishedAt != nil && task.Executor == taskjournal.TaskExecutorAgent &&
-		(task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback) && task.Params[releaserender.TaskReleasePublicationParam] != ""
+		(task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback) &&
+		task.Params[releaserender.TaskReleasePublicationParam] != ""
 }
 
 // Task terminalization wins its assignment race first. Only then may the
@@ -29,7 +30,10 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 	}
 	for batch := 0; batch < 32; batch++ {
 		task := current.Record
-		keys := []string{taskjournal.TaskAssignmentIndexKey(task.ID), releases.ReleaseFenceSetKey(task.Owner.EnvironmentID)}
+		keys := []string{
+			taskjournal.TaskAssignmentIndexKey(task.ID),
+			releases.ReleaseFenceSetKey(task.Owner.EnvironmentID),
+		}
 		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: current.ReadRevision})
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -54,7 +58,10 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 			task,
 			taskassignments.TaskAssignmentRecord{},
 			taskjournal.TaskStatusAborted,
-			taskjournal.TaskResultRecord{Kind: taskjournal.TaskResultCompose, Diagnostic: taskjournal.TaskResultDiagnosticNone},
+			taskjournal.TaskResultRecord{
+				Kind:       taskjournal.TaskResultCompose,
+				Diagnostic: taskjournal.TaskResultDiagnosticNone,
+			},
 			"",
 			*task.FinishedAt,
 			current.ReadRevision,

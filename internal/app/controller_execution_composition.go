@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/AlanD20/groundplane/internal/componentregistration"
+	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	backupcapability "github.com/AlanD20/groundplane/internal/controller/backup"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	handlers "github.com/AlanD20/groundplane/internal/controller/handlers"
@@ -86,10 +86,18 @@ func newControllerExecutionComposition(
 	)
 	if err != nil {
 		_ = store.Close()
-		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize backing hook checkpoint service: %w", err)
+		return controllerExecutionComposition{}, fmt.Errorf(
+			"controller: initialize backing hook checkpoint service: %w",
+			err,
+		)
 	}
 	materializationResolver, err := initializeTaskMaterializationResolver(
-		store, authority.hierarchyRecords, dataServices.entryValues, dataServices.secretRecords, planResolver, authority.intentProtector,
+		store,
+		authority.hierarchyRecords,
+		dataServices.entryValues,
+		dataServices.secretRecords,
+		planResolver,
+		authority.intentProtector,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -103,7 +111,10 @@ func newControllerExecutionComposition(
 	scriptSourceReferences, err := initializeExecutionSourceReferences(ctx, store)
 	if err != nil {
 		_ = store.Close()
-		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize Script source-reference authority: %w", err)
+		return controllerExecutionComposition{}, fmt.Errorf(
+			"controller: initialize Script source-reference authority: %w",
+			err,
+		)
 	}
 	backupSecretEvidence, err := backupsecrets.NewReader(store)
 	if err != nil {

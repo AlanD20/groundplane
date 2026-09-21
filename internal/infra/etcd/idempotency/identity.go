@@ -144,7 +144,9 @@ func IdempotencyReplayTargetKey(
 		return "", err
 	}
 	value := IdempotencyReplayTargetPrefix + string(target.Kind) + "/" + target.ID + "/" +
-		recordcodec.EncodeKeySegment(method) + "/" + recordcodec.EncodeKeySegment(route) + "/" + recordcodec.EncodeKeySegment(key)
+		recordcodec.EncodeKeySegment(
+			method,
+		) + "/" + recordcodec.EncodeKeySegment(route) + "/" + recordcodec.EncodeKeySegment(key)
 	if len(value) > maximumMarkerKeyBytes {
 		return "", errs.New(errs.KindValidationFailed, "idempotency replay target lookup exceeds key limit")
 	}
@@ -247,7 +249,8 @@ func ValidateIdempotencyRetentionKey(key string, markerKey string, retainUntil t
 		return CorruptIdempotencyMarker()
 	}
 	decoded, err := decodeRawBase64(strings.TrimPrefix(segment[separator+1:], "~"))
-	if err != nil || string(decoded) != markerKey || recordcodec.EncodeKeySegment(string(decoded)) != segment[separator+1:] {
+	if err != nil || string(decoded) != markerKey ||
+		recordcodec.EncodeKeySegment(string(decoded)) != segment[separator+1:] {
 		return CorruptIdempotencyMarker()
 	}
 	return nil

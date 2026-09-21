@@ -20,7 +20,10 @@ func (s *store) MeasureTransaction(
 	mutations []etcdstore.Mutation,
 ) (etcdstore.TransactionBudget, error) {
 	if ctx == nil {
-		return etcdstore.TransactionBudget{}, errs.New(errs.KindInternal, "etcd transaction measurement context is required")
+		return etcdstore.TransactionBudget{}, errs.New(
+			errs.KindInternal,
+			"etcd transaction measurement context is required",
+		)
 	}
 	if err := ctx.Err(); err != nil {
 		return etcdstore.TransactionBudget{}, err

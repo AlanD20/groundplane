@@ -31,8 +31,12 @@ func desiredRevisionTaskEnvironment(task TaskRecord) (string, bool, error) {
 }
 
 func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
-	ctx context.Context, claim blueprints.EnvironmentBlueprintStageClaim, candidate projectionrecord.EnvironmentComposeProjection,
-	task TaskRecord, removed preparedDesiredScriptRemoval, revision int64,
+	ctx context.Context,
+	claim blueprints.EnvironmentBlueprintStageClaim,
+	candidate projectionrecord.EnvironmentComposeProjection,
+	task TaskRecord,
+	removed preparedDesiredScriptRemoval,
+	revision int64,
 ) (entryDesiredRemovalPublication, error) {
 	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil {
 		return entryDesiredRemovalPublication{}, nil
@@ -64,8 +68,13 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 		)
 	}
 	keys := []string{projectionrecord.EnvironmentComposeProjectionStorageKey(claim.EnvironmentID),
-		deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), task.Target), environmentchanges.EntryRemovalIntentKey(task.ID),
-		environmentchanges.ComponentTaskActiveEnvironmentKey(claim.EnvironmentID), taskjournal.TaskMaterializationWriterKey(claim.EnvironmentID),
+		deletionrecord.TombstoneKey(
+			string(deletionrecord.DeletionTargetEntry),
+			task.Target,
+		), environmentchanges.EntryRemovalIntentKey(task.ID),
+		environmentchanges.ComponentTaskActiveEnvironmentKey(
+			claim.EnvironmentID,
+		), taskjournal.TaskMaterializationWriterKey(claim.EnvironmentID),
 		blueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -105,7 +114,12 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 			}
 		}
 	}
-	intent, err := environmentchanges.NewDesiredEntryRemovalIntent(task.Target, current.Record.RevisionID, claim, applied)
+	intent, err := environmentchanges.NewDesiredEntryRemovalIntent(
+		task.Target,
+		current.Record.RevisionID,
+		claim,
+		applied,
+	)
 	if err != nil {
 		return entryDesiredRemovalPublication{}, err
 	}
@@ -178,7 +192,9 @@ func entryRemovalControllerWriter(task TaskRecord) ([]etcdstore.Mutation, error)
 	if err != nil {
 		return nil, err
 	}
-	return []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: taskjournal.TaskMaterializationWriterKey(environmentID), Value: value}}, nil
+	return []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskMaterializationWriterKey(environmentID), Value: value},
+	}, nil
 }
 
 func (publication entryDesiredRemovalPublication) bind(

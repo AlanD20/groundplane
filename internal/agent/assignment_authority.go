@@ -36,23 +36,35 @@ func clearBackingHookProcedureValues(procedure *agentpb.BackingHookProcedure) {
 	}
 }
 
-func validateAndCopyAssignment(assignment taskassignment.Assignment, volumeRoot string) (taskassignment.Assignment, error) {
+func validateAndCopyAssignment(
+	assignment taskassignment.Assignment,
+	volumeRoot string,
+) (taskassignment.Assignment, error) {
 	if err := ids.Validate(ids.KindAssignment, assignment.AssignmentID); err != nil {
-		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid assignment id")
+		return taskassignment.Assignment{}, errs.New(
+			errs.KindInternal,
+			"agent: Controller sent an invalid assignment id",
+		)
 	}
 	if err := ids.Validate(ids.KindTask, assignment.TaskID); err != nil {
 		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid task id")
 	}
 	if assignment.ExecutionEpoch == 0 || assignment.ForwardDeadline.IsZero() || assignment.RecoveryDeadline.IsZero() ||
 		assignment.RecoveryDeadline.Before(assignment.ForwardDeadline) {
-		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent invalid execution authority")
+		return taskassignment.Assignment{}, errs.New(
+			errs.KindInternal,
+			"agent: Controller sent invalid execution authority",
+		)
 	}
 	deadline := assignment.ForwardDeadline
 	switch assignment.ExecutionMode {
 	case agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_FORWARD:
 		if assignment.ReleaseRecoveryDirective != nil || len(assignment.ReleaseRecoveryRecordSHA256) != 0 ||
 			assignment.RecoveryProofRequired {
-			return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: forward assignment carries recovery authority")
+			return taskassignment.Assignment{}, errs.New(
+				errs.KindInternal,
+				"agent: forward assignment carries recovery authority",
+			)
 		}
 	case agentpb.TaskExecutionMode_TASK_EXECUTION_MODE_RECOVERY_ONLY:
 		deadline = assignment.RecoveryDeadline
@@ -65,13 +77,22 @@ func validateAndCopyAssignment(assignment taskassignment.Assignment, volumeRoot 
 				assignment.ReleaseRecoveryRecordSHA256,
 			) ||
 			assignment.RecoveryProofRequired && !assignment.Deadline.After(assignment.RecoveryDeadline) {
-			return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: recovery assignment authority is incomplete")
+			return taskassignment.Assignment{}, errs.New(
+				errs.KindInternal,
+				"agent: recovery assignment authority is incomplete",
+			)
 		}
 	default:
-		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid execution mode")
+		return taskassignment.Assignment{}, errs.New(
+			errs.KindInternal,
+			"agent: Controller sent an invalid execution mode",
+		)
 	}
 	if err := ids.Validate(ids.KindOperation, assignment.OperationID); err != nil {
-		return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid operation id")
+		return taskassignment.Assignment{}, errs.New(
+			errs.KindInternal,
+			"agent: Controller sent an invalid operation id",
+		)
 	}
 	if assignment.RetryOf != "" {
 		if err := ids.Validate(
@@ -79,7 +100,10 @@ func validateAndCopyAssignment(assignment taskassignment.Assignment, volumeRoot 
 			assignment.RetryOf,
 		); err != nil ||
 			assignment.RetryOf == assignment.TaskID {
-			return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Controller sent an invalid retry identity")
+			return taskassignment.Assignment{}, errs.New(
+				errs.KindInternal,
+				"agent: Controller sent an invalid retry identity",
+			)
 		}
 	}
 	plan, err := executionplan.Validate(assignment.Plan)
@@ -111,7 +135,10 @@ func validateAndCopyAssignment(assignment taskassignment.Assignment, volumeRoot 
 	for _, metadata := range plan.ScriptBodyArtifacts {
 		if metadata == nil || metadata.ScriptExecutionId == "" {
 			taskassignment.ClearScriptArtifacts(scriptArtifacts)
-			return taskassignment.Assignment{}, errs.New(errs.KindInternal, "agent: Script execution metadata is invalid")
+			return taskassignment.Assignment{}, errs.New(
+				errs.KindInternal,
+				"agent: Script execution metadata is invalid",
+			)
 		}
 		expectedCheckpoints[metadata.ScriptExecutionId] = struct{}{}
 	}

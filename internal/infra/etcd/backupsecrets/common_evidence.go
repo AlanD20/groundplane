@@ -70,7 +70,11 @@ func (reader *Reader) decodeCommonDynamicEvidence(
 	} {
 		credential := evidence.Connector.Connector.Credentials[name]
 		if credential.Kind == backupsecret.CredentialSourceSecretRef {
-			projectSecretKey := secrets.SecretKeyIndexKey(backupsecret.SecretScopeProject, projectKeyID, credential.SecretRef)
+			projectSecretKey := secrets.SecretKeyIndexKey(
+				backupsecret.SecretScopeProject,
+				projectKeyID,
+				credential.SecretRef,
+			)
 			platformKey := secrets.SecretKeyIndexKey(backupsecret.SecretScopePlatform, "", credential.SecretRef)
 			dynamic.secretIndexes = append(dynamic.secretIndexes, backupSecretIndexRead{
 				name: name, reference: credential.SecretRef,
@@ -81,7 +85,11 @@ func (reader *Reader) decodeCommonDynamicEvidence(
 	return nil
 }
 
-func requireNoDeletionFence(value *etcdstore.KeyValue, targetKind deletionrecord.DeletionTargetKind, stableID string) error {
+func requireNoDeletionFence(
+	value *etcdstore.KeyValue,
+	targetKind deletionrecord.DeletionTargetKind,
+	stableID string,
+) error {
 	if value == nil {
 		return nil
 	}

@@ -13,7 +13,8 @@ import (
 func validateEnvironmentEntryProjection(environmentID string, values []entryrecord.Record) error {
 	previousID := ""
 	for _, value := range values {
-		if value.Entry.ID <= previousID || value.EnvironmentID != environmentID || entryrecord.ValidateRecord(value) != nil {
+		if value.Entry.ID <= previousID || value.EnvironmentID != environmentID ||
+			entryrecord.ValidateRecord(value) != nil {
 			return errs.New(errs.KindValidationFailed, "Environment Entry projection is invalid or unsorted")
 		}
 		previousID = value.Entry.ID
@@ -77,7 +78,10 @@ func validateEnvironmentRouteProjections(
 		match := value.Desired.Host + "\x00" + value.Desired.Path
 		record := routerecord.Record{
 			EnvironmentID: value.EnvironmentID, Desired: value.Desired, DesiredGeneration: value.DesiredGeneration,
-			Observed: routerecord.Observation{Status: routerecord.ObservedUnserved, DesiredGeneration: value.DesiredGeneration},
+			Observed: routerecord.Observation{
+				Status:            routerecord.ObservedUnserved,
+				DesiredGeneration: value.DesiredGeneration,
+			},
 		}
 		if value.EnvironmentID != environmentID || match <= previousMatch || routerecord.ValidateRecord(record) != nil {
 			return errs.New(errs.KindValidationFailed, "Environment desired Route projection is invalid or unsorted")

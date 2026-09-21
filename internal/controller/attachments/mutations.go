@@ -125,7 +125,10 @@ func (service *MutationService) resolveMutationResult(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Attach mutation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Attach mutation resolution is invalid",
+		)
 	}
 	return requestidempotency.CloneResponse(response), nil
 }

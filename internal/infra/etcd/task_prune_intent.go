@@ -60,7 +60,9 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 	conditions := []etcdstore.Condition{{
 		Key: taskjournal.TaskPruneIntentKey(current.Record.TaskID), ModRevision: current.Revision,
 	}}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: taskjournal.TaskPruneIntentKey(current.Record.TaskID)}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskPruneIntentKey(current.Record.TaskID)},
+	}
 	if current.Record.AttachPlanID != "" {
 		references, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: attachrender.AttachTaskPlanReferenceScopePrefix(current.Record.AttachPlanID), Limit: 1,

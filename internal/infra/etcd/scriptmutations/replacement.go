@@ -28,7 +28,12 @@ func (repository *Repository) PrepareScriptReplacement(
 	if err := ValidateScriptVersion(current); err != nil {
 		return scriptrecord.Record{}, nil, nil, nil, err
 	}
-	active, err := scriptrecord.ReadActiveScriptSet(ctx, repository.store, current.Record.EnvironmentID, current.ReadRevision)
+	active, err := scriptrecord.ReadActiveScriptSet(
+		ctx,
+		repository.store,
+		current.Record.EnvironmentID,
+		current.ReadRevision,
+	)
 	if err != nil {
 		return scriptrecord.Record{}, nil, nil, nil, err
 	}
@@ -37,14 +42,26 @@ func (repository *Repository) PrepareScriptReplacement(
 	}
 	replacement.ScriptSetGeneration = active.Record.GenerationID
 	indexKeys := []string{
-		scriptrecord.ScriptSetOwnerKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.ID),
-		scriptrecord.ScriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, current.Record.Desired.Slug),
+		scriptrecord.ScriptSetOwnerKey(
+			current.Record.EnvironmentID,
+			active.Record.GenerationID,
+			current.Record.Desired.ID,
+		),
+		scriptrecord.ScriptSetSlugKey(
+			current.Record.EnvironmentID,
+			active.Record.GenerationID,
+			current.Record.Desired.Slug,
+		),
 	}
 	slugChanged := replacement.Desired.Slug != current.Record.Desired.Slug
 	if slugChanged {
 		indexKeys = append(
 			indexKeys,
-			scriptrecord.ScriptSetSlugKey(current.Record.EnvironmentID, active.Record.GenerationID, replacement.Desired.Slug),
+			scriptrecord.ScriptSetSlugKey(
+				current.Record.EnvironmentID,
+				active.Record.GenerationID,
+				replacement.Desired.Slug,
+			),
 		)
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -58,7 +75,10 @@ func (repository *Repository) PrepareScriptReplacement(
 		indexes.Values[1] == nil ||
 		string(indexes.Values[0].Value) != current.Record.Desired.ID ||
 		string(indexes.Values[1].Value) != current.Record.Desired.ID {
-		return scriptrecord.Record{}, nil, nil, nil, errs.New(errs.KindInternal, "Script indexes are missing or corrupt")
+		return scriptrecord.Record{}, nil, nil, nil, errs.New(
+			errs.KindInternal,
+			"Script indexes are missing or corrupt",
+		)
 	}
 	if slugChanged && indexes.Values[2] != nil {
 		return scriptrecord.Record{}, nil, nil, nil, errs.New(errs.KindNameConflict, "Script slug is already in use")
@@ -78,18 +98,32 @@ func (repository *Repository) PrepareScriptReplacement(
 	}
 	mutations := []etcdstore.Mutation{
 		{
-			Type:  etcdstore.MutationPut,
-			Key:   scriptrecord.ScriptSetScriptKey(replacement.EnvironmentID, active.Record.GenerationID, replacement.Desired.ID),
+			Type: etcdstore.MutationPut,
+			Key: scriptrecord.ScriptSetScriptKey(
+				replacement.EnvironmentID,
+				active.Record.GenerationID,
+				replacement.Desired.ID,
+			),
 			Value: value,
 		},
-		{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(replacement.EnvironmentID), Value: activeValue},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   scriptrecord.ScriptSetActiveKey(replacement.EnvironmentID),
+			Value: activeValue,
+		},
 	}
 	extras := scriptWriteConflictExtras{}
 	if slugChanged {
 		extras.newSlug = replacement.Desired.Slug
 		conditions = append(
 			conditions,
-			etcdstore.Condition{Key: scriptrecord.ScriptSetSlugKey(replacement.EnvironmentID, active.Record.GenerationID, extras.newSlug)},
+			etcdstore.Condition{
+				Key: scriptrecord.ScriptSetSlugKey(
+					replacement.EnvironmentID,
+					active.Record.GenerationID,
+					extras.newSlug,
+				),
+			},
 		)
 		mutations = append(
 			mutations,
@@ -102,8 +136,12 @@ func (repository *Repository) PrepareScriptReplacement(
 				),
 			},
 			etcdstore.Mutation{
-				Type:  etcdstore.MutationPut,
-				Key:   scriptrecord.ScriptSetSlugKey(replacement.EnvironmentID, active.Record.GenerationID, extras.newSlug),
+				Type: etcdstore.MutationPut,
+				Key: scriptrecord.ScriptSetSlugKey(
+					replacement.EnvironmentID,
+					active.Record.GenerationID,
+					extras.newSlug,
+				),
 				Value: []byte(replacement.Desired.ID),
 			},
 		)

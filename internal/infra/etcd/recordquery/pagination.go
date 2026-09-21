@@ -170,7 +170,10 @@ func ListFilteredPrimary[T any](
 			}
 			expectedID := strings.TrimPrefix(value.Key, prefix)
 			if identity(record) != expectedID {
-				return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "filtered primary list key does not match its record id")
+				return etcdstore.Page[T]{}, errs.New(
+					errs.KindInternal,
+					"filtered primary list key does not match its record id",
+				)
 			}
 			if !matches(record) {
 				continue
@@ -193,7 +196,10 @@ func ListFilteredPrimary[T any](
 			return etcdstore.Page[T]{Items: items, Revision: readRevision}, nil
 		}
 		if len(rangeResult.Values) == 0 {
-			return etcdstore.Page[T]{}, errs.New(errs.KindInternal, "filtered primary list returned an empty continuation")
+			return etcdstore.Page[T]{}, errs.New(
+				errs.KindInternal,
+				"filtered primary list returned an empty continuation",
+			)
 		}
 		start = rangeResult.Values[len(rangeResult.Values)-1].Key
 	}

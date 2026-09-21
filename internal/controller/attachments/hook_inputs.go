@@ -217,7 +217,8 @@ func (service *FactService) ResolveHookInput(
 		hookContext.ServiceID != current.Record.ServiceID {
 		return errs.New(errs.KindValidationFailed, "Backing hook Task input request is invalid")
 	}
-	allowed := hookContext.Event == backinghook.Attach && current.Record.Operation == attachrecord.AttachOperationProvision &&
+	allowed := hookContext.Event == backinghook.Attach &&
+		current.Record.Operation == attachrecord.AttachOperationProvision &&
 		(current.Record.Status == core.AttachPending || current.Record.Status == core.AttachProvisioning)
 	allowed = allowed || hookContext.Event == backinghook.Detach &&
 		current.Record.Operation == attachrecord.AttachOperationDetach && current.Record.Status == core.AttachDetaching
@@ -316,7 +317,10 @@ func (service *FactService) consumeHookInput(
 		Key: "HOST", Value: []byte(backingendpoint.New(record.BackingServiceID)),
 	})
 	for _, value := range bundle.HookInputs {
-		input.Values = append(input.Values, backinghook.Value{Key: value.Key, Value: append([]byte(nil), value.Value...)})
+		input.Values = append(
+			input.Values,
+			backinghook.Value{Key: value.Key, Value: append([]byte(nil), value.Value...)},
+		)
 	}
 	if err := service.appendBackingHookTaskInputs(ctx, task, draft, &input); err != nil {
 		clearBackingHookInput(&input)
@@ -327,7 +331,10 @@ func (service *FactService) consumeHookInput(
 	})
 	if hookContext.Event == backinghook.Detach && len(bundle.Sets) != 0 {
 		for _, value := range bundle.Sets[0].Facts {
-			input.Facts = append(input.Facts, backinghook.Value{Key: value.Key, Value: append([]byte(nil), value.Value...)})
+			input.Facts = append(
+				input.Facts,
+				backinghook.Value{Key: value.Key, Value: append([]byte(nil), value.Value...)},
+			)
 		}
 	}
 	defer clearBackingHookInput(&input)
@@ -375,7 +382,10 @@ func (service *FactService) SealHookResult(
 	if ctx == nil || current.Revision <= 0 || !current.Record.HookBundle ||
 		current.Record.Operation != attachrecord.AttachOperationProvision ||
 		(current.Record.Status != core.AttachPending && current.Record.Status != core.AttachProvisioning) {
-		return attachrecord.EncryptedFacts{}, errs.New(errs.KindStateConflict, "Backing hook result owner is unavailable")
+		return attachrecord.EncryptedFacts{}, errs.New(
+			errs.KindStateConflict,
+			"Backing hook result owner is unavailable",
+		)
 	}
 	if err := backinghook.ValidateOutput(schema, output); err != nil {
 		return attachrecord.EncryptedFacts{}, err

@@ -180,7 +180,10 @@ func (service *agentUpdateService) UpdateAgent(
 	}
 	if found {
 		if existing.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent update replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Agent update replay resolution is invalid",
+			)
 		}
 		return requestidempotency.CloneResponse(existing.Response), nil
 	}
@@ -195,10 +198,16 @@ func (service *agentUpdateService) UpdateAgent(
 		)
 	}
 	if health.Agent.Phase != localagent.PhaseReady {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindResourceInUse, "Agent is not ready for update")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindResourceInUse,
+			"Agent is not ready for update",
+		)
 	}
 	if health.Agent.Image == image {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "Agent already runs the selected image")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindStateConflict,
+			"Agent already runs the selected image",
+		)
 	}
 
 	now := service.now().UTC()
@@ -243,7 +252,10 @@ func (service *agentUpdateService) UpdateAgent(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 	if resolution.Kind != requestidempotency.ResolutionApplied {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Agent update resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Agent update resolution is invalid",
+		)
 	}
 	return requestidempotency.CloneResponse(response), nil
 }

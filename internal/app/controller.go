@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/config"
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
-	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	"log/slog"
 	"os"
 )

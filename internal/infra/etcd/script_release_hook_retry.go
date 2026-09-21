@@ -85,8 +85,14 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 			transfer.clear()
 			return releaseHookExecutionRetryTransfer{}, encodeErr
 		}
-		transfer.conditions = append(transfer.conditions, etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision})
-		transfer.mutations = append(transfer.mutations, etcdstore.Mutation{Type: etcdstore.MutationPut, Key: value.Key, Value: encoded})
+		transfer.conditions = append(
+			transfer.conditions,
+			etcdstore.Condition{Key: value.Key, ModRevision: value.ModRevision},
+		)
+		transfer.mutations = append(
+			transfer.mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: value.Key, Value: encoded},
+		)
 	}
 	return transfer, nil
 }
@@ -150,7 +156,8 @@ func (repository *TaskRepository) releaseScriptEffectEvidenceAtRevision(
 		record, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](value.Value, "script-execution")
 		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(record) != nil || record.ID != steps[index].executionID ||
 			record.CurrentTaskID != task.ID || record.OperationID != task.OperationID ||
-			record.StepID != steps[index].stepID || record.PlanHash != task.PlanHash ||
+			record.StepID != steps[index].stepID ||
+			record.PlanHash != task.PlanHash ||
 			record.State == scriptexecutions.ScriptExecutionNotStarted && record.AssignmentID != "" ||
 			record.State != scriptexecutions.ScriptExecutionNotStarted && record.AssignmentID != assignment.AssignmentID {
 			return false, nil, releases.CorruptReleaseRecord()

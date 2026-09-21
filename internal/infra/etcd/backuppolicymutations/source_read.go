@@ -22,7 +22,11 @@ func (repository *Repository) loadSourceEvidence(
 		backuppolicy.BackupSourceIdentityKey(record.EnvironmentID, record.Kind, record.TargetID),
 	}
 	if record.Kind == core.BackupSourceAttach {
-		keys = append(keys, attachrecord.AttachKey(record.TargetID), attachrecord.AttachOwnerKey(record.EnvironmentID, record.TargetID))
+		keys = append(
+			keys,
+			attachrecord.AttachKey(record.TargetID),
+			attachrecord.AttachOwnerKey(record.EnvironmentID, record.TargetID),
+		)
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {

@@ -88,11 +88,17 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 		)
 	}
 	conditions := []etcdstore.Condition{
-		{Key: platformcomponents.PlatformComponentTaskRenderInputKey(input.PlanID), ModRevision: state.Values[0].ModRevision},
+		{
+			Key:         platformcomponents.PlatformComponentTaskRenderInputKey(input.PlanID),
+			ModRevision: state.Values[0].ModRevision,
+		},
 		{Key: platformComponentTaskActiveKey(input.ComponentID)},
 	}
 	if origin.Record.ID != source.Record.ID {
-		conditions = append(conditions, etcdstore.Condition{Key: taskjournal.TaskStorageKey(origin.Record.ID), ModRevision: origin.Revision})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: taskjournal.TaskStorageKey(origin.Record.ID), ModRevision: origin.Revision},
+		)
 	}
 	value := []byte(retry.ID)
 	return hostResolutionReconciliationChange{

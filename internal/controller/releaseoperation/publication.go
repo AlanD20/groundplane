@@ -248,13 +248,19 @@ func (service *Service) publish(
 		}
 	}
 	if len(executions) != hooks.executions {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "release hook execution authority is incomplete")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"release hook execution authority is incomplete",
+		)
 	}
 	hookPublications := make([]etcd.ReleaseHookExecutionPublication, len(executions))
 	for index, execution := range executions {
 		sources, exists := hooks.sources[execution.ID]
 		if !exists {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "release hook execution source is missing")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"release hook execution source is missing",
+			)
 		}
 		hookPublications[index] = etcd.ReleaseHookExecutionPublication{Sources: sources, Execution: execution}
 	}
@@ -373,7 +379,11 @@ func releaseAcceptedResponse(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, nil, errs.Wrap(errs.KindInternal, err)
 	}
-	return idempotencyrecord.IdempotencyResponse{Status: http.StatusAccepted, ContentKind: "application/json", Body: body}, body, nil
+	return idempotencyrecord.IdempotencyResponse{
+		Status:      http.StatusAccepted,
+		ContentKind: "application/json",
+		Body:        body,
+	}, body, nil
 }
 
 func releaseOperationResolution(
@@ -386,7 +396,10 @@ func releaseOperationResolution(
 	case requestidempotency.ResolutionReplay:
 		return cloneIdempotencyResponse(resolution.Response), nil
 	default:
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "release idempotency resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"release idempotency resolution is invalid",
+		)
 	}
 }
 

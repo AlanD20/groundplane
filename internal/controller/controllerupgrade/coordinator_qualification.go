@@ -11,7 +11,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (coordinator *Coordinator) qualify(ctx context.Context, operation *nativeOperation) (taskjournal.TaskStatus, error) {
+func (coordinator *Coordinator) qualify(
+	ctx context.Context,
+	operation *nativeOperation,
+) (taskjournal.TaskStatus, error) {
 	expected := operation.expected
 	if coordinator.process != expected.Manifest.ControllerSHA256 {
 		return coordinator.requestRollback(

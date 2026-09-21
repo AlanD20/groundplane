@@ -120,7 +120,8 @@ func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
 }
 
 func scriptAssignmentTaskOwnsPlan(task TaskRecord, plan *agentpb.ExecutionPlan) bool {
-	if task.Type == taskjournal.TaskScript || task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback {
+	if task.Type == taskjournal.TaskScript || task.Type == taskjournal.TaskDeploy ||
+		task.Type == taskjournal.TaskRollback {
 		return true
 	}
 	return task.Type == taskjournal.TaskUpdate && task.Params[releaserender.TaskReleasePublicationParam] != "" &&
@@ -151,17 +152,24 @@ func (repository *ScriptRepository) ResolveScriptAssignmentArtifacts(
 	}
 	artifacts := &agentpb.ScriptAssignmentArtifacts{}
 	for _, metadata := range validated.ScriptBodyArtifacts {
-		executionRead, readErr := repository.store.Get(ctx, scriptexecutions.ScriptExecutionKey(metadata.ScriptExecutionId))
+		executionRead, readErr := repository.store.Get(
+			ctx,
+			scriptexecutions.ScriptExecutionKey(metadata.ScriptExecutionId),
+		)
 		if readErr != nil {
 			return nil, readErr
 		}
 		if executionRead == nil || executionRead.Entry == nil {
 			return nil, errs.New(errs.KindStateConflict, "Script execution record is missing")
 		}
-		execution, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](executionRead.Entry.Value, "script-execution")
+		execution, decodeErr := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](
+			executionRead.Entry.Value,
+			"script-execution",
+		)
 		if decodeErr != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.CurrentTaskID != task.ID ||
 			execution.OperationID != task.OperationID || execution.StepID != steps[metadata.ScriptExecutionId] ||
-			execution.PlanHash != task.PlanHash || !execution.ActiveReference {
+			execution.PlanHash != task.PlanHash ||
+			!execution.ActiveReference {
 			return nil, errs.New(errs.KindInternal, "Script execution record is corrupt")
 		}
 		if task.Type == taskjournal.TaskScript {

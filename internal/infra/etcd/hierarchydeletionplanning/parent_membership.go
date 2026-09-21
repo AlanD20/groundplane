@@ -18,7 +18,8 @@ func (repository *Planner) freezeTenantMembership(
 		ctx, operation.SnapshotRevision, hierarchyrecord.ProjectTenantOwnerPrefix(operation.TargetID),
 		hierarchyrecord.ProjectKey, ids.KindProject, func(value []byte, id, owner string) error {
 			record, decodeErr := hierarchyrecord.DecodeProject(value)
-			if decodeErr != nil || record.ID != id || record.TenantID != owner || record.Kind != hierarchyrecord.ProjectKindTenant {
+			if decodeErr != nil || record.ID != id || record.TenantID != owner ||
+				record.Kind != hierarchyrecord.ProjectKindTenant {
 				return hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			return nil
@@ -62,14 +63,19 @@ func (repository *Planner) freezeProjectMembership(
 	root bool,
 ) ([]HierarchyDeletionMembershipNode, error) {
 	environments, err := repository.hierarchyDeletionIndexedTargets(
-		ctx, operation.SnapshotRevision, hierarchyrecord.EnvironmentOwnerPrefix(projectID), hierarchyrecord.EnvironmentKey,
-		ids.KindEnvironment, func(value []byte, id, owner string) error {
+		ctx,
+		operation.SnapshotRevision,
+		hierarchyrecord.EnvironmentOwnerPrefix(projectID),
+		hierarchyrecord.EnvironmentKey,
+		ids.KindEnvironment,
+		func(value []byte, id, owner string) error {
 			record, decodeErr := hierarchyrecord.DecodeEnvironment(value)
 			if decodeErr != nil || record.ID != id || record.ProjectID != owner {
 				return hierarchydeletion.CorruptHierarchyDeletion()
 			}
 			return nil
-		}, projectID,
+		},
+		projectID,
 	)
 	if err != nil {
 		return nil, err

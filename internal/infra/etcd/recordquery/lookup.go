@@ -57,7 +57,10 @@ func Resolve[T any](
 	if ids.Validate(idKind, id) != nil {
 		return etcdstore.Versioned[T]{}, errs.New(errs.KindInternal, "slug index contains an invalid stable id")
 	}
-	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{primaryKey(id)}, Revision: index.ReadRevision})
+	result, err := store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{primaryKey(id)}, Revision: index.ReadRevision},
+	)
 	if err != nil {
 		return etcdstore.Versioned[T]{}, err
 	}
@@ -72,7 +75,10 @@ func Resolve[T any](
 		return etcdstore.Versioned[T]{}, errs.New(errs.KindInternal, "slug index id does not match its primary record")
 	}
 	if !matches(record) {
-		return etcdstore.Versioned[T]{}, errs.New(errs.KindInternal, "slug index ownership does not match its primary record")
+		return etcdstore.Versioned[T]{}, errs.New(
+			errs.KindInternal,
+			"slug index ownership does not match its primary record",
+		)
 	}
 	return etcdstore.Versioned[T]{
 		Record: record, Revision: result.Values[0].ModRevision, ReadRevision: result.ReadRevision,

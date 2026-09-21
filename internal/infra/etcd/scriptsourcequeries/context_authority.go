@@ -13,7 +13,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func ValidateStoredScriptContext(sources ScriptExecutionSources, execution scriptexecutions.ScriptExecutionRecord) error {
+func ValidateStoredScriptContext(
+	sources ScriptExecutionSources,
+	execution scriptexecutions.ScriptExecutionRecord,
+) error {
 	var snapshot agentpb.ResolvedRunnerSnapshot
 	if err := proto.Unmarshal(execution.Snapshot, &snapshot); err != nil {
 		return errs.Wrap(errs.KindValidationFailed, err)

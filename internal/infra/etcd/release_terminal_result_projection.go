@@ -10,7 +10,11 @@ import (
 	"time"
 )
 
-func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus taskjournal.TaskStatus, result taskjournal.TaskResultRecord) (uint32, error) {
+func releaseFailedMemberOrdinal(
+	task TaskRecord,
+	terminalStatus taskjournal.TaskStatus,
+	result taskjournal.TaskResultRecord,
+) (uint32, error) {
 	if terminalStatus == taskjournal.TaskStatusCompleted {
 		return 0, nil
 	}
@@ -89,7 +93,10 @@ func releaseProxyEvidence(result taskjournal.TaskResultRecord, serviceID string)
 	return taskjournal.TaskProxyEvidence{}, false
 }
 
-func releaseRecreateEvidence(result taskjournal.TaskResultRecord, serviceID string) (taskjournal.TaskRecreateEvidence, bool) {
+func releaseRecreateEvidence(
+	result taskjournal.TaskResultRecord,
+	serviceID string,
+) (taskjournal.TaskRecreateEvidence, bool) {
 	for _, evidence := range result.RecreateEvidence {
 		if evidence.ServiceID == serviceID {
 			return evidence, true

@@ -55,7 +55,10 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 			releases.ReleaseProjectionKey(member.ServiceID),
 		)
 	}
-	details, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: detailKeys, Revision: base.ReadRevision})
+	details, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: detailKeys, Revision: base.ReadRevision},
+	)
 	if err != nil {
 		return false, err
 	}
@@ -90,7 +93,10 @@ func (repository *TaskRepository) finalizeReleaseRecoveryBatch(
 		if err != nil {
 			return false, err
 		}
-		summary, err := releases.DecodeReleaseRecord[domain.TerminalSummary](terminalValue.Value, "release-terminal-summary")
+		summary, err := releases.DecodeReleaseRecord[domain.TerminalSummary](
+			terminalValue.Value,
+			"release-terminal-summary",
+		)
 		if err != nil || summary.ReleaseID != intent.ID {
 			return false, releases.CorruptReleaseRecord()
 		}

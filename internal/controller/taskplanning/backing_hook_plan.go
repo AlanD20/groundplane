@@ -58,23 +58,39 @@ func (resolver *TaskPlanResolver) resolveCustomAttachPlan(
 		EnvironmentID: current.Record.EnvironmentID, ServiceID: current.Record.ServiceID,
 	}
 	var plan *agentpb.ExecutionPlan
-	err := resolver.attachIdentities.ResolveHookInput(ctx, current, task, hookContext, func(input backinghook.Input) error {
-		hookStep, buildErr := backingHookStep(task.Steps[0], *definition, input, renderInput.HookConfiguration.Facts)
-		if buildErr != nil {
+	err := resolver.attachIdentities.ResolveHookInput(
+		ctx,
+		current,
+		task,
+		hookContext,
+		func(input backinghook.Input) error {
+			hookStep, buildErr := backingHookStep(
+				task.Steps[0],
+				*definition,
+				input,
+				renderInput.HookConfiguration.Facts,
+			)
+			if buildErr != nil {
+				return buildErr
+			}
+			defer taskplan.ClearBackingHookProcedure(hookStep.GetBackingHookProcedure())
+			plan, buildErr = taskplan.Build(taskplan.BuildInput{
+				VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
+				RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
+				TargetID: task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact},
+				Steps: []*agentpb.ExecutionStep{
+					hookStep,
+					attachComposeStep(
+						task,
+						1,
+						artifact,
+						attachRuntimeServiceIDs(current.Record.ServiceID, applyRuntime),
+					),
+				},
+			})
 			return buildErr
-		}
-		defer taskplan.ClearBackingHookProcedure(hookStep.GetBackingHookProcedure())
-		plan, buildErr = taskplan.Build(taskplan.BuildInput{
-			VolumeRoot: resolver.volumeRoot, PlanID: task.PlanID,
-			RenderGeneration: uint64(task.RenderGeneration), Operation: operation,
-			TargetID: task.Target, Artifacts: []*agentpb.ComposeArtifact{artifact},
-			Steps: []*agentpb.ExecutionStep{
-				hookStep,
-				attachComposeStep(task, 1, artifact, attachRuntimeServiceIDs(current.Record.ServiceID, applyRuntime)),
-			},
-		})
-		return buildErr
-	})
+		},
+	)
 	return plan, err
 }
 

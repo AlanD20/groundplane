@@ -65,11 +65,15 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 			"Route deletion Task, intent, and tombstone do not match",
 		)
 	}
-	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetRoute, ID: route.Record.Desired.ID}
+	wantReplayTarget := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetRoute,
+		ID:   route.Record.Desired.ID,
+	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
-		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
+		*marker.ReplayTarget != wantReplayTarget ||
+		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -153,11 +157,18 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 			Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.Record.TenantID),
 		})
 	}
-	conditions = append(conditions, etcdstore.Condition{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)})
+	conditions = append(
+		conditions,
+		etcdstore.Condition{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)},
+	)
 	conditions = append(conditions, publication.conditions...)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},

@@ -92,7 +92,10 @@ func (repository *TaskRepository) preparePlatformComponentTaskAcknowledgement(
 		applies: true,
 		conditions: []etcdstore.Condition{
 			{Key: componentrecord.RecordKey(task.Target), ModRevision: componentValue.ModRevision},
-			{Key: platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID), ModRevision: renderInputValue.ModRevision},
+			{
+				Key:         platformcomponents.PlatformComponentTaskRenderInputKey(task.PlanID),
+				ModRevision: renderInputValue.ModRevision,
+			},
 		},
 	}
 	change.conditions = append(change.conditions, etcdstore.Condition{

@@ -56,7 +56,10 @@ func RequireEnvironmentDeletionLiveAuthorityEmpty(
 		return err
 	}
 	activeScripts, err := store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: scriptrecord.ScriptSetOwnerPrefix(environmentID, active.Record.GenerationID), Limit: 1, Revision: revision,
+		Prefix: scriptrecord.ScriptSetOwnerPrefix(
+			environmentID,
+			active.Record.GenerationID,
+		), Limit: 1, Revision: revision,
 	})
 	if err != nil {
 		return err
@@ -98,7 +101,10 @@ func EnvironmentDeletionLiveAuthorityConditions(
 	for _, prefix := range environmentDeletionLiveAuthorityPrefixes(environmentID, operationID) {
 		conditions = append(conditions, etcdstore.Condition{Key: prefix, Prefix: true})
 	}
-	conditions = append(conditions, etcdstore.Condition{Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(environmentID), Prefix: true})
+	conditions = append(
+		conditions,
+		etcdstore.Condition{Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(environmentID), Prefix: true},
+	)
 	return conditions
 }
 

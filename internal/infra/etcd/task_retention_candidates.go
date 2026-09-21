@@ -54,7 +54,10 @@ func (repository *TaskRepository) nextTaskRetentionPruneCandidate(
 func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 	ctx context.Context, taskID string, deadline time.Time, revision int64,
 ) (bool, error) {
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(taskID)}, Revision: revision})
+	read, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(taskID)}, Revision: revision},
+	)
 	if err != nil {
 		return false, err
 	}
@@ -71,7 +74,9 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 		return false, nil
 	}
 	sources, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		scriptsourceevidence.ScriptSourceRootKey(task.OperationID), scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam]),
+		scriptsourceevidence.ScriptSourceRootKey(
+			task.OperationID,
+		), scriptexecutions.ScriptExecutionKey(task.Params[scriptexecutions.ScriptExecutionIDParam]),
 	}, Revision: revision})
 	if err != nil {
 		return false, err
@@ -90,12 +95,16 @@ func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 	if err != nil {
 		return false, err
 	}
-	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](sources.Values[1].Value, "script-execution")
+	execution, err := recordcodec.Decode[scriptexecutions.ScriptExecutionRecord](
+		sources.Values[1].Value,
+		"script-execution",
+	)
 	if err != nil || scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || !taskOwnsScriptExecution(task, execution) ||
 		!manualScriptRootMatches(
 			execution,
 			root,
-		) || execution.PlanHash != task.PlanHash || execution.OperationID != task.OperationID {
+		) || execution.PlanHash != task.PlanHash ||
+		execution.OperationID != task.OperationID {
 		return false, taskjournal.CorruptPruneIntent()
 	}
 	return execution.CurrentTaskID != task.ID || (root.Phase == scriptsourceevidence.ScriptOperationSourceActive &&

@@ -99,7 +99,10 @@ func (service *routeMutationService) RemoveRoute(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if service == nil || service.deletions == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Route deletion service is not configured")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Route deletion service is not configured",
+		)
 	}
 	return service.deletions.RemoveRoute(ctx, routeID, idempotencyKey)
 }

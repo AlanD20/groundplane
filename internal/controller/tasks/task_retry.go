@@ -229,7 +229,10 @@ func (service *taskRetryService) retryTask(
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "task retry replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"task retry replay resolution is invalid",
+			)
 		}
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}

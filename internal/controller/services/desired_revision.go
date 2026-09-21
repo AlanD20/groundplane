@@ -158,13 +158,16 @@ func (service *serviceMutationService) claimServiceDesiredRevision(
 	if _, err := controllerrevision.PreflightProjection(projection); err != nil {
 		return blueprints.EnvironmentBlueprintStageClaim{}, err
 	}
-	claim, err := service.repository.ClaimEnvironmentBlueprintStage(ctx, blueprints.EnvironmentBlueprintStageClaimRequest{
-		EnvironmentID: projection.EnvironmentID, CandidateRevisionID: candidateRevisionID,
-		CandidateTaskID: candidateRevisionID, Locator: locator, Intent: evidence.durable,
-		BaselineHeadRevision: expectedHeadRevision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
-		RenderGeneration: projection.RenderGeneration,
-		ProjectionSchema: blueprints.EnvironmentDesiredProjectionSchema, CreatedAt: createdAt,
-	})
+	claim, err := service.repository.ClaimEnvironmentBlueprintStage(
+		ctx,
+		blueprints.EnvironmentBlueprintStageClaimRequest{
+			EnvironmentID: projection.EnvironmentID, CandidateRevisionID: candidateRevisionID,
+			CandidateTaskID: candidateRevisionID, Locator: locator, Intent: evidence.durable,
+			BaselineHeadRevision: expectedHeadRevision, SourceKind: blueprints.EnvironmentBlueprintSourceMutation,
+			RenderGeneration: projection.RenderGeneration,
+			ProjectionSchema: blueprints.EnvironmentDesiredProjectionSchema, CreatedAt: createdAt,
+		},
+	)
 	if err != nil {
 		return blueprints.EnvironmentBlueprintStageClaim{}, err
 	}
@@ -326,7 +329,10 @@ func buildServiceRemovalProjection(
 		}
 	}
 	if len(candidate.DesiredServices) != len(current.DesiredServices)-1 {
-		return projectionrecord.EnvironmentComposeProjection{}, errs.New(errs.KindStateConflict, "Service desired record is absent")
+		return projectionrecord.EnvironmentComposeProjection{}, errs.New(
+			errs.KindStateConflict,
+			"Service desired record is absent",
+		)
 	}
 	candidate.VolumeMounts = candidate.VolumeMounts[:0]
 	for _, mount := range current.VolumeMounts {
@@ -337,7 +343,10 @@ func buildServiceRemovalProjection(
 	candidate.ServiceDependencyPlans = current.ServiceDependencyPlans.Clone().WithoutService(record.Desired.Name)
 	artifact := &agentpb.ComposeArtifact{}
 	if err := proto.Unmarshal(current.ComposeArtifact, artifact); err != nil {
-		return projectionrecord.EnvironmentComposeProjection{}, errs.New(errs.KindInternal, "Service baseline artifact is corrupt")
+		return projectionrecord.EnvironmentComposeProjection{}, errs.New(
+			errs.KindInternal,
+			"Service baseline artifact is corrupt",
+		)
 	}
 	mutated, err := composerender.MutateEnvironmentServiceArtifact(artifact, composerender.ServiceArtifactMutation{
 		Action: composerender.ServiceArtifactRemove, Desired: record.Desired,
@@ -377,7 +386,10 @@ func buildServiceRemovalProjection(
 	return candidate, nil
 }
 
-func rejectComponentGeneratedServiceTarget(projection projectionrecord.EnvironmentComposeProjection, serviceID string) error {
+func rejectComponentGeneratedServiceTarget(
+	projection projectionrecord.EnvironmentComposeProjection,
+	serviceID string,
+) error {
 	for _, component := range projection.Components {
 		for _, generatedServiceID := range component.Runtime.GeneratedServices {
 			if generatedServiceID == serviceID {

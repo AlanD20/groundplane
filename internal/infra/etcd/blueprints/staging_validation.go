@@ -24,7 +24,8 @@ func ValidateEnvironmentBlueprintStageClaim(claim EnvironmentBlueprintStageClaim
 	if claim.SourceKind != EnvironmentBlueprintSourceApply && claim.SourceKind != EnvironmentBlueprintSourceMutation {
 		return errs.New(errs.KindValidationFailed, "Blueprint staging source kind is invalid")
 	}
-	if claim.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment || claim.Locator.ScopeID != claim.EnvironmentID {
+	if claim.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
+		claim.Locator.ScopeID != claim.EnvironmentID {
 		return errs.New(errs.KindValidationFailed, "Blueprint staging locator must belong to its Environment")
 	}
 	if _, _, err := EnvironmentBlueprintLocatorKey(claim.Locator); err != nil {

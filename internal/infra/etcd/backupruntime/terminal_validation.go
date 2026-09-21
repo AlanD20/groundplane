@@ -93,7 +93,9 @@ func ValidateBackupTerminalTaskEvidence(evidence BackupTerminalTaskEvidence) err
 		evidence.Executor != taskjournal.TaskExecutorAgent || evidence.Target != evidence.Owner.EnvironmentID ||
 		recordcodec.ValidateID(ids.KindPlan, evidence.PlanID) != nil || !recordcodec.ValidSHA256(evidence.PlanHash) ||
 		!taskjournal.IsTerminalTaskStatus(evidence.Status) || !recordcodec.ValidSHA256(evidence.ResultDigest) ||
-		!recordcodec.ValidSHA256(evidence.TaskDigest) || recordcodec.ValidateTimestamp("receipt created_at", evidence.CreatedAt) != nil ||
+		!recordcodec.ValidSHA256(
+			evidence.TaskDigest,
+		) || recordcodec.ValidateTimestamp("receipt created_at", evidence.CreatedAt) != nil ||
 		recordcodec.ValidateTimestamp("receipt updated_at", evidence.UpdatedAt) != nil ||
 		recordcodec.ValidateTimestamp("receipt finished_at", evidence.FinishedAt) != nil ||
 		recordcodec.ValidateTimestamp("receipt retain_until", evidence.RetainUntil) != nil ||

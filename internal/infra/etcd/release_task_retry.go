@@ -67,11 +67,17 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 			return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 		}
 	}
-	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](base.Values[0].Value, "release-publication")
+	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](
+		base.Values[0].Value,
+		"release-publication",
+	)
 	if err != nil || marker.PublicationID != publicationID || marker.OperationID != source.OperationID {
 		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()
 	}
-	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](base.Values[1].Value, "release-staged-manifest")
+	manifest, err := releases.DecodeReleaseRecord[releases.ReleaseStagedManifest](
+		base.Values[1].Value,
+		"release-staged-manifest",
+	)
 	if err != nil || manifest.PublicationID != publicationID || manifest.OperationID != source.OperationID ||
 		len(manifest.Members) == 0 {
 		return releaseTaskRetryChange{}, releases.CorruptReleaseRecord()

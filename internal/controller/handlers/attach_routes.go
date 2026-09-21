@@ -24,7 +24,12 @@ type AttachMutator interface {
 	ListAttaches(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[attachrecord.Record], error)
 	CreateAttach(context.Context, apiTypes.AttachRequest, string) (idempotencyrecord.IdempotencyResponse, error)
 	DetachAttach(context.Context, string, string) (idempotencyrecord.IdempotencyResponse, error)
-	RenameAttach(context.Context, string, apiTypes.AttachRenameRequest, string) (idempotencyrecord.IdempotencyResponse, error)
+	RenameAttach(
+		context.Context,
+		string,
+		apiTypes.AttachRenameRequest,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type attachCreateInput struct {

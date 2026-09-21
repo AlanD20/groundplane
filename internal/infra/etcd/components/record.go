@@ -152,7 +152,9 @@ func EnvironmentOwnerKey(environmentID string, componentID string) string {
 }
 
 func EnvironmentKindKey(environmentID string, kind core.ComponentKind) string {
-	return "/v1/indexes/components/by-kind/environment/" + environmentID + "/" + recordcodec.EncodeKeySegment(string(kind))
+	return "/v1/indexes/components/by-kind/environment/" + environmentID + "/" + recordcodec.EncodeKeySegment(
+		string(kind),
+	)
 }
 
 func ValidateRecord(record Record) error {

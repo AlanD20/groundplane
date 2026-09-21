@@ -20,7 +20,12 @@ type secretReadRepository interface {
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetSecret(context.Context, string) (etcdstore.Versioned[secretrecord.Record], error)
 	GetSecretValue(context.Context, etcdstore.Versioned[secretrecord.Record]) (secretrecord.EncryptedValue, error)
-	ListSecrets(context.Context, core.SecretScope, string, etcdstore.PageRequest) (etcdstore.Page[secretrecord.Record], error)
+	ListSecrets(
+		context.Context,
+		core.SecretScope,
+		string,
+		etcdstore.PageRequest,
+	) (etcdstore.Page[secretrecord.Record], error)
 }
 
 type secretReadService struct {
@@ -85,7 +90,10 @@ func (service *secretReadService) GetSecret(
 	secretID string,
 ) (etcdstore.Versioned[secretrecord.Record], error) {
 	if ctx == nil {
-		return etcdstore.Versioned[secretrecord.Record]{}, errs.New(errs.KindInternal, "Secret read context is required")
+		return etcdstore.Versioned[secretrecord.Record]{}, errs.New(
+			errs.KindInternal,
+			"Secret read context is required",
+		)
 	}
 	if ids.Validate(ids.KindSecret, secretID) != nil {
 		return etcdstore.Versioned[secretrecord.Record]{}, errs.New(

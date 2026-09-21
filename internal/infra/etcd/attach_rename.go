@@ -37,7 +37,8 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
 		marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != current.Record.EnvironmentID || marker.ReplayTarget == nil ||
-		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetAttach || marker.ReplayTarget.ID != current.Record.ID {
+		marker.ReplayTarget.Kind != idempotencyrecord.IdempotencyReplayTargetAttach ||
+		marker.ReplayTarget.ID != current.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Attach rename marker must be a completed Environment-scoped direct mutation",
@@ -97,14 +98,20 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 		{Key: deletions.TombstoneKey("project", project.Record.ID)},
 	}
 	if project.Record.TenantID != "" {
-		conditions = append(conditions, etcdstore.Condition{Key: deletions.TombstoneKey("tenant", project.Record.TenantID)})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: deletions.TombstoneKey("tenant", project.Record.TenantID)},
+		)
 	}
 	renaming := replacement.Name != current.Record.Name
 	newNameIndex := -1
 	mutations := []etcdstore.Mutation(nil)
 	if renaming {
 		newNameIndex = len(conditions)
-		conditions = append(conditions, etcdstore.Condition{Key: attachrecord.AttachNameKey(current.Record.EnvironmentID, replacement.Name)})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: attachrecord.AttachNameKey(current.Record.EnvironmentID, replacement.Name)},
+		)
 		value, encodeErr := attachrecord.EncodeAttachRecord(replacement)
 		if encodeErr != nil {
 			return IdempotencyTransactionResult{}, encodeErr
@@ -112,7 +119,10 @@ func (repository *AttachRepository) RenameAttachIdempotent(
 		defer clear(value)
 		mutations = []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(current.Record.ID), Value: value},
-			{Type: etcdstore.MutationDelete, Key: attachrecord.AttachNameKey(current.Record.EnvironmentID, current.Record.Name)},
+			{
+				Type: etcdstore.MutationDelete,
+				Key:  attachrecord.AttachNameKey(current.Record.EnvironmentID, current.Record.Name),
+			},
 			{
 				Type:  etcdstore.MutationPut,
 				Key:   attachrecord.AttachNameKey(current.Record.EnvironmentID, replacement.Name),

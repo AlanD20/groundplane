@@ -15,11 +15,22 @@ func abortAssignedManualScriptBeforeStart(
 	at time.Time,
 ) (scriptexecutions.ScriptExecutionRecord, error) {
 	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
-		execution.StartAuthorized || execution.AssignmentID != "" || !execution.ActiveReference || !at.After(execution.UpdatedAt) {
-		return scriptexecutions.ScriptExecutionRecord{}, errs.New(errs.KindStateConflict, "manual Script may already have started")
+		execution.StartAuthorized || execution.AssignmentID != "" || !execution.ActiveReference ||
+		!at.After(execution.UpdatedAt) {
+		return scriptexecutions.ScriptExecutionRecord{}, errs.New(
+			errs.KindStateConflict,
+			"manual Script may already have started",
+		)
 	}
-	outcome := scriptexecutions.ScriptOutcomeEvidence{Reason: scriptexecutions.ScriptOutcomeAbortBeforeStart, ObservedAt: at.UTC()}
-	cleanup := scriptexecutions.ScriptCleanupEvidence{ContainerAbsent: true, BodyAbsent: true, ExecutionDirectoryAbsent: true}
+	outcome := scriptexecutions.ScriptOutcomeEvidence{
+		Reason:     scriptexecutions.ScriptOutcomeAbortBeforeStart,
+		ObservedAt: at.UTC(),
+	}
+	cleanup := scriptexecutions.ScriptCleanupEvidence{
+		ContainerAbsent:          true,
+		BodyAbsent:               true,
+		ExecutionDirectoryAbsent: true,
+	}
 	digest, err := scriptControllerCleanupSHA256(outcome, cleanup)
 	if err != nil {
 		return scriptexecutions.ScriptExecutionRecord{}, err
@@ -36,7 +47,8 @@ func abortAssignedManualScriptBeforeStart(
 func manualScriptAssignedAbortMatches(execution scriptexecutions.ScriptExecutionRecord) bool {
 	if scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionCleanupProven ||
 		execution.ControllerCleanup != scriptexecutions.ScriptControllerCleanupManualAssignedAbort || execution.Outcome == nil ||
-		execution.Outcome.Reason != scriptexecutions.ScriptOutcomeAbortBeforeStart || execution.Cleanup == nil ||
+		execution.Outcome.Reason != scriptexecutions.ScriptOutcomeAbortBeforeStart ||
+		execution.Cleanup == nil ||
 		!execution.UpdatedAt.Equal(execution.Outcome.ObservedAt) {
 		return false
 	}

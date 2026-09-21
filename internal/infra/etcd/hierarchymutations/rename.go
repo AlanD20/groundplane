@@ -60,7 +60,10 @@ func (repository *Repository) RenameTenantProject(
 		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, recordcodec.StateConflict("project", id)
 	}
 	if current.Record.Kind != hierarchyrecord.ProjectKindTenant {
-		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, errs.New(errs.KindProjectNotFound, "project was not found")
+		return etcdstore.Versioned[hierarchyrecord.ProjectRecord]{}, errs.New(
+			errs.KindProjectNotFound,
+			"project was not found",
+		)
 	}
 	replacement := current.Record
 	replacement.Slug = slug

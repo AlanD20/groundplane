@@ -42,7 +42,12 @@ func NewMutationService(
 	if repository == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "Service mutation service is not configured")
 	}
-	return &serviceMutationService{repository: repository, idempotency: idempotency, lifecycle: lifecycle, now: time.Now}, nil
+	return &serviceMutationService{
+		repository:  repository,
+		idempotency: idempotency,
+		lifecycle:   lifecycle,
+		now:         time.Now,
+	}, nil
 }
 
 func (service *serviceMutationService) CreateService(
@@ -51,7 +56,10 @@ func (service *serviceMutationService) CreateService(
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service creation context is required")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Service creation context is required",
+		)
 	}
 	input = normalizeServiceCreate(input)
 	desired := serviceDesiredFromCreate(input)
@@ -74,7 +82,10 @@ func (service *serviceMutationService) CreateService(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service creation retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Service creation retry bound was not enforced",
+	)
 }
 
 func (service *serviceMutationService) createServiceOnce(
@@ -143,7 +154,10 @@ func (service *serviceMutationService) EditService(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service edit retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Service edit retry bound was not enforced",
+	)
 }
 
 func (service *serviceMutationService) editServiceOnce(
@@ -310,7 +324,11 @@ func (service *serviceMutationService) listAllServices(
 	items := []etcdstore.Versioned[servicerecord.ServiceRecord]{}
 	cursor := ""
 	for {
-		page, err := service.repository.ListServices(ctx, environmentID, etcdstore.PageRequest{Limit: 200, Cursor: cursor})
+		page, err := service.repository.ListServices(
+			ctx,
+			environmentID,
+			etcdstore.PageRequest{Limit: 200, Cursor: cursor},
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -331,7 +349,10 @@ func (service *serviceMutationService) serviceResponseMarker(
 ) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {
 	body, err := json.Marshal(serviceAPIResponse(record))
 	if err != nil {
-		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(errs.KindInternal, err)
+		return idempotencyrecord.IdempotencyResponse{}, idempotencyrecord.IdempotencyMarker{}, errs.Wrap(
+			errs.KindInternal,
+			err,
+		)
 	}
 	defer clear(body)
 	response := idempotencyrecord.IdempotencyResponse{
@@ -378,7 +399,10 @@ func (service *serviceMutationService) resolveServiceMutation(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	default:
 		clear(response.Body)
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service mutation resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Service mutation resolution is invalid",
+		)
 	}
 }
 
@@ -394,7 +418,10 @@ func serviceMutationLocator(intent serviceMutationIntent, idempotencyKey string)
 
 func serviceReplayResponse(resolution requestidempotency.Resolution) (idempotencyrecord.IdempotencyResponse, error) {
 	if resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Service replay resolution is invalid")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Service replay resolution is invalid",
+		)
 	}
 	return requestidempotency.CloneResponse(resolution.Response), nil
 }

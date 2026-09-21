@@ -32,7 +32,12 @@ func NewReleaseLedger(store etcdstore.Store, tasks *TaskRepository) (*ReleaseLed
 	if store == nil || tasks == nil || tasks.store == nil {
 		return nil, errs.New(errs.KindInternal, "release ledger dependencies are not configured")
 	}
-	return &ReleaseLedger{Stager: releases.NewStager(store), Reader: releasequeries.NewReader(store), store: store, tasks: tasks}, nil
+	return &ReleaseLedger{
+		Stager: releases.NewStager(store),
+		Reader: releasequeries.NewReader(store),
+		store:  store,
+		tasks:  tasks,
+	}, nil
 }
 
 type ReleaseDesiredKind string
@@ -151,7 +156,10 @@ func (ledger *ReleaseLedger) Publish(
 	}
 	defer clear(operationValue)
 	conditions := []etcdstore.Condition{
-		{Key: hierarchyrecord.EnvironmentMutationEpochKey(evidence.EnvironmentID), ModRevision: evidence.EnvironmentEpochRevision},
+		{
+			Key:         hierarchyrecord.EnvironmentMutationEpochKey(evidence.EnvironmentID),
+			ModRevision: evidence.EnvironmentEpochRevision,
+		},
 		{Key: deletions.TombstoneKey("environment", evidence.EnvironmentID)},
 		{Key: deletions.TombstoneKey("project", evidence.ProjectID)},
 		{Key: deletions.TombstoneKey("tenant", evidence.TenantID)},
@@ -215,7 +223,11 @@ func (ledger *ReleaseLedger) Publish(
 			Key:   releases.ReleasePublicationKey(evidence.Manifest.Record.PublicationID),
 			Value: publicationValue,
 		},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: releases.ReleaseFenceSetKey(evidence.EnvironmentID), Value: fenceValue},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   releases.ReleaseFenceSetKey(evidence.EnvironmentID),
+			Value: fenceValue,
+		},
 		etcdstore.Mutation{
 			Type:  etcdstore.MutationPut,
 			Key:   releases.ReleaseOperationKey(evidence.Manifest.Record.OperationID),
@@ -271,7 +283,10 @@ func (ledger *ReleaseLedger) Publish(
 		)
 	}
 	if result.FailureReads[6] != nil {
-		existing, err := idempotencyrecord.DecodeIdempotencyMarker(result.FailureReads[6].Value, evidence.Marker.Locator)
+		existing, err := idempotencyrecord.DecodeIdempotencyMarker(
+			result.FailureReads[6].Value,
+			evidence.Marker.Locator,
+		)
 		if err != nil {
 			return ReleasePublicationResult{}, err
 		}

@@ -39,11 +39,14 @@ func (repository *TaskRepository) AbortPendingTask(
 		if current.Record.Type == taskjournal.TaskBackup || current.Record.Type == taskjournal.TaskBackupPrune {
 			return repository.abortPendingBackupTask(ctx, taskID, terminalAt)
 		}
-		environmentCreation := current.Record.Executor == taskjournal.TaskExecutorAgent && current.Record.Type == taskjournal.TaskCreate &&
+		environmentCreation := current.Record.Executor == taskjournal.TaskExecutorAgent &&
+			current.Record.Type == taskjournal.TaskCreate &&
 			recordcodec.ValidateID(ids.KindEnvironment, current.Record.Target) == nil
-		environmentRemoval := current.Record.Executor == taskjournal.TaskExecutorAgent && current.Record.Type == taskjournal.TaskRemove &&
+		environmentRemoval := current.Record.Executor == taskjournal.TaskExecutorAgent &&
+			current.Record.Type == taskjournal.TaskRemove &&
 			recordcodec.ValidateID(ids.KindEnvironment, current.Record.Target) == nil
-		zoneRemoval := current.Record.Executor == taskjournal.TaskExecutorAgent && current.Record.Type == taskjournal.TaskRemove &&
+		zoneRemoval := current.Record.Executor == taskjournal.TaskExecutorAgent &&
+			current.Record.Type == taskjournal.TaskRemove &&
 			recordcodec.ValidateID(ids.KindNetwork, current.Record.Target) == nil &&
 			current.Record.Params[taskjournal.TaskZoneRemovalOperationParam] != ""
 		if current.Record.Status == taskjournal.TaskStatusAborted {
@@ -70,7 +73,12 @@ func (repository *TaskRepository) AbortPendingTask(
 		if blueprintAbortChange.applies {
 			terminalAt = blueprintAbortChange.terminalAt
 		}
-		terminal, err := TransitionTaskStatus(current.Record, taskjournal.TaskStatusPending, taskjournal.TaskStatusAborted, terminalAt)
+		terminal, err := TransitionTaskStatus(
+			current.Record,
+			taskjournal.TaskStatusPending,
+			taskjournal.TaskStatusAborted,
+			terminalAt,
+		)
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
@@ -144,9 +152,15 @@ func (repository *TaskRepository) AbortPendingTask(
 		}
 		conditions := []etcdstore.Condition{
 			{Key: taskjournal.TaskStorageKey(taskID), ModRevision: current.Revision},
-			{Key: taskjournal.TaskActiveOperationKey(current.Record.OperationID), ModRevision: companions.Values[0].ModRevision},
+			{
+				Key:         taskjournal.TaskActiveOperationKey(current.Record.OperationID),
+				ModRevision: companions.Values[0].ModRevision,
+			},
 			{Key: markerKey, ModRevision: companions.Values[1].ModRevision},
-			{Key: taskjournal.TaskQueueKey(current.Record.Executor, taskID), ModRevision: companions.Values[2].ModRevision},
+			{
+				Key:         taskjournal.TaskQueueKey(current.Record.Executor, taskID),
+				ModRevision: companions.Values[2].ModRevision,
+			},
 			{Key: retentionKey},
 			{Key: taskRetentionKey},
 		}

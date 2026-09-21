@@ -94,9 +94,12 @@ func (ledger *Stager) Stage(ctx context.Context, input ReleaseStage) (VersionedR
 		return VersionedReleaseManifest{}, err
 	}
 	defer clear(manifestValue)
-	result, err := ledger.store.Transact(ctx,
+	result, err := ledger.store.Transact(
+		ctx,
 		[]etcdstore.Condition{{Key: ReleaseManifestStagingKey(input.PublicationID)}},
-		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: ReleaseManifestStagingKey(input.PublicationID), Value: manifestValue}},
+		[]etcdstore.Mutation{
+			{Type: etcdstore.MutationPut, Key: ReleaseManifestStagingKey(input.PublicationID), Value: manifestValue},
+		},
 	)
 	if err != nil {
 		return VersionedReleaseManifest{}, err

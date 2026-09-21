@@ -131,9 +131,14 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 			etcdstore.Condition{Key: evidence.HookPrepared.key, ModRevision: evidence.HookPrepared.revision},
 		)
 		for _, hook := range evidence.Hooks {
-			conditions = append(conditions, scriptsourcequeries.ScriptAttachSourceConditions(hook.Sources.AttachSources)...)
+			conditions = append(
+				conditions,
+				scriptsourcequeries.ScriptAttachSourceConditions(hook.Sources.AttachSources)...)
 		}
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: evidence.HookPrepared.key})
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: evidence.HookPrepared.key},
+		)
 	}
 	var sourceFragment scriptsourcepublication.ScriptSourcePublicationFragment
 	if !evidence.SourcePrepared.IsZero() {

@@ -121,7 +121,10 @@ func (repository *IdempotencyRepository) ResolveReplayLocatorAtRevision(
 	key string,
 ) (idempotencyrecord.IdempotencyLocator, int64, bool, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyLocator{}, 0, false, errs.New(errs.KindInternal, "idempotency context is required")
+		return idempotencyrecord.IdempotencyLocator{}, 0, false, errs.New(
+			errs.KindInternal,
+			"idempotency context is required",
+		)
 	}
 	targetKey, err := idempotencyrecord.IdempotencyReplayTargetKey(target, method, route, key)
 	if err != nil {
@@ -190,16 +193,25 @@ func (repository *IdempotencyRepository) ResolveReplayLocatorAtSnapshot(
 	revision int64,
 ) (idempotencyrecord.IdempotencyLocator, bool, error) {
 	if ctx == nil {
-		return idempotencyrecord.IdempotencyLocator{}, false, errs.New(errs.KindInternal, "idempotency context is required")
+		return idempotencyrecord.IdempotencyLocator{}, false, errs.New(
+			errs.KindInternal,
+			"idempotency context is required",
+		)
 	}
 	if revision <= 0 {
-		return idempotencyrecord.IdempotencyLocator{}, false, errs.New(errs.KindValidationFailed, "idempotency revision is invalid")
+		return idempotencyrecord.IdempotencyLocator{}, false, errs.New(
+			errs.KindValidationFailed,
+			"idempotency revision is invalid",
+		)
 	}
 	targetKey, err := idempotencyrecord.IdempotencyReplayTargetKey(target, method, route, key)
 	if err != nil {
 		return idempotencyrecord.IdempotencyLocator{}, false, err
 	}
-	targets, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{targetKey}, Revision: revision})
+	targets, err := repository.store.GetMany(
+		ctx,
+		etcdstore.GetManyRequest{Keys: []string{targetKey}, Revision: revision},
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyLocator{}, false, err
 	}

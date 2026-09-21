@@ -2,7 +2,7 @@ package app
 
 import (
 	componentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
-	"github.com/AlanD20/groundplane/internal/componentregistration"
+	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	"runtime"
 
 	"github.com/AlanD20/groundplane/internal/infra/docker/composehelper"

@@ -88,7 +88,9 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	defer clear(taskRetentionValue)
 	keys := []string{
 		taskjournal.TaskStorageKey(task.ID), claimKey, taskjournal.TaskAssignmentIndexKey(task.ID),
-		taskjournal.TaskActiveOperationKey(task.OperationID), markerKey, taskjournal.TaskQueueKey(task.Executor, task.ID),
+		taskjournal.TaskActiveOperationKey(
+			task.OperationID,
+		), markerKey, taskjournal.TaskQueueKey(task.Executor, task.ID),
 		retentionKey, taskRetentionKey, taskjournal.TaskTimeoutIndexKey(task.ID, assignment.Deadline),
 	}
 	anchor, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})

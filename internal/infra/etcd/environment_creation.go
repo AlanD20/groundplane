@@ -72,7 +72,8 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != task.ID || marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopeProject ||
-		marker.Locator.ScopeID != project.Record.ID || !marker.CreatedAt.Equal(task.CreatedAt) ||
+		marker.Locator.ScopeID != project.Record.ID ||
+		!marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
@@ -126,7 +127,10 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(epochValue)
-	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(hierarchydeletion.HierarchyDeletionTargetEnvironment, record.ID)
+	coordinationValue, err := hierarchydeletion.EncodeInitialCoordination(
+		hierarchydeletion.HierarchyDeletionTargetEnvironment,
+		record.ID,
+	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -138,7 +142,10 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(scriptSetValue)
-	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), record.ID)
+	coordinationKey := hierarchydeletion.HierarchyCoordinationKey(
+		string(hierarchydeletion.HierarchyDeletionTargetEnvironment),
+		record.ID,
+	)
 	scriptSetKey := scriptrecord.ScriptSetActiveKey(record.ID)
 
 	conditions := []etcdstore.Condition{
@@ -167,20 +174,37 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(record.ID), Value: environmentValue},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name), Value: []byte(record.ID)},
-		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID), Value: []byte(record.ID)},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name),
+			Value: []byte(record.ID),
+		},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID),
+			Value: []byte(record.ID),
+		},
 		{Type: etcdstore.MutationPut, Key: networkreservations.EnvironmentPoolRegistryKey, Value: poolRegistryValue},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentMutationEpochKey(record.ID), Value: epochValue},
 		{Type: etcdstore.MutationPut, Key: coordinationKey, Value: coordinationValue},
 		{Type: etcdstore.MutationPut, Key: scriptSetKey, Value: scriptSetValue},
 	}
 	for index, component := range components {
-		mutations = append(mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(component.Desired.ID), Value: componentValues[index]},
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{
+				Type:  etcdstore.MutationPut,
+				Key:   componentrecord.RecordKey(component.Desired.ID),
+				Value: componentValues[index],
+			},
 			etcdstore.Mutation{
 				Type:  etcdstore.MutationPut,
 				Key:   componentrecord.EnvironmentOwnerKey(record.ID, component.Desired.ID),

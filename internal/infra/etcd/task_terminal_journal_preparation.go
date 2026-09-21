@@ -60,7 +60,9 @@ func (repository *TaskRepository) prepareTaskTerminalJournal(
 		return taskTerminalJournalPreparation{}, err
 	}
 	companionKeys := []string{
-		taskjournal.TaskActiveOperationKey(task.OperationID), markerKey, taskjournal.TaskQueueKey(task.Executor, task.ID), retentionKey,
+		taskjournal.TaskActiveOperationKey(
+			task.OperationID,
+		), markerKey, taskjournal.TaskQueueKey(task.Executor, task.ID), retentionKey,
 		lifecycleKey,
 	}
 	writerKey := ""
@@ -90,7 +92,10 @@ func (repository *TaskRepository) prepareTaskTerminalJournal(
 	}
 	if materializes {
 		if companions.Values[5] == nil {
-			return taskTerminalJournalPreparation{}, errs.New(errs.KindInternal, "task materialization writer is missing")
+			return taskTerminalJournalPreparation{}, errs.New(
+				errs.KindInternal,
+				"task materialization writer is missing",
+			)
 		}
 		materializationWriter, err = decodeTaskMaterializationWriter(companions.Values[5].Value)
 		if err != nil || validateTaskMaterializationWriterForTask(
@@ -151,12 +156,18 @@ func (repository *TaskRepository) prepareTaskTerminalJournal(
 	}
 	if recoveryAcknowledgement.final {
 		conditions = append(conditions, recoveryAcknowledgement.conditions...)
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: taskassignments.ReleaseRecoveryKey(task.ID)})
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: taskassignments.ReleaseRecoveryKey(task.ID)},
+		)
 	}
 	conditions = append(conditions, terminalScriptSourceRelease.conditions...)
 	mutations = append(mutations, terminalScriptSourceRelease.mutations...)
 	if materializes {
-		conditions = append(conditions, etcdstore.Condition{Key: writerKey, ModRevision: companions.Values[5].ModRevision})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: writerKey, ModRevision: companions.Values[5].ModRevision},
+		)
 		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: writerKey})
 	}
 	return taskTerminalJournalPreparation{

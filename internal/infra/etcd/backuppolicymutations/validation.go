@@ -37,7 +37,8 @@ func validateBackupPolicyReplacementMarker(
 		marker.Locator.Method != http.MethodPut || marker.Locator.Route != backupPolicyReplacementRoute ||
 		marker.ReplayTarget != nil || marker.Response.Status != http.StatusOK ||
 		marker.Response.ContentKind != "application/json" || !json.Valid(marker.Response.Body) ||
-		!marker.UpdatedAt.Equal(marker.CreatedAt) || !marker.TerminalAt.Equal(marker.CreatedAt) ||
+		!marker.UpdatedAt.Equal(marker.CreatedAt) ||
+		!marker.TerminalAt.Equal(marker.CreatedAt) ||
 		!marker.RetainUntil.Equal(marker.TerminalAt.Add(idempotencyrecord.MarkerRetention)) {
 		return errs.New(
 			errs.KindValidationFailed,
@@ -187,7 +188,11 @@ func ValidateSourceEvidence(
 		evidence.Source.Record.ID,
 	) || !validBackupPolicyIndex(
 		evidence.IdentityIndex,
-		backuppolicy.BackupSourceIdentityKey(environmentID, evidence.Source.Record.Kind, evidence.Source.Record.TargetID),
+		backuppolicy.BackupSourceIdentityKey(
+			environmentID,
+			evidence.Source.Record.Kind,
+			evidence.Source.Record.TargetID,
+		),
 		evidence.Source.Record.ID,
 	) {
 		return recordcodec.CorruptRecord()

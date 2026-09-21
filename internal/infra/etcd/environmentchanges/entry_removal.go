@@ -191,7 +191,10 @@ func ValidateEntryRemovalIntent(intent EntryRemovalIntent) error {
 	return nil
 }
 
-func SameEntryRemovalProjection(left projectionrecord.EnvironmentComposeProjection, right projectionrecord.EnvironmentComposeProjection) bool {
+func SameEntryRemovalProjection(
+	left projectionrecord.EnvironmentComposeProjection,
+	right projectionrecord.EnvironmentComposeProjection,
+) bool {
 	leftValue, leftErr := projectionrecord.EncodeEnvironmentComposeProjectionStorage(left)
 	rightValue, rightErr := projectionrecord.EncodeEnvironmentComposeProjectionStorage(right)
 	return leftErr == nil && rightErr == nil && bytes.Equal(leftValue, rightValue)

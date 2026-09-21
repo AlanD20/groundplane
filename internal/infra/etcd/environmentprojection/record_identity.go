@@ -11,6 +11,17 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
+func ValidateEnvironmentComposeProjectionAdvance(
+	previous EnvironmentComposeProjection,
+	hasPrevious bool,
+	next EnvironmentComposeProjection,
+) error {
+	if err := ValidateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(previous, hasPrevious, next, ""); err != nil {
+		return err
+	}
+	return PreserveEnvironmentNonEntryDesiredResources(previous, hasPrevious, next)
+}
+
 func ValidateEnvironmentComposeProjectionAdvanceAllowingVolumeRemoval(
 	previous EnvironmentComposeProjection,
 	hasPrevious bool,

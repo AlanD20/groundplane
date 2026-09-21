@@ -23,7 +23,10 @@ func (repository *ProjectionReader) GetEnvironmentPoolRegistry(
 			ReadRevision: result.ReadRevision,
 		}, nil
 	}
-	registry, err := recordcodec.Decode[networkreservations.EnvironmentPoolRegistry](result.Entry.Value, "environment_pool_registry")
+	registry, err := recordcodec.Decode[networkreservations.EnvironmentPoolRegistry](
+		result.Entry.Value,
+		"environment_pool_registry",
+	)
 	if err != nil || networkreservations.ValidateEnvironmentPoolRegistry(registry) != nil {
 		return etcdstore.Versioned[networkreservations.EnvironmentPoolRegistry]{}, networkreservations.CorruptEnvironmentPoolRegistry()
 	}

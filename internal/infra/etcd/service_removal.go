@@ -72,7 +72,12 @@ func (repository *ServiceRepository) ValidateServiceRemovalReferences(
 	if err := repository.scanServiceRemovalRecords(ctx, projection.ReadRevision, current.Record); err != nil {
 		return err
 	}
-	_, err := scriptsourceevidence.PrepareServiceScriptAbsence(ctx, repository.store, current.Record.Desired.ID, projection.ReadRevision)
+	_, err := scriptsourceevidence.PrepareServiceScriptAbsence(
+		ctx,
+		repository.store,
+		current.Record.Desired.ID,
+		projection.ReadRevision,
+	)
 	return err
 }
 
@@ -136,11 +141,15 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 			"Service removal state does not match its Task",
 		)
 	}
-	wantReplay := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetService, ID: current.Record.Desired.ID}
+	wantReplay := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetService,
+		ID:   current.Record.Desired.ID,
+	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending || marker.TaskID != task.ID ||
 		marker.Locator != intent.Claim.Locator || marker.ReplayTarget == nil || *marker.ReplayTarget != wantReplay ||
 		!blueprints.SameBlueprintProtectedIntent(marker.Intent, intent.Claim.Intent) ||
-		!marker.CreatedAt.Equal(task.CreatedAt) || !marker.UpdatedAt.Equal(marker.CreatedAt) {
+		!marker.CreatedAt.Equal(task.CreatedAt) ||
+		!marker.UpdatedAt.Equal(marker.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Service removal marker does not match its Task",
@@ -187,8 +196,12 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	}
 	hierarchy := composeHierarchyRepository(repository.store)
 	publication, err := hierarchy.prepareEnvironmentDirectPublication(
-		ctx, intent.Claim,
-		blueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: intent.EnvironmentID, RevisionID: intent.Claim.RevisionID},
+		ctx,
+		intent.Claim,
+		blueprints.EnvironmentDesiredRevisionIdentity{
+			EnvironmentID: intent.EnvironmentID,
+			RevisionID:    intent.Claim.RevisionID,
+		},
 		intent.CandidateProjection,
 		idempotencyrecord.IdempotencyMarker{Locator: intent.Claim.Locator, Intent: intent.Claim.Intent},
 		intent.ExpectedHeadRevision,
@@ -227,12 +240,17 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	defer clear(intentValue)
 	conditions := []etcdstore.Condition{
 		{Key: taskjournal.TaskStorageKey(task.ID)}, {Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
+		{
+			Key: taskjournal.TaskActiveOperationKey(task.OperationID),
+		}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		servicerecord.ServiceDesiredCondition(current),
 		servicerecord.ServiceRuntimeCondition(current),
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID)},
 		{Key: environmentchanges.ServiceRemovalIntentKey(task.ID)},
-		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID), ModRevision: indexes.Values[1].ModRevision},
+		{
+			Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
+			ModRevision: indexes.Values[1].ModRevision,
+		},
 		{Key: servicerecord.ServiceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID)},
 		{
@@ -244,7 +262,11 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			Value: reference,
+		},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
@@ -253,7 +275,11 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 			Value: tombstoneValue,
 		},
 		{Type: etcdstore.MutationPut, Key: environmentchanges.ServiceRemovalIntentKey(task.ID), Value: intentValue},
-		{Type: etcdstore.MutationPut, Key: environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID)},
+		{
+			Type:  etcdstore.MutationPut,
+			Key:   environmentchanges.ComponentTaskActiveEnvironmentKey(environment.Record.ID),
+			Value: []byte(task.ID),
+		},
 	}
 	originalClassify := func(_ int64, values []*etcdstore.KeyValue) error {
 		if len(values) != len(conditions) {

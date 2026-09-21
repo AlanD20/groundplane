@@ -171,7 +171,8 @@ func (repository *TaskRepository) beginTaskPrune(
 	if companions.Values[4] != nil {
 		componentIntent, decodeErr := environmentchanges.DecodeComponentTaskIntent(companions.Values[4].Value)
 		if decodeErr != nil || componentplanning.ValidateComponentTaskOwner(componentplanning.TaskIdentity{ID: task.ID, Target: task.Target, Executor: task.Executor, Type: task.Type, CreatedAt: task.CreatedAt}, componentIntent) != nil ||
-			componentIntent.Status != task.Status || componentIntent.TerminalAt == nil || task.FinishedAt == nil ||
+			componentIntent.Status != task.Status || componentIntent.TerminalAt == nil ||
+			task.FinishedAt == nil ||
 			!componentIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
@@ -203,7 +204,8 @@ func (repository *TaskRepository) beginTaskPrune(
 	if companions.Values[8] != nil {
 		attachIntent, decodeErr := attachments.DecodeBlueprintAttachTaskIntent(companions.Values[8].Value)
 		if decodeErr != nil || blueprintplanning.ValidateBlueprintAttachTaskOwner(blueprintplanning.TaskIdentity{ID: task.ID, Target: task.Target}, attachIntent) != nil ||
-			attachIntent.Status != task.Status || attachIntent.TerminalAt == nil || task.FinishedAt == nil ||
+			attachIntent.Status != task.Status || attachIntent.TerminalAt == nil ||
+			task.FinishedAt == nil ||
 			!attachIntent.TerminalAt.Equal(*task.FinishedAt) {
 			return etcdstore.Versioned[taskjournal.PruneIntent]{}, false, taskjournal.CorruptPruneIntent()
 		}
@@ -288,7 +290,10 @@ func (repository *TaskRepository) beginTaskPrune(
 		{Key: retentionEntry.Key, ModRevision: retentionEntry.ModRevision},
 		{Key: markerKey},
 		activeOperationCondition,
-		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), ModRevision: companions.Values[2].ModRevision},
+		{
+			Key:         taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+			ModRevision: companions.Values[2].ModRevision,
+		},
 		{Key: taskjournal.TaskPruneIntentKey(task.ID)},
 	}
 	conditions = append(conditions, taskSourcePruneConditions(task)...)
@@ -301,7 +306,10 @@ func (repository *TaskRepository) beginTaskPrune(
 		conditions = append(conditions, condition)
 	}
 	if backupPruneDispatchIndex >= 0 {
-		conditions = append(conditions, etcdstore.Condition{Key: backupruntime.BackupRecoveryPointPruneDispatchKey(task.ID)})
+		conditions = append(
+			conditions,
+			etcdstore.Condition{Key: backupruntime.BackupRecoveryPointPruneDispatchKey(task.ID)},
+		)
 	}
 	conditions = backupReceiptCompanion.appendStartCondition(conditions)
 	mutations := []etcdstore.Mutation{
@@ -336,7 +344,10 @@ func (repository *TaskRepository) beginTaskPrune(
 	mutationCondition := etcdstore.Condition{Key: environmentchanges.RouteMutationIntentKey(task.ID)}
 	if companions.Values[6] != nil {
 		mutationCondition.ModRevision = companions.Values[6].ModRevision
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.RouteMutationIntentKey(task.ID)})
+		mutations = append(
+			mutations,
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.RouteMutationIntentKey(task.ID)},
+		)
 	}
 	conditions = append(conditions, mutationCondition)
 	entryCondition := etcdstore.Condition{Key: environmentchanges.EntryRemovalIntentKey(task.ID)}

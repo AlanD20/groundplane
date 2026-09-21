@@ -143,12 +143,17 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 		return routeTaskChange{}, err
 	}
 	change.values = append(change.values, tombstoneValue, intentBytes)
-	change.mutations = append(change.mutations,
+	change.mutations = append(
+		change.mutations,
 		etcdstore.Mutation{
 			Type: etcdstore.MutationPut, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
 			Value: tombstoneValue,
 		},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.EntryRemovalIntentKey(retry.ID), Value: intentBytes},
+		etcdstore.Mutation{
+			Type:  etcdstore.MutationPut,
+			Key:   environmentchanges.EntryRemovalIntentKey(retry.ID),
+			Value: intentBytes,
+		},
 	)
 	if intent.CurrentProjection != nil {
 		change.mutations = append(change.mutations, etcdstore.Mutation{
@@ -158,7 +163,11 @@ func (repository *TaskRepository) prepareEntryTaskRetry(
 	return change, nil
 }
 func (repository *TaskRepository) readEntryRetryDependencies(
-	ctx context.Context, source TaskRecord, entry entryrecord.Record, intent environmentchanges.EntryRemovalIntent, revision int64,
+	ctx context.Context,
+	source TaskRecord,
+	entry entryrecord.Record,
+	intent environmentchanges.EntryRemovalIntent,
+	revision int64,
 ) (*etcdstore.GetManyResult, []string, error) {
 	baseKeys := []string{
 		entryrecord.EntryOwnerKey(entry.EnvironmentID, entry.Entry.ID),
@@ -196,7 +205,12 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 	values := append(base.Values, projectRead.Values...)
 	if project.TenantID != "" {
 		tenantDeletionKey := deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), project.TenantID)
-		tenantRead, readErr := recordquery.GetManyBatchedAtRevision(ctx, repository.store, []string{tenantDeletionKey}, revision)
+		tenantRead, readErr := recordquery.GetManyBatchedAtRevision(
+			ctx,
+			repository.store,
+			[]string{tenantDeletionKey},
+			revision,
+		)
 		if readErr != nil {
 			return nil, nil, readErr
 		}
@@ -218,7 +232,9 @@ func (repository *TaskRepository) readEntryRetryDependencies(
 			projectionRead.Values[0].ModRevision != intent.CurrentProjectionRevision {
 			return nil, nil, errs.New(errs.KindStateConflict, "entry retry applied projection changed")
 		}
-		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(projectionRead.Values[0].Value)
+		projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(
+			projectionRead.Values[0].Value,
+		)
 		if decodeErr != nil || !environmentchanges.SameEntryRemovalProjection(projection, *intent.CurrentProjection) {
 			return nil, nil, errs.New(errs.KindStateConflict, "entry retry applied projection changed")
 		}
@@ -299,7 +315,8 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[1].Value)
 	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetEntry || tombstone.TargetID != intent.EntryID ||
-		tombstone.TargetRevision != intent.EntryRevision || tombstone.TaskID != task.ID ||
+		tombstone.TargetRevision != intent.EntryRevision ||
+		tombstone.TaskID != task.ID ||
 		tombstone.Phase != entryRemovalTombstonePhase(intent) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "entry deletion tombstone changed")
 	}
@@ -350,7 +367,10 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 		},
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: environmentchanges.EntryRemovalIntentKey(task.ID), Value: intentBytes},
-			{Type: etcdstore.MutationDelete, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID)},
+			{
+				Type: etcdstore.MutationDelete,
+				Key:  deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
+			},
 		},
 		values: [][]byte{intentBytes},
 	}
@@ -370,14 +390,28 @@ func (repository *TaskRepository) prepareEntryTaskAcknowledgement(
 			return routeTaskChange{}, err
 		}
 		change.conditions = append(change.conditions, scriptConditions...)
-		change.mutations = append(change.mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryrecord.EntryOwnerKey(entry.EnvironmentID, entry.Entry.ID)},
+		change.mutations = append(
+			change.mutations,
+			etcdstore.Mutation{
+				Type: etcdstore.MutationDelete,
+				Key:  entryrecord.EntryOwnerKey(entry.EnvironmentID, entry.Entry.ID),
+			},
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryrecord.RecordKey(intent.EntryID)},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryvalues.PlainPrefix + intent.EntryID + "/", Prefix: true},
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryvalues.SecretPrefix + intent.EntryID + "/", Prefix: true},
+			etcdstore.Mutation{
+				Type:   etcdstore.MutationDelete,
+				Key:    entryvalues.PlainPrefix + intent.EntryID + "/",
+				Prefix: true,
+			},
+			etcdstore.Mutation{
+				Type:   etcdstore.MutationDelete,
+				Key:    entryvalues.SecretPrefix + intent.EntryID + "/",
+				Prefix: true,
+			},
 		)
 		if intent.CandidateProjection != nil {
-			projectionValue, encodeErr := projectionrecord.EncodeEnvironmentComposeProjectionStorage(*intent.CandidateProjection)
+			projectionValue, encodeErr := projectionrecord.EncodeEnvironmentComposeProjectionStorage(
+				*intent.CandidateProjection,
+			)
 			if encodeErr != nil {
 				clearRouteTaskChange(change)
 				return routeTaskChange{}, encodeErr
@@ -468,7 +502,8 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent environmentchanges.En
 		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry &&
 		task.Params[taskjournal.TaskEntryEnvironmentParam] == intent.EnvironmentID
 	if intent.Desired != nil && intent.CurrentProjection == nil {
-		validParams = len(task.Params) == 3 && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry &&
+		validParams = len(task.Params) == 3 &&
+			task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry &&
 			task.Params[taskjournal.TaskEntryEnvironmentParam] == intent.EnvironmentID
 	}
 	if intent.CurrentProjection != nil {

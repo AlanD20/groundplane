@@ -30,7 +30,10 @@ func (repository *HierarchyRepository) GetZoneRemovalIntent(
 		return etcdstore.Versioned[environmentchanges.ZoneRemovalIntent]{}, false, err
 	}
 	if result == nil {
-		return etcdstore.Versioned[environmentchanges.ZoneRemovalIntent]{}, false, errs.New(errs.KindInternal, "Zone removal intent read is empty")
+		return etcdstore.Versioned[environmentchanges.ZoneRemovalIntent]{}, false, errs.New(
+			errs.KindInternal,
+			"Zone removal intent read is empty",
+		)
 	}
 	if result.Entry == nil {
 		return etcdstore.Versioned[environmentchanges.ZoneRemovalIntent]{ReadRevision: result.ReadRevision}, false, nil
@@ -56,7 +59,8 @@ func validateZoneRemovalTaskOwner(task TaskRecord, intent environmentchanges.Zon
 		return errs.New(errs.KindStateConflict, "Zone removal intent does not belong to its Task")
 	}
 	if task.Executor == taskjournal.TaskExecutorAgent {
-		if len(task.Params) != 4 || ids.Validate(ids.KindConfig, task.Params[taskjournal.TaskComposeArtifactParam]) != nil {
+		if len(task.Params) != 4 ||
+			ids.Validate(ids.KindConfig, task.Params[taskjournal.TaskComposeArtifactParam]) != nil {
 			return errs.New(errs.KindStateConflict, "Zone removal Agent Task input changed")
 		}
 		return nil

@@ -233,7 +233,9 @@ func (service *ScriptArtifactService) ResolveScriptExecutionCheckpoints(
 	return checkpoints, nil
 }
 
-func scriptExecutionCheckpointMessage(record scriptexecutions.ScriptExecutionRecord) (*agentpb.ScriptExecutionCheckpoint, error) {
+func scriptExecutionCheckpointMessage(
+	record scriptexecutions.ScriptExecutionRecord,
+) (*agentpb.ScriptExecutionCheckpoint, error) {
 	state, ok := scriptExecutionCheckpointState(record.State)
 	if !ok {
 		return nil, errs.New(errs.KindInternal, "Script execution state is invalid")

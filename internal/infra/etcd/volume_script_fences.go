@@ -36,7 +36,8 @@ func classifyVolumeScriptReferences(volumeID string, values []*etcdstore.KeyValu
 		return errs.New(errs.KindInternal, "Volume Script reference count is corrupt")
 	}
 	reference, err := recordcodec.Decode[sourceref.Reference](values[1].Value, "script-source-reference")
-	if err != nil || reference.Source != source || scriptsourceevidence.ScriptSourceForwardReferenceKey(reference) != values[1].Key {
+	if err != nil || reference.Source != source ||
+		scriptsourceevidence.ScriptSourceForwardReferenceKey(reference) != values[1].Key {
 		return errs.New(errs.KindInternal, "Volume Script source membership is corrupt")
 	}
 	return errs.New(errs.KindResourceInUse, "Volume is referenced by a Script")
@@ -59,7 +60,10 @@ func prepareVolumeScriptAbsence(
 		(revision > 0 && count.ReadRevision != revision) {
 		return nil, errs.New(errs.KindInternal, "Volume Script count evidence is incomplete")
 	}
-	members, err := store.Range(ctx, etcdstore.RangeRequest{Prefix: conditions[1].Key, Limit: 1, Revision: count.ReadRevision})
+	members, err := store.Range(
+		ctx,
+		etcdstore.RangeRequest{Prefix: conditions[1].Key, Limit: 1, Revision: count.ReadRevision},
+	)
 	if err != nil {
 		return nil, err
 	}

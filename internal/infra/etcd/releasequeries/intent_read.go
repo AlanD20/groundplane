@@ -16,7 +16,10 @@ func (ledger *Reader) GetIntent(
 ) (etcdstore.Versioned[domain.Intent], error) {
 	if ctx == nil || ledger == nil || releases.ValidatePublicationID(publicationID) != nil ||
 		ids.Validate(ids.KindDeployment, releaseID) != nil {
-		return etcdstore.Versioned[domain.Intent]{}, errs.New(errs.KindValidationFailed, "release read identity is invalid")
+		return etcdstore.Versioned[domain.Intent]{}, errs.New(
+			errs.KindValidationFailed,
+			"release read identity is invalid",
+		)
 	}
 	result, err := ledger.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releases.ReleaseIntentStagingKey(publicationID, releaseID), releases.ReleasePublicationKey(publicationID),

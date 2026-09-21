@@ -142,7 +142,10 @@ func ValidateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 	if err := validateAttachTaskServiceSnapshots(input.Services); err != nil {
 		return err
 	}
-	if projectionrecord.ValidateEnvironmentProjection(input.RuntimeProjection, projectionrecord.EnvironmentArtifactCapturedRuntime) != nil ||
+	if projectionrecord.ValidateEnvironmentProjection(
+		input.RuntimeProjection,
+		projectionrecord.EnvironmentArtifactCapturedRuntime,
+	) != nil ||
 		input.RuntimeProjection.EnvironmentID != input.EnvironmentID ||
 		input.RuntimeProjection.RevisionID != input.DesiredRevisionID ||
 		input.RuntimeProjection.RenderGeneration != input.RenderGeneration {
@@ -159,7 +162,11 @@ func ValidateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 		return err
 	}
 	if len(input.ConsumerServiceIDs) == 0 ||
-		attachrecord.ValidateSortedStableIDs(input.ConsumerServiceIDs, ids.KindService, "Attach consumer service_ids") != nil ||
+		attachrecord.ValidateSortedStableIDs(
+			input.ConsumerServiceIDs,
+			ids.KindService,
+			"Attach consumer service_ids",
+		) != nil ||
 		attachrecord.ValidateSortedStableIDs(input.GrantAttachIDs, ids.KindAttach, "Attach grant_attach_ids") != nil {
 		return errs.New(errs.KindValidationFailed, "attach task removal evidence is invalid or unsorted")
 	}
@@ -172,7 +179,11 @@ func ValidateAttachTaskRenderInput(input AttachTaskRenderInput) error {
 			return errs.New(errs.KindValidationFailed, "attach task removal evidence references an unknown service")
 		}
 	}
-	if attachrecord.ValidateSortedStableIDs(input.RunningServiceIDs, ids.KindService, "Attach running service_ids") != nil {
+	if attachrecord.ValidateSortedStableIDs(
+		input.RunningServiceIDs,
+		ids.KindService,
+		"Attach running service_ids",
+	) != nil {
 		return errs.New(errs.KindValidationFailed, "Attach running service_ids are invalid or unsorted")
 	}
 	for _, serviceID := range input.RunningServiceIDs {
@@ -228,7 +239,9 @@ func AttachTaskServiceSnapshots(values []servicerecord.EnvironmentServiceProject
 	return snapshots
 }
 
-func AttachTaskOwnedNetworkSnapshots(values []projectionrecord.EnvironmentZoneProjection) []AttachTaskOwnedNetworkSnapshot {
+func AttachTaskOwnedNetworkSnapshots(
+	values []projectionrecord.EnvironmentZoneProjection,
+) []AttachTaskOwnedNetworkSnapshot {
 	snapshots := make([]AttachTaskOwnedNetworkSnapshot, len(values))
 	for index, value := range values {
 		snapshots[index] = AttachTaskOwnedNetworkSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}

@@ -181,7 +181,8 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	}
 	if creation.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask || creation.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		creation.Marker.TaskID != creation.Task.ID ||
-		creation.Marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopePlatform || creation.Marker.Locator.ScopeID != "-" ||
+		creation.Marker.Locator.ScopeKind != idempotencyrecord.IdempotencyScopePlatform ||
+		creation.Marker.Locator.ScopeID != "-" ||
 		!creation.Marker.CreatedAt.Equal(creation.Task.CreatedAt) ||
 		!creation.Marker.UpdatedAt.Equal(creation.Marker.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation marker is invalid")

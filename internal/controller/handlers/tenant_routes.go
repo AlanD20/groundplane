@@ -31,8 +31,18 @@ type TenantMutator interface {
 }
 
 type TenantChanger interface {
-	EditTenant(context.Context, string, hierarchy.EditTenantInput, string) (idempotencyrecord.IdempotencyResponse, error)
-	RenameTenant(context.Context, string, hierarchy.RenameTenantInput, string) (idempotencyrecord.IdempotencyResponse, error)
+	EditTenant(
+		context.Context,
+		string,
+		hierarchy.EditTenantInput,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
+	RenameTenant(
+		context.Context,
+		string,
+		hierarchy.RenameTenantInput,
+		string,
+	) (idempotencyrecord.IdempotencyResponse, error)
 }
 
 type tenantListInput struct {

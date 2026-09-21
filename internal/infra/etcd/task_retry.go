@@ -12,7 +12,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func CloneRetryTask(source TaskRecord, id string, actor taskjournal.TaskActor, createdAt time.Time) (TaskRecord, error) {
+func CloneRetryTask(
+	source TaskRecord,
+	id string,
+	actor taskjournal.TaskActor,
+	createdAt time.Time,
+) (TaskRecord, error) {
 	if err := ValidateTaskRecord(source); err != nil {
 		return TaskRecord{}, err
 	}
@@ -22,7 +27,8 @@ func CloneRetryTask(source TaskRecord, id string, actor taskjournal.TaskActor, c
 			"Controller update requires a fresh explicit release selection",
 		)
 	}
-	if source.Status != taskjournal.TaskStatusFailed && source.Status != taskjournal.TaskStatusTimedOut && source.Status != taskjournal.TaskStatusAborted {
+	if source.Status != taskjournal.TaskStatusFailed && source.Status != taskjournal.TaskStatusTimedOut &&
+		source.Status != taskjournal.TaskStatusAborted {
 		return TaskRecord{}, errs.Newf(
 			errs.KindTaskNotRetryable,
 			"task %s has status %s",
@@ -44,12 +50,14 @@ func CloneRetryTask(source TaskRecord, id string, actor taskjournal.TaskActor, c
 		PlanHash: source.PlanHash, RenderGeneration: source.RenderGeneration,
 		Type: source.Type, Target: source.Target, Params: cloneStringMap(source.Params),
 		Steps: taskjournal.CloneTaskSteps(source.Steps), TimeoutSeconds: source.TimeoutSeconds,
-		ComponentActionStepIDs:          append([]string(nil), source.ComponentActionStepIDs...),
-		ManagedComponentTeardownSources: environmentprojection.CloneManagedComponentRuntimeSources(source.ManagedComponentTeardownSources),
-		Materializations:                materializationrecord.Clone(source.Materializations),
-		EntryRuntime:                    taskjournal.CloneEntryTaskRuntime(source.EntryRuntime),
-		Configuration:                   taskconfiguration.CloneTaskConfiguration(source.Configuration),
-		Status:                          taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
+		ComponentActionStepIDs: append([]string(nil), source.ComponentActionStepIDs...),
+		ManagedComponentTeardownSources: environmentprojection.CloneManagedComponentRuntimeSources(
+			source.ManagedComponentTeardownSources,
+		),
+		Materializations: materializationrecord.Clone(source.Materializations),
+		EntryRuntime:     taskjournal.CloneEntryTaskRuntime(source.EntryRuntime),
+		Configuration:    taskconfiguration.CloneTaskConfiguration(source.Configuration),
+		Status:           taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}
 	if err := ValidateTaskRecord(retry); err != nil {
 		return TaskRecord{}, err

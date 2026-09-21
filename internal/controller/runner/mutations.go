@@ -25,7 +25,10 @@ const (
 
 type mutationRepository interface {
 	GetRunner(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerRecord], error)
-	GetRunnerObservation(context.Context, string) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], bool, error)
+	GetRunnerObservation(
+		context.Context,
+		string,
+	) (etcdstore.Versioned[runnerrecord.RunnerObservationRecord], bool, error)
 	ReplaceRunnerSlugIdempotent(
 		context.Context,
 		string,
@@ -82,7 +85,10 @@ func (service *MutationService) RenameRunner(
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
 	}
-	return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner edit retry bound was not enforced")
+	return idempotencyrecord.IdempotencyResponse{}, errs.New(
+		errs.KindInternal,
+		"Runner edit retry bound was not enforced",
+	)
 }
 
 func (service *MutationService) renameOnce(
@@ -91,7 +97,10 @@ func (service *MutationService) renameOnce(
 	request apiTypes.RunnerEditRequest,
 	idempotencyKey string,
 ) (idempotencyrecord.IdempotencyResponse, error) {
-	target := idempotencyrecord.IdempotencyReplayTarget{Kind: idempotencyrecord.IdempotencyReplayTargetRunner, ID: runnerID}
+	target := idempotencyrecord.IdempotencyReplayTarget{
+		Kind: idempotencyrecord.IdempotencyReplayTargetRunner,
+		ID:   runnerID,
+	}
 	locator, indexed, err := service.idempotency.ResolveReplayLocator(
 		ctx, target, http.MethodPatch, runnerEditRoute, idempotencyKey,
 	)
@@ -119,7 +128,10 @@ func (service *MutationService) renameOnce(
 	}
 	if existing {
 		if resolution.Kind != requestidempotency.ResolutionReplay {
-			return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner edit replay resolution is invalid")
+			return idempotencyrecord.IdempotencyResponse{}, errs.New(
+				errs.KindInternal,
+				"Runner edit replay resolution is invalid",
+			)
 		}
 		return cloneResponse(resolution.Response), nil
 	}
@@ -150,7 +162,12 @@ func (service *MutationService) renameOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	defer clear(durable.Ciphertext)
-	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(locator, durable, response, service.now().UTC())
+	marker, err := idempotencyrecord.NewCompletedDirectIdempotencyMarker(
+		locator,
+		durable,
+		response,
+		service.now().UTC(),
+	)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -201,7 +218,10 @@ func (service *MutationService) replay(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	if !existing || resolution.Kind != requestidempotency.ResolutionReplay {
-		return idempotencyrecord.IdempotencyResponse{}, errs.New(errs.KindInternal, "Runner edit replay index is inconsistent")
+		return idempotencyrecord.IdempotencyResponse{}, errs.New(
+			errs.KindInternal,
+			"Runner edit replay index is inconsistent",
+		)
 	}
 	return cloneResponse(resolution.Response), nil
 }

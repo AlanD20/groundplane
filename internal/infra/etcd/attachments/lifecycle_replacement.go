@@ -21,7 +21,10 @@ func (repository *Lifecycle) ReplaceLifecycle(
 		return etcdstore.Versioned[Record]{}, err
 	}
 	if !validAttachLifecycleReplacement(current.Record, replacement) {
-		return etcdstore.Versioned[Record]{}, errs.New(errs.KindStateConflict, "Attach lifecycle replacement is invalid")
+		return etcdstore.Versioned[Record]{}, errs.New(
+			errs.KindStateConflict,
+			"Attach lifecycle replacement is invalid",
+		)
 	}
 	conditions := []etcdstore.Condition{
 		{Key: AttachKey(current.Record.ID), ModRevision: current.Revision},

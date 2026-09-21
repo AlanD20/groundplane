@@ -21,7 +21,8 @@ func (repository *TaskRepository) prepareManualScriptRetryAvailability(
 	executionValue, rootValue *etcdstore.KeyValue, status taskjournal.TaskStatus, terminalAt *time.Time,
 ) (scriptTerminalSourceRelease, error) {
 	if execution.State != scriptexecutions.ScriptExecutionNotStarted || execution.StartAuthorized || execution.AssignmentID != "" ||
-		!execution.ActiveReference || execution.ReconciliationRequired {
+		!execution.ActiveReference ||
+		execution.ReconciliationRequired {
 		return scriptTerminalSourceRelease{}, errs.New(errs.KindStateConflict, "manual Script may already have started")
 	}
 	terminal, err := TransitionTaskStatus(task, taskjournal.TaskStatusRunning, status, *terminalAt)
@@ -60,7 +61,8 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 		) || retry.Type != taskjournal.TaskScript || retry.OperationID != source.OperationID ||
 		retry.PlanID != source.PlanID || retry.PlanHash != source.PlanHash || retry.Target != source.Target ||
 		retry.Params[scriptexecutions.ScriptExecutionIDParam] != source.Params[scriptexecutions.ScriptExecutionIDParam] ||
-		len(source.Steps) != 1 || len(retry.Steps) != 1 || retry.Steps[0].ID != source.Steps[0].ID {
+		len(source.Steps) != 1 || len(retry.Steps) != 1 ||
+		retry.Steps[0].ID != source.Steps[0].ID {
 		return scriptTaskChange{}, scriptRetryUnsafe("manual Script retry authority is unavailable")
 	}
 	execution, executionValue, err := (composeScriptRepository(repository.store)).manualScriptExecutionAtRevision(
@@ -72,7 +74,8 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 		return scriptTaskChange{}, err
 	}
 	if execution.State != scriptexecutions.ScriptExecutionNotStarted || execution.StartAuthorized || execution.AssignmentID != "" ||
-		!execution.ActiveReference || !retry.CreatedAt.After(execution.UpdatedAt) {
+		!execution.ActiveReference ||
+		!retry.CreatedAt.After(execution.UpdatedAt) {
 		return scriptTaskChange{}, scriptRetryUnsafe("manual Script may already have started")
 	}
 	retentionKey, retentionValue, err := prepareTaskRetentionIndex(source)
@@ -126,10 +129,15 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 		values[index] = mutation.Value
 	}
 	return scriptTaskChange{applies: true,
-		conditions: append(append([]etcdstore.Condition(nil), fragment.Conditions()...),
+		conditions: append(
+			append([]etcdstore.Condition(nil), fragment.Conditions()...),
 			etcdstore.Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision},
 			etcdstore.Condition{Key: retentionKey, ModRevision: read.Values[1].ModRevision},
-			etcdstore.Condition{Key: taskjournal.TaskAssignmentIndexKey(source.ID)}, etcdstore.Condition{Key: manualScriptClosingReportKey(source.ID)}),
+			etcdstore.Condition{
+				Key: taskjournal.TaskAssignmentIndexKey(source.ID),
+			},
+			etcdstore.Condition{Key: manualScriptClosingReportKey(source.ID)},
+		),
 		mutations: mutations, values: values,
 	}, nil
 }

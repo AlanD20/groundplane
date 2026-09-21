@@ -11,7 +11,14 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (service *Service) prepareApplyRoutes(ctx context.Context, environmentID string, parsed *blueprintparser.Result, desiredServices []core.Service, preserveRoutes bool, allocate func(ids.Kind) string) (taskplanning.BlueprintRouteChanges, []blueprints.EnvironmentBlueprintRouteChange, error) {
+func (service *Service) prepareApplyRoutes(
+	ctx context.Context,
+	environmentID string,
+	parsed *blueprintparser.Result,
+	desiredServices []core.Service,
+	preserveRoutes bool,
+	allocate func(ids.Kind) string,
+) (taskplanning.BlueprintRouteChanges, []blueprints.EnvironmentBlueprintRouteChange, error) {
 	currentRoutes, err := service.listBlueprintRoutes(ctx, environmentID)
 	if err != nil {
 		return taskplanning.BlueprintRouteChanges{}, nil, err

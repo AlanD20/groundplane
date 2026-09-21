@@ -37,7 +37,11 @@ func newControllerServiceMutations(
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Service lifecycle service: %w", err)
 	}
-	serviceMutations, err := serviceoperations.NewMutationService(serviceMutationRepository, serviceMutationIdempotency, serviceLifecycle)
+	serviceMutations, err := serviceoperations.NewMutationService(
+		serviceMutationRepository,
+		serviceMutationIdempotency,
+		serviceLifecycle,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("controller: initialize Service mutation service: %w", err)
 	}

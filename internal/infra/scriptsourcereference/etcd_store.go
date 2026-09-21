@@ -110,7 +110,11 @@ func (adapter *scriptSourceReferenceStore) AdjustScriptPrimary(
 func EtcdConditions(input []Condition) []etcdstore.Condition {
 	result := make([]etcdstore.Condition, len(input))
 	for index, condition := range input {
-		result[index] = etcdstore.Condition{Key: condition.Key, ModRevision: condition.ModRevision, Prefix: condition.Prefix}
+		result[index] = etcdstore.Condition{
+			Key:         condition.Key,
+			ModRevision: condition.ModRevision,
+			Prefix:      condition.Prefix,
+		}
 	}
 	return result
 }

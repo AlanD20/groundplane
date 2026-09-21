@@ -163,7 +163,9 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 	}
 	conditions = append(conditions, extraConditions...)
 	conditions = append(conditions, evidence.TransactionConditions()...)
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: backupruntime.BackupRunKey(next.TaskID), Value: value}}
+	mutations := []etcdstore.Mutation{
+		{Type: etcdstore.MutationPut, Key: backupruntime.BackupRunKey(next.TaskID), Value: value},
+	}
 	mutations = append(mutations, extraMutations...)
 	epoch, err := evidence.EpochRewriteMutation()
 	if err != nil {

@@ -82,7 +82,10 @@ func ProjectTaskOwner(project hierarchyrecord.ProjectRecord) (TaskOwner, error) 
 	return owner, nil
 }
 
-func EnvironmentTaskOwner(project hierarchyrecord.ProjectRecord, environment hierarchyrecord.EnvironmentRecord) (TaskOwner, error) {
+func EnvironmentTaskOwner(
+	project hierarchyrecord.ProjectRecord,
+	environment hierarchyrecord.EnvironmentRecord,
+) (TaskOwner, error) {
 	if ids.Validate(ids.KindEnvironment, environment.ID) != nil || environment.ProjectID != project.ID {
 		return TaskOwner{}, errs.New(errs.KindValidationFailed, "task owner Environment hierarchy is invalid")
 	}
