@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -69,7 +70,7 @@ func (plan backupRunPublicationPlan) taskIdempotencyPlan(
 			environmentID: plan.record.EnvironmentID, taskType: taskjournal.TaskBackup,
 			retryOf: plan.record.RetryOfTaskID, createdAt: plan.record.CreatedAt,
 			validatePlan: func(value *agentpb.ExecutionPlan) error {
-				return validateBackupRunExecutionPlan(plan.record, value)
+				return backupplanning.ValidateBackupRunExecutionPlan(plan.record, value)
 			},
 		},
 		plan.conditions,

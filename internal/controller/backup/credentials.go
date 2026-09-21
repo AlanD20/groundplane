@@ -3,6 +3,7 @@ package backup
 import (
 	"bytes"
 	"context"
+	backupsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/backupsecrets"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"unicode/utf16"
@@ -12,7 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -21,7 +22,7 @@ type backupSecretEvidenceReader interface {
 	ResolveBackupSecretEvidence(
 		context.Context,
 		backupsecret.Request,
-	) (etcd.BackupSecretResolutionEvidence, error)
+	) (backupsecrets.Evidence, error)
 }
 
 // BackupSecretResolver converts one fixed-revision durable evidence snapshot

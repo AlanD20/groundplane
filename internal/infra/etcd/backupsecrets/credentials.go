@@ -1,4 +1,4 @@
-package etcd
+package backupsecrets
 
 import (
 	"context"
@@ -12,11 +12,11 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
+func (reader *Reader) resolveEncryptedCredentialValues(
 	ctx context.Context,
 	fixedRevision int64,
 	dynamic *backupSecretDynamicRead,
-	evidence *BackupSecretResolutionEvidence,
+	evidence *Evidence,
 	second *etcdstore.GetManyResult,
 ) error {
 	if dynamic.project < 0 || second.Values[dynamic.project] == nil {
@@ -110,7 +110,7 @@ func (reader *BackupSecretResolutionReader) resolveEncryptedCredentialValues(
 		if decodeErr != nil || encrypted.SecretID != selected.id {
 			return errs.New(errs.KindInternal, "backup Secret encrypted value is corrupt")
 		}
-		evidence.SecretValues = append(evidence.SecretValues, BackupSecretValueEvidence{
+		evidence.SecretValues = append(evidence.SecretValues, SecretValueEvidence{
 			Name: reference.name, Reference: reference.reference, Value: encrypted,
 		})
 	}

@@ -25,7 +25,7 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 		return false
 	}
 	run, err := backupruntime.DecodeBackupRunRecord(runValue.Value)
-	if err != nil || validateBackupRunTaskBinding(task, run) != nil ||
+	if err != nil || ValidateBackupRunTaskBinding(task, run) != nil ||
 		run.UpdatedAt != *task.FinishedAt {
 		return false
 	}

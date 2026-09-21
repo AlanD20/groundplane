@@ -1,4 +1,4 @@
-package etcd
+package backupsecrets
 
 import (
 	"context"
@@ -64,9 +64,9 @@ func (dynamic *backupSecretDynamicRead) add(key string) int {
 	return position
 }
 
-func (reader *BackupSecretResolutionReader) planDynamicKeys(
+func (reader *Reader) planDynamicKeys(
 	dynamic *backupSecretDynamicRead,
-	evidence BackupSecretResolutionEvidence,
+	evidence Evidence,
 	plan *agentpb.ExecutionPlan,
 	stepIndex int,
 ) (string, map[string]int, map[string]int, error) {
@@ -150,7 +150,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 	return environmentID, connectorIDs, sourceIDs, nil
 }
 
-func (reader *BackupSecretResolutionReader) readFixed(
+func (reader *Reader) readFixed(
 	ctx context.Context,
 	keys []string,
 	revision int64,

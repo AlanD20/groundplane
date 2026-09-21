@@ -1,8 +1,9 @@
-package etcd
+package backupsecrets
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	base "github.com/AlanD20/groundplane/internal/infra/etcd"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -23,7 +24,7 @@ func validateBackupSecretResolutionRequest(request backupsecret.Request) error {
 }
 
 func validateBackupSecretTaskAssignment(
-	task TaskRecord,
+	task base.TaskRecord,
 	assignment taskassignments.TaskAssignmentRecord,
 	request backupsecret.Request,
 ) error {

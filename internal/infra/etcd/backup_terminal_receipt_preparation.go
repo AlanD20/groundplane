@@ -49,7 +49,7 @@ func prepareBackupRunTerminalReceipt(
 ) (backupTerminalReceiptPlan, error) {
 	if current.Revision <= 0 || current.Record.Type != taskjournal.TaskBackup || terminal.Type != taskjournal.TaskBackup ||
 		current.Record.ID != terminal.ID || !taskjournal.IsTerminalTaskStatus(terminal.Status) ||
-		validateBackupRunTaskBinding(terminal, run) != nil || !backupruntime.TerminalBackupRunState(run.State) ||
+		ValidateBackupRunTaskBinding(terminal, run) != nil || !backupruntime.TerminalBackupRunState(run.State) ||
 		terminal.FinishedAt == nil || !run.UpdatedAt.Equal(*terminal.FinishedAt) {
 		return backupTerminalReceiptPlan{}, errs.New(
 			errs.KindValidationFailed,
@@ -103,7 +103,7 @@ func prepareBackupPruneTerminalReceipt(
 ) (backupTerminalReceiptPlan, error) {
 	if current.Revision <= 0 || current.Record.Type != taskjournal.TaskBackupPrune ||
 		terminal.Type != taskjournal.TaskBackupPrune || !taskjournal.IsTerminalTaskStatus(terminal.Status) ||
-		terminal.FinishedAt == nil || validateBackupPruneTaskBinding(terminal, dispatch) != nil ||
+		terminal.FinishedAt == nil || ValidateBackupPruneTaskBinding(terminal, dispatch) != nil ||
 		len(prunes) != len(dispatch.RecoveryPointIDs) || terminal.ID != current.Record.ID {
 		return backupTerminalReceiptPlan{}, errs.New(
 			errs.KindValidationFailed,

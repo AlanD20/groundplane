@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
@@ -175,7 +176,7 @@ func (repository *BackupRuntimeRepository) prepareBackupPrunePublication(
 			environmentID: dispatch.EnvironmentID, taskType: taskjournal.TaskBackupPrune,
 			createdAt: dispatch.CreatedAt,
 			validatePlan: func(value *agentpb.ExecutionPlan) error {
-				return validateBackupPruneExecutionPlan(dispatch, planEvidence, value)
+				return backupplanning.ValidateBackupPruneExecutionPlan(dispatch, planEvidence, value)
 			},
 		},
 		readRevision: anchor.ReadRevision,
@@ -187,8 +188,8 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 	pending []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 	authorityValues []*etcdstore.KeyValue,
 	readRevision int64,
-) ([]backupPruneExecutionEvidence, error) {
-	evidence := make([]backupPruneExecutionEvidence, len(pending))
+) ([]backupplanning.PruneExecutionEvidence, error) {
+	evidence := make([]backupplanning.PruneExecutionEvidence, len(pending))
 	for index, version := range pending {
 		start := 1 + index*5
 		if start+4 >= len(authorityValues) || authorityValues[start+1] == nil {
@@ -220,17 +221,17 @@ func (repository *BackupRuntimeRepository) loadBackupPruneExecutionEvidence(
 			etcdstore.ClearValues(fixed.Values)
 			return nil, errs.New(errs.KindStateConflict, "backup prune plan evidence changed")
 		}
-		evidence[index] = backupPruneExecutionEvidence{
-			prune: version.Record, pruneRevision: version.Revision,
-			pointRevision:       authorityValues[start+1].ModRevision,
-			sourceRevision:      fixed.Values[0].ModRevision,
-			environmentRevision: fixed.Values[1].ModRevision,
-			connectorRevision:   fixed.Values[2].ModRevision,
-			connectorEndpoint:   connector.Connector.Endpoint,
-			connectorBucket:     connector.Connector.Bucket,
-			connectorPrefix:     connector.Connector.Prefix,
-			connectorRegion:     connector.Connector.Region,
-			connectorPathStyle:  connector.Connector.PathStyle,
+		evidence[index] = backupplanning.PruneExecutionEvidence{
+			Prune: version.Record, PruneRevision: version.Revision,
+			PointRevision:       authorityValues[start+1].ModRevision,
+			SourceRevision:      fixed.Values[0].ModRevision,
+			EnvironmentRevision: fixed.Values[1].ModRevision,
+			ConnectorRevision:   fixed.Values[2].ModRevision,
+			ConnectorEndpoint:   connector.Connector.Endpoint,
+			ConnectorBucket:     connector.Connector.Bucket,
+			ConnectorPrefix:     connector.Connector.Prefix,
+			ConnectorRegion:     connector.Connector.Region,
+			ConnectorPathStyle:  connector.Connector.PathStyle,
 		}
 		etcdstore.ClearValues(fixed.Values)
 	}

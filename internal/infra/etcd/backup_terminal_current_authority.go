@@ -97,7 +97,7 @@ func (repository *TaskRepository) validateCurrentBackupTerminalAuthority(
 		if runValue.ModRevision != terminalRevision {
 			return errs.New(errs.KindStateConflict, "terminal backup run binding changed")
 		}
-		if validateBackupRunTaskBinding(task, run) != nil {
+		if ValidateBackupRunTaskBinding(task, run) != nil {
 			return errs.New(errs.KindInternal, "same-revision terminal backup run binding is invalid")
 		}
 		value, err := backupruntime.EncodeBackupRunRecord(run)

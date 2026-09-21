@@ -53,7 +53,7 @@ func (repository *TaskRepository) abortPendingBackupTask(
 			if getErr != nil {
 				return etcdstore.Versioned[TaskRecord]{}, getErr
 			}
-			if err := validateBackupRunTaskBinding(current.Record, run.Record); err != nil {
+			if err := ValidateBackupRunTaskBinding(current.Record, run.Record); err != nil {
 				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			effectiveAt = backupTerminalTimestamp(effectiveAt, run.Record.UpdatedAt)

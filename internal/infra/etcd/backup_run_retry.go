@@ -124,7 +124,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 	run, runErr := backupruntime.DecodeBackupRunRecord(read.Values[1].Value)
 	receipt, receiptErr := backupruntime.DecodeBackupTerminalReceiptRecord(read.Values[2].Value)
 	if taskErr != nil || runErr != nil || receiptErr != nil || task.ID != taskID ||
-		validateBackupRunTaskBinding(task, run) != nil ||
+		ValidateBackupRunTaskBinding(task, run) != nil ||
 		validateBackupTerminalReceiptTaskBinding(task, receipt) != nil {
 		return backupRunRetrySource{}, backupruntime.CorruptBackupRuntimeRecord()
 	}

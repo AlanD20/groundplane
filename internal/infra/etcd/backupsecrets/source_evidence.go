@@ -1,7 +1,8 @@
-package etcd
+package backupsecrets
 
 import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
@@ -12,10 +13,10 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (reader *BackupSecretResolutionReader) decodeSourceDynamicEvidence(
+func (reader *Reader) decodeSourceDynamicEvidence(
 	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
-	evidence *BackupSecretResolutionEvidence,
+	evidence *Evidence,
 	plan *agentpb.ExecutionPlan,
 	stepIndex int,
 	sourceIDs map[string]int,
@@ -48,7 +49,7 @@ func (reader *BackupSecretResolutionReader) decodeSourceDynamicEvidence(
 	return nil
 }
 
-func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
+func (reader *Reader) validateCaptureTargetEvidence(
 	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
 	run *backupruntime.BackupRunRecord,
@@ -68,7 +69,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 			result.Values[dynamic.index[hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID)]],
 			result.Values[dynamic.index[blueprints.EnvironmentBlueprintHeadKey(snapshot.BackingEnvironmentID)]],
 		}
-		return validateBackupPostgresPublicationEvidence(keys, source, *snapshot)
+		return backupplanning.ValidateBackupPostgresPublicationEvidence(keys, source, *snapshot)
 	case backupruntime.BackupRuntimeSourceVolume:
 		snapshot := source.Snapshot.Volume
 		if snapshot == nil {
@@ -84,7 +85,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 		for _, service := range snapshot.Services {
 			keys = append(keys, result.Values[dynamic.index[servicerecord.ServiceRuntimeKey(service.ServiceID)]])
 		}
-		return validateBackupVolumePublicationEvidence(keys, source, *snapshot)
+		return backupplanning.ValidateBackupVolumePublicationEvidence(keys, source, *snapshot)
 	case backupruntime.BackupRuntimeSourceConfig:
 		snapshot := source.Snapshot.Config
 		config := step.GetConfig()

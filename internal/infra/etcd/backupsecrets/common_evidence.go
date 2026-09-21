@@ -1,4 +1,4 @@
-package etcd
+package backupsecrets
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
@@ -10,10 +10,10 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (reader *BackupSecretResolutionReader) decodeCommonDynamicEvidence(
+func (reader *Reader) decodeCommonDynamicEvidence(
 	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
-	evidence *BackupSecretResolutionEvidence,
+	evidence *Evidence,
 	environmentID string,
 	connectorIDs map[string]int,
 	selectedConnectorID string,

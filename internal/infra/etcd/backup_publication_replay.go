@@ -65,7 +65,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	}
 	run, runErr := backupruntime.DecodeBackupRunRecord(read.Values[0].Value)
 	lock, lockErr := backupruntime.DecodeBackupOperationLockRecord(read.Values[2].Value)
-	if runErr != nil || lockErr != nil || validateBackupRunTaskBinding(task, run) != nil ||
+	if runErr != nil || lockErr != nil || ValidateBackupRunTaskBinding(task, run) != nil ||
 		(run.RetryOfTaskID != "" && task.Actor != taskjournal.TaskActorOperator) ||
 		(run.RetryOfTaskID == "" && run.Initiator == backupruntime.BackupRunInitiatorOperator && task.Actor != taskjournal.TaskActorOperator) ||
 		(run.RetryOfTaskID == "" && run.Initiator == backupruntime.BackupRunInitiatorSchedule && task.Actor != taskjournal.TaskActorSystem) ||

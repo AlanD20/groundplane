@@ -9,6 +9,7 @@ import (
 	handlers "github.com/AlanD20/groundplane/internal/controller/handlers"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	backupsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/backupsecrets"
 	scriptsourcepublication "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourcepublication"
 
 	"github.com/AlanD20/groundplane/internal/common/config"
@@ -104,7 +105,7 @@ func newControllerExecutionComposition(
 		_ = store.Close()
 		return controllerExecutionComposition{}, fmt.Errorf("controller: initialize Script source-reference authority: %w", err)
 	}
-	backupSecretEvidence, err := etcd.NewBackupSecretResolutionReader(store)
+	backupSecretEvidence, err := backupsecrets.NewReader(store)
 	if err != nil {
 		// Rationale: initialization is already failing; store shutdown is
 		// best-effort and must not replace the primary typed error.

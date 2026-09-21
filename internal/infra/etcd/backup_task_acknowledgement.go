@@ -62,7 +62,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 			if getErr != nil {
 				return etcdstore.Versioned[TaskRecord]{}, getErr
 			}
-			if err := validateBackupRunTaskBinding(current.Task.Record, run.Record); err != nil {
+			if err := ValidateBackupRunTaskBinding(current.Task.Record, run.Record); err != nil {
 				return etcdstore.Versioned[TaskRecord]{}, err
 			}
 			effectiveAt = backupTerminalTimestamp(effectiveAt, run.Record.UpdatedAt)
@@ -250,7 +250,7 @@ func (repository *TaskRepository) loadBackupPruneTerminalAuthority(
 	if err != nil || dispatchRecord.TaskID != taskID {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{}, nil, backupruntime.CorruptBackupRuntimeRecord()
 	}
-	if err := validateBackupPruneTaskBinding(task, dispatchRecord); err != nil {
+	if err := ValidateBackupPruneTaskBinding(task, dispatchRecord); err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{}, nil, err
 	}
 	dispatch := etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneDispatchRecord]{
@@ -362,7 +362,7 @@ func backupRunForTaskTerminal(
 	return next, nil
 }
 
-func validateBackupRunTaskBinding(task TaskRecord, run backupruntime.BackupRunRecord) error {
+func ValidateBackupRunTaskBinding(task TaskRecord, run backupruntime.BackupRunRecord) error {
 	if task.Type != taskjournal.TaskBackup || task.ID != run.TaskID || task.OperationID != run.OperationID ||
 		task.Owner.EnvironmentID == "" || task.Owner.EnvironmentID != run.EnvironmentID ||
 		task.Target != run.EnvironmentID || !task.CreatedAt.Equal(run.CreatedAt) ||
@@ -372,7 +372,7 @@ func validateBackupRunTaskBinding(task TaskRecord, run backupruntime.BackupRunRe
 	return nil
 }
 
-func validateBackupPruneTaskBinding(
+func ValidateBackupPruneTaskBinding(
 	task TaskRecord,
 	dispatch backupruntime.BackupRecoveryPointPruneDispatchRecord,
 ) error {

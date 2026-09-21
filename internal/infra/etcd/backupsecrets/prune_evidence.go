@@ -1,7 +1,8 @@
-package etcd
+package backupsecrets
 
 import (
 	"context"
+	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
@@ -12,11 +13,11 @@ import (
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
-func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
+func (reader *Reader) decodePruneDynamicEvidence(
 	ctx context.Context,
 	result *etcdstore.GetManyResult,
 	dynamic *backupSecretDynamicRead,
-	evidence *BackupSecretResolutionEvidence,
+	evidence *Evidence,
 	plan *agentpb.ExecutionPlan,
 	stepIndex int,
 ) error {
@@ -24,7 +25,7 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 	if dispatch == nil {
 		return errs.New(errs.KindInternal, "backup prune dispatch evidence is missing")
 	}
-	items := make([]backupPruneExecutionEvidence, len(dispatch.RecoveryPointIDs))
+	items := make([]backupplanning.PruneExecutionEvidence, len(dispatch.RecoveryPointIDs))
 	for index, pointID := range dispatch.RecoveryPointIDs {
 		planned := plan.Steps[index].GetBackupArtifactPrune()
 		if planned == nil || planned.PruneRevision == 0 {
@@ -98,17 +99,17 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 		); err != nil {
 			return err
 		}
-		items[index] = backupPruneExecutionEvidence{
-			prune: prune, pruneRevision: int64(planned.PruneRevision),
-			pointRevision: pointValue.ModRevision, sourceRevision: sourceValue.ModRevision,
-			environmentRevision: environmentValue.ModRevision,
-			connectorRevision:   connectorValue.ModRevision,
-			connectorEndpoint:   connector.Connector.Endpoint, connectorBucket: connector.Connector.Bucket,
-			connectorPrefix: connector.Connector.Prefix, connectorRegion: connector.Connector.Region,
-			connectorPathStyle: connector.Connector.PathStyle,
+		items[index] = backupplanning.PruneExecutionEvidence{
+			Prune: prune, PruneRevision: int64(planned.PruneRevision),
+			PointRevision: pointValue.ModRevision, SourceRevision: sourceValue.ModRevision,
+			EnvironmentRevision: environmentValue.ModRevision,
+			ConnectorRevision:   connectorValue.ModRevision,
+			ConnectorEndpoint:   connector.Connector.Endpoint, ConnectorBucket: connector.Connector.Bucket,
+			ConnectorPrefix: connector.Connector.Prefix, ConnectorRegion: connector.Connector.Region,
+			ConnectorPathStyle: connector.Connector.PathStyle,
 		}
 	}
-	if err := validateBackupPruneExecutionPlan(*dispatch, items, plan); err != nil {
+	if err := backupplanning.ValidateBackupPruneExecutionPlan(*dispatch, items, plan); err != nil {
 		return err
 	}
 	selected := plan.Steps[stepIndex]
@@ -125,7 +126,7 @@ func (reader *BackupSecretResolutionReader) decodePruneDynamicEvidence(
 			evidence.Point = &point
 			evidence.Prune = &pruneRecord
 			evidence.Source = mustDecodeBackupSource(result.Values[dynamic.sources[point.SourceID]])
-			evidence.SourceRevision = items[index].sourceRevision
+			evidence.SourceRevision = items[index].SourceRevision
 			return nil
 		}
 	}

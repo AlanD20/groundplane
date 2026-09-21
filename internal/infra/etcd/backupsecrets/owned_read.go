@@ -1,4 +1,4 @@
-package etcd
+package backupsecrets
 
 import (
 	"context"

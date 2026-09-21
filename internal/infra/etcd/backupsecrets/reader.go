@@ -1,4 +1,4 @@
-package etcd
+package backupsecrets
 
 import (
 	"bytes"
@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	base "github.com/AlanD20/groundplane/internal/infra/etcd"
+	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
@@ -23,7 +25,7 @@ import (
 // BackupSecretValueEvidence is an encrypted Secret value selected by the
 // project-first/platform-fallback lookup. Ciphertext is caller-owned and must
 // be cleared after the controller has opened it.
-type BackupSecretValueEvidence struct {
+type SecretValueEvidence struct {
 	Name      backupsecret.CredentialName
 	Reference string
 	Value     secretrecord.EncryptedValue
@@ -32,9 +34,9 @@ type BackupSecretValueEvidence struct {
 // BackupSecretResolutionEvidence contains only the durable proof and
 // encrypted values required by the Controller resolver. No plaintext,
 // Connector object locator, or age identity is returned.
-type BackupSecretResolutionEvidence struct {
+type Evidence struct {
 	ReadRevision        int64
-	Task                TaskRecord
+	Task                base.TaskRecord
 	Assignment          taskassignments.TaskAssignmentRecord
 	Environment         hierarchyrecord.EnvironmentRecord
 	EnvironmentRevision int64
@@ -51,13 +53,13 @@ type BackupSecretResolutionEvidence struct {
 	SourceRevision      int64
 	Credentials         connectorrecord.EncryptedCredentials
 	HasCredentials      bool
-	SecretValues        []BackupSecretValueEvidence
+	SecretValues        []SecretValueEvidence
 }
 
 // Clear releases every encrypted buffer returned by the reader. It is safe
 // to call more than once and is intentionally explicit for callers that take
 // ownership before returning an error.
-func (e *BackupSecretResolutionEvidence) Clear() {
+func (e *Evidence) Clear() {
 	if e == nil {
 		return
 	}
@@ -74,7 +76,7 @@ func (e *BackupSecretResolutionEvidence) Clear() {
 // backup capture or prune secret delivery. It is deliberately narrower than
 // the runtime repositories so channel composition can depend on one read
 // contract without acquiring lifecycle authority.
-type BackupSecretResolutionReader struct {
+type Reader struct {
 	store backupSecretResolutionStore
 	now   func() time.Time
 }
@@ -83,41 +85,41 @@ type backupSecretResolutionStore interface {
 	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 }
 
-func NewBackupSecretResolutionReader(store backupSecretResolutionStore) (*BackupSecretResolutionReader, error) {
+func NewReader(store backupSecretResolutionStore) (*Reader, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "backup secret resolution store is required")
 	}
-	return &BackupSecretResolutionReader{store: store, now: time.Now}, nil
+	return &Reader{store: store, now: time.Now}, nil
 }
 
-func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
+func (reader *Reader) ResolveBackupSecretEvidence(
 	ctx context.Context,
 	request backupsecret.Request,
-) (BackupSecretResolutionEvidence, error) {
+) (Evidence, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 	if err := validateBackupSecretResolutionRequest(request); err != nil {
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 	plan, err := executionplan.Validate(request.Plan)
 	if err != nil {
-		return BackupSecretResolutionEvidence{}, errs.Wrap(errs.KindValidationFailed, err)
+		return Evidence{}, errs.Wrap(errs.KindValidationFailed, err)
 	}
 	stepIndex, err := backupSecretStepIndex(plan, request.StepID)
 	if err != nil {
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 
 	anchor, err := reader.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskjournal.TaskStorageKey(request.TaskID), taskjournal.TaskAssignmentIndexKey(request.TaskID),
 	}})
 	if err != nil {
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 	if anchor == nil || anchor.ReadRevision <= 0 || len(anchor.Values) != 2 || anchor.Values[1] == nil {
 		etcdstore.ClearValues(anchorValues(anchor))
-		return BackupSecretResolutionEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindStateConflict,
 			"backup task assignment evidence is unavailable",
 		)
@@ -125,7 +127,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 	assignmentForKey, err := taskassignments.DecodeTaskAssignment(anchor.Values[1].Value)
 	etcdstore.ClearValues(anchor.Values)
 	if err != nil {
-		return BackupSecretResolutionEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindInternal,
 			"backup task assignment evidence is corrupt",
 		)
@@ -142,11 +144,11 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 	}
 	base, err := reader.readFixed(ctx, baseKeys, fixedRevision)
 	if err != nil {
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 	defer etcdstore.ClearValues(base.Values)
 	if base.Values[0] == nil {
-		return BackupSecretResolutionEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindTaskNotFound,
 			"backup task was not found",
 		)
@@ -156,127 +158,127 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 		base.Values[1].ModRevision != base.Values[3].ModRevision ||
 		!bytes.Equal(base.Values[1].Value, base.Values[2].Value) ||
 		!bytes.Equal(base.Values[1].Value, base.Values[3].Value) {
-		return BackupSecretResolutionEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindStateConflict,
 			"backup task assignment evidence changed",
 		)
 	}
-	task, err := DecodeTaskRecord(base.Values[0].Value)
+	task, err := base.DecodeTaskRecord(base.Values[0].Value)
 	if err != nil {
-		return BackupSecretResolutionEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindInternal,
 			"backup task evidence is corrupt",
 		)
 	}
 	assignment, err := taskassignments.DecodeTaskAssignment(base.Values[1].Value)
 	if err != nil {
-		return BackupSecretResolutionEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindInternal,
 			"backup task assignment evidence is corrupt",
 		)
 	}
 	if err := validateBackupSecretTaskAssignment(task, assignment, request); err != nil {
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 	now := reader.now
 	if now == nil {
 		now = time.Now
 	}
 	if !now().Before(assignment.Deadline) {
-		return BackupSecretResolutionEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindStateConflict,
 			"backup task assignment deadline has expired",
 		)
 	}
 	if len(task.Params) != 0 || len(task.Materializations) != 0 {
-		return BackupSecretResolutionEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindStateConflict,
 			"backup task contains mutable execution inputs",
 		)
 	}
 	if task.PlanID != plan.PlanId || task.PlanHash != hex.EncodeToString(plan.PlanHash) ||
 		task.RenderGeneration != int32(plan.RenderGeneration) {
-		return BackupSecretResolutionEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindStateConflict,
 			"backup task plan identity changed",
 		)
 	}
 	if !proto.Equal(plan.Steps[stepIndex], request.Step) {
-		return BackupSecretResolutionEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindStateConflict,
 			"backup task step evidence changed",
 		)
 	}
 	for index, taskStep := range task.Steps {
 		if index >= len(plan.Steps) || taskStep.ID != plan.Steps[index].StepId {
-			return BackupSecretResolutionEvidence{}, errs.New(
+			return Evidence{}, errs.New(
 				errs.KindStateConflict,
 				"backup task step evidence changed",
 			)
 		}
 	}
 	if len(task.Steps) != len(plan.Steps) {
-		return BackupSecretResolutionEvidence{}, errs.New(
+		return Evidence{}, errs.New(
 			errs.KindStateConflict,
 			"backup task step evidence changed",
 		)
 	}
 
-	evidence := BackupSecretResolutionEvidence{
+	evidence := Evidence{
 		ReadRevision: fixedRevision, Task: task, Assignment: assignment,
 	}
 	if task.Type == taskjournal.TaskBackup {
 		if base.Values[4] == nil || base.Values[5] != nil {
-			return BackupSecretResolutionEvidence{}, errs.New(
+			return Evidence{}, errs.New(
 				errs.KindStateConflict,
 				"backup run evidence is unavailable",
 			)
 		}
 		run, decodeErr := backupruntime.DecodeBackupRunRecord(base.Values[4].Value)
 		if decodeErr != nil {
-			return BackupSecretResolutionEvidence{}, errs.New(
+			return Evidence{}, errs.New(
 				errs.KindInternal,
 				"backup run evidence is corrupt",
 			)
 		}
-		if err := validateBackupRunTaskBinding(task, run); err != nil {
-			return BackupSecretResolutionEvidence{}, err
+		if err := base.ValidateBackupRunTaskBinding(task, run); err != nil {
+			return Evidence{}, err
 		}
 		if run.State != backupruntime.BackupRunQueued && run.State != backupruntime.BackupRunRunning {
-			return BackupSecretResolutionEvidence{}, errs.New(
+			return Evidence{}, errs.New(
 				errs.KindStateConflict,
 				"backup run is no longer active",
 			)
 		}
 		if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_BACKUP {
-			return BackupSecretResolutionEvidence{}, errs.New(
+			return Evidence{}, errs.New(
 				errs.KindStateConflict,
 				"backup task plan operation changed",
 			)
 		}
-		if err := validateBackupRunExecutionPlan(run, plan); err != nil {
-			return BackupSecretResolutionEvidence{}, err
+		if err := backupplanning.ValidateBackupRunExecutionPlan(run, plan); err != nil {
+			return Evidence{}, err
 		}
 		evidence.Run = &run
 	} else {
 		if base.Values[4] != nil || base.Values[5] == nil {
-			return BackupSecretResolutionEvidence{}, errs.New(
+			return Evidence{}, errs.New(
 				errs.KindStateConflict,
 				"backup prune dispatch evidence is unavailable",
 			)
 		}
 		dispatch, decodeErr := backupruntime.DecodeBackupRecoveryPointPruneDispatchRecord(base.Values[5].Value)
 		if decodeErr != nil {
-			return BackupSecretResolutionEvidence{}, errs.New(
+			return Evidence{}, errs.New(
 				errs.KindInternal,
 				"backup prune dispatch evidence is corrupt",
 			)
 		}
-		if err := validateBackupPruneTaskBinding(task, dispatch); err != nil {
-			return BackupSecretResolutionEvidence{}, err
+		if err := base.ValidateBackupPruneTaskBinding(task, dispatch); err != nil {
+			return Evidence{}, err
 		}
 		if plan.Operation != agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE {
-			return BackupSecretResolutionEvidence{}, errs.New(
+			return Evidence{}, errs.New(
 				errs.KindStateConflict,
 				"backup prune task plan operation changed",
 			)
@@ -290,11 +292,11 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 		dynamic, evidence, plan, stepIndex,
 	)
 	if err != nil {
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 	firstDynamic, err := reader.readFixed(ctx, dynamic.keys, fixedRevision)
 	if err != nil {
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 	defer etcdstore.ClearValues(firstDynamic.Values)
 	selectedConnectorID := ""
@@ -307,34 +309,34 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 		firstDynamic, dynamic, &evidence, environmentID, connectorIDs, selectedConnectorID,
 	); err != nil {
 		evidence.Clear()
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 	if err := reader.decodeSourceDynamicEvidence(
 		firstDynamic, dynamic, &evidence, plan, stepIndex, sourceIDs,
 	); err != nil {
 		evidence.Clear()
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 	if evidence.Dispatch != nil {
 		if err := reader.decodePruneDynamicEvidence(
 			ctx, firstDynamic, dynamic, &evidence, plan, stepIndex,
 		); err != nil {
 			evidence.Clear()
-			return BackupSecretResolutionEvidence{}, err
+			return Evidence{}, err
 		}
 	}
 
 	secondDynamic, err := reader.readFixed(ctx, dynamic.keys, fixedRevision)
 	if err != nil {
 		evidence.Clear()
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 	defer etcdstore.ClearValues(secondDynamic.Values)
 	if err := reader.resolveEncryptedCredentialValues(
 		ctx, fixedRevision, dynamic, &evidence, secondDynamic,
 	); err != nil {
 		evidence.Clear()
-		return BackupSecretResolutionEvidence{}, err
+		return Evidence{}, err
 	}
 	return evidence, nil
 }
