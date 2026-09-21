@@ -13,7 +13,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
-	"github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
@@ -30,7 +29,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/attachments"
 	"github.com/AlanD20/groundplane/internal/controller/attachplanning"
 	"github.com/AlanD20/groundplane/internal/controller/backingservices"
-	"github.com/AlanD20/groundplane/internal/controller/backupkey"
 	"github.com/AlanD20/groundplane/internal/controller/blueprint"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintrelease"
 	componentcapability "github.com/AlanD20/groundplane/internal/controller/component"
@@ -587,83 +585,13 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize hierarchy deletion runtime: %w", err)
 	}
-	backupPolicyIdempotency, err := backupcapability.NewDurableBackupPolicyIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("initialize backup policy idempotency", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
-	}
-	backupPolicyKeys, err := backupcapability.NewAgeBackupPolicyKeyFactory(intentProtector)
-	if err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("initialize backup policy key factory", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
-	}
-	backupPolicies, err := backupcapability.NewBackupPolicyService(
-		backupPolicyRepository,
-		backupPolicyKeys,
-		backupPolicyIdempotency,
+	backupComposition, err := newControllerBackupComposition(
+		store, logger, hierarchyRecords, backupPolicyRecords, backupPolicyRepository,
+		backupRuntimeRecords, backupKeyRecords, attachFactValues, intentCoordinator,
+		idempotency, intentProtector, controllerKey,
 	)
 	if err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("initialize backup policy service", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
-	}
-	backupPointReads, err := backupcapability.NewRecoveryPointReadService(
-		hierarchyRecords,
-		backupRuntimeRecords,
-		secretvalue.NewControllerKeyCipher(controllerKey),
-	)
-	if err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("initialize recovery point reads", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
-	}
-	backupRunRepository, err := backupcapability.NewDurableBackupRunRepository(
-		backupRuntimeRecords,
-		attachFactValues.ResolveBackupIdentity,
-	)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize backup run repository: %w", err)
-	}
-	backupRunIdempotency, err := backupcapability.NewDurableBackupRunIdempotency(intentCoordinator, idempotency)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize backup run idempotency: %w", err)
-	}
-	backupRuns := backupcapability.NewBackupRunService(
-		backupRunRepository,
-		backupcapability.BackupRunPlanBuilderFunc(backupcapability.BuildBackupRunPlan),
-		backupRunIdempotency,
-	)
-	backupSchedules, err := backupcapability.NewBackupScheduleService(backupscheduling.New(store), backupRuns, logger)
-	if err != nil {
-		_ = store.Close()
-		return nil, fmt.Errorf("controller: initialize backup scheduler: %w", err)
-	}
-	backupKeys, err := backupkey.NewService(
-		backupPolicyRecords,
-		backupKeyRecords,
-		backupPolicyKeys,
-		intentCoordinator,
-		idempotency,
-		intentProtector,
-	)
-	if err != nil {
-		closeErr := store.Close()
-		return nil, errs.Wrap(errs.KindInternal, errors.Join(
-			wrapControllerRunError("initialize backup key service", err),
-			wrapControllerRunError("close etcd", closeErr),
-		))
+		return nil, err
 	}
 	networkRecords, err := networketcd.NewRepository(
 		hierarchyRecords,
@@ -796,7 +724,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry idempotency: %w", err)
 	}
-	taskMutations, err := taskoperations.NewRetryService(tasks, taskRetryIdempotency, backupRuns)
+	taskMutations, err := taskoperations.NewRetryService(tasks, taskRetryIdempotency, backupComposition.runs)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize Task retry service: %w", err)
@@ -868,7 +796,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		cfg.Storage.VolumeRoot, cfg.EnvironmentPool,
 		environmentBlueprintRepository, environmentBlueprintIdempotency, materializationResolver,
 		releaseGroupBlueprints, blueprintReleases, entryGeneration, attachFactValues, componentCatalog,
-		environmentBlueprintRepository, backupPolicyKeys,
+		environmentBlueprintRepository, backupComposition.policyKeys,
 	)
 	if err != nil {
 		_ = store.Close()
@@ -966,7 +894,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		return nil, fmt.Errorf("controller: initialize Controller Task handler: %w", err)
 	}
 	controllerTaskRunner, err := newControllerTaskRuntime(
-		ctx, tasks, controllerTaskHandler, backupKeys, hierarchyDeletions,
+		ctx, tasks, controllerTaskHandler, backupComposition.keys, hierarchyDeletions,
 		platform.agents, agentRuntime.Registry, platform.native, tick, logger,
 	)
 	if err != nil {
@@ -1025,12 +953,12 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		RunnerProvisioning:    runnerComposition.provisioning,
 		RunnerMutations:       runnerComposition.mutations,
 		RunnerRemovals:        runnerComposition.removals,
-		BackupPolicies:        backupPolicies,
-		BackupPolicyMutations: backupPolicies,
-		RecoveryPoints:        backupPointReads,
-		BackupRuns:            backupRuns,
-		BackupKeyMutations:    backupKeys,
-		BackupKeyExports:      backupKeys,
+		BackupPolicies:        backupComposition.policies,
+		BackupPolicyMutations: backupComposition.policies,
+		RecoveryPoints:        backupComposition.points,
+		BackupRuns:            backupComposition.runs,
+		BackupKeyMutations:    backupComposition.keys,
+		BackupKeyExports:      backupComposition.keys,
 		Volumes:               volumeReads,
 		VolumeMutations:       volumeMutations,
 		EnvironmentMutations:  hierarchyMutations.environmentMutations,
@@ -1053,7 +981,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		Logger:          logger,
 		server:          srv,
 		agent:           agentRuntime,
-		scheduler:       scheduler.New(logger, platform.upgrades, tick, tasks, idempotency, staleTasks, backupSchedules),
+		scheduler:       scheduler.New(logger, platform.upgrades, tick, tasks, idempotency, staleTasks, backupComposition.schedules),
 		controllerTasks: controllerTaskRunner,
 		localAgent:      platform.reconciliation,
 		attachMutations: attachMutations,

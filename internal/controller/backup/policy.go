@@ -166,7 +166,7 @@ func (factory *ageBackupPolicyKeyFactory) Create(
 	}, nil
 }
 
-type backupPolicyService struct {
+type PolicyService struct {
 	repository  backupPolicyRepository
 	keys        backupPolicyKeyFactory
 	idempotency backupPolicyIdempotency
@@ -177,17 +177,17 @@ func NewBackupPolicyService(
 	repository backupPolicyRepository,
 	keys backupPolicyKeyFactory,
 	idempotency backupPolicyIdempotency,
-) (*backupPolicyService, error) {
+) (*PolicyService, error) {
 	if repository == nil || keys == nil || idempotency == nil {
 		return nil, errs.New(errs.KindInternal, "backup policy service dependencies are required")
 	}
-	return &backupPolicyService{
+	return &PolicyService{
 		repository: repository, keys: keys, idempotency: idempotency,
 		now: func() time.Time { return time.Now().UTC() },
 	}, nil
 }
 
-func (service *backupPolicyService) GetBackupPolicy(
+func (service *PolicyService) GetBackupPolicy(
 	ctx context.Context,
 	environmentID string,
 ) (apiTypes.BackupPolicy, error) {
@@ -198,7 +198,7 @@ func (service *backupPolicyService) GetBackupPolicy(
 	return backupPolicyAPI(projection), nil
 }
 
-func (service *backupPolicyService) SetBackupPolicy(
+func (service *PolicyService) SetBackupPolicy(
 	ctx context.Context,
 	environmentID string,
 	input apiTypes.BackupPolicyReplacementRequest,

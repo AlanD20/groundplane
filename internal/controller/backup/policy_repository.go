@@ -10,27 +10,27 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-type durableBackupPolicyRepository struct {
+type PolicyRepository struct {
 	repository *etcd.BackupPolicyRepository
 }
 
 func NewDurableBackupPolicyRepository(
 	repository *etcd.BackupPolicyRepository,
-) (*durableBackupPolicyRepository, error) {
+) (*PolicyRepository, error) {
 	if repository == nil {
 		return nil, errs.New(errs.KindInternal, "backup policy repository is required")
 	}
-	return &durableBackupPolicyRepository{repository: repository}, nil
+	return &PolicyRepository{repository: repository}, nil
 }
 
-func (repository *durableBackupPolicyRepository) GetBackupPolicyProjection(
+func (repository *PolicyRepository) GetBackupPolicyProjection(
 	ctx context.Context,
 	environmentID string,
 ) (etcd.BackupPolicyProjection, error) {
 	return repository.repository.GetBackupPolicyProjection(ctx, environmentID)
 }
 
-func (repository *durableBackupPolicyRepository) PrepareBackupPolicyReplacement(
+func (repository *PolicyRepository) PrepareBackupPolicyReplacement(
 	ctx context.Context,
 	input backuppolicy.BackupPolicyReplacementInput,
 ) (etcd.PreparedBackupPolicyReplacement, bool, error) {
@@ -38,7 +38,7 @@ func (repository *durableBackupPolicyRepository) PrepareBackupPolicyReplacement(
 	return prepared, prepared.RequiresInitialKey(), err
 }
 
-func (repository *durableBackupPolicyRepository) SupplyBackupPolicyInitialKey(
+func (repository *PolicyRepository) SupplyBackupPolicyInitialKey(
 	ctx context.Context,
 	prepared etcd.PreparedBackupPolicyReplacement,
 	material etcd.BackupPolicyInitialKeyMaterial,
@@ -46,7 +46,7 @@ func (repository *durableBackupPolicyRepository) SupplyBackupPolicyInitialKey(
 	return repository.repository.SupplyBackupPolicyInitialKey(ctx, prepared, material)
 }
 
-func (repository *durableBackupPolicyRepository) FinalizeBackupPolicySchedule(
+func (repository *PolicyRepository) FinalizeBackupPolicySchedule(
 	prepared etcd.PreparedBackupPolicyReplacement,
 	now time.Time,
 ) (etcd.PreparedBackupPolicyReplacement, etcd.BackupPolicyProjection, error) {
@@ -57,7 +57,7 @@ func (repository *durableBackupPolicyRepository) FinalizeBackupPolicySchedule(
 	return finalized, finalized.Projection(), nil
 }
 
-func (repository *durableBackupPolicyRepository) ReplaceBackupPolicyProtected(
+func (repository *PolicyRepository) ReplaceBackupPolicyProtected(
 	ctx context.Context,
 	prepared etcd.PreparedBackupPolicyReplacement,
 	marker idempotencyrecord.IdempotencyMarker,
