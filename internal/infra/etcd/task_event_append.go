@@ -16,13 +16,13 @@ import (
 // idempotency evidence that ADR 0013 still gates.
 func (repository *TaskRepository) AppendTaskEvent(
 	ctx context.Context,
-	input TaskEventInput,
+	input taskjournal.TaskEventInput,
 	receivedAt time.Time,
 ) (TaskEventAppend, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return TaskEventAppend{}, err
 	}
-	if err := validateTaskEventIdentity(input.Identity); err != nil {
+	if err := taskjournal.ValidateTaskEventIdentity(input.Identity); err != nil {
 		return TaskEventAppend{}, err
 	}
 
@@ -59,9 +59,9 @@ func (repository *TaskRepository) AppendTaskEvent(
 			return TaskEventAppend{}, errs.New(errs.KindInternal, "task event read returned a mismatched task")
 		}
 
-		var existing *TaskEventDedupRecord
+		var existing *taskjournal.TaskEventDedupRecord
 		if result.Values[1] != nil {
-			dedup, err := decodeTaskEventDedupRecord(result.Values[1].Value)
+			dedup, err := taskjournal.DecodeTaskEventDedupRecord(result.Values[1].Value)
 			if err != nil {
 				return TaskEventAppend{}, err
 			}
@@ -71,7 +71,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
-		if prepared.Duplicate && isTerminalTaskStatus(task.Status) {
+		if prepared.Duplicate && taskjournal.IsTerminalTaskStatus(task.Status) {
 			if err := repository.verifyDuplicateEvent(ctx, result.ReadRevision, task, prepared.Dedup); err != nil {
 				return TaskEventAppend{}, err
 			}
@@ -172,11 +172,11 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
-		encodedEvent, err := encodeTaskEventRecord(prepared.Event)
+		encodedEvent, err := taskjournal.EncodeTaskEventRecord(prepared.Event)
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
-		encodedDedup, err := encodeTaskEventDedupRecord(prepared.Dedup)
+		encodedDedup, err := taskjournal.EncodeTaskEventDedupRecord(prepared.Dedup)
 		if err != nil {
 			return TaskEventAppend{}, err
 		}

@@ -6,6 +6,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"strings"
 
@@ -277,7 +278,7 @@ func (service *FactService) resolveLifecycleHookInput(
 	event backinghook.Event,
 	consume taskplanning.BackingHookInputConsumer,
 ) error {
-	creationServiceID := task.Params[etcd.TaskBackingServiceCreationParam]
+	creationServiceID := task.Params[taskjournal.TaskBackingServiceCreationParam]
 	ownsService := task.Target == serviceID ||
 		event == backinghook.AfterStart && creationServiceID == serviceID
 	if ctx == nil || consume == nil || !ownsService ||

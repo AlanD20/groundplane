@@ -115,7 +115,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionCompleted
 	nextFence.ActiveActionOrdinal = nil
 	nextTombstone.Terminal = &hierarchydeletion.HierarchyDeletionTerminal{
 		Status: string(taskjournal.TaskStatusCompleted), TaskID: operation.Tombstone.CurrentTaskID,
-		CompletedAt: terminalAt, RetainUntil: terminalAt.Add(TaskRetention),
+		CompletedAt: terminalAt, RetainUntil: terminalAt.Add(taskjournal.TaskRetention),
 		CompletionSummaryDigest: nextTombstone.Checkpoint.CompletedPrefixDigest,
 	}
 	replay.RetainUntil = &nextTombstone.Terminal.RetainUntil

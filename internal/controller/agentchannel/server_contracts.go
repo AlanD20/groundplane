@@ -38,7 +38,7 @@ type TaskStore interface {
 	ClaimNextTask(context.Context, string, uint64, time.Time) (etcd.TaskAssignment, bool, error)
 	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	ListTaskEvents(context.Context, string, int64) (etcd.TaskEventSnapshot, error)
-	AppendTaskEvent(context.Context, etcd.TaskEventInput, time.Time) (etcd.TaskEventAppend, error)
+	AppendTaskEvent(context.Context, taskjournal.TaskEventInput, time.Time) (etcd.TaskEventAppend, error)
 	AcknowledgeTask(
 		context.Context,
 		string,

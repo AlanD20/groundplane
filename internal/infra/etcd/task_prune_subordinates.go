@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -101,13 +102,13 @@ func validateTaskPruneSubordinate(taskID string, entry etcdstore.KeyValue, event
 		if err != nil {
 			return corruptTaskPruneIntent()
 		}
-		event, err := decodeTaskEventRecord(entry.Value)
+		event, err := taskjournal.DecodeTaskEventRecord(entry.Value)
 		if err != nil || event.Identity.TaskID != taskID || event.Sequence != sequence {
 			return corruptTaskPruneIntent()
 		}
 		return nil
 	}
-	record, err := decodeTaskEventDedupRecord(entry.Value)
+	record, err := taskjournal.DecodeTaskEventDedupRecord(entry.Value)
 	if err != nil || record.Identity.TaskID != taskID ||
 		taskEventDedupKey(record.Identity) != entry.Key {
 		return corruptTaskPruneIntent()

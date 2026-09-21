@@ -127,7 +127,7 @@ func validateReleaseRestorationAuthority(authority ReleaseRestorationAuthority) 
 	if predecessor := authority.AppliedPredecessor; predecessor != nil {
 		if predecessor.KeyRevision <= 0 || ids.Validate(ids.KindTask, predecessor.RevisionID) != nil ||
 			predecessor.RenderGeneration == 0 || !recordcodec.ValidSHA256(predecessor.ComposeArtifactSHA256) ||
-			len(predecessor.ComposeArtifact) == 0 || len(predecessor.ComposeArtifact) > MaximumTaskRecordBytes {
+			len(predecessor.ComposeArtifact) == 0 || len(predecessor.ComposeArtifact) > taskjournal.MaximumTaskRecordBytes {
 			return corruptTaskAssignment()
 		}
 		digest := sha256.Sum256(predecessor.ComposeArtifact)
@@ -293,7 +293,7 @@ func (repository *TaskRepository) createReleaseRecoveryRecord(
 
 func advanceReleaseRecoveryRecord(
 	record releaseRecoveryRecord,
-	input TaskEventInput,
+	input taskjournal.TaskEventInput,
 	revision int64,
 ) (releaseRecoveryRecord, bool, error) {
 	if err := validateReleaseRecoveryRecord(record); err != nil || record.Phase == ReleaseRecoveryPhaseProven ||

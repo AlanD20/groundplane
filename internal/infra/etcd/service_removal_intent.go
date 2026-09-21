@@ -109,7 +109,7 @@ func terminalServiceRemovalIntent(
 	status taskjournal.TaskStatus,
 	at time.Time,
 ) (ServiceRemovalIntent, error) {
-	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
+	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) {
 		return ServiceRemovalIntent{}, errs.New(errs.KindStateConflict, "Service removal intent is not pending")
 	}
 	terminal := cloneServiceRemovalIntent(intent)
@@ -150,7 +150,7 @@ func validateServiceRemovalIntent(intent ServiceRemovalIntent) error {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "pending Service removal intent has terminal time")
 		}
-	} else if !isTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil || intent.TerminalAt.Before(intent.CreatedAt) ||
+	} else if !taskjournal.IsTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil || intent.TerminalAt.Before(intent.CreatedAt) ||
 		recordcodec.ValidateTimestamp("Service removal terminal_at", *intent.TerminalAt) != nil {
 		return errs.New(errs.KindValidationFailed, "Service removal terminal state is invalid")
 	}

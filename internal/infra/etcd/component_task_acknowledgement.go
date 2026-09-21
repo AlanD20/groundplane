@@ -282,5 +282,5 @@ func componentTaskAcknowledgementRequiresBlueprintRootCondition(
 	environmentID string,
 ) bool {
 	return terminalStatus != taskjournal.TaskStatusCompleted ||
-		task.Params[TaskMaterializationEnvironmentParam] != environmentID
+		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != environmentID
 }

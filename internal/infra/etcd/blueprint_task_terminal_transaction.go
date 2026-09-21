@@ -101,7 +101,7 @@ func compileBlueprintTaskTerminalTransaction(
 ) (BlueprintTaskTerminalTransaction, error) {
 	if !isBlueprintCandidateTerminalTask(task) || validateTaskRecord(task) != nil ||
 		task.TerminalAssignment == nil || task.Owner.EnvironmentID == "" ||
-		task.Params[TaskMaterializationEnvironmentParam] != task.Owner.EnvironmentID {
+		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != task.Owner.EnvironmentID {
 		return BlueprintTaskTerminalTransaction{}, errs.New(
 			errs.KindInternal,
 			"Blueprint terminal Task authority is invalid",

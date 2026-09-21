@@ -70,8 +70,8 @@ func (s *Server) recordTaskEvent(
 	default:
 		return errs.New(errs.KindValidationFailed, "Agent Task event state is invalid")
 	}
-	_, err = s.tasks.AppendTaskEvent(ctx, etcd.TaskEventInput{
-		Identity: etcd.TaskEventIdentity{
+	_, err = s.tasks.AppendTaskEvent(ctx, taskjournal.TaskEventInput{
+		Identity: taskjournal.TaskEventIdentity{
 			AssignmentID: event.AssignmentId, AgentID: agentID, AgentGeneration: agentGeneration,
 			TaskID: event.TaskId, StepID: event.StepId,
 			Attempt: event.ExecutionEpoch, Ordinal: event.Ordinal,

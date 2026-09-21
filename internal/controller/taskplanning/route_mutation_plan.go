@@ -108,11 +108,11 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 	task.TimeoutSeconds = 120
 	task.RenderGeneration = int32(candidate.RenderGeneration)
 	task.Params = map[string]string{
-		etcd.TaskResourceKindParam:               etcd.TaskResourceRoute,
-		etcd.TaskRouteEnvironmentParam:           intent.EnvironmentID,
-		etcd.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
-		etcd.EnvironmentDesiredRevisionParam:     candidate.RevisionID,
-		EnvironmentBlueprintArtifactParam:        procedure.ArtifactID,
+		etcd.TaskResourceKindParam:                      etcd.TaskResourceRoute,
+		etcd.TaskRouteEnvironmentParam:                  intent.EnvironmentID,
+		taskjournal.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
+		etcd.EnvironmentDesiredRevisionParam:            candidate.RevisionID,
+		EnvironmentBlueprintArtifactParam:               procedure.ArtifactID,
 	}
 	task.Steps = []taskjournal.TaskStepRecord{
 		{Kind: taskjournal.TaskStepOperation, ID: procedure.MaterializeStepID},
@@ -216,7 +216,7 @@ func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
 	if task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceRoute ||
 		task.Params[etcd.TaskRouteEnvironmentParam] != intent.EnvironmentID ||
-		task.Params[etcd.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||
+		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||
 		revisionID != candidate.RevisionID ||
 		uint64(task.RenderGeneration) != candidate.RenderGeneration {
 		return nil, errs.New(errs.KindInternal, "durable Route mutation Task parameters are invalid")

@@ -413,7 +413,7 @@ func validateAttachDetachTask(
 		detaching.TaskID == task.ID && attachImmutableEqual(current, detaching)
 	validTaskShape := task.Type == taskjournal.TaskDetach && task.Target == current.ID && task.Executor == taskjournal.TaskExecutorAgent &&
 		task.Status == taskjournal.TaskStatusPending && len(task.Params) == 1 && len(task.Materializations) == 0 &&
-		task.Params[TaskMutationEnvironmentParam] == current.EnvironmentID
+		task.Params[taskjournal.TaskMutationEnvironmentParam] == current.EnvironmentID
 	if !validOwnership || !validTaskShape {
 		return errs.New(errs.KindValidationFailed, "Attach detach Task does not own its detaching Attach")
 	}

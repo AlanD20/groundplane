@@ -139,7 +139,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 		renderInput.Record.BackingProjectID != current.Record.BackingProjectID ||
 		!slices.Equal(renderInput.Record.ConsumerServiceIDs, []string{current.Record.ServiceID}) ||
 		!slices.Equal(renderInput.Record.GrantAttachIDs, current.Record.GrantAttachIDs) ||
-		task.Params[etcd.TaskMutationEnvironmentParam] != current.Record.EnvironmentID {
+		task.Params[taskjournal.TaskMutationEnvironmentParam] != current.Record.EnvironmentID {
 		return nil, errs.New(errs.KindInternal, "durable Attach Task render input does not match its Task")
 	}
 	operation, err := attachPlanOperation(task, current.Record)

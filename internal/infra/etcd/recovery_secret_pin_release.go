@@ -136,7 +136,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	if task.Configuration.SecretPins == nil {
 		return repository.prepareBackingHookInputExpiry(ctx, task, taskRevision, retention, now)
 	}
-	if !isTerminalTaskStatus(task.Status) || task.RetainUntil == nil || task.RetainUntil.After(now) {
+	if !taskjournal.IsTerminalTaskStatus(task.Status) || task.RetainUntil == nil || task.RetainUntil.After(now) {
 		return true, errs.New(errs.KindStateConflict, "recovery Secret retry authority has not expired")
 	}
 	pins, err := tasksecretpins.NewEtcdRepository(repository.store, taskSecretPinProjectID(task))
@@ -196,7 +196,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 			return true, corruptTaskPruneIntent()
 		}
 	}
-	if !isTerminalTaskStatus(latest.Status) || latest.RetainUntil == nil || latest.RetainUntil.After(now) {
+	if !taskjournal.IsTerminalTaskStatus(latest.Status) || latest.RetainUntil == nil || latest.RetainUntil.After(now) {
 		return true, nil
 	}
 	if read.Values[3] != nil {
@@ -254,7 +254,7 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 	if task.Configuration.BackingHookInputs == nil {
 		return false, nil
 	}
-	if !isTerminalTaskStatus(task.Status) || task.RetainUntil == nil || task.RetainUntil.After(now) {
+	if !taskjournal.IsTerminalTaskStatus(task.Status) || task.RetainUntil == nil || task.RetainUntil.After(now) {
 		return true, errs.New(errs.KindStateConflict, "Backing hook retry authority has not expired")
 	}
 	keys := []string{

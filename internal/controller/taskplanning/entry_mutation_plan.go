@@ -53,12 +53,12 @@ func (runtime EntryMutationRuntime) PrepareTask(
 	}
 	task.EntryRuntime = &etcd.EntryTaskRuntime{RunningServiceIDs: running, Updates: updates}
 	task.Params = map[string]string{
-		etcd.TaskResourceKindParam:               etcd.TaskResourceEntry,
-		etcd.TaskMaterializationEnvironmentParam: candidate.EnvironmentID,
-		etcd.EnvironmentDesiredRevisionParam:     candidate.RevisionID,
-		etcd.TaskComposeArtifactParam:            artifact.ArtifactId,
-		EntryMutationBaselineRevisionParam:       baseline.RevisionID,
-		etcd.TaskEntryRuntimeEpochParam:          strconv.FormatInt(runtime.EpochRevision, 10),
+		etcd.TaskResourceKindParam:                      etcd.TaskResourceEntry,
+		taskjournal.TaskMaterializationEnvironmentParam: candidate.EnvironmentID,
+		etcd.EnvironmentDesiredRevisionParam:            candidate.RevisionID,
+		etcd.TaskComposeArtifactParam:                   artifact.ArtifactId,
+		EntryMutationBaselineRevisionParam:              baseline.RevisionID,
+		etcd.TaskEntryRuntimeEpochParam:                 strconv.FormatInt(runtime.EpochRevision, 10),
 	}
 	references := append([]materializationrecord.Record(nil), task.Materializations...)
 	sort.Slice(
@@ -137,7 +137,7 @@ func (resolver *TaskPlanResolver) resolveEntryMutationPlan(
 	if resolver.blueprints == nil {
 		return nil, errs.New(errs.KindInternal, "Entry mutation plan resolver is not configured")
 	}
-	environmentID := task.Params[etcd.TaskMaterializationEnvironmentParam]
+	environmentID := task.Params[taskjournal.TaskMaterializationEnvironmentParam]
 	baseline, found, err := resolver.blueprints.GetEnvironmentComposeProjectionRevision(
 		ctx, environmentID, task.Params[EntryMutationBaselineRevisionParam],
 	)
@@ -166,7 +166,7 @@ func buildEntryMutationPlan(
 		task.TimeoutSeconds <= 0 || task.TimeoutSeconds > math.MaxUint32 || len(task.Params) != 6 ||
 		task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceEntry ||
 		task.Target != candidate.EnvironmentID || baseline.EnvironmentID != candidate.EnvironmentID ||
-		task.Params[etcd.TaskMaterializationEnvironmentParam] != candidate.EnvironmentID ||
+		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != candidate.EnvironmentID ||
 		task.Params[etcd.EnvironmentDesiredRevisionParam] != candidate.RevisionID ||
 		task.Params[EntryMutationBaselineRevisionParam] != baseline.RevisionID ||
 		candidate.RenderGeneration != uint64(

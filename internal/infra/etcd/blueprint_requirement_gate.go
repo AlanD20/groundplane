@@ -377,7 +377,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if task.Status != taskjournal.TaskStatusCompleted || task.Type != taskjournal.TaskAttach ||
 		ids.Validate(ids.KindAttach, task.Target) != nil ||
-		task.Params[TaskMutationEnvironmentParam] != fence.environmentID {
+		task.Params[taskjournal.TaskMutationEnvironmentParam] != fence.environmentID {
 		return nil, nil, nil
 	}
 	epochRevision := int64(0)

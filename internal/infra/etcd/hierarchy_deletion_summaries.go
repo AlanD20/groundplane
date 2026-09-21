@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 	"time"
 )
@@ -82,7 +83,7 @@ func (repository *HierarchyDeletionRepository) buildHierarchyDeletionSummaries(
 		DeletionEpoch: operation.Tombstone.DeletionEpoch, PlanCount: count, PlanDigest: *operation.Tombstone.PlanDigest,
 		OrderedCompletionSetDigest: completionDigest,
 		AgentReceiptSummaryDigest:  hierarchyDeletionBytesDigest(receiptSummaryValue),
-		FinalCheckpointDigest:      finalCheckpoint, CompletedAt: completedAt, RetainUntil: completedAt.Add(TaskRetention),
+		FinalCheckpointDigest:      finalCheckpoint, CompletedAt: completedAt, RetainUntil: completedAt.Add(taskjournal.TaskRetention),
 	}
 	completionSummaryValue, err := hierarchydeletion.EncodeHierarchyDeletionRecord(completionSummary, hierarchydeletion.HierarchyDeletionSmallRecordBytes)
 	if err != nil {

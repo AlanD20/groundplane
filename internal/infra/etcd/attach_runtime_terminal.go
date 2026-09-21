@@ -124,7 +124,7 @@ func (repository *TaskRepository) readAttachRuntimePreparation(
 	if err != nil {
 		return AttachTaskRenderInput{}, 0, err
 	}
-	if input.AttachID != task.Target || input.EnvironmentID != task.Params[TaskMutationEnvironmentParam] {
+	if input.AttachID != task.Target || input.EnvironmentID != task.Params[taskjournal.TaskMutationEnvironmentParam] {
 		return AttachTaskRenderInput{}, 0, errs.New(
 			errs.KindStateConflict,
 			"Attach runtime preparation ownership differs",

@@ -139,7 +139,7 @@ func terminalEntryRemovalIntent(
 	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (EntryRemovalIntent, error) {
-	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
+	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) {
 		return EntryRemovalIntent{}, errs.New(errs.KindStateConflict, "Entry removal intent is not pending")
 	}
 	terminal := cloneEntryRemovalIntent(intent)
@@ -191,7 +191,7 @@ func validateEntryRemovalIntent(intent EntryRemovalIntent) error {
 			return errs.New(errs.KindValidationFailed, "pending Entry removal intent has a terminal timestamp")
 		}
 	} else {
-		if !isTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil ||
+		if !taskjournal.IsTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil ||
 			intent.TerminalAt.Before(intent.CreatedAt) {
 			return errs.New(errs.KindValidationFailed, "Entry removal intent terminal state is invalid")
 		}

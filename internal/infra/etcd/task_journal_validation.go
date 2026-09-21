@@ -40,7 +40,7 @@ func validateTaskRecord(record TaskRecord) error {
 	if !taskjournal.ValidExecutor(record.Executor) {
 		return errs.New(errs.KindValidationFailed, "task executor is invalid")
 	}
-	if !validTaskType(record.Type) {
+	if !taskjournal.ValidTaskType(record.Type) {
 		return errs.New(errs.KindValidationFailed, "task type is not in the durable task catalog")
 	}
 	if record.Type == taskjournal.TaskBackupPrune && record.Actor != taskjournal.TaskActorSystem {
@@ -75,19 +75,19 @@ func validateTaskRecord(record TaskRecord) error {
 	if record.TimeoutSeconds <= 0 {
 		return errs.New(errs.KindValidationFailed, "task timeout_seconds must be positive")
 	}
-	if !validTaskStatus(record.Status) {
+	if !taskjournal.ValidTaskStatus(record.Status) {
 		return errs.New(errs.KindValidationFailed, "task status is invalid")
 	}
 	if record.TerminalAssignment != nil {
 		identity := record.TerminalAssignment
-		if record.Executor != taskjournal.TaskExecutorAgent || !isTerminalTaskStatus(record.Status) ||
+		if record.Executor != taskjournal.TaskExecutorAgent || !taskjournal.IsTerminalTaskStatus(record.Status) ||
 			recordcodec.ValidateID(ids.KindAssignment, identity.AssignmentID) != nil ||
 			recordcodec.ValidateID(ids.KindAgent, identity.AgentID) != nil || identity.AgentGeneration == 0 {
 			return errs.New(errs.KindInternal, "task terminal assignment identity is invalid")
 		}
 	}
 	if record.NextEventSequence == 0 ||
-		uint64(record.EventCount) != min(record.NextEventSequence-1, MaximumTaskEvents) {
+		uint64(record.EventCount) != min(record.NextEventSequence-1, taskjournal.MaximumTaskEvents) {
 		return errs.New(errs.KindInternal, "task event summary is inconsistent")
 	}
 	if err := validateTaskEventCheckpoints(record); err != nil {
@@ -136,7 +136,7 @@ func validateTaskRecord(record TaskRecord) error {
 		return err
 	}
 	if record.Result != nil {
-		if !isTerminalTaskStatus(record.Status) {
+		if !taskjournal.IsTerminalTaskStatus(record.Status) {
 			return errs.New(errs.KindInternal, "nonterminal task has a completion result")
 		}
 		if err := taskjournal.ValidateTaskResult(*record.Result, record.Steps, record.Status); err != nil {
@@ -158,7 +158,7 @@ func validateTaskTimeline(record TaskRecord) error {
 			return errs.New(errs.KindInternal, "task updated_at precedes started_at")
 		}
 	}
-	if isTerminalTaskStatus(record.Status) {
+	if taskjournal.IsTerminalTaskStatus(record.Status) {
 		if record.FinishedAt == nil || record.RetainUntil == nil {
 			return errs.New(errs.KindInternal, "terminal task is missing retention timestamps")
 		}
@@ -175,7 +175,7 @@ func validateTaskTimeline(record TaskRecord) error {
 		if !record.UpdatedAt.Equal(*record.FinishedAt) {
 			return errs.New(errs.KindInternal, "terminal task updated_at does not equal finished_at")
 		}
-		if !record.RetainUntil.Equal(record.FinishedAt.Add(TaskRetention)) {
+		if !record.RetainUntil.Equal(record.FinishedAt.Add(taskjournal.TaskRetention)) {
 			return errs.New(errs.KindInternal, "task retention deadline is inconsistent")
 		}
 		return nil

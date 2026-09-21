@@ -42,7 +42,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRootAckno
 		lock.ParentOperationID != operation.Tombstone.OperationID || lock.DeletionEpoch != operation.Tombstone.DeletionEpoch {
 		return hierarchyDeletionRootAckChange{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	retainUntil := terminalAt.Add(TaskRetention)
+	retainUntil := terminalAt.Add(taskjournal.TaskRetention)
 	nextTombstone := operation.Tombstone
 	nextFence := operation.Fence
 	replay.RetainUntil = &retainUntil

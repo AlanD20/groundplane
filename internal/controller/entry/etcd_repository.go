@@ -403,14 +403,14 @@ func applyRemovalTaskPlan(task etcd.TaskRecord, plan RemovalTaskPlan) (etcd.Task
 		identity := plan.Identity
 		task.Executor = taskjournal.TaskExecutorAgent
 		task.Params = map[string]string{
-			etcd.TaskEntryEnvironmentParam:           plan.EnvironmentID,
-			etcd.TaskMaterializationEnvironmentParam: plan.EnvironmentID,
-			etcd.EnvironmentDesiredRevisionParam:     plan.BlueprintRevisionID,
-			etcd.TaskComposeArtifactParam:            plan.ArtifactID,
-			etcd.TaskEntryTenantSlugParam:            identity.TenantSlug,
-			etcd.TaskEntryProjectSlugParam:           identity.ProjectSlug,
-			etcd.TaskEntryEnvironmentNameParam:       identity.EnvironmentName,
-			etcd.TaskEntryAuthorizedVolumeDirParam:   identity.AuthorizedVolumeDir,
+			etcd.TaskEntryEnvironmentParam:                  plan.EnvironmentID,
+			taskjournal.TaskMaterializationEnvironmentParam: plan.EnvironmentID,
+			etcd.EnvironmentDesiredRevisionParam:            plan.BlueprintRevisionID,
+			etcd.TaskComposeArtifactParam:                   plan.ArtifactID,
+			etcd.TaskEntryTenantSlugParam:                   identity.TenantSlug,
+			etcd.TaskEntryProjectSlugParam:                  identity.ProjectSlug,
+			etcd.TaskEntryEnvironmentNameParam:              identity.EnvironmentName,
+			etcd.TaskEntryAuthorizedVolumeDirParam:          identity.AuthorizedVolumeDir,
 		}
 	case RemovalExecutorController:
 		task.Executor = taskjournal.TaskExecutorController

@@ -170,16 +170,16 @@ func (publication volumeRemovalInitialPublication) classifyConflict(
 // immutable references plus standard Task routing/materialization authority.
 func EnvironmentVolumeRemovalTaskParams(runtime removalrecord.Runtime, attemptOrdinal uint32) map[string]string {
 	return map[string]string{
-		TaskResourceKindParam:               TaskResourceVolume,
-		TaskMaterializationEnvironmentParam: runtime.EnvironmentID,
-		EnvironmentDesiredRevisionParam:     runtime.DesiredRevisionID,
-		removalrecord.EnvironmentParam:      runtime.EnvironmentID,
-		removalrecord.OriginTaskParam:       runtime.OriginTaskID,
-		removalrecord.AttemptParam:          strconv.FormatUint(uint64(attemptOrdinal), 10),
-		removalrecord.KeyParam:              runtime.Key,
-		removalrecord.ImpactParam:           hex.EncodeToString(runtime.ImpactSHA256[:]),
-		removalrecord.ManifestParam:         hex.EncodeToString(runtime.EvidenceManifestSHA256[:]),
-		removalrecord.IntentParam:           hex.EncodeToString(runtime.IntentSHA256[:]),
+		TaskResourceKindParam:                           TaskResourceVolume,
+		taskjournal.TaskMaterializationEnvironmentParam: runtime.EnvironmentID,
+		EnvironmentDesiredRevisionParam:                 runtime.DesiredRevisionID,
+		removalrecord.EnvironmentParam:                  runtime.EnvironmentID,
+		removalrecord.OriginTaskParam:                   runtime.OriginTaskID,
+		removalrecord.AttemptParam:                      strconv.FormatUint(uint64(attemptOrdinal), 10),
+		removalrecord.KeyParam:                          runtime.Key,
+		removalrecord.ImpactParam:                       hex.EncodeToString(runtime.ImpactSHA256[:]),
+		removalrecord.ManifestParam:                     hex.EncodeToString(runtime.EvidenceManifestSHA256[:]),
+		removalrecord.IntentParam:                       hex.EncodeToString(runtime.IntentSHA256[:]),
 	}
 }
 

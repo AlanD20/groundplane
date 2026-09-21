@@ -58,7 +58,7 @@ func newAttachMutationTask(
 		Owner: owner, Actor: taskjournal.TaskActorOperator,
 		Executor: taskjournal.TaskExecutorAgent, PlanID: ids.New(ids.KindPlan),
 		RenderGeneration: int32(renderGeneration), Type: taskType, Target: attachID,
-		Params: map[string]string{etcd.TaskMutationEnvironmentParam: environmentID}, Steps: steps,
+		Params: map[string]string{taskjournal.TaskMutationEnvironmentParam: environmentID}, Steps: steps,
 		TimeoutSeconds: attachMutationTimeout, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: createdAt, UpdatedAt: createdAt,
 	}, ids.New(ids.KindConfig), nil

@@ -100,7 +100,7 @@ func (resolver *TaskPlanResolver) resolveExecutionPlan(
 	if task.Type == taskjournal.TaskAttach || task.Type == taskjournal.TaskDetach {
 		return resolver.resolveAttachPlan(ctx, task)
 	}
-	if _, backingCreation := task.Params[etcd.TaskBackingServiceCreationParam]; task.Type == taskjournal.TaskUpdate && backingCreation {
+	if _, backingCreation := task.Params[taskjournal.TaskBackingServiceCreationParam]; task.Type == taskjournal.TaskUpdate && backingCreation {
 		return resolver.resolveEnvironmentBlueprintPlan(ctx, task)
 	}
 	if task.Type == taskjournal.TaskUpdate {

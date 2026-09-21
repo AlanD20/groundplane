@@ -89,7 +89,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	if !taskjournal.ValidExecutor(executor) || recordcodec.ValidateID(ids.KindTask, taskID) != nil ||
-		!isTerminalTaskStatus(terminalStatus) ||
+		!taskjournal.IsTerminalTaskStatus(terminalStatus) ||
 		(executor == taskjournal.TaskExecutorAgent && (recordcodec.ValidateID(ids.KindAgent, agentID) != nil || agentGeneration == 0 ||
 			recordcodec.ValidateID(ids.KindAssignment, assignmentID) != nil || result == nil)) ||
 		(executor == taskjournal.TaskExecutorController &&

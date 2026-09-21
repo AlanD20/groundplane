@@ -591,9 +591,9 @@ func (service *Service) applyBlueprintOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	params := map[string]string{
-		etcd.EnvironmentDesiredRevisionParam:           taskID,
-		etcd.TaskMaterializationEnvironmentParam:       environmentID,
-		taskcontract.EnvironmentBlueprintArtifactParam: artifactID,
+		etcd.EnvironmentDesiredRevisionParam:            taskID,
+		taskjournal.TaskMaterializationEnvironmentParam: environmentID,
+		taskcontract.EnvironmentBlueprintArtifactParam:  artifactID,
 		taskcontract.EnvironmentBlueprintProcedureParam: string(
 			taskcontract.BlueprintComposeProcedureNone,
 		),

@@ -15,7 +15,7 @@ func blueprintScriptTaskShape(task TaskRecord) bool {
 	return task.Type == taskjournal.TaskUpdate && task.Executor == taskjournal.TaskExecutorAgent &&
 		validatePublicationID(task.Params[TaskReleasePublicationParam]) == nil &&
 		task.Owner.EnvironmentID != "" && task.Target == task.Owner.EnvironmentID &&
-		task.Params[TaskMaterializationEnvironmentParam] == task.Owner.EnvironmentID &&
+		task.Params[taskjournal.TaskMaterializationEnvironmentParam] == task.Owner.EnvironmentID &&
 		ids.Validate(ids.KindTask, task.Params[EnvironmentDesiredRevisionParam]) == nil
 }
 

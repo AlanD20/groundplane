@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -19,10 +20,10 @@ func ordinaryTaskEnvironmentMutationTarget(
 ) (string, bool, error) {
 	targets := make([]string, 0, 1)
 	if materializationChange {
-		targets = append(targets, task.Params[TaskMaterializationEnvironmentParam])
+		targets = append(targets, task.Params[taskjournal.TaskMaterializationEnvironmentParam])
 	}
 	if attachChange {
-		targets = append(targets, task.Params[TaskMutationEnvironmentParam])
+		targets = append(targets, task.Params[taskjournal.TaskMutationEnvironmentParam])
 	}
 	if entryChange {
 		targets = append(targets, task.Params[TaskEntryEnvironmentParam])

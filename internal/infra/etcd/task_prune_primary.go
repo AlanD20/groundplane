@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func (repository *TaskRepository) deleteTaskPrunePrimary(
@@ -25,7 +26,7 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	}
 	defer clearKeyValues(taskResult.Values)
 	task, err := decodeTaskRecord(taskResult.Values[0].Value)
-	if err != nil || task.ID != current.Record.TaskID || !isTerminalTaskStatus(task.Status) {
+	if err != nil || task.ID != current.Record.TaskID || !taskjournal.IsTerminalTaskStatus(task.Status) {
 		return etcdstore.Versioned[taskPruneIntent]{}, corruptTaskPruneIntent()
 	}
 	ownerKeys, err := taskJournalIndexKeys(task)

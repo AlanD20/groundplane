@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 	"strings"
 
@@ -65,11 +66,11 @@ func (resolver *TaskPlanResolver) volumeRemovalPlanParams(
 		}
 	}
 	return map[string]string{
-		etcd.TaskResourceKindParam:               etcd.TaskResourceVolume,
-		etcd.TaskMaterializationEnvironmentParam: manifest.EnvironmentID,
-		etcd.EnvironmentDesiredRevisionParam:     manifest.DesiredRevisionID,
-		etcd.TaskComposeArtifactParam:            "cfg_" + strings.TrimPrefix(origin, "task_"),
-		VolumeTaskActionParam:                    VolumeTaskActionRemove, VolumeTaskComposeKeyParam: manifest.Key,
+		etcd.TaskResourceKindParam:                      etcd.TaskResourceVolume,
+		taskjournal.TaskMaterializationEnvironmentParam: manifest.EnvironmentID,
+		etcd.EnvironmentDesiredRevisionParam:            manifest.DesiredRevisionID,
+		etcd.TaskComposeArtifactParam:                   "cfg_" + strings.TrimPrefix(origin, "task_"),
+		VolumeTaskActionParam:                           VolumeTaskActionRemove, VolumeTaskComposeKeyParam: manifest.Key,
 		VolumeTaskIntentSHA256Param: hex.EncodeToString(
 			intent,
 		), VolumeTaskBaselineRevisionParam: manifest.SourceRevisionID,

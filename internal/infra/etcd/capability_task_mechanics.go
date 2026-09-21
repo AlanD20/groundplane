@@ -23,7 +23,7 @@ func ValidateCapabilityTaskResult(result taskjournal.TaskResultRecord, steps []t
 	return taskjournal.ValidateTaskResult(result, steps, status)
 }
 func IsCapabilityTerminalTaskStatus(status taskjournal.TaskStatus) bool {
-	return isTerminalTaskStatus(status)
+	return taskjournal.IsTerminalTaskStatus(status)
 }
 func ValidateCapabilityVolumeComposeKey(key string) error          { return volumeidentity.ValidateKey(key) }
 func EncodeCapabilityTaskRecord(record TaskRecord) ([]byte, error) { return encodeTaskRecord(record) }

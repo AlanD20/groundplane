@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -23,7 +24,7 @@ const (
 )
 
 type taskEventRunner interface {
-	Run(context.Context, func(etcd.TaskEventRecord) error) error
+	Run(context.Context, func(taskjournal.TaskEventRecord) error) error
 }
 
 type taskEventStreamOpener interface {
@@ -144,7 +145,7 @@ func (s *Server) streamTaskEvents(w http.ResponseWriter, r *http.Request) {
 	frames := make(chan []byte)
 	done := make(chan error, 1)
 	go func() {
-		streamErr := stream.Run(streamContext, func(record etcd.TaskEventRecord) error {
+		streamErr := stream.Run(streamContext, func(record taskjournal.TaskEventRecord) error {
 			frame, frameErr := taskEventSSEFrame(record)
 			if frameErr != nil {
 				return frameErr
@@ -195,7 +196,7 @@ func parseLastTaskEventID(header http.Header) (uint64, error) {
 	return sequence, nil
 }
 
-func taskEventSSEFrame(record etcd.TaskEventRecord) ([]byte, error) {
+func taskEventSSEFrame(record taskjournal.TaskEventRecord) ([]byte, error) {
 	state, err := taskEventAPIStatus(record.State)
 	if err != nil {
 		return nil, err

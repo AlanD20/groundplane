@@ -54,7 +54,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	defer clearKeyValues(taskResult.Values)
 	taskValue := taskResult.Values[0]
 	task, err := decodeTaskRecord(taskValue.Value)
-	if err != nil || task.ID != taskID || !isTerminalTaskStatus(task.Status) ||
+	if err != nil || task.ID != taskID || !taskjournal.IsTerminalTaskStatus(task.Status) ||
 		task.RetainUntil == nil ||
 		!task.RetainUntil.Equal(retainUntil) {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()

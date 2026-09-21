@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"sort"
 	"time"
@@ -163,7 +164,7 @@ func validateNativeRestorationMemberWitness(authority ReleaseRestorationAuthorit
 	for index, witness := range authority.NativePredecessors {
 		candidate := authority.Candidates[index]
 		total += len(witness.CurrentArtifact) + len(witness.RetainedPriorArtifact)
-		if witness.ServiceID != candidate.ServiceID || total > MaximumTaskRecordBytes {
+		if witness.ServiceID != candidate.ServiceID || total > taskjournal.MaximumTaskRecordBytes {
 			return corruptTaskAssignment()
 		}
 		if len(witness.CurrentArtifact) == 0 {

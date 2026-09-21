@@ -245,7 +245,7 @@ func (repository *TaskRepository) validateCompletedAttachDetachReplay(
 	defer clearKeyValues(evidence.Values)
 	input, err := decodeAttachTaskRenderInput(evidence.Values[0].Value)
 	if err != nil || input.PlanID != task.PlanID || input.AttachID != task.Target ||
-		input.EnvironmentID != task.Params[TaskMutationEnvironmentParam] {
+		input.EnvironmentID != task.Params[taskjournal.TaskMutationEnvironmentParam] {
 		return errs.New(errs.KindInternal, "attach detach replay evidence is corrupt")
 	}
 	if len(input.ConsumerServiceIDs) != 1 || len(input.GrantAttachIDs) > attachrecord.MaximumAttachGrants {

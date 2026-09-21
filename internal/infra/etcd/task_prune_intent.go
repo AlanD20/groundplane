@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -49,8 +50,8 @@ func validateTaskPruneIntent(intent taskPruneIntent) error {
 			!intent.BackupCheckpointCursorsComplete) ||
 		(intent.TaskPrimaryDeleted && !intent.BackupCheckpointDeduplicationsComplete) ||
 		intent.BackupTerminalReceiptRevision < 0 ||
-		intent.RemainingEvents > MaximumTaskEvents ||
-		intent.RemainingDeduplications > MaximumTaskEvents {
+		intent.RemainingEvents > taskjournal.MaximumTaskEvents ||
+		intent.RemainingDeduplications > taskjournal.MaximumTaskEvents {
 		return errs.New(errs.KindValidationFailed, "task prune intent is invalid")
 	}
 	if intent.AttachPlanID != "" && ids.Validate(ids.KindPlan, intent.AttachPlanID) != nil {

@@ -165,7 +165,7 @@ func (repository *BackupRuntimeRepository) validateTerminalBackupRunPublication(
 	readRevision int64,
 	terminalRevision int64,
 ) error {
-	if taskValue.ModRevision != terminalRevision || !isTerminalTaskStatus(task.Status) ||
+	if taskValue.ModRevision != terminalRevision || !taskjournal.IsTerminalTaskStatus(task.Status) ||
 		task.FinishedAt == nil || task.RetainUntil == nil ||
 		!marker.TerminalAt.Equal(*task.FinishedAt) ||
 		!marker.RetainUntil.Equal(*task.RetainUntil) ||

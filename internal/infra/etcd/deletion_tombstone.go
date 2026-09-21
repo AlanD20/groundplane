@@ -202,7 +202,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		evidence.Values[5].ModRevision != expectedBlueprintRevision ||
 		evidence.Values[6].ModRevision != expectedBlueprintRevision ||
 		len(task.Params) != 4 || task.Params[EnvironmentDesiredRevisionParam] == "" ||
-		task.Params[TaskMaterializationEnvironmentParam] != environment.Record.ID {
+		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != environment.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,
 			"environment Blueprint state changed",

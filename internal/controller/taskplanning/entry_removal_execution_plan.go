@@ -47,7 +47,7 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[etcd.TaskComposeArtifactParam]
 	if task.Params[etcd.TaskEntryEnvironmentParam] != intent.EnvironmentID ||
-		task.Params[etcd.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||
+		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||
 		revisionID != candidate.RevisionID || ids.Validate(ids.KindTask, revisionID) != nil ||
 		ids.Validate(ids.KindConfig, artifactID) != nil || uint64(task.RenderGeneration) != candidate.RenderGeneration {
 		return nil, errs.New(errs.KindInternal, "durable Entry removal Task parameters are invalid")

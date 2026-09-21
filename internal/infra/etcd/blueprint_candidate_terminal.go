@@ -108,7 +108,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 		return blueprintCandidateTerminalChange{}, nil
 	}
 	if task.Executor != taskjournal.TaskExecutorAgent || task.Owner.EnvironmentID == "" ||
-		task.Params[TaskMaterializationEnvironmentParam] != task.Owner.EnvironmentID ||
+		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != task.Owner.EnvironmentID ||
 		task.Params[EnvironmentDesiredRevisionParam] == "" {
 		return blueprintCandidateTerminalChange{}, corruptReleaseRecord()
 	}

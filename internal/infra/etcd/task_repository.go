@@ -61,7 +61,7 @@ type TaskEventAppend struct {
 // unbounded read or a second revision to return the complete journal.
 type TaskEventSnapshot struct {
 	Task     TaskRecord
-	Events   []TaskEventRecord
+	Events   []taskjournal.TaskEventRecord
 	Revision int64
 }
 
@@ -499,17 +499,17 @@ func (repository *TaskRepository) ListTaskEvents(
 	}
 	eventsResult, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix:   taskEventScopePrefix(taskID),
-		Limit:    int64(MaximumTaskEvents) + 1,
+		Limit:    int64(taskjournal.MaximumTaskEvents) + 1,
 		Revision: taskResult.ReadRevision,
 	})
 	if err != nil {
 		return TaskEventSnapshot{}, err
 	}
 	if eventsResult.ReadRevision != taskResult.ReadRevision || eventsResult.More ||
-		len(eventsResult.Values) > MaximumTaskEvents {
+		len(eventsResult.Values) > taskjournal.MaximumTaskEvents {
 		return TaskEventSnapshot{}, errs.New(errs.KindInternal, "task event snapshot exceeds its durable bounds")
 	}
-	events := make([]TaskEventRecord, len(eventsResult.Values))
+	events := make([]taskjournal.TaskEventRecord, len(eventsResult.Values))
 	for index, value := range eventsResult.Values {
 		sequence, err := taskEventSequenceFromKey(taskID, value.Key)
 		if err != nil {
@@ -518,7 +518,7 @@ func (repository *TaskRepository) ListTaskEvents(
 		if sequence != firstTaskEventSequence(task)+uint64(index) {
 			return TaskEventSnapshot{}, errs.New(errs.KindInternal, "task event snapshot has a sequence gap")
 		}
-		event, err := decodeTaskEventRecord(value.Value)
+		event, err := taskjournal.DecodeTaskEventRecord(value.Value)
 		if err != nil {
 			return TaskEventSnapshot{}, err
 		}
@@ -537,7 +537,7 @@ func (repository *TaskRepository) verifyDuplicateEvent(
 	ctx context.Context,
 	revision int64,
 	task TaskRecord,
-	dedup TaskEventDedupRecord,
+	dedup taskjournal.TaskEventDedupRecord,
 ) error {
 	if dedup.Sequence < firstTaskEventSequence(task) {
 		for _, checkpoint := range task.EventCheckpoints {
@@ -560,7 +560,7 @@ func (repository *TaskRepository) verifyDuplicateEvent(
 	if len(result.Values) != 1 || result.Values[0] == nil {
 		return errs.New(errs.KindInternal, "task event dedupe references a missing event")
 	}
-	event, err := decodeTaskEventRecord(result.Values[0].Value)
+	event, err := taskjournal.DecodeTaskEventRecord(result.Values[0].Value)
 	if err != nil {
 		return err
 	}

@@ -63,7 +63,7 @@ func (repository *TaskRepository) prepareBackupKeyRotationTaskAcknowledgement(
 		return backupKeyRotationTaskChange{}, nil
 	}
 	if task.Executor != taskjournal.TaskExecutorController || task.Target != task.Owner.EnvironmentID ||
-		ids.Validate(ids.KindEnvironment, task.Target) != nil || !isTerminalTaskStatus(status) ||
+		ids.Validate(ids.KindEnvironment, task.Target) != nil || !taskjournal.IsTerminalTaskStatus(status) ||
 		!backuppolicy.ValidUTCInstant(terminalAt) || readRevision <= 0 {
 		return backupKeyRotationTaskChange{}, errs.New(
 			errs.KindInternal,

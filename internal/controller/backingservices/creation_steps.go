@@ -54,11 +54,11 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 	}
 	stepRecords := []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: environmentStepID}}
 	taskParams := map[string]string{
-		etcd.EnvironmentDesiredRevisionParam:           input.TaskID,
-		etcd.TaskMaterializationEnvironmentParam:       environment.ID,
-		etcd.TaskBackingServiceCreationParam:           serviceID,
-		etcd.TaskBackingServiceVolumeDirectoryParam:    environment.VolumeDir,
-		taskcontract.EnvironmentBlueprintArtifactParam: artifactID,
+		etcd.EnvironmentDesiredRevisionParam:               input.TaskID,
+		taskjournal.TaskMaterializationEnvironmentParam:    environment.ID,
+		taskjournal.TaskBackingServiceCreationParam:        serviceID,
+		taskjournal.TaskBackingServiceVolumeDirectoryParam: environment.VolumeDir,
+		taskcontract.EnvironmentBlueprintArtifactParam:     artifactID,
 		taskcontract.EnvironmentBlueprintProcedureParam: string(
 			taskcontract.BlueprintComposeProcedureFullReconcile,
 		),
@@ -120,7 +120,7 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 			},
 		})
 		stepRecords = append(stepRecords, taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: healthStepID})
-		taskParams[etcd.TaskBackingServiceHealthParam] = serviceID
+		taskParams[taskjournal.TaskBackingServiceHealthParam] = serviceID
 	}
 
 	return backingCreationSteps{steps: steps, records: stepRecords, params: taskParams, materializations: materializations}, nil

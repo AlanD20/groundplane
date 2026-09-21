@@ -172,7 +172,7 @@ func taskHasBlueprintCandidateAppliedAuthority(record TaskRecord) bool {
 }
 
 func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {
-	environmentID, declared := record.Params[TaskMaterializationEnvironmentParam]
+	environmentID, declared := record.Params[taskjournal.TaskMaterializationEnvironmentParam]
 	if !declared {
 		return "", false, nil
 	}
@@ -407,7 +407,7 @@ func taskEnvironmentWriter(record TaskRecord) (string, bool, error) {
 	if err != nil {
 		return "", false, err
 	}
-	mutationEnvironment, mutates := record.Params[TaskMutationEnvironmentParam]
+	mutationEnvironment, mutates := record.Params[taskjournal.TaskMutationEnvironmentParam]
 	if materializes && mutates {
 		return "", false, errs.New(errs.KindValidationFailed, "task declares multiple Environment writers")
 	}

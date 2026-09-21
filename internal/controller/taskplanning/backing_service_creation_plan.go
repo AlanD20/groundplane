@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -31,9 +32,9 @@ func resolveBackingServiceCreationPlan(
 	task etcd.TaskRecord,
 	procedure taskcontract.BlueprintComposeProcedure,
 ) (backingServiceCreationPlan, error) {
-	serviceID, enabled := task.Params[etcd.TaskBackingServiceCreationParam]
-	volumeDirectory, hasVolumeDirectory := task.Params[etcd.TaskBackingServiceVolumeDirectoryParam]
-	healthServiceID, hasHealth := task.Params[etcd.TaskBackingServiceHealthParam]
+	serviceID, enabled := task.Params[taskjournal.TaskBackingServiceCreationParam]
+	volumeDirectory, hasVolumeDirectory := task.Params[taskjournal.TaskBackingServiceVolumeDirectoryParam]
+	healthServiceID, hasHealth := task.Params[taskjournal.TaskBackingServiceHealthParam]
 	afterStartID, hasAfterStart := task.Params[etcd.TaskBackingServiceAfterStartParam]
 	if enabled != hasVolumeDirectory ||
 		enabled && procedure != taskcontract.BlueprintComposeProcedureFullReconcile ||

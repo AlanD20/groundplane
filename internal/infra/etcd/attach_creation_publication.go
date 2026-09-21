@@ -394,7 +394,7 @@ func validateAttachCreationTask(record attachrecord.Record, task TaskRecord, mar
 		record.TaskID == task.ID && record.CreatedAt.Equal(task.CreatedAt)
 	validTaskShape := task.Type == taskjournal.TaskAttach && task.Target == record.ID && task.Executor == taskjournal.TaskExecutorAgent &&
 		task.Status == taskjournal.TaskStatusPending && len(task.Params) == 1 && len(task.Materializations) == 0 &&
-		task.Params[TaskMutationEnvironmentParam] == record.EnvironmentID
+		task.Params[taskjournal.TaskMutationEnvironmentParam] == record.EnvironmentID
 	if !pendingAttachOwned || !validTaskShape {
 		return errs.New(errs.KindValidationFailed, "Attach creation Task does not own its pending Attach")
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"sync"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -57,7 +58,7 @@ func (repository *TaskRepository) OpenTaskEventStream(
 		after:      after,
 		snapshot:   snapshot,
 	}
-	if isTerminalTaskStatus(snapshot.Task.Status) {
+	if taskjournal.IsTerminalTaskStatus(snapshot.Task.Status) {
 		return stream, nil
 	}
 	store, ok := repository.store.(taskEventWatchStore)
@@ -76,7 +77,7 @@ func (repository *TaskRepository) OpenTaskEventStream(
 // It returns nil only after an authoritative terminal Task drain.
 func (stream *TaskEventStream) Run(
 	ctx context.Context,
-	emit func(TaskEventRecord) error,
+	emit func(taskjournal.TaskEventRecord) error,
 ) error {
 	if stream == nil || stream.repository == nil || stream.taskID == "" || emit == nil {
 		return errs.New(errs.KindInternal, "task event stream is invalid")
@@ -92,7 +93,7 @@ func (stream *TaskEventStream) Run(
 	if err != nil {
 		return err
 	}
-	if isTerminalTaskStatus(stream.snapshot.Task.Status) {
+	if taskjournal.IsTerminalTaskStatus(stream.snapshot.Task.Status) {
 		return nil
 	}
 
@@ -152,7 +153,7 @@ func (stream *TaskEventStream) consumeEvent(
 	ctx context.Context,
 	event etcdstore.Event,
 	last uint64,
-	emit func(TaskEventRecord) error,
+	emit func(taskjournal.TaskEventRecord) error,
 ) (uint64, error) {
 	if event.Type == etcdstore.EventDelete {
 		sequence, err := taskEventSequenceFromKey(stream.taskID, event.Key)
@@ -171,7 +172,7 @@ func (stream *TaskEventStream) consumeEvent(
 	if err != nil {
 		return last, err
 	}
-	record, err := decodeTaskEventRecord(event.Value)
+	record, err := taskjournal.DecodeTaskEventRecord(event.Value)
 	if err != nil {
 		return last, err
 	}
@@ -204,14 +205,14 @@ func (stream *TaskEventStream) consumeTask(event etcdstore.Event) (int64, bool, 
 	if record.ID != stream.taskID || event.ModRevision <= 0 {
 		return 0, false, errs.New(errs.KindInternal, "watched Task primary is inconsistent")
 	}
-	return event.ModRevision, isTerminalTaskStatus(record.Status), nil
+	return event.ModRevision, taskjournal.IsTerminalTaskStatus(record.Status), nil
 }
 
 func (stream *TaskEventStream) recoverWatch(
 	ctx context.Context,
 	watchErr error,
 	last uint64,
-	emit func(TaskEventRecord) error,
+	emit func(taskjournal.TaskEventRecord) error,
 ) (uint64, bool, error) {
 	if !errors.Is(watchErr, errs.New(errs.KindCursorExpired, "")) {
 		return last, false, watchErr
@@ -224,7 +225,7 @@ func (stream *TaskEventStream) recoverWatch(
 	if snapshot.Task.NextEventSequence <= last {
 		return last, false, errs.New(errs.KindInternal, "task event journal regressed during compaction recovery")
 	}
-	if isTerminalTaskStatus(snapshot.Task.Status) {
+	if taskjournal.IsTerminalTaskStatus(snapshot.Task.Status) {
 		last, err = emitTaskEventSuffix(ctx, snapshot, last, emit)
 		return last, err == nil, err
 	}
@@ -241,7 +242,7 @@ func (stream *TaskEventStream) finalDrain(
 	ctx context.Context,
 	revision int64,
 	last uint64,
-	emit func(TaskEventRecord) error,
+	emit func(taskjournal.TaskEventRecord) error,
 ) error {
 	stream.watches.stop()
 	snapshot, err := stream.repository.ListTaskEvents(ctx, stream.taskID, revision)
@@ -251,7 +252,7 @@ func (stream *TaskEventStream) finalDrain(
 	if err != nil {
 		return err
 	}
-	if !isTerminalTaskStatus(snapshot.Task.Status) || snapshot.Task.NextEventSequence <= last {
+	if !taskjournal.IsTerminalTaskStatus(snapshot.Task.Status) || snapshot.Task.NextEventSequence <= last {
 		return errs.New(errs.KindInternal, "terminal Task event drain is inconsistent")
 	}
 	_, err = emitTaskEventSuffix(ctx, snapshot, last, emit)
@@ -262,7 +263,7 @@ func emitTaskEventSuffix(
 	ctx context.Context,
 	snapshot TaskEventSnapshot,
 	last uint64,
-	emit func(TaskEventRecord) error,
+	emit func(taskjournal.TaskEventRecord) error,
 ) (uint64, error) {
 	if snapshot.Task.NextEventSequence <= last {
 		return last, errs.New(errs.KindInternal, "task event snapshot is behind the stream")
@@ -291,8 +292,8 @@ func emitTaskEventSuffix(
 
 func emitTaskEvent(
 	ctx context.Context,
-	emit func(TaskEventRecord) error,
-	event TaskEventRecord,
+	emit func(taskjournal.TaskEventRecord) error,
+	event taskjournal.TaskEventRecord,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return err

@@ -10,18 +10,6 @@ import (
 	"time"
 )
 
-const (
-	MaximumTaskRecordBytes                 = 256 * 1024
-	MaximumTaskEventBytes                  = 32 * 1024
-	MaximumTaskEvents                      = 1000
-	TaskRetention                          = 90 * 24 * time.Hour
-	TaskMaterializationEnvironmentParam    = "materialization_environment_id"
-	TaskMutationEnvironmentParam           = "mutation_environment_id"
-	TaskBackingServiceCreationParam        = "backing_service_creation_service_id"
-	TaskBackingServiceHealthParam          = "backing_service_health_service_id"
-	TaskBackingServiceVolumeDirectoryParam = "backing_service_volume_directory"
-)
-
 // TaskRecord is the versioned persistence DTO for one execution attempt.
 // NextEventSequence starts at one. FinishedAt is the retention epoch; the
 // pruning scheduler can delete the task, events, and dedupe records together
@@ -98,7 +86,7 @@ func transitionTaskStatus(
 			record.Status,
 		)
 	}
-	if expected == next || !validTaskTransition(expected, next) {
+	if expected == next || !taskjournal.ValidTaskTransition(expected, next) {
 		return TaskRecord{}, errs.Newf(
 			errs.KindStateConflict,
 			"task %s cannot transition from %s to %s",
@@ -121,54 +109,13 @@ func transitionTaskStatus(
 	if next == taskjournal.TaskStatusRunning {
 		replacement.StartedAt = timePointer(at)
 	}
-	if isTerminalTaskStatus(next) {
+	if taskjournal.IsTerminalTaskStatus(next) {
 		replacement.FinishedAt = timePointer(at)
-		retention := at.Add(TaskRetention)
+		retention := at.Add(taskjournal.TaskRetention)
 		replacement.RetainUntil = &retention
 	}
 	if err := validateTaskRecord(replacement); err != nil {
 		return TaskRecord{}, err
 	}
 	return replacement, nil
-}
-
-func validTaskTransition(current taskjournal.TaskStatus, next taskjournal.TaskStatus) bool {
-	switch current {
-	case taskjournal.TaskStatusPending:
-		return next == taskjournal.TaskStatusRunning || next == taskjournal.TaskStatusAborted
-	case taskjournal.TaskStatusRunning:
-		return isTerminalTaskStatus(next)
-	default:
-		return false
-	}
-}
-
-func isTerminalTaskStatus(status taskjournal.TaskStatus) bool {
-	switch status {
-	case taskjournal.TaskStatusCompleted, taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, taskjournal.TaskStatusTimedOut:
-		return true
-	default:
-		return false
-	}
-}
-
-func validTaskType(taskType taskjournal.TaskType) bool {
-	switch taskType {
-	case taskjournal.TaskDeploy, taskjournal.TaskRollback, taskjournal.TaskBackup, taskjournal.TaskBackupPrune, taskjournal.TaskRestore, taskjournal.TaskAttach, taskjournal.TaskDetach,
-		taskjournal.TaskRun, taskjournal.TaskScript, taskjournal.TaskProvision, taskjournal.TaskCreate, taskjournal.TaskUpdate, taskjournal.TaskRemove,
-		taskjournal.TaskStart, taskjournal.TaskStop, taskjournal.TaskDestroy, taskjournal.TaskRotate:
-		return true
-	default:
-		return false
-	}
-}
-
-func validTaskStatus(status taskjournal.TaskStatus) bool {
-	switch status {
-	case taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, taskjournal.TaskStatusCompleted,
-		taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, taskjournal.TaskStatusTimedOut:
-		return true
-	default:
-		return false
-	}
 }

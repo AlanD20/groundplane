@@ -111,7 +111,7 @@ func terminalRouteRemovalIntent(
 	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (RouteRemovalIntent, error) {
-	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
+	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) {
 		return RouteRemovalIntent{}, errs.New(errs.KindStateConflict, "Route removal intent is not pending")
 	}
 	terminal := cloneRouteRemovalIntent(intent)
@@ -155,7 +155,7 @@ func validateRouteRemovalIntent(intent RouteRemovalIntent) error {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "pending Route removal intent has a terminal timestamp")
 		}
-	} else if !isTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil || intent.TerminalAt.Before(intent.CreatedAt) {
+	} else if !taskjournal.IsTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil || intent.TerminalAt.Before(intent.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Route removal intent terminal state is invalid")
 	} else if err := recordcodec.ValidateTimestamp("Route removal intent terminal_at", *intent.TerminalAt); err != nil {
 		return err

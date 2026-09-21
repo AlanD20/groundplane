@@ -530,7 +530,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 			"environment deletion cleanup task ownership changed",
 		)
 	}
-	if isTerminalTaskStatus(persistedTask.Status) {
+	if taskjournal.IsTerminalTaskStatus(persistedTask.Status) {
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, errs.New(
 			errs.KindStateConflict,
 			"terminal environment deletion task cannot complete cleanup enumeration",

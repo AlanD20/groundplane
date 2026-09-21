@@ -111,7 +111,7 @@ func TransferZoneRemovalIntent(
 	taskID string,
 	createdAt time.Time,
 ) (ZoneRemovalIntent, error) {
-	if !isTerminalTaskStatus(intent.Status) && intent.Status != taskjournal.TaskStatusPending {
+	if !taskjournal.IsTerminalTaskStatus(intent.Status) && intent.Status != taskjournal.TaskStatusPending {
 		return ZoneRemovalIntent{}, errs.New(errs.KindStateConflict, "Zone removal intent cannot transfer")
 	}
 	next := cloneZoneRemovalIntent(intent)
@@ -127,7 +127,7 @@ func TransferZoneRemovalIntent(
 }
 
 func terminalZoneRemovalIntent(intent ZoneRemovalIntent, status taskjournal.TaskStatus, at time.Time) (ZoneRemovalIntent, error) {
-	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
+	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) {
 		return ZoneRemovalIntent{}, errs.New(errs.KindStateConflict, "Zone removal intent is not pending")
 	}
 	next := cloneZoneRemovalIntent(intent)
@@ -175,7 +175,7 @@ func validateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "pending Zone removal intent has terminal time")
 		}
-	} else if !isTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil ||
+	} else if !taskjournal.IsTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil ||
 		!intent.TerminalAt.Equal(intent.UpdatedAt) || recordcodec.ValidateTimestamp("Zone removal terminal_at", *intent.TerminalAt) != nil {
 		return errs.New(errs.KindValidationFailed, "Zone removal terminal state is invalid")
 	}

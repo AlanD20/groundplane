@@ -5,6 +5,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -12,7 +13,7 @@ import (
 )
 
 func prepareTaskRetentionIndex(task TaskRecord) (string, []byte, error) {
-	if validateTaskRecord(task) != nil || !isTerminalTaskStatus(task.Status) || task.RetainUntil == nil {
+	if validateTaskRecord(task) != nil || !taskjournal.IsTerminalTaskStatus(task.Status) || task.RetainUntil == nil {
 		return "", nil, errs.New(errs.KindInternal, "terminal Task retention metadata is invalid")
 	}
 	key := taskRetentionIndexKey(task.ID, *task.RetainUntil)

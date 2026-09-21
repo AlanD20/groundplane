@@ -48,7 +48,7 @@ func prepareBackupRunTerminalReceipt(
 	run backupruntime.BackupRunRecord,
 ) (backupTerminalReceiptPlan, error) {
 	if current.Revision <= 0 || current.Record.Type != taskjournal.TaskBackup || terminal.Type != taskjournal.TaskBackup ||
-		current.Record.ID != terminal.ID || !isTerminalTaskStatus(terminal.Status) ||
+		current.Record.ID != terminal.ID || !taskjournal.IsTerminalTaskStatus(terminal.Status) ||
 		validateBackupRunTaskBinding(terminal, run) != nil || !terminalBackupRunState(run.State) ||
 		terminal.FinishedAt == nil || !run.UpdatedAt.Equal(*terminal.FinishedAt) {
 		return backupTerminalReceiptPlan{}, errs.New(
@@ -102,7 +102,7 @@ func prepareBackupPruneTerminalReceipt(
 	prunes []etcdstore.Versioned[backupruntime.BackupRecoveryPointPruneRecord],
 ) (backupTerminalReceiptPlan, error) {
 	if current.Revision <= 0 || current.Record.Type != taskjournal.TaskBackupPrune ||
-		terminal.Type != taskjournal.TaskBackupPrune || !isTerminalTaskStatus(terminal.Status) ||
+		terminal.Type != taskjournal.TaskBackupPrune || !taskjournal.IsTerminalTaskStatus(terminal.Status) ||
 		terminal.FinishedAt == nil || validateBackupPruneTaskBinding(terminal, dispatch) != nil ||
 		len(prunes) != len(dispatch.RecoveryPointIDs) || terminal.ID != current.Record.ID {
 		return backupTerminalReceiptPlan{}, errs.New(

@@ -55,11 +55,11 @@ func encodeTaskRecord(record TaskRecord) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(value) > MaximumTaskRecordBytes {
+	if len(value) > taskjournal.MaximumTaskRecordBytes {
 		return nil, errs.Newf(
 			errs.KindValidationFailed,
 			"task record exceeds the %d-byte durable record limit",
-			MaximumTaskRecordBytes,
+			taskjournal.MaximumTaskRecordBytes,
 		)
 	}
 	return value, nil

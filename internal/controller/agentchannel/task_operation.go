@@ -58,7 +58,7 @@ func operationMatchesTask(operation agentpb.PlanOperation, task etcd.TaskRecord)
 		if task.Params[etcd.TaskResourceKindParam] == etcd.TaskResourceComponent {
 			return operation == agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY
 		}
-		_, backingCreation := task.Params[etcd.TaskBackingServiceCreationParam]
+		_, backingCreation := task.Params[taskjournal.TaskBackingServiceCreationParam]
 		return backingCreation && operation == agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE
 	case taskjournal.TaskBackup:
 		return operation == agentpb.PlanOperation_PLAN_OPERATION_BACKUP

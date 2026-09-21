@@ -158,7 +158,7 @@ func terminalRouteMutationIntent(
 	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (RouteMutationIntent, error) {
-	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
+	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) {
 		return RouteMutationIntent{}, errs.New(errs.KindStateConflict, "Route mutation intent is not pending")
 	}
 	terminal := cloneRouteMutationIntent(intent)
@@ -230,7 +230,7 @@ func validateRouteMutationIntent(intent RouteMutationIntent) error {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "pending Route mutation intent has a terminal timestamp")
 		}
-	} else if !isTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil || intent.TerminalAt.Before(intent.CreatedAt) {
+	} else if !taskjournal.IsTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil || intent.TerminalAt.Before(intent.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Route mutation intent terminal state is invalid")
 	}
 	if intent.CurrentProjection == nil || intent.CandidateProjection == nil {

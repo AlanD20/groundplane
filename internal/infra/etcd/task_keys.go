@@ -78,7 +78,7 @@ func taskEventKey(taskID string, sequence uint64) string {
 	return taskEventScopePrefix(taskID) + fmt.Sprintf("%020d", sequence)
 }
 
-func taskEventDedupKey(identity TaskEventIdentity) string {
+func taskEventDedupKey(identity taskjournal.TaskEventIdentity) string {
 	return taskEventDedupRootPrefix + identity.TaskID + "/" + identity.AssignmentID + "/" + identity.StepID + "/" +
 		strconv.FormatUint(uint64(identity.Attempt), 10) + "/" + strconv.FormatUint(identity.Ordinal, 10)
 }

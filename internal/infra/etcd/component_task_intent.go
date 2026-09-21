@@ -72,7 +72,7 @@ func terminalComponentTaskIntent(
 	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (ComponentTaskIntent, error) {
-	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) {
+	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) {
 		return ComponentTaskIntent{}, errs.New(errs.KindStateConflict, "Component candidate is not pending")
 	}
 	terminal := cloneComponentTaskIntent(intent)
@@ -115,7 +115,7 @@ func validateComponentTaskIntent(intent ComponentTaskIntent) error {
 			return errs.New(errs.KindValidationFailed, "pending Component candidate has a terminal timestamp")
 		}
 	} else {
-		if !isTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil {
+		if !taskjournal.IsTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil {
 			return errs.New(errs.KindValidationFailed, "Component candidate status is invalid")
 		}
 		if err := recordcodec.ValidateTimestamp("component candidate terminal_at", *intent.TerminalAt); err != nil {

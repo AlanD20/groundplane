@@ -193,7 +193,7 @@ func validateSemanticAuthority(
 	if projection.EnvironmentID != record.EnvironmentID || projection.RevisionID != record.AppliedRevisionID ||
 		projection.RenderGeneration != record.RenderGeneration || task.ID != record.ProducingTaskID ||
 		task.Executor != taskjournal.TaskExecutorAgent || uint64(task.RenderGeneration) != record.RenderGeneration ||
-		task.Params[base.TaskMaterializationEnvironmentParam] != record.EnvironmentID ||
+		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != record.EnvironmentID ||
 		task.Params[base.EnvironmentDesiredRevisionParam] != record.AppliedRevisionID {
 		return authorityConflict()
 	}

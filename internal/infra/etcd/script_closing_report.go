@@ -73,7 +73,7 @@ func (report scriptClosingReport) validate(current TaskAssignment) error {
 		report.RecoveryRecordSHA256 != assignment.ReleaseRecoveryRecordSHA256 ||
 		report.Result.ReleaseRecoveryRecordSHA256 != report.RecoveryRecordSHA256 ||
 		taskjournal.ValidateTaskResult(report.Result, task.Steps, report.Status) != nil ||
-		!isTerminalTaskStatus(
+		!taskjournal.IsTerminalTaskStatus(
 			report.Status,
 		) || recordcodec.ValidateTimestamp("Blueprint closing report observed_at", report.ObservedAt) != nil ||
 		report.ObservedAt.Before(task.UpdatedAt) {
@@ -167,7 +167,7 @@ func (repository *TaskRepository) resumeScriptClosingReport(
 	if err != nil {
 		return TaskAssignment{}, true, err
 	}
-	if !isTerminalTaskStatus(terminal.Record.Status) {
+	if !taskjournal.IsTerminalTaskStatus(terminal.Record.Status) {
 		return TaskAssignment{}, true, corruptTaskAssignment()
 	}
 	current.Task = terminal

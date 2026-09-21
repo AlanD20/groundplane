@@ -56,8 +56,8 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 		ids.Validate(ids.KindVolume, task.Target) != nil || task.TimeoutSeconds <= 0 ||
 		task.TimeoutSeconds > math.MaxUint32 || task.RenderGeneration <= 0 || len(params) != expectedParams ||
 		params[etcd.TaskResourceKindParam] != etcd.TaskResourceVolume ||
-		ids.Validate(ids.KindEnvironment, params[etcd.TaskMaterializationEnvironmentParam]) != nil ||
-		params[etcd.TaskMaterializationEnvironmentParam] == "" ||
+		ids.Validate(ids.KindEnvironment, params[taskjournal.TaskMaterializationEnvironmentParam]) != nil ||
+		params[taskjournal.TaskMaterializationEnvironmentParam] == "" ||
 		ids.Validate(ids.KindTask, params[etcd.EnvironmentDesiredRevisionParam]) != nil ||
 		ids.Validate(ids.KindConfig, params[etcd.TaskComposeArtifactParam]) != nil ||
 		!composerender.ValidVolumeArtifactKey(params[VolumeTaskComposeKeyParam]) {
@@ -73,7 +73,7 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 	if err != nil {
 		return nil, err
 	}
-	environmentID := params[etcd.TaskMaterializationEnvironmentParam]
+	environmentID := params[taskjournal.TaskMaterializationEnvironmentParam]
 	candidateRevisionID := params[etcd.EnvironmentDesiredRevisionParam]
 	candidateArtifactID := params[etcd.TaskComposeArtifactParam]
 	candidateProjection, found, err := resolver.blueprints.GetEnvironmentComposeProjectionRevision(

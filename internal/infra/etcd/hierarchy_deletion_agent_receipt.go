@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -42,7 +43,7 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 	if err != nil || task.ID != entry.CurrentTaskID || task.OperationID != entry.ChildOperationID {
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	if !isTerminalTaskStatus(task.Status) {
+	if !taskjournal.IsTerminalTaskStatus(task.Status) {
 		return nil, nil
 	}
 	if err := repository.ensureHierarchyDeletionTerminalReceipt(

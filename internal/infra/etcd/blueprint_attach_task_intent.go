@@ -176,7 +176,7 @@ func terminalBlueprintAttachTaskIntent(
 	status taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (BlueprintAttachTaskIntent, error) {
-	if intent.Status != taskjournal.TaskStatusPending || !isTerminalTaskStatus(status) || terminalAt.IsZero() {
+	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) || terminalAt.IsZero() {
 		return BlueprintAttachTaskIntent{}, errs.New(errs.KindStateConflict, "Blueprint Attach intent is not pending")
 	}
 	terminal := intent
@@ -358,7 +358,7 @@ func validateBlueprintAttachTaskIntent(intent BlueprintAttachTaskIntent) error {
 		if intent.TerminalAt != nil {
 			return errs.New(errs.KindValidationFailed, "Pending Blueprint Attach intent has a terminal timestamp")
 		}
-	} else if !isTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil ||
+	} else if !taskjournal.IsTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil ||
 		intent.TerminalAt.Before(intent.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Terminal Blueprint Attach intent is invalid")
 	}

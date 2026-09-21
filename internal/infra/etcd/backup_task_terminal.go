@@ -48,7 +48,7 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 		assignment.Executor != taskjournal.TaskExecutorAgent || assignment.TaskID != task.ID ||
 		assignment.TaskID != current.Task.Record.ID ||
 		assignment.ClaimedTaskRevision >= current.Assignment.Revision ||
-		!isTerminalTaskStatus(terminalStatus) ||
+		!taskjournal.IsTerminalTaskStatus(terminalStatus) ||
 		taskjournal.ValidateTaskResult(result, task.Steps, terminalStatus) != nil {
 		return backupTaskTerminalPlan{}, errs.New(
 			errs.KindValidationFailed,

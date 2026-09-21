@@ -472,7 +472,7 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) e
 		expectedExecutor = taskjournal.TaskExecutorAgent
 		validParams = intent.CandidateProjection != nil && len(task.Params) == 8 &&
 			task.Params[TaskEntryEnvironmentParam] == intent.EnvironmentID &&
-			task.Params[TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
+			task.Params[taskjournal.TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID &&
 			recordcodec.ValidateID(ids.KindConfig, task.Params[TaskComposeArtifactParam]) == nil &&
 			task.Params[TaskEntryProjectSlugParam] != "" && task.Params[TaskEntryEnvironmentNameParam] != "" &&

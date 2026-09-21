@@ -86,7 +86,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	}
 	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
-	if task.Params[etcd.TaskMaterializationEnvironmentParam] != task.Target ||
+	if task.Params[taskjournal.TaskMaterializationEnvironmentParam] != task.Target ||
 		ids.Validate(ids.KindTask, revisionID) != nil || ids.Validate(ids.KindConfig, artifactID) != nil {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Task parameters are invalid")
 	}

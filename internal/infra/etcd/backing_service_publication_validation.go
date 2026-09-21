@@ -156,7 +156,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	if err != nil {
 		return err
 	}
-	healthServiceID, hasHealthStep := creation.Task.Params[TaskBackingServiceHealthParam]
+	healthServiceID, hasHealthStep := creation.Task.Params[taskjournal.TaskBackingServiceHealthParam]
 	desiredHealth := creation.Service.Desired.Healthcheck
 	hasDesiredHealth := desiredHealth.HTTP != "" || desiredHealth.TCP != "" || desiredHealth.Pgrep != ""
 	afterStartServiceID, hasAfterStartStep := creation.Task.Params[TaskBackingServiceAfterStartParam]
@@ -167,12 +167,12 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		creation.Task.Target != creation.Environment.ID || creation.Task.Status != taskjournal.TaskStatusPending ||
 		creation.Task.RenderGeneration != 1 ||
 		creation.Task.Params[EnvironmentDesiredRevisionParam] != creation.Task.ID ||
-		creation.Task.Params[TaskMaterializationEnvironmentParam] != creation.Environment.ID ||
-		creation.Task.Params[TaskBackingServiceCreationParam] != creation.Service.Desired.ID ||
+		creation.Task.Params[taskjournal.TaskMaterializationEnvironmentParam] != creation.Environment.ID ||
+		creation.Task.Params[taskjournal.TaskBackingServiceCreationParam] != creation.Service.Desired.ID ||
 		hasHealthStep != hasDesiredHealth || hasHealthStep && healthServiceID != creation.Service.Desired.ID ||
 		hasAfterStartStep != hasDesiredAfterStart ||
 		hasAfterStartStep && afterStartServiceID != creation.Service.Desired.ID ||
-		creation.Task.Params[TaskBackingServiceVolumeDirectoryParam] != creation.Environment.VolumeDir {
+		creation.Task.Params[taskjournal.TaskBackingServiceVolumeDirectoryParam] != creation.Environment.VolumeDir {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation Task is invalid")
 	}
 	if creation.Marker.Kind != idempotencyrecord.IdempotencyMarkerTask || creation.Marker.State != idempotencyrecord.IdempotencyMarkerPending ||

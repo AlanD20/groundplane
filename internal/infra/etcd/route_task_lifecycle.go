@@ -68,7 +68,7 @@ func validateRouteRemovalTaskOwner(task TaskRecord, intent RouteRemovalIntent) e
 		expectedExecutor = taskjournal.TaskExecutorAgent
 		validParams = intent.CandidateProjection != nil && len(task.Params) == 4 &&
 			task.Params[TaskRouteEnvironmentParam] == intent.EnvironmentID &&
-			task.Params[TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
+			task.Params[taskjournal.TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID
 	}
 	if task.ID != intent.TaskID || task.Executor != expectedExecutor || task.Type != taskjournal.TaskRemove ||

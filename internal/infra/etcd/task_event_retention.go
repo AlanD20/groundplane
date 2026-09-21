@@ -14,13 +14,13 @@ import (
 // TaskEventCheckpoint retains bounded step progress and mutation facts, not a
 // second history. Its identity is the replay watermark of evicted events.
 type TaskEventCheckpoint struct {
-	Identity       TaskEventIdentity          `json:"identity"`
-	Sequence       uint64                     `json:"sequence"`
-	PayloadSHA256  string                     `json:"payload_sha256"`
-	State          taskjournal.TaskEventState `json:"state"`
-	Running        bool                       `json:"running"`
-	Completed      bool                       `json:"completed"`
-	EffectPossible bool                       `json:"effect_possible"`
+	Identity       taskjournal.TaskEventIdentity `json:"identity"`
+	Sequence       uint64                        `json:"sequence"`
+	PayloadSHA256  string                        `json:"payload_sha256"`
+	State          taskjournal.TaskEventState    `json:"state"`
+	Running        bool                          `json:"running"`
+	Completed      bool                          `json:"completed"`
+	EffectPossible bool                          `json:"effect_possible"`
 }
 
 func firstTaskEventSequence(task TaskRecord) uint64 {
@@ -49,10 +49,10 @@ func validateTaskEventCheckpoints(task TaskRecord) error {
 	}
 	previous := ""
 	for _, checkpoint := range task.EventCheckpoints {
-		if validateTaskEventIdentity(checkpoint.Identity) != nil || checkpoint.Identity.TaskID != task.ID ||
+		if taskjournal.ValidateTaskEventIdentity(checkpoint.Identity) != nil || checkpoint.Identity.TaskID != task.ID ||
 			!taskContainsStep(task, checkpoint.Identity.StepID) || checkpoint.Identity.StepID <= previous ||
 			checkpoint.Sequence == 0 || checkpoint.Sequence >= firstTaskEventSequence(task) ||
-			!recordcodec.ValidSHA256(checkpoint.PayloadSHA256) || !validTaskEventState(checkpoint.State) ||
+			!recordcodec.ValidSHA256(checkpoint.PayloadSHA256) || !taskjournal.ValidTaskEventState(checkpoint.State) ||
 			checkpoint.Completed && !checkpoint.Running || checkpoint.Running && !checkpoint.EffectPossible ||
 			checkpoint.State == taskjournal.TaskEventStateRunning && !checkpoint.Running ||
 			checkpoint.State == taskjournal.TaskEventStateCompleted && !checkpoint.Completed ||
@@ -64,7 +64,7 @@ func validateTaskEventCheckpoints(task TaskRecord) error {
 	return nil
 }
 
-func trimmedTaskEventReplay(task TaskRecord, input TaskEventInput, hash string) (*TaskEventDedupRecord, error) {
+func trimmedTaskEventReplay(task TaskRecord, input taskjournal.TaskEventInput, hash string) (*taskjournal.TaskEventDedupRecord, error) {
 	for _, checkpoint := range task.EventCheckpoints {
 		if checkpoint.Identity.StepID != input.Identity.StepID {
 			continue
@@ -73,7 +73,7 @@ func trimmedTaskEventReplay(task TaskRecord, input TaskEventInput, hash string) 
 			if checkpoint.PayloadSHA256 != hash {
 				return nil, errs.New(errs.KindInternal, "trimmed event replay changed payload")
 			}
-			return &TaskEventDedupRecord{Identity: checkpoint.Identity, Sequence: checkpoint.Sequence,
+			return &taskjournal.TaskEventDedupRecord{Identity: checkpoint.Identity, Sequence: checkpoint.Sequence,
 				PayloadSHA256: checkpoint.PayloadSHA256}, nil
 		}
 		if input.Identity.Attempt < checkpoint.Identity.Attempt ||
@@ -90,7 +90,7 @@ func trimmedTaskEventReplay(task TaskRecord, input TaskEventInput, hash string) 
 func (repository *TaskRepository) prepareTaskEventTrim(
 	ctx context.Context, task TaskRecord, prepared *PreparedTaskEvent, revision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
-	if task.EventCount < MaximumTaskEvents {
+	if task.EventCount < taskjournal.MaximumTaskEvents {
 		return nil, nil, nil
 	}
 	oldest := firstTaskEventSequence(task)
@@ -105,7 +105,7 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 		return nil, nil, recordcodec.CorruptRecord()
 	}
 	defer clearKeyValues(read.Values)
-	event, err := decodeTaskEventRecord(read.Values[0].Value)
+	event, err := taskjournal.DecodeTaskEventRecord(read.Values[0].Value)
 	if err != nil || event.Sequence != oldest || event.Identity.TaskID != task.ID {
 		return nil, nil, recordcodec.CorruptRecord()
 	}
@@ -119,7 +119,7 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 		return nil, nil, recordcodec.CorruptRecord()
 	}
 	defer clearKeyValues(dedupRead.Values)
-	dedup, err := decodeTaskEventDedupRecord(dedupRead.Values[0].Value)
+	dedup, err := taskjournal.DecodeTaskEventDedupRecord(dedupRead.Values[0].Value)
 	if err != nil || dedup.Identity != event.Identity || dedup.Sequence != event.Sequence ||
 		dedup.PayloadSHA256 != event.PayloadSHA256 {
 		return nil, nil, recordcodec.CorruptRecord()

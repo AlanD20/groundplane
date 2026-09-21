@@ -93,13 +93,13 @@ func validateBackupTerminalTaskEvidence(evidence BackupTerminalTaskEvidence) err
 		!taskjournal.ValidActor(evidence.Actor) || !taskjournal.ValidExecutor(evidence.Executor) ||
 		evidence.Executor != taskjournal.TaskExecutorAgent || evidence.Target != evidence.Owner.EnvironmentID ||
 		recordcodec.ValidateID(ids.KindPlan, evidence.PlanID) != nil || !recordcodec.ValidSHA256(evidence.PlanHash) ||
-		!isTerminalTaskStatus(evidence.Status) || !recordcodec.ValidSHA256(evidence.ResultDigest) ||
+		!taskjournal.IsTerminalTaskStatus(evidence.Status) || !recordcodec.ValidSHA256(evidence.ResultDigest) ||
 		!recordcodec.ValidSHA256(evidence.TaskDigest) || recordcodec.ValidateTimestamp("receipt created_at", evidence.CreatedAt) != nil ||
 		recordcodec.ValidateTimestamp("receipt updated_at", evidence.UpdatedAt) != nil ||
 		recordcodec.ValidateTimestamp("receipt finished_at", evidence.FinishedAt) != nil ||
 		recordcodec.ValidateTimestamp("receipt retain_until", evidence.RetainUntil) != nil ||
 		!evidence.UpdatedAt.Equal(evidence.FinishedAt) ||
-		!evidence.RetainUntil.Equal(evidence.FinishedAt.Add(TaskRetention)) {
+		!evidence.RetainUntil.Equal(evidence.FinishedAt.Add(taskjournal.TaskRetention)) {
 		return errs.New(errs.KindValidationFailed, "backup terminal receipt Task evidence is invalid")
 	}
 	if evidence.StartedAt != nil && recordcodec.ValidateTimestamp("receipt started_at", *evidence.StartedAt) != nil {
