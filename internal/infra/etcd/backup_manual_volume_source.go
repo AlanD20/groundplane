@@ -17,7 +17,7 @@ func (repository *BackupRuntimeRepository) prepareManualVolumeSource(
 	environmentID string,
 	fixedRevision int64,
 ) (backupruntime.BackupRunSourceAttemptRecord, error) {
-	evidence, err := loadBackupVolumeProjectionEvidence(
+	evidence, err := environmentqueries.LoadBackupVolumeProjectionEvidence(
 		ctx, repository.store, environmentID, attempt.TargetID, fixedRevision,
 	)
 	if err != nil {

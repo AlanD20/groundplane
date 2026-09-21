@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -342,7 +343,7 @@ func volumeConsumerServiceNames(projection projectionrecord.EnvironmentComposePr
 func volumeRemovalImpactItems(
 	projection projectionrecord.EnvironmentComposeProjection,
 	volumeID string,
-	backup etcd.BackupVolumeRemovalImpact,
+	backup backupruntime.BackupVolumeRemovalImpact,
 ) []apiTypes.VolumeDeletionImpactItem {
 	items := volumeMountImpactItems(projection, volumeID)
 	selected := false
@@ -375,7 +376,7 @@ func volumeRemovalImpactItems(
 func volumeImpactDigest(
 	projection projectionrecord.EnvironmentComposeProjection,
 	identity projectionrecord.EnvironmentVolumeIdentity,
-	backup etcd.BackupVolumeRemovalImpact,
+	backup backupruntime.BackupVolumeRemovalImpact,
 	items []apiTypes.VolumeDeletionImpactItem,
 ) (string, error) {
 	value, err := json.Marshal(struct {
@@ -383,7 +384,7 @@ func volumeImpactDigest(
 		RevisionID    string                                     `json:"revision_id"`
 		Generation    uint64                                     `json:"generation"`
 		Volume        projectionrecord.EnvironmentVolumeIdentity `json:"volume"`
-		Backup        etcd.BackupVolumeRemovalImpact             `json:"backup"`
+		Backup        backupruntime.BackupVolumeRemovalImpact    `json:"backup"`
 		Items         []apiTypes.VolumeDeletionImpactItem        `json:"items"`
 	}{projection.EnvironmentID, projection.RevisionID, projection.RenderGeneration, identity, backup, items})
 	if err != nil {

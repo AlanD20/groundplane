@@ -2,6 +2,7 @@ package volume
 
 import (
 	"context"
+	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -43,7 +44,7 @@ type ReadRepository interface {
 		string,
 		int64,
 		time.Time,
-	) (etcd.BackupVolumeRemovalImpact, error)
+	) (backupruntime.BackupVolumeRemovalImpact, error)
 }
 
 type MutationRepository interface {

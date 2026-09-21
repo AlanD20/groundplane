@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 )
@@ -48,7 +49,7 @@ func (repository *BackupPolicyRepository) loadbackupPolicySourceEvidence(
 		return evidence, nil
 	}
 	if record.Kind == core.BackupSourceVolume {
-		volume, volumeErr := loadBackupVolumeProjectionEvidence(
+		volume, volumeErr := environmentqueries.LoadBackupVolumeProjectionEvidence(
 			ctx, repository.store, record.EnvironmentID, record.TargetID, revision,
 		)
 		if volumeErr != nil {

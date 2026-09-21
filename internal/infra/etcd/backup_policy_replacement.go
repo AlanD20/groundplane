@@ -7,6 +7,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -28,7 +29,7 @@ type backupPolicySourceEvidence struct {
 	EnvironmentIndex *etcdstore.KeyValue
 	IdentityIndex    *etcdstore.KeyValue
 	Attach           *etcdstore.Versioned[attachrecord.Record]
-	Volume           *backupVolumeProjectionEvidence
+	Volume           *environmentqueries.BackupVolumeProjectionEvidence
 	TargetOwnerIndex *etcdstore.KeyValue
 }
 

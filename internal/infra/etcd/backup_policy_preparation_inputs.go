@@ -7,6 +7,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentqueries "github.com/AlanD20/groundplane/internal/infra/etcd/environmentqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -21,7 +22,7 @@ func (repository *BackupPolicyRepository) validateBackupPolicySelectionTarget(
 		return nil
 	}
 	if selection.Kind == core.BackupSourceVolume {
-		evidence, err := loadBackupVolumeProjectionEvidence(
+		evidence, err := environmentqueries.LoadBackupVolumeProjectionEvidence(
 			ctx, repository.store, environmentID, selection.TargetID, 0,
 		)
 		if err != nil {
