@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	groupstore "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/netip"
 	"time"
 
@@ -205,7 +206,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			return IdempotencyTransactionResult{}, err
 		}
 	}
-	poolChange, err := repository.prepareEnvironmentBlueprintPoolChangeAtRevision(
+	poolChange, err := networkreservations.NewPlanner(repository.store).PrepareEnvironmentPoolChangeAtRevision(
 		ctx,
 		environmentPool,
 		environment,
@@ -215,8 +216,8 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clearPreparedEnvironmentBlueprintPoolChange(poolChange)
-	effectiveEnvironment := poolChange.environment
+	defer networkreservations.ClearPreparedEnvironmentBlueprintPoolChange(poolChange)
+	effectiveEnvironment := poolChange.Environment()
 	scriptRemoval, err := repository.prepareDesiredScriptRemoval(
 		ctx, environment.Record.ID, expectedHeadRevision, fence.ReadRevision(), projection, task,
 	)
@@ -235,13 +236,17 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		return IdempotencyTransactionResult{}, err
 	}
 	defer etcdstore.ClearMutationValues(entryPublication.mutations)
-	zonePool, err := repository.prepareEnvironmentBlueprintZonePoolAtRevision(
-		ctx, effectiveEnvironment.Record, projection.DesiredZones, fence.ReadRevision(),
+	zoneRecords := make([]zonerecord.Record, len(projection.DesiredZones))
+	for index, zone := range projection.DesiredZones {
+		zoneRecords[index] = zonerecord.Record(zone)
+	}
+	zonePool, err := networkreservations.NewPlanner(repository.store).PrepareZonePoolAtRevision(
+		ctx, effectiveEnvironment.Record, zoneRecords, fence.ReadRevision(),
 	)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	defer clear(zonePool.value)
+	defer clear(zonePool.Value())
 	publishDomain := claim.SourceKind == blueprints.EnvironmentBlueprintSourceApply
 	requirementPublication, err := prepareBlueprintRequirementGatePublication(
 		requirementGate,
@@ -382,7 +387,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 		{Key: blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID), ModRevision: expectedHeadRevision},
-		{Key: networkreservations.ZonePoolRegistryKey(revision.EnvironmentID), ModRevision: zonePool.currentRevision},
+		{Key: networkreservations.ZonePoolRegistryKey(revision.EnvironmentID), ModRevision: zonePool.CurrentRevision()},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
@@ -392,18 +397,18 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
 		{Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: networkreservations.ZonePoolRegistryKey(revision.EnvironmentID), Value: zonePool.value},
+		{Type: etcdstore.MutationPut, Key: networkreservations.ZonePoolRegistryKey(revision.EnvironmentID), Value: zonePool.Value()},
 	}
 	zonePoolConditionIndex := len(conditions) - 1
 	poolRegistryConditionIndex := -1
-	if poolChange.changed() {
+	if poolChange.Changed() {
 		poolRegistryConditionIndex = len(conditions)
 		conditions = append(conditions, etcdstore.Condition{
-			Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: poolChange.registryRevision,
+			Key: networkreservations.EnvironmentPoolRegistryKey, ModRevision: poolChange.RegistryRevision(),
 		})
 		mutations = append(mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), Value: poolChange.environmentValue},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: networkreservations.EnvironmentPoolRegistryKey, Value: poolChange.registryValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), Value: poolChange.EnvironmentValue()},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: networkreservations.EnvironmentPoolRegistryKey, Value: poolChange.RegistryValue()},
 		)
 	}
 	removalLockConditionIndex := -1
@@ -447,14 +452,14 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 			return errs.New(errs.KindStateConflict, "Environment desired state changed")
 		}
 		zoneRegistry := values[zonePoolConditionIndex]
-		if (zonePool.currentRevision == 0 && zoneRegistry != nil) ||
-			(zonePool.currentRevision > 0 &&
-				(zoneRegistry == nil || zoneRegistry.ModRevision != zonePool.currentRevision)) {
+		if (zonePool.CurrentRevision() == 0 && zoneRegistry != nil) ||
+			(zonePool.CurrentRevision() > 0 &&
+				(zoneRegistry == nil || zoneRegistry.ModRevision != zonePool.CurrentRevision())) {
 			return recordcodec.StateConflict("Zone pool registry", environment.Record.ID)
 		}
 		if poolRegistryConditionIndex >= 0 {
 			registry := values[poolRegistryConditionIndex]
-			if registry == nil || registry.ModRevision != poolChange.registryRevision {
+			if registry == nil || registry.ModRevision != poolChange.RegistryRevision() {
 				return recordcodec.StateConflict("environment pool registry", environment.Record.ID)
 			}
 		}
