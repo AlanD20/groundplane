@@ -1,0 +1,90 @@
+package etcd
+
+import (
+	"context"
+	"github.com/AlanD20/groundplane/internal/common/runnerallocation"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+type runnerAllocationEvidence struct {
+	owner  *etcdstore.KeyValue
+	slug   *etcdstore.KeyValue
+	quota  *etcdstore.KeyValue
+	host   *etcdstore.KeyValue
+	system *etcdstore.KeyValue
+}
+
+func (repository *RunnerRepository) readRunnerAllocationEvidence(
+	ctx context.Context,
+	record runnerrecord.RunnerRecord,
+	revision int64,
+) (runnerAllocationEvidence, error) {
+	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
+		Keys: []string{
+			runnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
+			runnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
+			runnerTenantQuotaKey(record.Desired.TenantID),
+			runnerHostSlotKey(record.Allocation.Slot),
+			systemPoolRegistryKey,
+		},
+		Revision: revision,
+	})
+	if err != nil {
+		return runnerAllocationEvidence{}, err
+	}
+	if result == nil || len(result.Values) != 5 {
+		return runnerAllocationEvidence{}, errs.New(errs.KindInternal, "runner allocation evidence is incomplete")
+	}
+	evidence := runnerAllocationEvidence{
+		owner:  result.Values[0],
+		slug:   result.Values[1],
+		quota:  result.Values[2],
+		host:   result.Values[3],
+		system: result.Values[4],
+	}
+	if err := runnerAllocationEvidenceOwns(record, evidence); err != nil {
+		return runnerAllocationEvidence{}, err
+	}
+	return evidence, nil
+}
+
+func runnerAllocationEvidenceOwns(record runnerrecord.RunnerRecord, evidence runnerAllocationEvidence) error {
+	if evidence.owner == nil || string(evidence.owner.Value) != record.Desired.ID ||
+		evidence.slug == nil || string(evidence.slug.Value) != record.Desired.ID ||
+		evidence.quota == nil || evidence.host == nil || evidence.system == nil {
+		return errs.New(errs.KindInternal, "runner allocation evidence is incomplete")
+	}
+	quota, err := decodeRunnerTenantQuota(evidence.quota.Value)
+	if err != nil || quota.Validate() != nil {
+		return corruptRunnerTenantQuota()
+	}
+	index := sortSearchRunnerID(quota.RunnerIDs, record.Desired.ID)
+	if index >= len(quota.RunnerIDs) || quota.RunnerIDs[index] != record.Desired.ID {
+		return errs.New(errs.KindInternal, "runner tenant quota lost its owner")
+	}
+	host, err := decodeRunnerHostSlotRecord(evidence.host.Value)
+	if err != nil || host.Slot != record.Allocation.Slot || host.RunnerID != record.Desired.ID {
+		return corruptRunnerHostSlotRecord()
+	}
+	system, err := decodeSystemPoolRegistry(evidence.system.Value)
+	if err != nil ||
+		system.Reservations[runnerallocation.RunnerReservationOwner(record.Desired.ID)] != record.Allocation.NetworkCIDR {
+		return corruptSystemPoolRegistry()
+	}
+	return nil
+}
+
+func sortSearchRunnerID(values []string, id string) int {
+	left, right := 0, len(values)
+	for left < right {
+		middle := int(uint(left+right) >> 1)
+		if values[middle] < id {
+			left = middle + 1
+		} else {
+			right = middle
+		}
+	}
+	return left
+}
