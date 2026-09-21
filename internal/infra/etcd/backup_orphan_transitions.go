@@ -2,7 +2,9 @@ package etcd
 
 import (
 	"context"
+	backupretention "github.com/AlanD20/groundplane/internal/infra/etcd/backupretention"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -99,7 +101,7 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 	if err := backupruntime.ValidateBackupOrphanCompanionEvidence(anchor.Values[1:], current.Record); err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
-	evidence, err := repository.loadOwnedEvidence(ctx, run.Record, anchor.ReadRevision)
+	evidence, err := environmentfence.LoadBackupRunOwned(ctx, repository.store, run.Record, anchor.ReadRevision)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
@@ -109,9 +111,9 @@ func (repository *BackupRuntimeRepository) TransitionBackupOrphan(
 		{Key: connectorIndex, ModRevision: current.Revision},
 		{Key: environmentIndex, ModRevision: current.Revision},
 	}
-	conditions = append(conditions, evidence.fence.TransactionConditions()...)
+	conditions = append(conditions, evidence.TransactionConditions()...)
 	conditions = append(conditions, assignmentConditions...)
-	epoch, err := evidence.fence.EpochRewriteMutation()
+	epoch, err := evidence.EpochRewriteMutation()
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupOrphanRecord]{}, err
 	}
@@ -184,7 +186,7 @@ func (repository *BackupRuntimeRepository) advanceBackupRunAfterRetention(
 	changedOrdinal, changed := backupruntime.ChangedBackupSourceOrdinal(currentRun.Record, nextRun)
 	if int(ordinal) >= len(currentRun.Record.Sources) || !changed || changedOrdinal != ordinal ||
 		sweep.Revision <= 0 || sweep.Record.State != backupruntime.BackupRetentionCompleted ||
-		!backupRetentionSweepMatchesRun(currentRun.Record, sweep.Record) ||
+		!backupretention.BackupRetentionSweepMatchesRun(currentRun.Record, sweep.Record) ||
 		sweep.Record.SourceID != currentRun.Record.Sources[ordinal].SourceID ||
 		sweep.Record.TriggerRecoveryPointID != currentRun.Record.Sources[ordinal].RecoveryPointID ||
 		backupruntime.ValidateBackupRunTransition(
@@ -210,7 +212,7 @@ func (repository *BackupRuntimeRepository) advanceBackupRunAfterRetention(
 			}
 			stored, err := backupruntime.DecodeBackupRetentionSweepRecord(values[0].Value)
 			if err != nil || stored != sweep.Record || stored.State != backupruntime.BackupRetentionCompleted ||
-				!backupRetentionSweepMatchesRun(currentRun.Record, stored) {
+				!backupretention.BackupRetentionSweepMatchesRun(currentRun.Record, stored) {
 				return backupruntime.CorruptBackupRuntimeRecord()
 			}
 			return nil

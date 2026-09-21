@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -178,7 +179,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 			)
 		}
 	}
-	evidence, err := repository.loadOwnedEvidence(ctx, current.Record, anchor.ReadRevision)
+	evidence, err := environmentfence.LoadBackupRunOwned(ctx, repository.store, current.Record, anchor.ReadRevision)
 	if err != nil {
 		return backupRunPublicationPlan{}, err
 	}
@@ -253,12 +254,12 @@ func (repository *BackupRuntimeRepository) prepareBackupRunTerminalPlan(
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentIndex, Value: []byte(orphan.Point.ID)},
 		)
 	}
-	conditions = append(conditions, evidence.fence.TransactionConditions()...)
+	conditions = append(conditions, evidence.TransactionConditions()...)
 	conditions = append(conditions, checkpointPlan.conditions...)
 	mutations = append(mutations, etcdstore.Mutation{
 		Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentOperationLockKey(current.Record.EnvironmentID),
 	})
-	epoch, err := evidence.fence.EpochRewriteMutation()
+	epoch, err := evidence.EpochRewriteMutation()
 	if err != nil {
 		etcdstore.ClearMutationValues(mutations)
 		return backupRunPublicationPlan{}, err

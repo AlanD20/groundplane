@@ -2,8 +2,8 @@ package etcd
 
 import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupretention"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
-	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -11,11 +11,8 @@ import (
 type BackupRuntimeRepository struct {
 	*backupruntime.Writer
 	*backupplanning.Planner
+	*backupretention.Repository
 	store hierarchyStore
-}
-
-type backupRuntimeOwnedEvidence struct {
-	fence environmentfence.Evidence
 }
 
 func NewBackupRuntimeRepository(store etcdstore.Store) (*BackupRuntimeRepository, error) {
@@ -26,5 +23,5 @@ func newBackupRuntimeRepository(store hierarchyStore) (*BackupRuntimeRepository,
 	if store == nil {
 		return nil, errs.New(errs.KindInternal, "backup runtime store is required")
 	}
-	return &BackupRuntimeRepository{store: store, Writer: backupruntime.NewWriter(store), Planner: backupplanning.NewPlanner(store)}, nil
+	return &BackupRuntimeRepository{store: store, Writer: backupruntime.NewWriter(store), Planner: backupplanning.NewPlanner(store), Repository: backupretention.NewRepository(store)}, nil
 }

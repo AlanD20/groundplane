@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	environmentfence "github.com/AlanD20/groundplane/internal/infra/etcd/environmentfence"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -153,7 +154,7 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 			ReadRevision: anchor.ReadRevision,
 		}, nil
 	}
-	evidence, err := repository.loadOwnedEvidence(ctx, current.Record, anchor.ReadRevision)
+	evidence, err := environmentfence.LoadBackupRunOwned(ctx, repository.store, current.Record, anchor.ReadRevision)
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
@@ -161,10 +162,10 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 		{Key: backupruntime.BackupRunKey(current.Record.TaskID), ModRevision: current.Revision},
 	}
 	conditions = append(conditions, extraConditions...)
-	conditions = append(conditions, evidence.fence.TransactionConditions()...)
+	conditions = append(conditions, evidence.TransactionConditions()...)
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: backupruntime.BackupRunKey(next.TaskID), Value: value}}
 	mutations = append(mutations, extraMutations...)
-	epoch, err := evidence.fence.EpochRewriteMutation()
+	epoch, err := evidence.EpochRewriteMutation()
 	if err != nil {
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 	}
@@ -196,8 +197,8 @@ func (repository *BackupRuntimeRepository) replaceBackupRun(
 			)
 		}
 		fenceStart := 1 + len(extraConditions)
-		fenceEnd := fenceStart + evidence.fence.ConditionCount()
-		if err := evidence.fence.ClassifyConflict(result.FailureReads[fenceStart:fenceEnd]); err != nil {
+		fenceEnd := fenceStart + evidence.ConditionCount()
+		if err := evidence.ClassifyConflict(result.FailureReads[fenceStart:fenceEnd]); err != nil {
 			return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, err
 		}
 		return etcdstore.Versioned[backupruntime.BackupRunRecord]{}, errs.New(
