@@ -177,7 +177,7 @@ func (repository *Repository) ListSecrets(
 
 func (repository *Repository) CreateSecretIdempotent(
 	ctx context.Context,
-	owner etcd.SecretOwner,
+	owner secretrecord.Owner,
 	record secretrecord.Record,
 	value secretrecord.EncryptedValue,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -187,7 +187,7 @@ func (repository *Repository) CreateSecretIdempotent(
 
 func (repository *Repository) BeginSecretDeletionWithTask(
 	ctx context.Context,
-	owner etcd.SecretOwner,
+	owner secretrecord.Owner,
 	current etcdstore.Versioned[secretrecord.Record],
 	tombstone deletionrecord.DeletionTombstoneRecord,
 	task etcd.TaskRecord,

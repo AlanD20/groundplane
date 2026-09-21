@@ -142,7 +142,7 @@ func selectBackupSecretCandidate(
 		id := string(candidate.value.Value)
 		fence := values[dynamic.secretFences[id]]
 		if fence != nil {
-			if err := validateSecretDeletionFence(fence, id); err != nil {
+			if err := secretrecord.ValidateSecretDeletionFence(fence, id); err != nil {
 				return backupSecretCandidate{}, err
 			}
 			continue

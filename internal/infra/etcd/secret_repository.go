@@ -3,7 +3,6 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
-	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -14,18 +13,6 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
-
-// SecretOwner is a closed project-or-platform ownership input. A nil Project
-// denotes platform scope.
-type SecretOwner struct {
-	Project *etcdstore.Versioned[hierarchyrecord.ProjectRecord]
-}
-
-func ProjectSecretOwner(project etcdstore.Versioned[hierarchyrecord.ProjectRecord]) SecretOwner {
-	return SecretOwner{Project: &project}
-}
-
-func PlatformSecretOwner() SecretOwner { return SecretOwner{} }
 
 type SecretRepository struct {
 	store hierarchyStore
@@ -44,14 +31,14 @@ func newSecretRepository(store hierarchyStore) (*SecretRepository, error) {
 
 func (repository *SecretRepository) CreateSecret(
 	ctx context.Context,
-	owner SecretOwner,
+	owner secretrecord.Owner,
 	record secretrecord.Record,
 	value secretrecord.EncryptedValue,
 ) (etcdstore.Versioned[secretrecord.Record], error) {
-	if err := validateSecretOwnership(ctx, owner, record); err != nil {
+	if err := secretrecord.ValidateSecretOwnership(ctx, owner, record); err != nil {
 		return etcdstore.Versioned[secretrecord.Record]{}, err
 	}
-	if err := validateSecretValueBinding(record, value); err != nil {
+	if err := secretrecord.ValidateSecretValueBinding(record, value); err != nil {
 		return etcdstore.Versioned[secretrecord.Record]{}, err
 	}
 	primaryValue, err := secretrecord.EncodeRecord(record)
@@ -65,7 +52,7 @@ func (repository *SecretRepository) CreateSecret(
 	}
 	defer clear(encryptedValue)
 
-	conditions := secretCreateConditions(owner, record)
+	conditions := secretrecord.SecretCreateConditions(owner, record)
 	result, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: secretrecord.RecordKey(record.Secret.ID), Value: primaryValue},
 		{Type: etcdstore.MutationPut, Key: secretrecord.SecretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
@@ -76,7 +63,7 @@ func (repository *SecretRepository) CreateSecret(
 		return etcdstore.Versioned[secretrecord.Record]{}, err
 	}
 	if !result.Succeeded {
-		return etcdstore.Versioned[secretrecord.Record]{}, classifySecretCreateConflict(
+		return etcdstore.Versioned[secretrecord.Record]{}, secretrecord.ClassifySecretCreateConflict(
 			result.FailureReads, owner, record,
 		)
 	}
@@ -89,15 +76,15 @@ func (repository *SecretRepository) CreateSecret(
 // indexes, encrypted value, and exact completed replay marker.
 func (repository *SecretRepository) CreateSecretIdempotent(
 	ctx context.Context,
-	owner SecretOwner,
+	owner secretrecord.Owner,
 	record secretrecord.Record,
 	value secretrecord.EncryptedValue,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateSecretOwnership(ctx, owner, record); err != nil {
+	if err := secretrecord.ValidateSecretOwnership(ctx, owner, record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateSecretValueBinding(record, value); err != nil {
+	if err := secretrecord.ValidateSecretValueBinding(record, value); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted {
@@ -120,7 +107,7 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 	}
 	defer clear(encryptedValue)
 	plan, err := NewIdempotencyMutationPlan(
-		secretCreateConditions(owner, record),
+		secretrecord.SecretCreateConditions(owner, record),
 		[]etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: secretrecord.RecordKey(record.Secret.ID), Value: primaryValue},
 			{Type: etcdstore.MutationPut, Key: secretrecord.SecretOwnerKey(record.Secret), Value: []byte(record.Secret.ID)},
@@ -128,7 +115,7 @@ func (repository *SecretRepository) CreateSecretIdempotent(
 			{Type: etcdstore.MutationPut, Key: secretrecord.ValueKey(record.Secret.ID), Value: encryptedValue},
 		},
 		func(_ int64, values []*etcdstore.KeyValue) error {
-			return classifySecretCreateConflict(values, owner, record)
+			return secretrecord.ClassifySecretCreateConflict(values, owner, record)
 		},
 	)
 	if err != nil {
@@ -152,7 +139,7 @@ func (repository *SecretRepository) GetSecretValue(
 	ctx context.Context,
 	current etcdstore.Versioned[secretrecord.Record],
 ) (secretrecord.EncryptedValue, error) {
-	if err := validateSecretVersion(current); err != nil {
+	if err := secretrecord.ValidateSecretVersion(current); err != nil {
 		return secretrecord.EncryptedValue{}, err
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -178,7 +165,7 @@ func (repository *SecretRepository) ListSecrets(
 	projectID string,
 	request etcdstore.PageRequest,
 ) (etcdstore.Page[secretrecord.Record], error) {
-	if err := validateSecretListScope(scope, projectID); err != nil {
+	if err := secretrecord.ValidateSecretListScope(scope, projectID); err != nil {
 		return etcdstore.Page[secretrecord.Record]{}, err
 	}
 	ownerKind, ownerID := secretrecord.SecretScopeKey(scope, projectID)
@@ -218,7 +205,7 @@ func (repository *SecretRepository) ListSecrets(
 			visible = append(visible, item)
 			continue
 		}
-		if err := validateSecretDeletionFence(tombstones.Values[index], item.Record.Secret.ID); err != nil {
+		if err := secretrecord.ValidateSecretDeletionFence(tombstones.Values[index], item.Record.Secret.ID); err != nil {
 			return etcdstore.Page[secretrecord.Record]{}, err
 		}
 	}
@@ -296,7 +283,7 @@ func (repository *SecretRepository) resolveSecretAtRevision(
 			)
 		}
 		if stored.Values[1] != nil {
-			if err := validateSecretDeletionFence(stored.Values[1], id); err != nil {
+			if err := secretrecord.ValidateSecretDeletionFence(stored.Values[1], id); err != nil {
 				return etcdstore.Versioned[secretrecord.Record]{}, err
 			}
 			continue
@@ -317,27 +304,15 @@ func (repository *SecretRepository) resolveSecretAtRevision(
 	return etcdstore.Versioned[secretrecord.Record]{}, errs.New(errs.KindSecretNotFound, "Secret was not found in scope")
 }
 
-func validateSecretDeletionFence(value *etcdstore.KeyValue, secretID string) error {
-	if value == nil {
-		return errs.New(errs.KindInternal, "Secret deletion fence is missing")
-	}
-	tombstone, err := deletionrecord.DecodeDeletionTombstone(value.Value)
-	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetSecret || tombstone.TargetID != secretID ||
-		tombstone.Phase != deletionrecord.DeletionPhaseFinalizing {
-		return deletionrecord.CorruptDeletionTombstone()
-	}
-	return nil
-}
-
 func (repository *SecretRepository) DeleteSecret(
 	ctx context.Context,
-	owner SecretOwner,
+	owner secretrecord.Owner,
 	current etcdstore.Versioned[secretrecord.Record],
 ) (int64, error) {
-	if err := validateSecretOwnership(ctx, owner, current.Record); err != nil {
+	if err := secretrecord.ValidateSecretOwnership(ctx, owner, current.Record); err != nil {
 		return 0, err
 	}
-	if err := validateSecretVersion(current); err != nil {
+	if err := secretrecord.ValidateSecretVersion(current); err != nil {
 		return 0, err
 	}
 	dependencies, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -357,7 +332,7 @@ func (repository *SecretRepository) DeleteSecret(
 		string(dependencies.Values[1].Value) != current.Record.Secret.ID {
 		return 0, errs.New(errs.KindInternal, "Secret indexes or encrypted value are missing")
 	}
-	conditions := secretDeleteConditions(owner, current, dependencies.Values)
+	conditions := secretrecord.SecretDeleteConditions(owner, current, dependencies.Values)
 	fences, err := prepareSecretScriptAbsence(ctx, repository.store, current.Record.Secret.ID)
 	if err != nil {
 		return 0, err
@@ -376,162 +351,4 @@ func (repository *SecretRepository) DeleteSecret(
 		return 0, errs.New(errs.KindStateConflict, "Secret changed while deletion was requested")
 	}
 	return result.Revision, nil
-}
-
-func validateSecretValueBinding(record secretrecord.Record, value secretrecord.EncryptedValue) error {
-	if err := secretrecord.ValidateEncryptedValue(value); err != nil {
-		return err
-	}
-	if record.Secret.ID != value.SecretID {
-		return errs.New(errs.KindValidationFailed, "Secret encrypted value does not match metadata")
-	}
-	return nil
-}
-
-func validateSecretOwnership(ctx context.Context, owner SecretOwner, record secretrecord.Record) error {
-	if err := etcdstore.ValidateContext(ctx); err != nil {
-		return err
-	}
-	if err := secretrecord.ValidateRecord(record); err != nil {
-		return err
-	}
-	if owner.Project == nil {
-		if record.Secret.Scope != core.SecretScopePlatform || record.Secret.ProjectID != "" {
-			return errs.New(errs.KindValidationFailed, "Secret platform ownership is invalid")
-		}
-		return nil
-	}
-	if err := hierarchyrecord.ValidateProject(owner.Project.Record); err != nil {
-		return err
-	}
-	if owner.Project.Revision <= 0 || owner.Project.ReadRevision < owner.Project.Revision ||
-		record.Secret.Scope != core.SecretScopeProject ||
-		record.Secret.ProjectID != owner.Project.Record.ID {
-		return errs.New(errs.KindValidationFailed, "Secret project ownership or revision is invalid")
-	}
-	return nil
-}
-
-func validateSecretVersion(current etcdstore.Versioned[secretrecord.Record]) error {
-	if err := secretrecord.ValidateRecord(current.Record); err != nil {
-		return err
-	}
-	if current.Revision <= 0 || current.ReadRevision < current.Revision {
-		return errs.New(errs.KindValidationFailed, "Secret version metadata is invalid")
-	}
-	return nil
-}
-
-func validateSecretListScope(scope core.SecretScope, projectID string) error {
-	switch scope {
-	case core.SecretScopeProject:
-		return recordcodec.ValidateID(ids.KindProject, projectID)
-	case core.SecretScopePlatform:
-		if projectID != "" {
-			return errs.New(errs.KindValidationFailed, "Platform Secret list must not set project id")
-		}
-		return nil
-	default:
-		return errs.New(errs.KindValidationFailed, "Secret list scope is invalid")
-	}
-}
-
-func secretCreateConditions(owner SecretOwner, record secretrecord.Record) []etcdstore.Condition {
-	conditions := []etcdstore.Condition{
-		{Key: secretrecord.RecordKey(record.Secret.ID)},
-		{Key: secretrecord.SecretOwnerKey(record.Secret)},
-		{Key: secretrecord.SecretScopedKey(record.Secret)},
-		{Key: secretrecord.ValueKey(record.Secret.ID)},
-	}
-	if owner.Project != nil {
-		conditions = append(conditions,
-			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
-		)
-	}
-	conditions = append(conditions, etcdstore.Condition{Key: deletionrecord.TombstoneKey("secret", record.Secret.ID)})
-	if owner.Project != nil {
-		conditions = append(conditions, etcdstore.Condition{Key: deletionrecord.TombstoneKey("project", owner.Project.Record.ID)})
-		if owner.Project.Record.TenantID != "" {
-			conditions = append(
-				conditions,
-				etcdstore.Condition{Key: deletionrecord.TombstoneKey("tenant", owner.Project.Record.TenantID)},
-			)
-		}
-	}
-	return conditions
-}
-
-func secretDeleteConditions(
-	owner SecretOwner,
-	current etcdstore.Versioned[secretrecord.Record],
-	dependencies []*etcdstore.KeyValue,
-) []etcdstore.Condition {
-	conditions := []etcdstore.Condition{
-		{Key: secretrecord.RecordKey(current.Record.Secret.ID), ModRevision: current.Revision},
-		{Key: secretrecord.SecretOwnerKey(current.Record.Secret), ModRevision: dependencies[0].ModRevision},
-		{Key: secretrecord.SecretScopedKey(current.Record.Secret), ModRevision: dependencies[1].ModRevision},
-		{Key: secretrecord.ValueKey(current.Record.Secret.ID), ModRevision: dependencies[2].ModRevision},
-	}
-	if owner.Project != nil {
-		conditions = append(conditions,
-			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(owner.Project.Record.ID), ModRevision: owner.Project.Revision},
-		)
-	}
-	conditions = append(
-		conditions,
-		etcdstore.Condition{Key: deletionrecord.TombstoneKey("secret", current.Record.Secret.ID)},
-	)
-	if owner.Project != nil {
-		conditions = append(conditions, etcdstore.Condition{Key: deletionrecord.TombstoneKey("project", owner.Project.Record.ID)})
-		if owner.Project.Record.TenantID != "" {
-			conditions = append(
-				conditions,
-				etcdstore.Condition{Key: deletionrecord.TombstoneKey("tenant", owner.Project.Record.TenantID)},
-			)
-		}
-	}
-	return conditions
-}
-
-func classifySecretCreateConflict(
-	values []*etcdstore.KeyValue,
-	owner SecretOwner,
-	record secretrecord.Record,
-) error {
-	expected := 5
-	if owner.Project != nil {
-		expected += 2
-		if owner.Project.Record.TenantID != "" {
-			expected++
-		}
-	}
-	if len(values) != expected {
-		return errs.New(errs.KindInternal, "Secret create compare evidence is incomplete")
-	}
-	if values[0] != nil || values[1] != nil || values[3] != nil {
-		return errs.New(errs.KindStateConflict, "Secret stable identity is already in use")
-	}
-	if values[2] != nil {
-		return errs.New(errs.KindNameConflict, "Secret key is already defined in this scope")
-	}
-	position := 4
-	if owner.Project != nil {
-		if values[position] == nil {
-			return errs.New(errs.KindProjectNotFound, "Secret project was not found")
-		}
-		if values[position].ModRevision != owner.Project.Revision {
-			return recordcodec.StateConflict("project", owner.Project.Record.ID)
-		}
-		position++
-	}
-	if values[position] != nil {
-		return errs.New(errs.KindResourceInUse, "Secret deletion is in progress")
-	}
-	position++
-	for ; position < len(values); position++ {
-		if values[position] != nil {
-			return errs.New(errs.KindResourceInUse, "Secret owner deletion is in progress")
-		}
-	}
-	return recordcodec.StateConflict("secret", record.Secret.ID)
 }

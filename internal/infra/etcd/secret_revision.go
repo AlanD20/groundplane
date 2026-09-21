@@ -44,7 +44,7 @@ func (repository *SecretRepository) getSecretAtRevision(
 		return etcdstore.Versioned[secretrecord.Record]{}, secretrecord.CorruptRecord()
 	}
 	if read.Values[1] != nil {
-		if err := validateSecretDeletionFence(read.Values[1], id); err != nil {
+		if err := secretrecord.ValidateSecretDeletionFence(read.Values[1], id); err != nil {
 			return etcdstore.Versioned[secretrecord.Record]{}, err
 		}
 		return etcdstore.Versioned[secretrecord.Record]{}, errs.New(errs.KindSecretNotFound, "Secret was not found")

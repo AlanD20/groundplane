@@ -72,7 +72,7 @@ func selectConnectorCredentialSecret(
 				"Connector credential Secret tombstone evidence is corrupt",
 			)
 		}
-		if err := validateSecretDeletionFence(values[1], record.Secret.ID); err != nil {
+		if err := secretrecord.ValidateSecretDeletionFence(values[1], record.Secret.ID); err != nil {
 			return false, nil, 0, err
 		}
 		conditions = append(conditions, etcdstore.Condition{Key: values[1].Key, ModRevision: values[1].ModRevision})
@@ -86,7 +86,7 @@ func selectConnectorCredentialSecret(
 		return false, nil, 0, secretrecord.CorruptRecord()
 	}
 	defer clear(value.Ciphertext)
-	if err := validateSecretValueBinding(record, value); err != nil {
+	if err := secretrecord.ValidateSecretValueBinding(record, value); err != nil {
 		return false, nil, 0, secretrecord.CorruptRecord()
 	}
 	if record.Secret.Kind != core.SecretKindEnvVar {

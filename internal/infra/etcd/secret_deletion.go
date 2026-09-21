@@ -18,16 +18,16 @@ import (
 // remain durable until the Task reaches a terminal state.
 func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	ctx context.Context,
-	owner SecretOwner,
+	owner secretrecord.Owner,
 	current etcdstore.Versioned[secretrecord.Record],
 	tombstone deletionrecord.DeletionTombstoneRecord,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
-	if err := validateSecretOwnership(ctx, owner, current.Record); err != nil {
+	if err := secretrecord.ValidateSecretOwnership(ctx, owner, current.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateSecretVersion(current); err != nil {
+	if err := secretrecord.ValidateSecretVersion(current); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
@@ -200,7 +200,7 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	return idempotency.Apply(ctx, marker, plan)
 }
 
-func secretIdempotencyScope(owner SecretOwner) (idempotencyrecord.IdempotencyScopeKind, string) {
+func secretIdempotencyScope(owner secretrecord.Owner) (idempotencyrecord.IdempotencyScopeKind, string) {
 	if owner.Project == nil {
 		return idempotencyrecord.IdempotencyScopePlatform, "-"
 	}
@@ -208,7 +208,7 @@ func secretIdempotencyScope(owner SecretOwner) (idempotencyrecord.IdempotencySco
 }
 
 func classifySecretDeletionStartConflict(
-	owner SecretOwner,
+	owner secretrecord.Owner,
 	current etcdstore.Versioned[secretrecord.Record],
 	operationID string,
 ) idempotencyPlanClassifier {

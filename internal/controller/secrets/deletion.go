@@ -34,7 +34,7 @@ type secretDeletionRepository interface {
 	GetSecret(context.Context, string) (etcdstore.Versioned[secretrecord.Record], error)
 	BeginSecretDeletionWithTask(
 		context.Context,
-		etcd.SecretOwner,
+		secretrecord.Owner,
 		etcdstore.Versioned[secretrecord.Record],
 		deletionrecord.DeletionTombstoneRecord,
 		etcd.TaskRecord,
@@ -230,7 +230,7 @@ func (service *secretDeletionService) deleteSecretOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	owner := etcd.PlatformSecretOwner()
+	owner := secretrecord.PlatformOwner()
 	locator = idempotencyrecord.IdempotencyLocator{
 		ScopeKind: idempotencyrecord.IdempotencyScopePlatform, ScopeID: "-",
 		Method: http.MethodDelete, Route: secretDeletionRoute, Key: idempotencyKey,
@@ -240,7 +240,7 @@ func (service *secretDeletionService) deleteSecretOnce(
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
-		owner = etcd.ProjectSecretOwner(project)
+		owner = secretrecord.ProjectOwner(project)
 		locator.ScopeKind = idempotencyrecord.IdempotencyScopeProject
 		locator.ScopeID = project.Record.ID
 	}

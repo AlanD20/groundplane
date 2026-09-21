@@ -32,7 +32,7 @@ type secretCreationRepository interface {
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	CreateSecretIdempotent(
 		context.Context,
-		etcd.SecretOwner,
+		secretrecord.Owner,
 		secretrecord.Record,
 		secretrecord.EncryptedValue,
 		idempotencyrecord.IdempotencyMarker,
@@ -217,13 +217,13 @@ func (service *secretCreationService) createSecretOnce(
 		return requestidempotency.CloneResponse(resolution.Response), nil
 	}
 
-	owner := etcd.PlatformSecretOwner()
+	owner := secretrecord.PlatformOwner()
 	if input.ProjectID != "" {
 		project, projectErr := service.repository.GetProject(ctx, input.ProjectID)
 		if projectErr != nil {
 			return idempotencyrecord.IdempotencyResponse{}, projectErr
 		}
-		owner = etcd.ProjectSecretOwner(project)
+		owner = secretrecord.ProjectOwner(project)
 	}
 	plaintext := []byte(input.Value)
 	defer clear(plaintext)
