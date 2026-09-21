@@ -7,6 +7,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -814,7 +815,7 @@ func (repository *BackupRuntimeRepository) validateQueuedBackupRunPublication(
 		}
 	}
 	if run.RetryOfTaskID == "" && run.Initiator == backupruntime.BackupRunInitiatorSchedule &&
-		!repository.exactScheduledBackupRunSubordinates(ctx, run, readRevision, commitRevision) {
+		!backupscheduling.New(repository.store).HasExactPublishedOutcome(ctx, run, readRevision, commitRevision) {
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	if run.State != backupruntime.BackupRunQueued || !run.UpdatedAt.Equal(run.CreatedAt) ||

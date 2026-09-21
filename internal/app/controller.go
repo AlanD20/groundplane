@@ -13,6 +13,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
@@ -663,7 +664,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 		backupcapability.BackupRunPlanBuilderFunc(backupcapability.BuildBackupRunPlan),
 		backupRunIdempotency,
 	)
-	backupSchedules, err := backupcapability.NewBackupScheduleService(backupRuntimeRecords, backupRuns, logger)
+	backupSchedules, err := backupcapability.NewBackupScheduleService(backupscheduling.New(store), backupRuns, logger)
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("controller: initialize backup scheduler: %w", err)

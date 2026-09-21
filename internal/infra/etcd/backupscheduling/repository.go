@@ -1,4 +1,4 @@
-package etcd
+package backupscheduling
 
 import (
 	"context"
@@ -14,6 +14,20 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
+
+type scheduleStore interface {
+	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
+	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
+	Transact(context.Context, []etcdstore.Condition, []etcdstore.Mutation) (etcdstore.TransactionResult, error)
+}
+
+// Repository owns durable scheduling progress, overlap outcomes, and the
+// scheduling contribution to atomic Backup run publication.
+type Repository struct{ store scheduleStore }
+
+func New(store scheduleStore) *Repository { return &Repository{store: store} }
+
+const maximumCandidatePage = 96
 
 const backupDueRetention = 90 * 24 * time.Hour
 
@@ -39,7 +53,7 @@ type BackupScheduleEvaluation struct {
 // ListBackupScheduleCandidates lists valid policy records. Invalid records
 // are deliberately ignored: a bad policy is never executable work. Disabled
 // records are included so a prior coordination singleton is cleared promptly.
-func (repository *BackupRuntimeRepository) ListBackupScheduleCandidates(
+func (repository *Repository) ListBackupScheduleCandidates(
 	ctx context.Context,
 ) ([]BackupScheduleCandidate, error) {
 	if repository == nil || repository.store == nil {
@@ -53,7 +67,7 @@ func (repository *BackupRuntimeRepository) ListBackupScheduleCandidates(
 	for {
 		page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: backuppolicy.PolicyPrefix, StartExclusive: start,
-			Limit: maximumBackupRuntimeListLimit,
+			Limit: maximumCandidatePage,
 		})
 		if err != nil {
 			return nil, err
@@ -91,7 +105,7 @@ func (repository *BackupRuntimeRepository) ListBackupScheduleCandidates(
 	return candidates, nil
 }
 
-func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
+func (repository *Repository) EvaluateBackupSchedule(
 	ctx context.Context, environmentID string, now time.Time,
 ) (BackupScheduleEvaluation, error) {
 	if repository == nil || repository.store == nil {
@@ -190,7 +204,7 @@ func (repository *BackupRuntimeRepository) EvaluateBackupSchedule(
 
 // SkipScheduledBackup records an overlap outcome and advances coordination in
 // one CAS transaction. No Task is created for this outcome.
-func (repository *BackupRuntimeRepository) SkipScheduledBackup(
+func (repository *Repository) SkipScheduledBackup(
 	ctx context.Context, evaluation BackupScheduleEvaluation, now time.Time,
 ) error {
 	if repository == nil || repository.store == nil {
@@ -283,7 +297,7 @@ func (repository *BackupRuntimeRepository) SkipScheduledBackup(
 	return nil
 }
 
-func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
+func (repository *Repository) PreparePublication(
 	ctx context.Context, record backupruntime.BackupRunRecord, fixedRevision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, error) {
 	if record.ScheduledAt == nil || record.Initiator != backupruntime.BackupRunInitiatorSchedule {
@@ -363,7 +377,7 @@ func (repository *BackupRuntimeRepository) prepareScheduledBackupPublication(
 	}, nil
 }
 
-func (repository *BackupRuntimeRepository) exactScheduledBackupRunSubordinates(
+func (repository *Repository) HasExactPublishedOutcome(
 	ctx context.Context, run backupruntime.BackupRunRecord, readRevision, commitRevision int64,
 ) bool {
 	if run.ScheduledAt == nil {
@@ -407,4 +421,13 @@ func (repository *BackupRuntimeRepository) exactScheduledBackupRunSubordinates(
 		return false
 	}
 	return string(read.Values[2].Value) == dueKey
+}
+
+func clearKeyValues(values []*etcdstore.KeyValue) {
+	for _, value := range values {
+		if value != nil {
+			clear(value.Value)
+			value.Value = nil
+		}
+	}
 }

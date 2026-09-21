@@ -4,6 +4,7 @@ import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -198,7 +199,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	}
 	mutations = append(mutations, epoch)
 	if retrySource == nil && record.Initiator == backupruntime.BackupRunInitiatorSchedule {
-		scheduleConditions, scheduleMutations, scheduleErr := repository.prepareScheduledBackupPublication(
+		scheduleConditions, scheduleMutations, scheduleErr := backupscheduling.New(repository.store).PreparePublication(
 			ctx, record, fixedRevision,
 		)
 		if scheduleErr != nil {

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -25,9 +25,9 @@ type ScheduledBackupRunner interface {
 
 // BackupScheduleRepository is the Controller-owned durable scheduling seam.
 type BackupScheduleRepository interface {
-	ListBackupScheduleCandidates(context.Context) ([]etcd.BackupScheduleCandidate, error)
-	EvaluateBackupSchedule(context.Context, string, time.Time) (etcd.BackupScheduleEvaluation, error)
-	SkipScheduledBackup(context.Context, etcd.BackupScheduleEvaluation, time.Time) error
+	ListBackupScheduleCandidates(context.Context) ([]backupscheduling.BackupScheduleCandidate, error)
+	EvaluateBackupSchedule(context.Context, string, time.Time) (backupscheduling.BackupScheduleEvaluation, error)
+	SkipScheduledBackup(context.Context, backupscheduling.BackupScheduleEvaluation, time.Time) error
 }
 
 // BackupScheduleService is called by the Controller singleton scheduler. It
