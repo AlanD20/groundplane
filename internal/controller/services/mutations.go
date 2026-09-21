@@ -11,6 +11,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -108,7 +109,7 @@ func (service *serviceMutationService) createServiceOnce(
 	}
 	return service.publishServiceDesiredMutation(
 		ctx, environment, project, nil,
-		etcd.ServiceRecord{EnvironmentID: input.EnvironmentID, Desired: desired},
+		servicerecord.ServiceRecord{EnvironmentID: input.EnvironmentID, Desired: desired},
 		etcd.ServiceMutationReferences{},
 		serviceMutationAuditFromCreate(input), etcd.EnvironmentServiceMutationCreate,
 		http.StatusCreated, locator, evidence,
@@ -185,7 +186,7 @@ func (service *serviceMutationService) editServiceOnce(
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
-	replacement, err := etcd.ReplaceServiceDesired(current.Record, desired)
+	replacement, err := servicerecord.ReplaceServiceDesired(current.Record, desired)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
@@ -202,7 +203,7 @@ func (service *serviceMutationService) editServiceOnce(
 
 func (service *serviceMutationService) rejectComponentGeneratedServiceMutation(
 	ctx context.Context,
-	record etcd.ServiceRecord,
+	record servicerecord.ServiceRecord,
 ) error {
 	projection, found, err := service.repository.GetEnvironmentComposeProjection(ctx, record.EnvironmentID)
 	if err != nil {
@@ -231,7 +232,7 @@ func (service *serviceMutationService) serviceHierarchy(
 
 func (service *serviceMutationService) resolveServiceReferences(
 	ctx context.Context,
-	record etcd.ServiceRecord,
+	record servicerecord.ServiceRecord,
 ) (etcd.ServiceMutationReferences, error) {
 	zones, err := service.listAllZones(ctx, record.EnvironmentID)
 	if err != nil {
@@ -259,7 +260,7 @@ func (service *serviceMutationService) resolveServiceReferences(
 	if err != nil {
 		return etcd.ServiceMutationReferences{}, err
 	}
-	serviceByName := make(map[string]etcdstore.Versioned[etcd.ServiceRecord], len(services))
+	serviceByName := make(map[string]etcdstore.Versioned[servicerecord.ServiceRecord], len(services))
 	for _, candidate := range services {
 		serviceByName[candidate.Record.Desired.Name] = candidate
 	}
@@ -304,8 +305,8 @@ func (service *serviceMutationService) listAllZones(
 func (service *serviceMutationService) listAllServices(
 	ctx context.Context,
 	environmentID string,
-) ([]etcdstore.Versioned[etcd.ServiceRecord], error) {
-	items := []etcdstore.Versioned[etcd.ServiceRecord]{}
+) ([]etcdstore.Versioned[servicerecord.ServiceRecord], error) {
+	items := []etcdstore.Versioned[servicerecord.ServiceRecord]{}
 	cursor := ""
 	for {
 		page, err := service.repository.ListServices(ctx, environmentID, etcdstore.PageRequest{Limit: 200, Cursor: cursor})
@@ -323,7 +324,7 @@ func (service *serviceMutationService) listAllServices(
 func (service *serviceMutationService) serviceResponseMarker(
 	locator idempotencyrecord.IdempotencyLocator,
 	intent idempotencyrecord.ProtectedIntentRecord,
-	record etcd.ServiceRecord,
+	record servicerecord.ServiceRecord,
 	status int,
 	createdAt time.Time,
 ) (idempotencyrecord.IdempotencyResponse, idempotencyrecord.IdempotencyMarker, error) {

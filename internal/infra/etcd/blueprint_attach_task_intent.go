@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"slices"
 	"sort"
 	"time"
@@ -28,7 +29,7 @@ type EnvironmentBlueprintAttachCandidateInput struct {
 	Facts                   *attachrecord.EncryptedFacts
 	BackingProject          etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	BackingEnvironment      etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-	BackingService          etcdstore.Versioned[ServiceRecord]
+	BackingService          etcdstore.Versioned[servicerecord.ServiceRecord]
 	RetainedCredentialOwner *etcdstore.Versioned[attachrecord.Record]
 	RetainedGrantTargets    []etcdstore.Versioned[attachrecord.Record]
 }

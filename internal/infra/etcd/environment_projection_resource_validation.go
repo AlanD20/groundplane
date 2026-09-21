@@ -5,6 +5,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -42,19 +43,19 @@ func validateEnvironmentZoneProjections(
 
 func validateEnvironmentServiceProjections(
 	environmentID string,
-	values []EnvironmentServiceProjection,
+	values []servicerecord.EnvironmentServiceProjection,
 ) error {
 	previousName := ""
 	seenIDs := make(map[string]struct{}, len(values))
 	for _, value := range values {
-		record := ServiceRecord{
+		record := servicerecord.ServiceRecord{
 			EnvironmentID: value.EnvironmentID, BackingNetworkID: value.BackingNetworkID, Desired: value.Desired,
 			Runtime: core.ServiceRuntime{
 				ServiceID: value.Desired.ID, RuntimeIntent: core.ServiceRuntimeIntentRunning,
 			},
 		}
 		if value.EnvironmentID != environmentID || value.Desired.Name <= previousName ||
-			validateServiceRecord(record) != nil {
+			servicerecord.ValidateServiceRecord(record) != nil {
 			return errs.New(errs.KindValidationFailed, "Environment desired Service projection is invalid or unsorted")
 		}
 		if _, duplicate := seenIDs[value.Desired.ID]; duplicate {

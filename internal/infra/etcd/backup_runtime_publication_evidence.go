@@ -9,6 +9,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
 )
@@ -189,7 +190,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID),
 			}
 			for _, service := range snapshot.Services {
-				keys = append(keys, serviceRuntimeKey(service.ServiceID))
+				keys = append(keys, servicerecord.ServiceRuntimeKey(service.ServiceID))
 			}
 			read, readErr := repository.readFixedKeys(ctx, keys, fixedRevision)
 			if readErr != nil {
@@ -223,7 +224,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			}
 			for _, service := range snapshot.Services {
 				if err := addCondition(
-					serviceRuntimeKey(service.ServiceID),
+					servicerecord.ServiceRuntimeKey(service.ServiceID),
 					service.ServiceRevision,
 				); err != nil {
 					clearBackupRuntimeMutations(mutations)
@@ -395,7 +396,7 @@ func validateBackupVolumePublicationEvidence(
 		if value == nil || value.ModRevision != expected.ServiceRevision {
 			return errs.New(errs.KindStateConflict, "volume service publication evidence changed")
 		}
-		service, decodeErr := decodeServiceRuntimeRecord(value.Value)
+		service, decodeErr := servicerecord.DecodeServiceRuntimeRecord(value.Value)
 		if decodeErr != nil {
 			return backupruntime.CorruptBackupRuntimeRecord()
 		}

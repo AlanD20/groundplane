@@ -5,6 +5,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"maps"
 	"slices"
 
@@ -123,7 +124,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		{Key: deletionTombstoneKey("service", serviceID)},
 	}
 	if input.Change.Current == nil {
-		conditions = append(conditions, etcdstore.Condition{Key: serviceRuntimeKey(serviceID)})
+		conditions = append(conditions, etcdstore.Condition{Key: servicerecord.ServiceRuntimeKey(serviceID)})
 	}
 	removalLockIndex := len(conditions)
 	conditions = append(conditions, etcdstore.Condition{Key: removalrecord.EnvironmentLockKey(input.Environment.Record.ID)})
@@ -137,14 +138,14 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
 	}
 	if input.Change.Current == nil {
-		runtimeValue, runtimeErr := encodeServiceRuntimeRecord(newServiceRuntimeRecord(input.Change.Record))
+		runtimeValue, runtimeErr := servicerecord.EncodeServiceRuntimeRecord(servicerecord.NewServiceRuntimeRecord(input.Change.Record))
 		if runtimeErr != nil {
 			return IdempotencyTransactionResult{}, runtimeErr
 		}
 		defer clear(runtimeValue)
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: serviceRuntimeKey(serviceID), Value: runtimeValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: servicerecord.ServiceRuntimeKey(serviceID), Value: runtimeValue},
 		)
 	}
 	mutations = append(mutations, epochMutation)
@@ -236,7 +237,7 @@ func equalDirectProjectRecord(left hierarchyrecord.ProjectRecord, right hierarch
 
 func validateDirectEnvironmentServiceChange(input EnvironmentServiceDesiredPublication) error {
 	change := input.Change
-	if err := validateServiceRecord(change.Record); err != nil {
+	if err := servicerecord.ValidateServiceRecord(change.Record); err != nil {
 		return err
 	}
 	matched := false

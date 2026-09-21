@@ -6,13 +6,14 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 type serviceLifecycleRepository interface {
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 	GetEnvironmentAppliedComposeProjection(
 		context.Context,
 		string,
@@ -24,8 +25,8 @@ type serviceLifecycleRepository interface {
 		*etcdstore.Versioned[hierarchyrecord.TenantRecord],
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-		etcdstore.Versioned[etcd.ServiceRecord],
-		etcd.ServiceRecord,
+		etcdstore.Versioned[servicerecord.ServiceRecord],
+		servicerecord.ServiceRecord,
 		*etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 		*etcd.ServiceLifecycleRenderInput,
 		*etcd.BackingHookEncryptedInputs,
@@ -77,8 +78,8 @@ func (repository *durableServiceMutationRepository) BeginServiceLifecycleWithTas
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	current etcdstore.Versioned[etcd.ServiceRecord],
-	replacement etcd.ServiceRecord,
+	current etcdstore.Versioned[servicerecord.ServiceRecord],
+	replacement servicerecord.ServiceRecord,
 	projection *etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	renderInput *etcd.ServiceLifecycleRenderInput,
 	hookInputs *etcd.BackingHookEncryptedInputs,

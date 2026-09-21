@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"strings"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -146,9 +147,7 @@ func (repository *BackingServiceRepository) composeBackingService(
 		)
 	}
 	serviceID := projection.Record.DesiredServices[0].Desired.ID
-	service, err := joinEnvironmentService(
-		ctx, repository.store, projection, serviceID, environmentBlueprintHeadKey(environmentID),
-	)
+	service, err := servicerecord.ReadJoined(ctx, repository.store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, serviceID, environmentBlueprintHeadKey(environmentID))
 	if err != nil {
 		return etcdstore.Versioned[BackingServiceRecord]{}, err
 	}
@@ -168,7 +167,7 @@ func (repository *BackingServiceRepository) composeBackingService(
 			project.Revision,
 			environmentValue.ModRevision,
 			service.Revision,
-			ServiceRuntimeRevision(service),
+			servicerecord.ServiceRuntimeRevision(service),
 		),
 		ReadRevision: project.ReadRevision,
 	}, nil

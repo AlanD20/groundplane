@@ -7,6 +7,7 @@ import (
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -239,7 +240,7 @@ func backupRunExternalConditions(
 		if source.Snapshot.Volume != nil {
 			allowed[environmentComposeProjectionKey(source.Snapshot.Volume.EnvironmentID)] = struct{}{}
 			for _, service := range source.Snapshot.Volume.Services {
-				allowed[serviceRuntimeKey(service.ServiceID)] = struct{}{}
+				allowed[servicerecord.ServiceRuntimeKey(service.ServiceID)] = struct{}{}
 			}
 		}
 		if source.Snapshot.Config != nil {

@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"strings"
 	"time"
 
@@ -367,7 +368,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 				return nil, nil, errs.New(errs.KindInternal, "environment deletion desired projection is corrupt")
 			}
 			for _, service := range projection.DesiredServices {
-				projectedKeys = append(projectedKeys, serviceRuntimeKey(service.Desired.ID))
+				projectedKeys = append(projectedKeys, servicerecord.ServiceRuntimeKey(service.Desired.ID))
 			}
 			for _, zone := range projection.DesiredZones {
 				projectedKeys = append(projectedKeys,

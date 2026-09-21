@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 	"strings"
 	"time"
@@ -25,8 +26,8 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	current *etcdstore.Versioned[etcd.ServiceRecord],
-	record etcd.ServiceRecord,
+	current *etcdstore.Versioned[servicerecord.ServiceRecord],
+	record servicerecord.ServiceRecord,
 	references etcd.ServiceMutationReferences,
 	request etcd.EnvironmentServiceMutationRequest,
 	action etcd.EnvironmentServiceMutationAction,
@@ -60,7 +61,7 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	if current == nil {
 		desired := record.Desired
 		desired.ID = serviceStableIDFromRevision(ids.KindService, candidateRevisionID)
-		record, err = etcd.NewServiceRecord(environment.Record.ID, desired, "")
+		record, err = servicerecord.NewServiceRecord(environment.Record.ID, desired, "")
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
@@ -86,7 +87,7 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	if current == nil && claim.RevisionID != candidateRevisionID {
 		desired := record.Desired
 		desired.ID = serviceStableIDFromRevision(ids.KindService, claim.RevisionID)
-		record, err = etcd.NewServiceRecord(environment.Record.ID, desired, "")
+		record, err = servicerecord.NewServiceRecord(environment.Record.ID, desired, "")
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
@@ -195,7 +196,7 @@ func buildServiceDesiredProjection(
 	environment hierarchyrecord.EnvironmentRecord,
 	current etcd.EnvironmentComposeProjection,
 	hasCurrent bool,
-	record etcd.ServiceRecord,
+	record servicerecord.ServiceRecord,
 	references etcd.ServiceMutationReferences,
 	create bool,
 	revisionID string,
@@ -211,14 +212,14 @@ func buildServiceDesiredProjection(
 	candidate.RevisionID = revisionID
 	candidate.RenderGeneration = generation
 	if create {
-		candidate.DesiredServices = append(candidate.DesiredServices, etcd.EnvironmentServiceProjection{
+		candidate.DesiredServices = append(candidate.DesiredServices, servicerecord.EnvironmentServiceProjection{
 			EnvironmentID: record.EnvironmentID, BackingNetworkID: record.BackingNetworkID, Desired: record.Desired,
 		})
 	} else {
 		replaced := false
 		for index := range candidate.DesiredServices {
 			if candidate.DesiredServices[index].Desired.ID == record.Desired.ID {
-				candidate.DesiredServices[index] = etcd.EnvironmentServiceProjection{
+				candidate.DesiredServices[index] = servicerecord.EnvironmentServiceProjection{
 					EnvironmentID: record.EnvironmentID, BackingNetworkID: record.BackingNetworkID, Desired: record.Desired,
 				}
 				replaced = true
@@ -306,7 +307,7 @@ func buildServiceRemovalProjection(
 	tenantID string,
 	projectID string,
 	current etcd.EnvironmentComposeProjection,
-	record etcd.ServiceRecord,
+	record servicerecord.ServiceRecord,
 	revisionID string,
 	generation uint64,
 ) (etcd.EnvironmentComposeProjection, error) {
@@ -316,7 +317,7 @@ func buildServiceRemovalProjection(
 	candidate := controllerrevision.CloneProjection(current)
 	candidate.RevisionID = revisionID
 	candidate.RenderGeneration = generation
-	candidate.DesiredServices = make([]etcd.EnvironmentServiceProjection, 0, len(current.DesiredServices)-1)
+	candidate.DesiredServices = make([]servicerecord.EnvironmentServiceProjection, 0, len(current.DesiredServices)-1)
 	for _, desired := range current.DesiredServices {
 		if desired.Desired.ID != record.Desired.ID {
 			candidate.DesiredServices = append(candidate.DesiredServices, desired)

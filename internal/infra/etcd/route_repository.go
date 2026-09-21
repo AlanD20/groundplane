@@ -6,6 +6,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -33,7 +34,7 @@ func (repository *RouteRepository) CreateRoute(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record routerecord.Record,
 ) (etcdstore.Versioned[routerecord.Record], error) {
 	conditions, mutations, classify, err := repository.prepareRouteCreation(ctx, environment, project, target, record)
@@ -57,7 +58,7 @@ func (repository *RouteRepository) prepareRouteCreation(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record routerecord.Record,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	if err := validateRouteHierarchy(ctx, environment, project, target, record); err != nil {
@@ -127,7 +128,7 @@ func (repository *RouteRepository) ReplaceDesired(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current etcdstore.Versioned[routerecord.Record],
 	desired core.Route,
 ) (etcdstore.Versioned[routerecord.Record], error) {
@@ -154,7 +155,7 @@ func (repository *RouteRepository) prepareRouteReplacement(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current etcdstore.Versioned[routerecord.Record],
 	desired core.Route,
 ) (routerecord.Record, []etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
@@ -201,7 +202,7 @@ func (repository *RouteRepository) prepareRouteReplacement(
 func routeWriteConditions(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record routerecord.Record,
 	current *etcdstore.Versioned[routerecord.Record],
 	ownerRevision int64,
@@ -221,7 +222,7 @@ func routeWriteConditions(
 		matchCondition,
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		serviceDesiredCondition(target),
+		servicerecord.ServiceDesiredCondition(target),
 		{Key: deletionTombstoneKey("route", record.Desired.ID)},
 		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},
@@ -237,7 +238,7 @@ func validateRouteHierarchy(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record routerecord.Record,
 ) error {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -278,7 +279,7 @@ func classifyRouteWriteConflict(
 	values []*etcdstore.KeyValue,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record routerecord.Record,
 	expectedRouteRevision int64,
 ) error {

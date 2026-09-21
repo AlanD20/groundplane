@@ -13,6 +13,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/netip"
@@ -38,8 +39,8 @@ type environmentBlueprintRepository interface {
 		string,
 	) (etcdstore.Versioned[etcd.EnvironmentComposeProjection], etcd.EnvironmentVolumeIdentity, error)
 	ListZones(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[zonerecord.Record], error)
-	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
-	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 	ResolveBackingProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	ResolveEnvironment(context.Context, string, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	ListRoutes(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[routerecord.Record], error)
@@ -241,7 +242,7 @@ func (repository *durableRepository) ListServices(
 	ctx context.Context,
 	environmentID string,
 	request etcdstore.PageRequest,
-) (etcdstore.Page[etcd.ServiceRecord], error) {
+) (etcdstore.Page[servicerecord.ServiceRecord], error) {
 	return repository.services.ListServices(ctx, environmentID, request)
 }
 

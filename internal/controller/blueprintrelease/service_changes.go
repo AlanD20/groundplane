@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -11,9 +12,9 @@ import (
 func PrepareServiceChanges(
 	environmentID string,
 	desired []core.Service,
-	current []etcdstore.Versioned[etcd.ServiceRecord],
+	current []etcdstore.Versioned[servicerecord.ServiceRecord],
 ) ([]etcd.EnvironmentBlueprintServiceChange, error) {
-	currentByID := make(map[string]etcdstore.Versioned[etcd.ServiceRecord], len(current))
+	currentByID := make(map[string]etcdstore.Versioned[servicerecord.ServiceRecord], len(current))
 	for _, service := range current {
 		if service.Record.EnvironmentID != environmentID || service.Record.Desired.ID == "" {
 			return nil, errs.New(errs.KindInternal, "durable Blueprint Service state is inconsistent")
@@ -26,7 +27,7 @@ func PrepareServiceChanges(
 	changes := make([]etcd.EnvironmentBlueprintServiceChange, 0, len(desired))
 	for _, next := range desired {
 		if existing, found := currentByID[next.ID]; found {
-			replacement, err := etcd.ReplaceServiceDesired(existing.Record, next)
+			replacement, err := servicerecord.ReplaceServiceDesired(existing.Record, next)
 			if err != nil {
 				return nil, err
 			}
@@ -38,7 +39,7 @@ func PrepareServiceChanges(
 			delete(currentByID, next.ID)
 			continue
 		}
-		record, err := etcd.NewServiceRecord(environmentID, next, "")
+		record, err := servicerecord.NewServiceRecord(environmentID, next, "")
 		if err != nil {
 			return nil, err
 		}

@@ -4,6 +4,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -11,7 +12,7 @@ func classifyScriptWriteConflict(
 	values []*etcdstore.KeyValue,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record scriptrecord.Record,
 	expectedScriptRevision int64,
 	extras scriptWriteConflictExtras,

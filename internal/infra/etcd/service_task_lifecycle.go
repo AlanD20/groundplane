@@ -4,6 +4,7 @@ import (
 	"context"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -56,8 +57,8 @@ func (repository *TaskRepository) prepareServiceTaskRetry(
 	change := serviceTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			serviceDesiredCondition(service),
-			serviceRuntimeCondition(service),
+			servicerecord.ServiceDesiredCondition(service),
+			servicerecord.ServiceRuntimeCondition(service),
 			{Key: serviceLifecycleActiveKey(source.Target)},
 		},
 		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: serviceLifecycleActiveKey(source.Target), Value: reference}},

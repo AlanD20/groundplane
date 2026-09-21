@@ -4,6 +4,7 @@ import (
 	"context"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -24,7 +25,7 @@ type serviceLifecycleHookInputs interface {
 func (service *serviceLifecycleService) prepareAppliedServiceLifecycle(
 	ctx context.Context,
 	taskType etcd.TaskType,
-	current etcdstore.Versioned[etcd.ServiceRecord],
+	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],

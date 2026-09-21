@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -66,7 +67,7 @@ func ProjectEnvironmentEntryMutation(
 	candidate.ComposeArtifact = artifactValue
 	candidate.NormalizedCompose = append([]byte(nil), current.NormalizedCompose...)
 	candidate.DesiredZones = append([]etcd.EnvironmentZoneProjection(nil), current.DesiredZones...)
-	candidate.DesiredServices = append([]etcd.EnvironmentServiceProjection(nil), current.DesiredServices...)
+	candidate.DesiredServices = append([]servicerecord.EnvironmentServiceProjection(nil), current.DesiredServices...)
 	candidate.DesiredRoutes = append([]etcd.EnvironmentRouteProjection(nil), current.DesiredRoutes...)
 	candidate.Volumes = append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...)
 	candidate.VolumeMounts = append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...)

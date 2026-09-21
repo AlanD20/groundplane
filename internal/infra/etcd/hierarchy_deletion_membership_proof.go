@@ -10,6 +10,7 @@ import (
 	runnerrecord "github.com/AlanD20/groundplane/internal/infra/etcd/runners"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -94,7 +95,7 @@ func validateHierarchyDeletionAttachOwner(value []byte, id, owner string) error 
 }
 
 func validateHierarchyDeletionServiceOwner(value []byte, id, owner string) error {
-	record, err := decodeServiceRuntimeRecord(value)
+	record, err := servicerecord.DecodeServiceRuntimeRecord(value)
 	if err != nil || record.ServiceID != id || record.EnvironmentID != owner {
 		return corruptHierarchyDeletion()
 	}

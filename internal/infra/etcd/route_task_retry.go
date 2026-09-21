@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"maps"
 )
@@ -209,7 +210,7 @@ func (repository *TaskRepository) readRouteRetryDependencies(
 	}
 	baseKeys := []string{
 		hierarchyrecord.EnvironmentKey(route.EnvironmentID),
-		service.Record.desiredFenceKey,
+		servicerecord.ServiceDesiredCondition(service).Key,
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), route.EnvironmentID),
 		deletionTombstoneKey("service", route.Desired.TargetServiceID),
 	}

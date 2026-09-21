@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"slices"
 	"sort"
@@ -193,7 +194,7 @@ func validateZoneRemovalIntent(intent ZoneRemovalIntent) error {
 		}
 		expected.DesiredZones = append(expected.DesiredZones, zone)
 	}
-	expected.DesiredServices = append([]EnvironmentServiceProjection(nil), intent.DesiredProjection.DesiredServices...)
+	expected.DesiredServices = append([]servicerecord.EnvironmentServiceProjection(nil), intent.DesiredProjection.DesiredServices...)
 	affected := make([]string, 0)
 	for index, service := range intent.DesiredProjection.DesiredServices {
 		expected.DesiredServices[index] = service

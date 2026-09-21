@@ -3,11 +3,12 @@ package serviceobservation
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	wire "github.com/AlanD20/groundplane/internal/common/serviceobservation"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -53,7 +54,7 @@ func New(services Services, releases Releases, channel Channel, now func() time.
 // Missing authority or live evidence never turns a successful desired read into
 // an error. All storage work and the single exchange share one five-second bound.
 func (observer *Observer) Observe(
-	ctx context.Context, agentID string, services []etcdstore.Versioned[etcd.ServiceRecord],
+	ctx context.Context, agentID string, services []etcdstore.Versioned[servicerecord.ServiceRecord],
 ) []Observation {
 	observations := unavailable(len(services))
 	if ctx == nil || observer == nil || ids.Validate(ids.KindAgent, agentID) != nil || !validBatch(services) {
@@ -132,13 +133,13 @@ func (observer *Observer) Observe(
 // Services remain excluded. It stops once all requested ids are found; cursor
 // pages share one MVCC view and the enclosing observation deadline.
 func (observer *Observer) currentServices(
-	ctx context.Context, requested []etcdstore.Versioned[etcd.ServiceRecord],
-) (map[string]etcdstore.Versioned[etcd.ServiceRecord], bool) {
+	ctx context.Context, requested []etcdstore.Versioned[servicerecord.ServiceRecord],
+) (map[string]etcdstore.Versioned[servicerecord.ServiceRecord], bool) {
 	wanted := make(map[string]bool, len(requested))
 	for _, service := range requested {
 		wanted[service.Record.Desired.ID] = true
 	}
-	current := make(map[string]etcdstore.Versioned[etcd.ServiceRecord], len(requested))
+	current := make(map[string]etcdstore.Versioned[servicerecord.ServiceRecord], len(requested))
 	request := etcdstore.PageRequest{Limit: etcdstore.MaximumPageLimit}
 	seenCursors := make(map[string]bool)
 	for ctx.Err() == nil {
@@ -169,7 +170,7 @@ func (observer *Observer) currentServices(
 	return nil, false
 }
 
-func validBatch(services []etcdstore.Versioned[etcd.ServiceRecord]) bool {
+func validBatch(services []etcdstore.Versioned[servicerecord.ServiceRecord]) bool {
 	if len(services) == 0 || len(services) > wire.MaximumTargets || services[0].ReadRevision <= 0 {
 		return false
 	}

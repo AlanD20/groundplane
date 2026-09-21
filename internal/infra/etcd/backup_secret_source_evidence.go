@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -80,7 +81,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 			result.Values[dynamic.index[environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID)]],
 		)
 		for _, service := range snapshot.Services {
-			keys = append(keys, result.Values[dynamic.index[serviceRuntimeKey(service.ServiceID)]])
+			keys = append(keys, result.Values[dynamic.index[servicerecord.ServiceRuntimeKey(service.ServiceID)]])
 		}
 		return validateBackupVolumePublicationEvidence(keys, source, *snapshot)
 	case BackupRuntimeSourceConfig:

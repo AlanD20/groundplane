@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	environmentcapability "github.com/AlanD20/groundplane/internal/controller/environment"
@@ -12,7 +13,7 @@ import (
 )
 
 type ServiceReader interface {
-	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 }
 
 type Service struct {

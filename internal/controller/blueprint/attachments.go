@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"slices"
 	"sort"
 	"time"
@@ -25,10 +26,10 @@ import (
 type resolvedBlueprintAttach struct {
 	name               string
 	spec               core.AttachmentSpec
-	consumer           etcd.ServiceRecord
+	consumer           servicerecord.ServiceRecord
 	backingProject     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	backingEnvironment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-	backingService     etcdstore.Versioned[etcd.ServiceRecord]
+	backingService     etcdstore.Versioned[servicerecord.ServiceRecord]
 	adapter            adapters.Adapter
 	authentication     core.BackingAuthentication
 }
@@ -77,7 +78,7 @@ func (service *Service) prepareBlueprintAttaches(
 	if len(specs) == 0 {
 		return prepared, nil
 	}
-	serviceByName := make(map[string]etcd.ServiceRecord, len(serviceChanges))
+	serviceByName := make(map[string]servicerecord.ServiceRecord, len(serviceChanges))
 	for _, change := range serviceChanges {
 		serviceByName[change.Record.Desired.Name] = change.Record
 	}
@@ -115,7 +116,7 @@ func (service *Service) prepareBlueprintAttaches(
 		if err != nil {
 			return preparedBlueprintAttaches{}, err
 		}
-		var backingService etcdstore.Versioned[etcd.ServiceRecord]
+		var backingService etcdstore.Versioned[servicerecord.ServiceRecord]
 		for _, candidate := range backingServices {
 			if candidate.Record.Desired.Name == spec.BackingService {
 				backingService = candidate

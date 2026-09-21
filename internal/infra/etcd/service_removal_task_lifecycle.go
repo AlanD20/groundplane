@@ -5,6 +5,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
@@ -65,7 +66,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal intent is not pending")
 	}
 	keys := []string{
-		serviceRuntimeKey(intent.ServiceID),
+		servicerecord.ServiceRuntimeKey(intent.ServiceID),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		environmentBlueprintHeadKey(intent.EnvironmentID),
 		environmentComposeProjectionKey(intent.EnvironmentID),
@@ -215,7 +216,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 		return errs.New(errs.KindStateConflict, "Service removal intent does not match terminal Task")
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		serviceRuntimeKey(intent.ServiceID), deletionTombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
+		servicerecord.ServiceRuntimeKey(intent.ServiceID), deletionTombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
 		environmentBlueprintHeadKey(intent.EnvironmentID), environmentComposeProjectionKey(intent.EnvironmentID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}, Revision: revision})
@@ -234,7 +235,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 		}
 		wantRevision = state.Values[2].ModRevision
 		wantProjection = intent.CandidateProjection
-	} else if !conditionMatchesRead(etcdstore.Condition{Key: serviceRuntimeKey(intent.ServiceID), ModRevision: intent.RuntimeRevision}, state.Values[0]) {
+	} else if !conditionMatchesRead(etcdstore.Condition{Key: servicerecord.ServiceRuntimeKey(intent.ServiceID), ModRevision: intent.RuntimeRevision}, state.Values[0]) {
 		return errs.New(errs.KindStateConflict, "failed Service removal lost its target")
 	}
 	projection, decodeErr := decodeEnvironmentComposeProjection(state.Values[3].Value)

@@ -4,11 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -31,7 +32,7 @@ type BlueprintScriptReconciliation struct {
 func ReconcileBlueprintScripts(
 	environmentID string,
 	authored map[string]core.ScriptSpec,
-	services []etcd.ServiceRecord,
+	services []servicerecord.ServiceRecord,
 	previous []scriptrecord.Record,
 	resources BlueprintScriptResources,
 	allocate func(ids.Kind, string) string,
@@ -199,10 +200,10 @@ func ReconcileBlueprintScripts(
 
 func scriptServices(
 	environmentID string,
-	services []etcd.ServiceRecord,
-) (map[string]etcd.ServiceRecord, map[string]etcd.ServiceRecord, error) {
-	byName := make(map[string]etcd.ServiceRecord, len(services))
-	byID := make(map[string]etcd.ServiceRecord, len(services))
+	services []servicerecord.ServiceRecord,
+) (map[string]servicerecord.ServiceRecord, map[string]servicerecord.ServiceRecord, error) {
+	byName := make(map[string]servicerecord.ServiceRecord, len(services))
+	byID := make(map[string]servicerecord.ServiceRecord, len(services))
 	for _, service := range services {
 		if service.EnvironmentID != environmentID || ids.Validate(ids.KindService, service.Desired.ID) != nil ||
 			service.Desired.Name == "" || service.Desired.Validate() != nil {
@@ -237,7 +238,7 @@ func validateBlueprintScriptSpec(key string, spec core.ScriptSpec) error {
 
 func newBlueprintScriptRecord(
 	environmentID string,
-	service etcd.ServiceRecord,
+	service servicerecord.ServiceRecord,
 	key string,
 	scriptID string,
 	spec core.ScriptSpec,
@@ -258,7 +259,7 @@ func newBlueprintScriptRecord(
 func validateBlueprintScriptRecord(
 	environmentID string,
 	record scriptrecord.Record,
-	servicesByID map[string]etcd.ServiceRecord,
+	servicesByID map[string]servicerecord.ServiceRecord,
 ) error {
 	if record.EnvironmentID != environmentID || ids.Validate(ids.KindService, record.ServiceID) != nil ||
 		ids.Validate(ids.KindScript, record.Desired.ID) != nil || record.ActiveGeneration == 0 ||

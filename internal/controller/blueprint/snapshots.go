@@ -2,7 +2,8 @@ package blueprint
 
 import (
 	"context"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -40,8 +41,8 @@ func (service *Service) listBlueprintZones(
 func (service *Service) listBlueprintServices(
 	ctx context.Context,
 	environmentID string,
-) ([]etcdstore.Versioned[etcd.ServiceRecord], error) {
-	services := []etcdstore.Versioned[etcd.ServiceRecord](nil)
+) ([]etcdstore.Versioned[servicerecord.ServiceRecord], error) {
+	services := []etcdstore.Versioned[servicerecord.ServiceRecord](nil)
 	cursor := ""
 	for {
 		page, err := service.repository.ListServices(

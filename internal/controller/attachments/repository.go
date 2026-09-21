@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -14,7 +15,7 @@ type attachMutationRepository interface {
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 	GetEnvironmentBlueprintHead(
 		context.Context,
 		string,
@@ -131,7 +132,7 @@ func (repository *durableAttachMutationRepository) GetEnvironmentComposeProjecti
 func (repository *durableAttachMutationRepository) GetService(
 	ctx context.Context,
 	id string,
-) (etcdstore.Versioned[etcd.ServiceRecord], error) {
+) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
 	return repository.services.GetService(ctx, id)
 }
 

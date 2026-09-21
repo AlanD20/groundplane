@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -14,7 +15,7 @@ func (repository *ScriptRepository) ReplaceDesiredIdempotent(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current etcdstore.Versioned[scriptrecord.Record],
 	desired core.Script,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -44,7 +45,7 @@ func (repository *ScriptRepository) prepareScriptReplacement(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current etcdstore.Versioned[scriptrecord.Record],
 	desired core.Script,
 ) (scriptrecord.Record, []etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {

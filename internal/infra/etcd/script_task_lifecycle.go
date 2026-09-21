@@ -8,6 +8,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -60,7 +61,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 			scriptrecord.ScriptSetOwnerKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.ID),
 			scriptrecord.ScriptSetSlugKey(record.EnvironmentID, record.ScriptSetGeneration, record.Desired.Slug),
 			hierarchyrecord.EnvironmentKey(record.EnvironmentID),
-			service.Record.desiredFenceKey,
+			servicerecord.ServiceDesiredCondition(service).Key,
 		},
 		Revision: revision,
 	})
@@ -117,7 +118,7 @@ func (repository *TaskRepository) prepareScriptTaskRetry(
 			},
 			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), record.Desired.ID)},
 			{Key: hierarchyrecord.EnvironmentKey(environment.ID), ModRevision: dependencies.Values[2].ModRevision},
-			serviceDesiredCondition(service),
+			servicerecord.ServiceDesiredCondition(service),
 			{Key: hierarchyrecord.ProjectKey(project.ID), ModRevision: parents.Values[0].ModRevision},
 			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID)},
 			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.ID)},

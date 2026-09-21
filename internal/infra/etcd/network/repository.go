@@ -12,6 +12,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -136,7 +137,7 @@ func (repository *Repository) GetProject(
 func (repository *Repository) GetService(
 	ctx context.Context,
 	id string,
-) (etcdstore.Versioned[etcd.ServiceRecord], error) {
+) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
 	return repository.services.GetService(ctx, id)
 }
 
@@ -144,7 +145,7 @@ func (repository *Repository) ListServices(
 	ctx context.Context,
 	environmentID string,
 	request etcdstore.PageRequest,
-) (etcdstore.Page[etcd.ServiceRecord], error) {
+) (etcdstore.Page[servicerecord.ServiceRecord], error) {
 	return repository.services.ListServices(ctx, environmentID, request)
 }
 
@@ -210,7 +211,7 @@ func (repository *Repository) BeginRouteMutationWithTask(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[etcd.ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current *etcdstore.Versioned[routerecord.Record],
 	record routerecord.Record,
 	intent etcd.RouteMutationIntent,
@@ -247,7 +248,7 @@ func (repository *Repository) BeginRouteDeletionWithTask(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[etcd.ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	route etcdstore.Versioned[routerecord.Record],
 	projection *etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 	tombstone deletionrecord.DeletionTombstoneRecord,

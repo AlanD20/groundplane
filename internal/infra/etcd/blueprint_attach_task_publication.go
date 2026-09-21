@@ -4,6 +4,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -106,7 +107,7 @@ func prepareBlueprintAttachTaskPublication(
 			etcdstore.Condition{Key: deletionTombstoneKey("attach", record.ID)},
 			etcdstore.Condition{Key: hierarchyrecord.ProjectKey(record.BackingProjectID), ModRevision: input.BackingProject.Revision},
 			etcdstore.Condition{Key: hierarchyrecord.EnvironmentKey(record.BackingEnvironmentID), ModRevision: input.BackingEnvironment.Revision},
-			serviceDesiredCondition(input.BackingService),
+			servicerecord.ServiceDesiredCondition(input.BackingService),
 		)
 		publication.mutations = append(
 			publication.mutations,

@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -14,10 +15,10 @@ type AttachCreateScope struct {
 	Environment        etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
 	DesiredHead        etcdstore.Versioned[EnvironmentBlueprintHead]
 	ComposeProjection  etcdstore.Versioned[EnvironmentComposeProjection]
-	Services           []etcdstore.Versioned[ServiceRecord]
+	Services           []etcdstore.Versioned[servicerecord.ServiceRecord]
 	BackingProject     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	BackingEnvironment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-	BackingService     etcdstore.Versioned[ServiceRecord]
+	BackingService     etcdstore.Versioned[servicerecord.ServiceRecord]
 	CredentialOwner    *etcdstore.Versioned[attachrecord.Record]
 	Grants             []etcdstore.Versioned[attachrecord.Record]
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 )
 
@@ -27,7 +28,7 @@ type BackingServiceCreation struct {
 	Environment  hierarchyrecord.EnvironmentRecord
 	Components   []componentrecord.Record
 	Zone         zonerecord.Record
-	Service      ServiceRecord
+	Service      servicerecord.ServiceRecord
 	Secrets      []secretrecord.Record
 	SecretValues []secretrecord.EncryptedValue
 	Entries      []entryrecord.Record
@@ -128,7 +129,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(zoneRegistryValue)
-	serviceValue, err := encodeServiceRuntimeRecord(newServiceRuntimeRecord(creation.Service))
+	serviceValue, err := servicerecord.EncodeServiceRuntimeRecord(servicerecord.NewServiceRuntimeRecord(creation.Service))
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -237,7 +238,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		{Type: etcdstore.MutationPut, Key: scriptrecord.ScriptSetActiveKey(creation.Environment.ID), Value: scriptSetValue},
 		{Type: etcdstore.MutationPut, Key: environmentPoolRegistryKey, Value: poolRegistryValue},
 		{Type: etcdstore.MutationPut, Key: zonePoolRegistryKey(creation.Environment.ID), Value: zoneRegistryValue},
-		{Type: etcdstore.MutationPut, Key: serviceRuntimeKey(creation.Service.Desired.ID), Value: serviceValue},
+		{Type: etcdstore.MutationPut, Key: servicerecord.ServiceRuntimeKey(creation.Service.Desired.ID), Value: serviceValue},
 	}
 	for index, component := range creation.Components {
 		mutations = append(

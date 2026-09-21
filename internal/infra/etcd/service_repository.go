@@ -5,6 +5,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -327,11 +328,11 @@ func newServiceRepository(store hierarchyStore) (*ServiceRepository, error) {
 // one complete candidate Environment revision.
 type ServiceMutationReferences struct {
 	Zones        []etcdstore.Versioned[zonerecord.Record]
-	Dependencies []etcdstore.Versioned[ServiceRecord]
+	Dependencies []etcdstore.Versioned[servicerecord.ServiceRecord]
 }
 
 func serviceMutationReferenceConditions(
-	record ServiceRecord,
+	record servicerecord.ServiceRecord,
 	references ServiceMutationReferences,
 ) ([]etcdstore.Condition, error) {
 	wantZones := make(map[string]struct{}, len(record.Desired.Zones))
@@ -370,7 +371,7 @@ func serviceMutationReferenceConditions(
 		}
 		delete(wantDependencies, dependency.Record.Desired.Name)
 		conditions = append(conditions,
-			serviceDesiredCondition(dependency),
+			servicerecord.ServiceDesiredCondition(dependency),
 			etcdstore.Condition{Key: deletionTombstoneKey("service", dependency.Record.Desired.ID)},
 		)
 	}
@@ -418,7 +419,7 @@ func validateServiceHierarchy(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	record ServiceRecord,
+	record servicerecord.ServiceRecord,
 ) error {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
@@ -429,7 +430,7 @@ func validateServiceHierarchy(
 	if err := hierarchyrecord.ValidateProject(project.Record); err != nil {
 		return err
 	}
-	if err := validateServiceRecord(record); err != nil {
+	if err := servicerecord.ValidateServiceRecord(record); err != nil {
 		return err
 	}
 	if environment.Revision <= 0 || environment.ReadRevision < environment.Revision || project.Revision <= 0 ||
@@ -440,8 +441,8 @@ func validateServiceHierarchy(
 	return nil
 }
 
-func validateServiceVersion(current etcdstore.Versioned[ServiceRecord]) error {
-	if err := validateServiceRecord(current.Record); err != nil {
+func validateServiceVersion(current etcdstore.Versioned[servicerecord.ServiceRecord]) error {
+	if err := servicerecord.ValidateServiceRecord(current.Record); err != nil {
 		return err
 	}
 	if current.Revision <= 0 || current.ReadRevision < current.Revision {
@@ -454,7 +455,7 @@ func classifyServiceWriteConflict(
 	values []*etcdstore.KeyValue,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	record ServiceRecord,
+	record servicerecord.ServiceRecord,
 	expectedServiceRevision int64,
 ) error {
 	expected := 8

@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) EnvironmentComposeProjection {
@@ -23,7 +24,7 @@ func cloneEnvironmentComposeProjection(source EnvironmentComposeProjection) Envi
 	}
 	clone.ServiceExtensions = cloneEnvironmentServiceExtensions(source.ServiceExtensions)
 	clone.DesiredZones = append([]EnvironmentZoneProjection(nil), source.DesiredZones...)
-	clone.DesiredServices = append([]EnvironmentServiceProjection(nil), source.DesiredServices...)
+	clone.DesiredServices = append([]servicerecord.EnvironmentServiceProjection(nil), source.DesiredServices...)
 	clone.DesiredRoutes = append([]EnvironmentRouteProjection(nil), source.DesiredRoutes...)
 	clone.Volumes = append([]EnvironmentVolumeIdentity(nil), source.Volumes...)
 	clone.VolumeMounts = append([]EnvironmentServiceVolumeMount(nil), source.VolumeMounts...)

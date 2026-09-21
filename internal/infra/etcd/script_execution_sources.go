@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -25,7 +26,7 @@ type ScriptExecutionSources struct {
 	Tenant            etcdstore.Versioned[hierarchyrecord.TenantRecord]
 	Project           etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	Environment       etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-	Service           etcdstore.Versioned[ServiceRecord]
+	Service           etcdstore.Versioned[servicerecord.ServiceRecord]
 	ScriptSet         etcdstore.Versioned[scriptrecord.SetGenerationRecord]
 	Script            etcdstore.Versioned[scriptrecord.Record]
 	BodyGeneration    etcdstore.Versioned[scriptrecord.BodyGenerationRecord]
@@ -44,7 +45,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 	ctx context.Context,
 	publicationID string,
 	script scriptrecord.Record,
-	service ServiceRecord,
+	service servicerecord.ServiceRecord,
 	member ReleaseTaskRenderMember,
 	tenant etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
@@ -146,7 +147,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 		Tenant:        tenant,
 		Project:       project,
 		Environment:   environment,
-		Service: etcdstore.Versioned[ServiceRecord]{
+		Service: etcdstore.Versioned[servicerecord.ServiceRecord]{
 			Record:       service,
 			ReadRevision: revision,
 		},

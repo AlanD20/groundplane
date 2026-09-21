@@ -12,6 +12,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"io"
 	"strings"
 
@@ -136,9 +137,9 @@ func validateScriptSourceRecord(key string, value []byte, reference ref.Referenc
 			}
 			return nil
 		}
-		record, err := decodeServiceRuntimeRecord(value)
+		record, err := servicerecord.DecodeServiceRuntimeRecord(value)
 		if err != nil || reference.SourceDigest != "" ||
-			key != serviceRuntimeKey(source.ServiceID) || record.ServiceID != source.ServiceID ||
+			key != servicerecord.ServiceRuntimeKey(source.ServiceID) || record.ServiceID != source.ServiceID ||
 			record.EnvironmentID != reference.SourceOwnerID {
 			return errs.New(errs.KindValidationFailed, "Script Service source evidence is invalid")
 		}

@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 type EnvironmentVolumeIdentity struct {
@@ -21,11 +22,6 @@ type EnvironmentServiceVolumeMount struct {
 type EnvironmentZoneProjection struct {
 	EnvironmentID string    `json:"environment_id"`
 	Desired       core.Zone `json:"desired"`
-}
-type EnvironmentServiceProjection struct {
-	EnvironmentID    string       `json:"environment_id"`
-	BackingNetworkID string       `json:"backing_network_id,omitempty"`
-	Desired          core.Service `json:"desired"`
 }
 type EnvironmentRouteProjection struct {
 	EnvironmentID     string     `json:"environment_id"`
@@ -48,22 +44,22 @@ type ManagedComponentRuntimeSource struct {
 
 // EnvironmentComposeProjection is the sorted durable input for one Environment render.
 type EnvironmentComposeProjection struct {
-	EnvironmentID                  string                               `json:"environment_id"`
-	RevisionID                     string                               `json:"blueprint_revision_id"`
-	RenderGeneration               uint64                               `json:"render_generation"`
-	ComposeArtifact                []byte                               `json:"compose_artifact"`
-	NormalizedCompose              []byte                               `json:"normalized_compose"`
-	RuntimeFiles                   []core.BlueprintFile                 `json:"runtime_files,omitempty"`
-	ServiceExtensions              map[string]core.ServiceExtensionSpec `json:"service_extensions,omitempty"`
-	DesiredZones                   []EnvironmentZoneProjection          `json:"desired_zones,omitempty"`
-	DesiredServices                []EnvironmentServiceProjection       `json:"desired_services,omitempty"`
-	DesiredRoutes                  []EnvironmentRouteProjection         `json:"desired_routes,omitempty"`
-	Volumes                        []EnvironmentVolumeIdentity          `json:"volumes,omitempty"`
-	VolumeMounts                   []EnvironmentServiceVolumeMount      `json:"volume_mounts,omitempty"`
-	Components                     []componentrecord.Record             `json:"components,omitempty"`
-	ManagedComponentRuntimeSources []ManagedComponentRuntimeSource      `json:"managed_component_runtime_sources,omitempty"`
-	Entries                        []entryrecord.Record                 `json:"entries,omitempty"`
-	Backup                         *EnvironmentBlueprintBackupPolicy    `json:"backup,omitempty"`
+	EnvironmentID                  string                                       `json:"environment_id"`
+	RevisionID                     string                                       `json:"blueprint_revision_id"`
+	RenderGeneration               uint64                                       `json:"render_generation"`
+	ComposeArtifact                []byte                                       `json:"compose_artifact"`
+	NormalizedCompose              []byte                                       `json:"normalized_compose"`
+	RuntimeFiles                   []core.BlueprintFile                         `json:"runtime_files,omitempty"`
+	ServiceExtensions              map[string]core.ServiceExtensionSpec         `json:"service_extensions,omitempty"`
+	DesiredZones                   []EnvironmentZoneProjection                  `json:"desired_zones,omitempty"`
+	DesiredServices                []servicerecord.EnvironmentServiceProjection `json:"desired_services,omitempty"`
+	DesiredRoutes                  []EnvironmentRouteProjection                 `json:"desired_routes,omitempty"`
+	Volumes                        []EnvironmentVolumeIdentity                  `json:"volumes,omitempty"`
+	VolumeMounts                   []EnvironmentServiceVolumeMount              `json:"volume_mounts,omitempty"`
+	Components                     []componentrecord.Record                     `json:"components,omitempty"`
+	ManagedComponentRuntimeSources []ManagedComponentRuntimeSource              `json:"managed_component_runtime_sources,omitempty"`
+	Entries                        []entryrecord.Record                         `json:"entries,omitempty"`
+	Backup                         *EnvironmentBlueprintBackupPolicy            `json:"backup,omitempty"`
 	core.ServiceDependencyPlans
 	core.BlueprintRequirements
 }

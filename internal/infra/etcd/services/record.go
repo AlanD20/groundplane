@@ -1,4 +1,4 @@
-package etcd
+package services
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -30,7 +30,7 @@ func NewServiceRecord(environmentID string, desired core.Service, backingNetwork
 			RuntimeIntent: core.ServiceRuntimeIntentRunning,
 		},
 	}
-	if err := validateServiceRecord(record); err != nil {
+	if err := ValidateServiceRecord(record); err != nil {
 		return ServiceRecord{}, err
 	}
 	return record, nil
@@ -39,7 +39,7 @@ func NewServiceRecord(environmentID string, desired core.Service, backingNetwork
 // ReplaceServiceDesired applies a Blueprint or direct edit without changing
 // Controller-owned runtime intent.
 func ReplaceServiceDesired(record ServiceRecord, desired core.Service) (ServiceRecord, error) {
-	if err := validateServiceRecord(record); err != nil {
+	if err := ValidateServiceRecord(record); err != nil {
 		return ServiceRecord{}, err
 	}
 	if desired.ID != record.Desired.ID {
@@ -47,7 +47,7 @@ func ReplaceServiceDesired(record ServiceRecord, desired core.Service) (ServiceR
 	}
 	replacement := record
 	replacement.Desired = desired
-	if err := validateServiceRecord(replacement); err != nil {
+	if err := ValidateServiceRecord(replacement); err != nil {
 		return ServiceRecord{}, err
 	}
 	return replacement, nil
@@ -58,18 +58,18 @@ func SetServiceRuntimeIntent(
 	record ServiceRecord,
 	intent core.ServiceRuntimeIntent,
 ) (ServiceRecord, error) {
-	if err := validateServiceRecord(record); err != nil {
+	if err := ValidateServiceRecord(record); err != nil {
 		return ServiceRecord{}, err
 	}
 	replacement := record
 	replacement.Runtime.RuntimeIntent = intent
-	if err := validateServiceRecord(replacement); err != nil {
+	if err := ValidateServiceRecord(replacement); err != nil {
 		return ServiceRecord{}, err
 	}
 	return replacement, nil
 }
 
-func validateServiceRecord(record ServiceRecord) error {
+func ValidateServiceRecord(record ServiceRecord) error {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, record.EnvironmentID); err != nil {
 		return err
 	}

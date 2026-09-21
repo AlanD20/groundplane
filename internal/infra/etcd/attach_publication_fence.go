@@ -3,20 +3,21 @@ package etcd
 import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func attachDesiredHeadConditions(
 	consumerEnvironmentID string,
 	consumerRevision int64,
-	backingService etcdstore.Versioned[ServiceRecord],
-	services []etcdstore.Versioned[ServiceRecord],
+	backingService etcdstore.Versioned[servicerecord.ServiceRecord],
+	services []etcdstore.Versioned[servicerecord.ServiceRecord],
 ) ([]etcdstore.Condition, error) {
 	candidates := []etcdstore.Condition{{
 		Key: environmentBlueprintHeadKey(consumerEnvironmentID), ModRevision: consumerRevision,
-	}, serviceDesiredCondition(backingService)}
+	}, servicerecord.ServiceDesiredCondition(backingService)}
 	for _, service := range services {
-		candidates = append(candidates, serviceDesiredCondition(service))
+		candidates = append(candidates, servicerecord.ServiceDesiredCondition(service))
 	}
 
 	conditions := make([]etcdstore.Condition, 0, len(candidates))

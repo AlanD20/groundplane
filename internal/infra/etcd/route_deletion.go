@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -18,7 +19,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	route etcdstore.Versioned[routerecord.Record],
 	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	tombstone deletionrecord.DeletionTombstoneRecord,
@@ -230,7 +231,7 @@ func validateRouteDeletionProjection(
 func classifyRouteDeletionStartConflict(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	route etcdstore.Versioned[routerecord.Record],
 	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	indexes []*etcdstore.KeyValue,

@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -98,7 +99,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 	if _, err := (zonePoolRegistry{Reservations: map[string]string{}}).reserve(creation.Environment, creation.Zone); err != nil {
 		return err
 	}
-	if err := validateServiceRecord(creation.Service); err != nil {
+	if err := servicerecord.ValidateServiceRecord(creation.Service); err != nil {
 		return err
 	}
 	if creation.Service.EnvironmentID != creation.Environment.ID || creation.Service.Desired.Adapter == "" ||

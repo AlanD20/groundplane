@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
@@ -17,7 +18,7 @@ import (
 
 type retainedRuntime struct {
 	applied   etcdstore.Versioned[etcd.EnvironmentComposeProjection]
-	services  map[string]etcdstore.Versioned[etcd.ServiceRecord]
+	services  map[string]etcdstore.Versioned[servicerecord.ServiceRecord]
 	snapshots map[string]etcd.BlueprintRetainedRuntimeSource
 	artifacts []*agentpb.ComposeArtifact
 }
@@ -58,7 +59,7 @@ func (service *Service) captureRetainedRuntime(
 		if result == nil {
 			result = &retainedRuntime{
 				applied:   applied,
-				services:  make(map[string]etcdstore.Versioned[etcd.ServiceRecord]),
+				services:  make(map[string]etcdstore.Versioned[servicerecord.ServiceRecord]),
 				snapshots: make(map[string]etcd.BlueprintRetainedRuntimeSource),
 			}
 		}

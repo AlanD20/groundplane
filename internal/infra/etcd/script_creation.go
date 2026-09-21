@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -13,7 +14,7 @@ func (repository *ScriptRepository) CreateScript(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record scriptrecord.Record,
 ) (etcdstore.Versioned[scriptrecord.Record], error) {
 	conditions, mutations, classify, err := repository.prepareScriptCreation(ctx, environment, project, target, record)
@@ -39,7 +40,7 @@ func (repository *ScriptRepository) CreateScriptIdempotent(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record scriptrecord.Record,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -66,7 +67,7 @@ func (repository *ScriptRepository) prepareScriptCreation(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record scriptrecord.Record,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, idempotencyPlanClassifier, error) {
 	if err := validateScriptHierarchy(ctx, environment, project, target, record); err != nil {

@@ -10,6 +10,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"net/http"
 	"sort"
 	"time"
@@ -33,7 +34,7 @@ const (
 type entryCreationRepository interface {
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
 	CreateEntryIdempotent(
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
@@ -574,7 +575,7 @@ func (repository *durableEntryCreationRepository) ListServices(
 	ctx context.Context,
 	environmentID string,
 	request etcdstore.PageRequest,
-) (etcdstore.Page[etcd.ServiceRecord], error) {
+) (etcdstore.Page[servicerecord.ServiceRecord], error) {
 	return repository.services.ListServices(ctx, environmentID, request)
 }
 

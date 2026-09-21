@@ -3,11 +3,12 @@ package services
 import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-func serviceAPIResponse(record etcd.ServiceRecord) apiTypes.Service {
+func serviceAPIResponse(record servicerecord.ServiceRecord) apiTypes.Service {
 	response := apiTypes.Service{
 		ID: record.Desired.ID, EnvironmentID: record.EnvironmentID, Name: record.Desired.Name,
 		Image: record.Desired.Image, RuntimeIntent: apiTypes.ServiceRuntimeIntent(record.Runtime.RuntimeIntent),

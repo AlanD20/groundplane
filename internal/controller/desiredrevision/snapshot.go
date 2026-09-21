@@ -6,6 +6,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
 )
@@ -47,7 +48,7 @@ func CloneProjection(current etcd.EnvironmentComposeProjection) etcd.Environment
 		RuntimeFiles:           runtimeFiles,
 		ServiceExtensions:      CloneServiceExtensions(current.ServiceExtensions),
 		DesiredZones:           append([]etcd.EnvironmentZoneProjection(nil), current.DesiredZones...),
-		DesiredServices:        append([]etcd.EnvironmentServiceProjection(nil), current.DesiredServices...),
+		DesiredServices:        append([]servicerecord.EnvironmentServiceProjection(nil), current.DesiredServices...),
 		DesiredRoutes:          append([]etcd.EnvironmentRouteProjection(nil), current.DesiredRoutes...),
 		Volumes:                append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...),
 		VolumeMounts:           append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),

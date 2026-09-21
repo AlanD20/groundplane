@@ -9,11 +9,12 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 func (service *MutationService) prepareAttachFacts(
 	ctx context.Context, attachID string, operationID string,
-	consumer etcdstore.Versioned[etcd.ServiceRecord],
+	consumer etcdstore.Versioned[servicerecord.ServiceRecord],
 	scope etcd.AttachCreateScope,
 	adapter adapters.Adapter,
 ) (*taskplanning.AttachPlanIdentity, []attachrecord.FactSetMetadata, *attachrecord.EncryptedFacts,

@@ -7,6 +7,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"slices"
 	"time"
 
@@ -39,7 +40,7 @@ type ServiceRemovalIntent struct {
 
 func NewServiceRemovalIntent(
 	taskID string,
-	service etcdstore.Versioned[ServiceRecord],
+	service etcdstore.Versioned[servicerecord.ServiceRecord],
 	projection etcdstore.Versioned[EnvironmentComposeProjection],
 	expectedHeadRevision int64,
 	claim EnvironmentBlueprintStageClaim,
@@ -49,7 +50,7 @@ func NewServiceRemovalIntent(
 	intent := ServiceRemovalIntent{
 		TaskID: taskID, EnvironmentID: service.Record.EnvironmentID,
 		ServiceID: service.Record.Desired.ID, ServiceName: service.Record.Desired.Name,
-		ServiceRevision: service.Revision, RuntimeRevision: ServiceRuntimeRevision(service),
+		ServiceRevision: service.Revision, RuntimeRevision: servicerecord.ServiceRuntimeRevision(service),
 		CurrentProjectionRevision: projection.Revision,
 		ExpectedHeadRevision:      expectedHeadRevision, Claim: claim,
 		CurrentProjection:   cloneEnvironmentComposeProjection(projection.Record),
@@ -207,7 +208,7 @@ func sameServiceRemovalDesiredZones(left, right []EnvironmentZoneProjection) boo
 	return true
 }
 
-func sameServiceRemovalDesiredServices(left, right []EnvironmentServiceProjection) bool {
+func sameServiceRemovalDesiredServices(left, right []servicerecord.EnvironmentServiceProjection) bool {
 	if (left == nil) != (right == nil) || len(left) != len(right) {
 		return false
 	}

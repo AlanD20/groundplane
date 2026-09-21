@@ -1,4 +1,4 @@
-package etcd
+package services
 
 import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -19,9 +19,9 @@ type ServiceRuntimeRecord struct {
 	Runtime          core.ServiceRuntime `json:"runtime"`
 }
 
-func serviceRuntimeKey(serviceID string) string { return serviceRuntimePrefix + serviceID }
+func ServiceRuntimeKey(serviceID string) string { return serviceRuntimePrefix + serviceID }
 
-func newServiceRuntimeRecord(record ServiceRecord) ServiceRuntimeRecord {
+func NewServiceRuntimeRecord(record ServiceRecord) ServiceRuntimeRecord {
 	return ServiceRuntimeRecord{
 		EnvironmentID: record.EnvironmentID, ServiceID: record.Desired.ID,
 		BackingNetworkID: record.BackingNetworkID, Runtime: record.Runtime,
@@ -49,7 +49,7 @@ func validateServiceRuntimeRecord(record ServiceRuntimeRecord) error {
 	return nil
 }
 
-func encodeServiceRuntimeRecord(record ServiceRuntimeRecord) ([]byte, error) {
+func EncodeServiceRuntimeRecord(record ServiceRuntimeRecord) ([]byte, error) {
 	if err := validateServiceRuntimeRecord(record); err != nil {
 		return nil, err
 	}
@@ -59,10 +59,10 @@ func encodeServiceRuntimeRecord(record ServiceRuntimeRecord) ([]byte, error) {
 // EncodeServiceRuntimeRecordStorage returns the exact value used by Blueprint
 // final publication for a Service runtime source.
 func EncodeServiceRuntimeRecordStorage(record ServiceRecord) ([]byte, error) {
-	return encodeServiceRuntimeRecord(newServiceRuntimeRecord(record))
+	return EncodeServiceRuntimeRecord(NewServiceRuntimeRecord(record))
 }
 
-func decodeServiceRuntimeRecord(value []byte) (ServiceRuntimeRecord, error) {
+func DecodeServiceRuntimeRecord(value []byte) (ServiceRuntimeRecord, error) {
 	record, err := recordcodec.Decode[ServiceRuntimeRecord](value, "service_runtime")
 	if err != nil || validateServiceRuntimeRecord(record) != nil {
 		return ServiceRuntimeRecord{}, recordcodec.CorruptRecord()
@@ -70,12 +70,12 @@ func decodeServiceRuntimeRecord(value []byte) (ServiceRuntimeRecord, error) {
 	return record, nil
 }
 
-func serviceDesiredCondition(service etcdstore.Versioned[ServiceRecord]) etcdstore.Condition {
+func ServiceDesiredCondition(service etcdstore.Versioned[ServiceRecord]) etcdstore.Condition {
 	return etcdstore.Condition{Key: service.Record.desiredFenceKey, ModRevision: service.Revision}
 }
 
-func serviceRuntimeCondition(service etcdstore.Versioned[ServiceRecord]) etcdstore.Condition {
-	return etcdstore.Condition{Key: serviceRuntimeKey(service.Record.Desired.ID), ModRevision: service.Record.runtimeRevision}
+func ServiceRuntimeCondition(service etcdstore.Versioned[ServiceRecord]) etcdstore.Condition {
+	return etcdstore.Condition{Key: ServiceRuntimeKey(service.Record.Desired.ID), ModRevision: service.Record.runtimeRevision}
 }
 
 func ServiceRuntimeRevision(service etcdstore.Versioned[ServiceRecord]) int64 {

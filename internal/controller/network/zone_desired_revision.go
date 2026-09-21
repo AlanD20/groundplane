@@ -2,6 +2,7 @@ package network
 
 import (
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 	"strings"
 
@@ -56,7 +57,7 @@ func buildZoneRemovalProjection(
 			"Zone is absent from the current desired revision",
 		)
 	}
-	candidate.DesiredServices = make([]etcd.EnvironmentServiceProjection, len(current.DesiredServices))
+	candidate.DesiredServices = make([]servicerecord.EnvironmentServiceProjection, len(current.DesiredServices))
 	affected := make([]string, 0)
 	for index, service := range current.DesiredServices {
 		candidate.DesiredServices[index] = service

@@ -4,6 +4,7 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 	"time"
 
@@ -54,14 +55,14 @@ func ComposeProjection(
 func WithDesiredTopology(
 	projection etcd.EnvironmentComposeProjection,
 	zones []etcd.EnvironmentZoneProjection,
-	services []etcd.EnvironmentServiceProjection,
+	services []servicerecord.EnvironmentServiceProjection,
 	routes []etcd.EnvironmentRouteProjection,
 ) etcd.EnvironmentComposeProjection {
 	projection.DesiredZones = append([]etcd.EnvironmentZoneProjection(nil), zones...)
 	sort.Slice(projection.DesiredZones, func(left int, right int) bool {
 		return projection.DesiredZones[left].Desired.Name < projection.DesiredZones[right].Desired.Name
 	})
-	projection.DesiredServices = append([]etcd.EnvironmentServiceProjection(nil), services...)
+	projection.DesiredServices = append([]servicerecord.EnvironmentServiceProjection(nil), services...)
 	sort.Slice(projection.DesiredServices, func(left int, right int) bool {
 		return projection.DesiredServices[left].Desired.Name < projection.DesiredServices[right].Desired.Name
 	})

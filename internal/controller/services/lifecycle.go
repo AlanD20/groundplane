@@ -10,6 +10,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"net/http"
@@ -230,7 +231,7 @@ func (service *serviceLifecycleService) runOnce(
 	}
 	applied := hasProjection && serviceInComposeProjection(projection.Record, serviceID)
 	var projectionInput *etcdstore.Versioned[etcd.EnvironmentComposeProjection]
-	replacement, err := etcd.SetServiceRuntimeIntent(current.Record, intent)
+	replacement, err := servicerecord.SetServiceRuntimeIntent(current.Record, intent)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}

@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -60,16 +61,16 @@ func environmentBlueprintTopologyProjection(
 	zones []etcd.EnvironmentBlueprintZoneChange,
 	services []etcd.EnvironmentBlueprintServiceChange,
 	routes []etcd.EnvironmentBlueprintRouteChange,
-) ([]etcd.EnvironmentZoneProjection, []etcd.EnvironmentServiceProjection, []etcd.EnvironmentRouteProjection) {
+) ([]etcd.EnvironmentZoneProjection, []servicerecord.EnvironmentServiceProjection, []etcd.EnvironmentRouteProjection) {
 	zoneProjection := make([]etcd.EnvironmentZoneProjection, len(zones))
 	for index, change := range zones {
 		zoneProjection[index] = etcd.EnvironmentZoneProjection{
 			EnvironmentID: change.Record.EnvironmentID, Desired: change.Record.Desired,
 		}
 	}
-	serviceProjection := make([]etcd.EnvironmentServiceProjection, len(services))
+	serviceProjection := make([]servicerecord.EnvironmentServiceProjection, len(services))
 	for index, change := range services {
-		serviceProjection[index] = etcd.EnvironmentServiceProjection{
+		serviceProjection[index] = servicerecord.EnvironmentServiceProjection{
 			EnvironmentID:    change.Record.EnvironmentID,
 			BackingNetworkID: change.Record.BackingNetworkID,
 			Desired:          change.Record.Desired,

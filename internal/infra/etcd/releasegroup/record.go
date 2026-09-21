@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"io"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -186,12 +187,12 @@ func decodeTenant(value []byte) (hierarchyrecord.TenantRecord, error) {
 	return record, nil
 }
 
-func decodeService(value []byte) (infraetcd.ServiceRecord, error) {
-	record, err := decodeDurable[infraetcd.ServiceRecord](value, "service")
+func decodeService(value []byte) (servicerecord.ServiceRecord, error) {
+	record, err := decodeDurable[servicerecord.ServiceRecord](value, "service")
 	if err != nil || ids.Validate(ids.KindEnvironment, record.EnvironmentID) != nil ||
 		ids.Validate(ids.KindService, record.Desired.ID) != nil ||
 		record.Runtime.ServiceID != record.Desired.ID || record.Runtime.RuntimeIntent == "absent" {
-		return infraetcd.ServiceRecord{}, corruptRecord()
+		return servicerecord.ServiceRecord{}, corruptRecord()
 	}
 	return record, nil
 }

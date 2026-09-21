@@ -10,6 +10,7 @@ import (
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -133,7 +134,7 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 			dynamic.add(environmentBlueprintHeadKey(snapshot.EnvironmentID))
 			dynamic.add(environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID))
 			for _, service := range snapshot.Services {
-				dynamic.add(serviceRuntimeKey(service.ServiceID))
+				dynamic.add(servicerecord.ServiceRuntimeKey(service.ServiceID))
 			}
 		case BackupRuntimeSourceConfig:
 			if source.Snapshot.Config == nil {

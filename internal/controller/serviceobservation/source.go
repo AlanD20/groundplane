@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"strconv"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -21,7 +22,7 @@ import (
 
 // Services is the fixed-revision storage read seam, not a desired-state writer.
 type Services interface {
-	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
 }
 
 // Releases exposes only the immutable serving-source and runtime-receipt reads.
@@ -43,7 +44,7 @@ type source struct {
 	acknowledgedRuntimeRevision                                         int64
 }
 
-func capture(ctx context.Context, releases Releases, service etcdstore.Versioned[etcd.ServiceRecord]) (source, bool) {
+func capture(ctx context.Context, releases Releases, service etcdstore.Versioned[servicerecord.ServiceRecord]) (source, bool) {
 	environmentID, serviceID, revision := service.Record.EnvironmentID, service.Record.Desired.ID, service.ReadRevision
 	serving, err := releases.ResolveServing(ctx, environmentID, serviceID, revision)
 	if err != nil || serving.Revision != revision || serving.ProjectionRevision <= 0 || serving.IntentRevision <= 0 {
@@ -97,7 +98,7 @@ func capture(ctx context.Context, releases Releases, service etcdstore.Versioned
 			ProxyRenderGeneration: proxy.renderGeneration, ProxyConfigSha256: proxy.configSHA256,
 		},
 		expected:        intent.CandidateWorkload.ReplicaCount,
-		runtimeRevision: etcd.ServiceRuntimeRevision(service), projectionRevision: serving.ProjectionRevision,
+		runtimeRevision: servicerecord.ServiceRuntimeRevision(service), projectionRevision: serving.ProjectionRevision,
 		intentRevision: serving.IntentRevision, renderRevision: render.Revision,
 		acknowledgedRuntimeRevision: proxyRevision,
 	}, true

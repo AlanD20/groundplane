@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"net/http"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,7 +21,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current *etcdstore.Versioned[routerecord.Record],
 	record routerecord.Record,
 	intent RouteMutationIntent,
@@ -166,7 +167,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
 	)
 	conditions = append(conditions, publication.conditions...)
-	conditions, err = routeHeadTargetConditions(conditions, serviceDesiredCondition(target))
+	conditions, err = routeHeadTargetConditions(conditions, servicerecord.ServiceDesiredCondition(target))
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}

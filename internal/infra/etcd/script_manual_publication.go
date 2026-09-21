@@ -7,6 +7,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -197,7 +198,7 @@ func (repository *ScriptRepository) prepareManualScriptSnapshot(
 // manualScriptSourceConditions fences the desired sources captured for a manual
 // execution. Release image and render-input fences are owned by its publication.
 func manualScriptSourceConditions(sources ScriptExecutionSources) ([]etcdstore.Condition, error) {
-	conditions := []etcdstore.Condition{serviceDesiredCondition(sources.Service)}
+	conditions := []etcdstore.Condition{servicerecord.ServiceDesiredCondition(sources.Service)}
 	byKey := map[string]etcdstore.Condition{conditions[0].Key: conditions[0]}
 	for _, condition := range scriptExecutionProjectionConditions(sources) {
 		if existing, found := byKey[condition.Key]; found {

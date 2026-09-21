@@ -12,6 +12,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 	"sync"
 	"time"
@@ -633,7 +634,7 @@ func (repository *BackupRuntimeRepository) manualBackupVolumeConsumers(
 				)
 			}
 			result = append(result, backupruntime.BackupVolumeServiceSnapshot{
-				ServiceID: service.Record.Desired.ID, ServiceRevision: ServiceRuntimeRevision(service),
+				ServiceID: service.Record.Desired.ID, ServiceRevision: servicerecord.ServiceRuntimeRevision(service),
 				ComposeKey: composeKey, MountPaths: mountPaths,
 				PriorIntent: backupruntime.BackupServiceRuntimeIntent(service.Record.Runtime.RuntimeIntent),
 			})

@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"slices"
 	"strings"
 
@@ -29,7 +30,7 @@ type ReleasePlanningScope struct {
 }
 
 type ReleasePlanningService struct {
-	Service            etcdstore.Versioned[ServiceRecord]
+	Service            etcdstore.Versioned[servicerecord.ServiceRecord]
 	Projection         domain.ServiceProjection
 	ProjectionRevision int64
 }

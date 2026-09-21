@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -23,7 +24,7 @@ func validateScriptMutationMarker(marker idempotencyrecord.IdempotencyMarker, en
 func scriptWriteConditions(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record scriptrecord.Record,
 	current *etcdstore.Versioned[scriptrecord.Record],
 	active etcdstore.Versioned[scriptrecord.SetGenerationRecord],
@@ -50,7 +51,7 @@ func scriptWriteConditions(
 		slugCondition,
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		serviceDesiredCondition(target),
+		servicerecord.ServiceDesiredCondition(target),
 		{Key: deletionTombstoneKey("script", record.Desired.ID)},
 		{Key: deletionTombstoneKey("environment", environment.Record.ID)},
 		{Key: deletionTombstoneKey("project", project.Record.ID)},
@@ -73,7 +74,7 @@ func validateScriptHierarchy(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record scriptrecord.Record,
 ) error {
 	if err := etcdstore.ValidateContext(ctx); err != nil {

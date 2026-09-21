@@ -8,6 +8,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/releasegroup"
@@ -93,7 +94,7 @@ func (repository *TaskRepository) prepareReleaseGroupMemberEvidence(
 	group domain.Group,
 	projection EnvironmentComposeProjection,
 ) ([]etcdstore.Condition, error) {
-	desiredMembers := make(map[string]EnvironmentServiceProjection, len(projection.DesiredServices))
+	desiredMembers := make(map[string]servicerecord.EnvironmentServiceProjection, len(projection.DesiredServices))
 	for _, desired := range projection.DesiredServices {
 		if ids.Validate(ids.KindService, desired.Desired.ID) != nil {
 			return nil, recordcodec.CorruptRecord()

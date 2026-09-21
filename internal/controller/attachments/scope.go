@@ -8,13 +8,14 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"slices"
 )
 
 func (service *MutationService) resolveAttachScope(
 	ctx context.Context,
-	consumer etcdstore.Versioned[etcd.ServiceRecord],
+	consumer etcdstore.Versioned[servicerecord.ServiceRecord],
 	backingServiceID string,
 	credentialAttachID string,
 	grantIDs []string,
@@ -147,7 +148,7 @@ func (service *MutationService) resolveAttachScope(
 	scope := etcd.AttachCreateScope{
 		Tenant: tenant, Project: project, Environment: environment,
 		DesiredHead: head, ComposeProjection: projection,
-		Services:       []etcdstore.Versioned[etcd.ServiceRecord]{consumer},
+		Services:       []etcdstore.Versioned[servicerecord.ServiceRecord]{consumer},
 		BackingProject: backingProject, BackingEnvironment: backingEnvironment,
 		BackingService: backingService, CredentialOwner: credentialOwner, Grants: grants,
 	}

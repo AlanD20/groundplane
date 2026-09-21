@@ -12,6 +12,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/http"
 	"net/netip"
@@ -286,7 +287,7 @@ func (service *CreationService) createBackingServiceFromStage(
 		FactsPrefix: adapter.FactsPrefix(), Label: input.Name,
 		Hooks: taskplanning.BackingHookConfigurationFromAPI(input.Hooks),
 	}
-	serviceRecord, err := etcd.NewServiceRecord(environment.ID, desiredService, zone.Desired.ID)
+	serviceRecord, err := servicerecord.NewServiceRecord(environment.ID, desiredService, zone.Desired.ID)
 	if err != nil {
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}

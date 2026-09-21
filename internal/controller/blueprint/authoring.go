@@ -6,6 +6,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 	"time"
 
@@ -33,7 +34,7 @@ type environmentBlueprintSnapshot struct {
 func (repository *durableRepository) GetService(
 	ctx context.Context,
 	id string,
-) (etcdstore.Versioned[etcd.ServiceRecord], error) {
+) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
 	return repository.services.GetService(ctx, id)
 }
 

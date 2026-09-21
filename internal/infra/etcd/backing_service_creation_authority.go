@@ -9,6 +9,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -45,7 +46,7 @@ func backingServiceCreationConditions(
 		{Key: environmentPoolRegistryKey, ModRevision: creation.PoolRegistry.Revision},
 		{Key: deletionTombstoneKey("zone", creation.Zone.Desired.ID)},
 		{Key: zonePoolRegistryKey(creation.Environment.ID)},
-		{Key: serviceRuntimeKey(creation.Service.Desired.ID)},
+		{Key: servicerecord.ServiceRuntimeKey(creation.Service.Desired.ID)},
 		{Key: deletionTombstoneKey("service", creation.Service.Desired.ID)},
 	}
 	for _, component := range creation.Components {

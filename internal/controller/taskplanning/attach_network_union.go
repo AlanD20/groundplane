@@ -4,6 +4,7 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -20,7 +21,7 @@ func ProjectEnvironmentAttachNetworks(
 	project *composetypes.Project,
 	environmentID string,
 	zones []etcd.EnvironmentZoneProjection,
-	services []etcd.EnvironmentServiceProjection,
+	services []servicerecord.EnvironmentServiceProjection,
 	attaches []etcdstore.Versioned[attachrecord.Record],
 ) ([]composeidentity.Resource, error) {
 	projection := etcd.EnvironmentComposeProjection{

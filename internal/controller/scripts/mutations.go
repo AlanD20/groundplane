@@ -8,6 +8,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"net/http"
 	"time"
 
@@ -30,13 +31,13 @@ const (
 type scriptMutationRepository interface {
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 	GetScript(context.Context, string) (etcdstore.Versioned[scriptrecord.Record], error)
 	CreateScriptIdempotent(
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[etcd.ServiceRecord],
+		etcdstore.Versioned[servicerecord.ServiceRecord],
 		scriptrecord.Record,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -44,7 +45,7 @@ type scriptMutationRepository interface {
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[etcd.ServiceRecord],
+		etcdstore.Versioned[servicerecord.ServiceRecord],
 		etcdstore.Versioned[scriptrecord.Record],
 		core.Script,
 		idempotencyrecord.IdempotencyMarker,
@@ -111,7 +112,7 @@ func (repository *durableScriptMutationRepository) GetProject(
 
 func (repository *durableScriptMutationRepository) GetService(
 	ctx context.Context, id string,
-) (etcdstore.Versioned[etcd.ServiceRecord], error) {
+) (etcdstore.Versioned[servicerecord.ServiceRecord], error) {
 	return repository.services.GetService(ctx, id)
 }
 
@@ -125,7 +126,7 @@ func (repository *durableScriptMutationRepository) CreateScriptIdempotent(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[etcd.ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	record scriptrecord.Record,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -136,7 +137,7 @@ func (repository *durableScriptMutationRepository) ReplaceDesiredIdempotent(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[etcd.ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current etcdstore.Versioned[scriptrecord.Record],
 	desired core.Script,
 	marker idempotencyrecord.IdempotencyMarker,
@@ -441,23 +442,23 @@ func (service *scriptMutationService) scriptHierarchy(
 ) (
 	etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	etcdstore.Versioned[etcd.ServiceRecord],
+	etcdstore.Versioned[servicerecord.ServiceRecord],
 	error,
 ) {
 	environment, err := service.repository.GetEnvironment(ctx, environmentID)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcdstore.Versioned[hierarchyrecord.ProjectRecord]{},
-			etcdstore.Versioned[etcd.ServiceRecord]{}, err
+			etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
 	}
 	project, err := service.repository.GetProject(ctx, environment.Record.ProjectID)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcdstore.Versioned[hierarchyrecord.ProjectRecord]{},
-			etcdstore.Versioned[etcd.ServiceRecord]{}, err
+			etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
 	}
 	target, err := service.repository.GetService(ctx, targetServiceID)
 	if err != nil {
 		return etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]{}, etcdstore.Versioned[hierarchyrecord.ProjectRecord]{},
-			etcdstore.Versioned[etcd.ServiceRecord]{}, err
+			etcdstore.Versioned[servicerecord.ServiceRecord]{}, err
 	}
 	return environment, project, target, nil
 }

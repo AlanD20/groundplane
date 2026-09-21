@@ -11,6 +11,7 @@ import (
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 func (repository *HierarchyDeletionRepository) freezeEnvironmentMembership(
@@ -196,7 +197,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMe
 		end := min(begin+32, len(projection.Record.DesiredServices))
 		keys := make([]string, end-begin)
 		for index, desired := range projection.Record.DesiredServices[begin:end] {
-			keys[index] = serviceRuntimeKey(desired.Desired.ID)
+			keys[index] = servicerecord.ServiceRuntimeKey(desired.Desired.ID)
 		}
 		read, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: keys, Revision: operation.Tombstone.SnapshotRevision,
@@ -216,7 +217,7 @@ func (repository *HierarchyDeletionRepository) freezeEnvironmentServiceRuntimeMe
 				continue
 			}
 			desired := projection.Record.DesiredServices[begin+index]
-			runtime, decodeErr := decodeServiceRuntimeRecord(value.Value)
+			runtime, decodeErr := servicerecord.DecodeServiceRuntimeRecord(value.Value)
 			if decodeErr != nil || value.Key != keys[index] || runtime.EnvironmentID != environmentID ||
 				runtime.ServiceID != desired.Desired.ID || runtime.BackingNetworkID != desired.BackingNetworkID {
 				clearKeyValues(read.Values)

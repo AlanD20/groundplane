@@ -2,6 +2,7 @@ package backingservices
 
 import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	"github.com/AlanD20/groundplane/internal/controller/desiredrevision"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
@@ -18,7 +19,7 @@ func buildBackingServiceCreationProjection(
 	artifact []byte,
 	normalizedCompose []byte,
 	zone zonerecord.Record,
-	service etcd.ServiceRecord,
+	service servicerecord.ServiceRecord,
 	entries []entryrecord.Record,
 ) etcd.EnvironmentComposeProjection {
 	projection := desiredrevision.ComposeProjection(
@@ -28,7 +29,7 @@ func buildBackingServiceCreationProjection(
 	return desiredrevision.WithDesiredTopology(
 		projection,
 		[]etcd.EnvironmentZoneProjection{{EnvironmentID: zone.EnvironmentID, Desired: zone.Desired}},
-		[]etcd.EnvironmentServiceProjection{{
+		[]servicerecord.EnvironmentServiceProjection{{
 			EnvironmentID: service.EnvironmentID, BackingNetworkID: service.BackingNetworkID, Desired: service.Desired,
 		}},
 		nil,

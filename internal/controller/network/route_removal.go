@@ -11,6 +11,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"math"
 	"net/http"
 	"time"
@@ -33,7 +34,7 @@ const (
 type routeRemovalRepository interface {
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 	GetRoute(context.Context, string) (etcdstore.Versioned[routerecord.Record], error)
 	GetEnvironmentComposeProjection(context.Context, string) (
 		etcdstore.Versioned[etcd.EnvironmentComposeProjection], bool, error,
@@ -42,7 +43,7 @@ type routeRemovalRepository interface {
 		context.Context,
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-		etcdstore.Versioned[etcd.ServiceRecord],
+		etcdstore.Versioned[servicerecord.ServiceRecord],
 		etcdstore.Versioned[routerecord.Record],
 		*etcdstore.Versioned[etcd.EnvironmentComposeProjection],
 		deletionrecord.DeletionTombstoneRecord,

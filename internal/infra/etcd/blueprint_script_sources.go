@@ -7,6 +7,7 @@ import (
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	sourceref "github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -77,7 +78,7 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 			}},
 		})
 
-		serviceValue, err := EncodeServiceRuntimeRecordStorage(sources.Service.Record)
+		serviceValue, err := servicerecord.EncodeServiceRuntimeRecordStorage(sources.Service.Record)
 		if err != nil {
 			return nil, err
 		}
@@ -88,7 +89,7 @@ func (ledger *ReleaseLedger) BlueprintReleaseSourceMembers(
 		}
 		serviceEvidence, err := blueprintStagedSourceEvidence(
 			snapshot.ServiceSource,
-			serviceRuntimeKey(execution.ServiceID),
+			servicerecord.ServiceRuntimeKey(execution.ServiceID),
 			serviceValue,
 			execution.EnvironmentID,
 		)

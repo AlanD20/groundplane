@@ -4,6 +4,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"math"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -107,7 +108,7 @@ func prepareReleaseHookPublicationFragment(
 		appendRevision(scriptrecord.ScriptSetBodyGenerationKey(
 			execution.EnvironmentID, execution.ScriptSetGeneration, execution.ScriptID, execution.ScriptGeneration,
 		), sources.BodyGeneration.Revision)
-		fragment.conditions = append(fragment.conditions, serviceDesiredCondition(sources.Service))
+		fragment.conditions = append(fragment.conditions, servicerecord.ServiceDesiredCondition(sources.Service))
 		for _, condition := range scriptExecutionProjectionConditions(sources) {
 			appendRevision(condition.Key, condition.ModRevision)
 		}

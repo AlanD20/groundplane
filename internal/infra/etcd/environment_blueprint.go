@@ -10,6 +10,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"net/netip"
 	"path"
@@ -65,8 +66,8 @@ type EnvironmentBlueprintZoneChange struct {
 // committed with the Blueprint head. Current is nil only when the Blueprint
 // first introduces the stable Service id.
 type EnvironmentBlueprintServiceChange struct {
-	Current *etcdstore.Versioned[ServiceRecord]
-	Record  ServiceRecord
+	Current *etcdstore.Versioned[servicerecord.ServiceRecord]
+	Record  servicerecord.ServiceRecord
 }
 
 // EnvironmentBlueprintRouteChange is one exposure-only Route replacement or

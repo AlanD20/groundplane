@@ -3,6 +3,7 @@ package serviceobservation
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"time"
 
 	wire "github.com/AlanD20/groundplane/internal/common/serviceobservation"
@@ -32,7 +33,7 @@ func NewReader(agents Agents, observer *Observer) (*Reader, error) {
 // ObserveServices serves the existing human read surfaces without creating an
 // operator action. Unavailable evidence never prevents the desired read.
 func (reader *Reader) ObserveServices(
-	ctx context.Context, services []etcdstore.Versioned[etcd.ServiceRecord],
+	ctx context.Context, services []etcdstore.Versioned[servicerecord.ServiceRecord],
 ) []api.ServiceObservation {
 	result := unavailablePublic(len(services))
 	if ctx == nil || reader == nil || !validBatch(services) {

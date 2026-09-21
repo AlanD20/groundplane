@@ -8,6 +8,7 @@ import (
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
@@ -285,7 +286,7 @@ func (resolver *TaskPlanResolver) renderServiceLifecycleArtifact(
 	includeProxy bool,
 ) (*agentpb.ComposeArtifact, error) {
 	projection := releaseWorkloadProjection(source.Projection)
-	selected := make([]etcd.EnvironmentServiceProjection, 0, 1)
+	selected := make([]servicerecord.EnvironmentServiceProjection, 0, 1)
 	for _, service := range projection.DesiredServices {
 		if service.Desired.ID == source.ServiceID {
 			selected = append(selected, service)

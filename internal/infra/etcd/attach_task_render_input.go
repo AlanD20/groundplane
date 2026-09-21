@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -307,7 +308,7 @@ func validateAttachTaskRenderInputScope(
 	return validateAttachTaskRenderInput(input)
 }
 
-func attachTaskServiceSnapshots(values []EnvironmentServiceProjection) []AttachTaskServiceSnapshot {
+func attachTaskServiceSnapshots(values []servicerecord.EnvironmentServiceProjection) []AttachTaskServiceSnapshot {
 	snapshots := make([]AttachTaskServiceSnapshot, len(values))
 	for index, value := range values {
 		snapshots[index] = AttachTaskServiceSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}

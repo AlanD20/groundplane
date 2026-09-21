@@ -5,6 +5,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"math"
 	"slices"
 	"time"
@@ -206,7 +207,7 @@ func buildAttachTaskRenderInput(
 }
 
 func attachTaskServiceSnapshots(
-	values []etcd.EnvironmentServiceProjection,
+	values []servicerecord.EnvironmentServiceProjection,
 ) []etcd.AttachTaskServiceSnapshot {
 	snapshots := make([]etcd.AttachTaskServiceSnapshot, len(values))
 	for index, value := range values {

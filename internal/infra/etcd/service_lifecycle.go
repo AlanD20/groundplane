@@ -6,6 +6,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/core"
@@ -26,8 +27,8 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTask(
 	tenant etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	current etcdstore.Versioned[ServiceRecord],
-	replacement ServiceRecord,
+	current etcdstore.Versioned[servicerecord.ServiceRecord],
+	replacement servicerecord.ServiceRecord,
 	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	renderInput *ServiceLifecycleRenderInput,
 	task TaskRecord,
@@ -43,8 +44,8 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	current etcdstore.Versioned[ServiceRecord],
-	replacement ServiceRecord,
+	current etcdstore.Versioned[servicerecord.ServiceRecord],
+	replacement servicerecord.ServiceRecord,
 	projection *etcdstore.Versioned[EnvironmentComposeProjection],
 	renderInput *ServiceLifecycleRenderInput,
 	hookInputs *BackingHookEncryptedInputs,
@@ -122,7 +123,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	if err := validateTaskRecord(task); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	serviceValue, err := encodeServiceRuntimeRecord(newServiceRuntimeRecord(replacement))
+	serviceValue, err := servicerecord.EncodeServiceRuntimeRecord(servicerecord.NewServiceRuntimeRecord(replacement))
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -143,8 +144,8 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
 		{Key: taskActiveOperationKey(task.OperationID)},
 		{Key: taskQueueKey(task.Executor, task.ID)},
-		serviceDesiredCondition(current),
-		serviceRuntimeCondition(current),
+		servicerecord.ServiceDesiredCondition(current),
+		servicerecord.ServiceRuntimeCondition(current),
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
@@ -165,7 +166,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: serviceRuntimeKey(current.Record.Desired.ID), Value: serviceValue},
+		{Type: etcdstore.MutationPut, Key: servicerecord.ServiceRuntimeKey(current.Record.Desired.ID), Value: serviceValue},
 		{Type: etcdstore.MutationPut, Key: serviceLifecycleActiveKey(current.Record.Desired.ID), Value: reference},
 	}
 	if renderInput != nil {
@@ -258,7 +259,7 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 
 func validateBoundServiceConditions(
 	binding *ordinaryEnvironmentMutationBinding,
-	service etcdstore.Versioned[ServiceRecord],
+	service etcdstore.Versioned[servicerecord.ServiceRecord],
 	desiredIndex int,
 	runtimeIndex int,
 ) error {
@@ -266,10 +267,10 @@ func validateBoundServiceConditions(
 		desiredIndex >= len(binding.conditions) || runtimeIndex >= len(binding.conditions) {
 		return errs.New(errs.KindInternal, "Service compare binding is incomplete")
 	}
-	if binding.conditions[desiredIndex] != serviceDesiredCondition(service) {
+	if binding.conditions[desiredIndex] != servicerecord.ServiceDesiredCondition(service) {
 		return stateConflict("service", service.Record.Desired.ID)
 	}
-	if binding.conditions[runtimeIndex] != serviceRuntimeCondition(service) {
+	if binding.conditions[runtimeIndex] != servicerecord.ServiceRuntimeCondition(service) {
 		return stateConflict("service runtime", service.Record.Desired.ID)
 	}
 	return nil
@@ -283,12 +284,12 @@ func validateServiceLifecycleHierarchy(
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	service etcdstore.Versioned[ServiceRecord],
+	service etcdstore.Versioned[servicerecord.ServiceRecord],
 ) error {
 	if project.Revision <= 0 || environment.Revision <= 0 || service.Revision <= 0 ||
 		project.ReadRevision < project.Revision ||
 		environment.ReadRevision < environment.Revision || service.ReadRevision < service.Revision ||
-		validateServiceRecord(service.Record) != nil ||
+		servicerecord.ValidateServiceRecord(service.Record) != nil ||
 		environment.Record.ProjectID != project.Record.ID || service.Record.EnvironmentID != environment.Record.ID {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle hierarchy is invalid")
 	}
@@ -308,8 +309,8 @@ func validateServiceLifecycleHierarchy(
 	return nil
 }
 
-func validateServiceLifecycleReplacement(current ServiceRecord, replacement ServiceRecord, task TaskRecord) error {
-	if validateServiceRecord(current) != nil || validateServiceRecord(replacement) != nil ||
+func validateServiceLifecycleReplacement(current servicerecord.ServiceRecord, replacement servicerecord.ServiceRecord, task TaskRecord) error {
+	if servicerecord.ValidateServiceRecord(current) != nil || servicerecord.ValidateServiceRecord(replacement) != nil ||
 		replacement.EnvironmentID != current.EnvironmentID ||
 		replacement.BackingNetworkID != current.BackingNetworkID ||
 		!sameServiceRemovalDesired(replacement.Desired, current.Desired) ||
@@ -391,7 +392,7 @@ func classifyServiceLifecycleStartConflict(
 	tenant *etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	service etcdstore.Versioned[ServiceRecord],
+	service etcdstore.Versioned[servicerecord.ServiceRecord],
 	input *ServiceLifecycleRenderInput,
 	operationID string,
 ) idempotencyPlanClassifier {
@@ -440,7 +441,7 @@ func classifyServiceLifecycleStartConflict(
 		if values[4].ModRevision != service.Revision {
 			return stateConflict("service", service.Record.Desired.ID)
 		}
-		if !conditionMatchesRead(serviceRuntimeCondition(service), values[5]) {
+		if !conditionMatchesRead(servicerecord.ServiceRuntimeCondition(service), values[5]) {
 			return stateConflict("service runtime", service.Record.Desired.ID)
 		}
 		if values[6] != nil {

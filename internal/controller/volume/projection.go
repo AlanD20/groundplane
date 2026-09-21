@@ -5,6 +5,7 @@ import (
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"sort"
 	"strings"
 
@@ -191,7 +192,7 @@ func cloneVolumeMutationProjection(current etcd.EnvironmentComposeProjection) et
 		NormalizedCompose: append([]byte(nil), current.NormalizedCompose...),
 		RuntimeFiles:      runtimeFiles, ServiceExtensions: serviceExtensions,
 		DesiredZones:           append([]etcd.EnvironmentZoneProjection(nil), current.DesiredZones...),
-		DesiredServices:        append([]etcd.EnvironmentServiceProjection(nil), current.DesiredServices...),
+		DesiredServices:        append([]servicerecord.EnvironmentServiceProjection(nil), current.DesiredServices...),
 		DesiredRoutes:          append([]etcd.EnvironmentRouteProjection(nil), current.DesiredRoutes...),
 		Volumes:                append([]etcd.EnvironmentVolumeIdentity(nil), current.Volumes...),
 		VolumeMounts:           append([]etcd.EnvironmentServiceVolumeMount(nil), current.VolumeMounts...),

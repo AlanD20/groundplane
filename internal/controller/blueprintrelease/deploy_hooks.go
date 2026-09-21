@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
 	"strconv"
@@ -57,7 +58,7 @@ func (service *Service) prepareDeployHooks(
 				"Blueprint candidate Service source is missing",
 			)
 		}
-		serviceValue, err := etcd.EncodeServiceRuntimeRecordStorage(candidate.Record)
+		serviceValue, err := servicerecord.EncodeServiceRuntimeRecordStorage(candidate.Record)
 		if err != nil {
 			return preparedHooks{}, err
 		}

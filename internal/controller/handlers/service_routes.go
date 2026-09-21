@@ -4,6 +4,7 @@ import (
 	"context"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"log/slog"
 	"net/http"
 	"reflect"
@@ -17,13 +18,13 @@ import (
 )
 
 type ServiceReader interface {
-	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 	GetServiceNativeCompose(context.Context, string, string) (string, error)
-	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[etcd.ServiceRecord], error)
+	ListServices(context.Context, string, etcdstore.PageRequest) (etcdstore.Page[servicerecord.ServiceRecord], error)
 }
 
 type ServiceObserver interface {
-	ObserveServices(context.Context, []etcdstore.Versioned[etcd.ServiceRecord]) []apiTypes.ServiceObservation
+	ObserveServices(context.Context, []etcdstore.Versioned[servicerecord.ServiceRecord]) []apiTypes.ServiceObservation
 }
 
 type ServiceMutator interface {
@@ -198,7 +199,7 @@ func (s *Server) showService(ctx context.Context, request *serviceShowInput) (*s
 		return nil, normalizeProjectError(err)
 	}
 	service := serviceResponse(record.Record)
-	observations := s.observeServices(ctx, []etcdstore.Versioned[etcd.ServiceRecord]{record})
+	observations := s.observeServices(ctx, []etcdstore.Versioned[servicerecord.ServiceRecord]{record})
 	service.Observation = &observations[0]
 	return &serviceDetailOutput{Body: apiTypes.ServiceDetail{
 		Service:       service,
@@ -208,7 +209,7 @@ func (s *Server) showService(ctx context.Context, request *serviceShowInput) (*s
 }
 
 func (s *Server) observeServices(
-	ctx context.Context, records []etcdstore.Versioned[etcd.ServiceRecord],
+	ctx context.Context, records []etcdstore.Versioned[servicerecord.ServiceRecord],
 ) []apiTypes.ServiceObservation {
 	if s.serviceObservations != nil {
 		return s.serviceObservations.ObserveServices(ctx, records)
@@ -287,7 +288,7 @@ func serviceListRequest(environmentID string, limit int, cursor string) (etcdsto
 	return etcdstore.PageRequest{Limit: limit, Cursor: cursor}, nil
 }
 
-func serviceResponse(record etcd.ServiceRecord) apiTypes.Service {
+func serviceResponse(record servicerecord.ServiceRecord) apiTypes.Service {
 	return apiTypes.Service{
 		ID:            record.Desired.ID,
 		EnvironmentID: record.EnvironmentID,

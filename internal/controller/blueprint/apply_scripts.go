@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 func (service *Service) prepareApplyScripts(ctx context.Context, environmentID, revisionID string, authored map[string]core.ScriptSpec, desiredServices []core.Service, resources desiredrevision.BlueprintScriptResources, allocate func(ids.Kind, string) string) (desiredrevision.BlueprintScriptReconciliation, etcd.BlueprintScriptPublication, error) {
@@ -15,9 +16,9 @@ func (service *Service) prepareApplyScripts(ctx context.Context, environmentID, 
 	if err != nil {
 		return desiredrevision.BlueprintScriptReconciliation{}, etcd.BlueprintScriptPublication{}, err
 	}
-	scriptServices := make([]etcd.ServiceRecord, len(desiredServices))
+	scriptServices := make([]servicerecord.ServiceRecord, len(desiredServices))
 	for index, desiredService := range desiredServices {
-		scriptServices[index] = etcd.ServiceRecord{EnvironmentID: environmentID, Desired: desiredService}
+		scriptServices[index] = servicerecord.ServiceRecord{EnvironmentID: environmentID, Desired: desiredService}
 	}
 	previousScripts := make([]scriptrecord.Record, len(currentScripts))
 	for index, currentScript := range currentScripts {

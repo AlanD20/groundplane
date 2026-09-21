@@ -7,6 +7,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -18,7 +19,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current etcdstore.Versioned[scriptrecord.Record],
 	tombstone deletionrecord.DeletionTombstoneRecord,
 	task TaskRecord,
@@ -138,7 +139,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetScript), scriptID)},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		serviceDesiredCondition(target),
+		servicerecord.ServiceDesiredCondition(target),
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
 		{Key: deletionTombstoneKey("service", target.Record.Desired.ID)},
@@ -185,7 +186,7 @@ func (repository *ScriptRepository) BeginScriptDeletionWithTask(
 func classifyScriptDeletionStartConflict(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
-	target etcdstore.Versioned[ServiceRecord],
+	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current etcdstore.Versioned[scriptrecord.Record],
 	operationID string,
 ) idempotencyPlanClassifier {

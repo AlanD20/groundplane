@@ -5,11 +5,12 @@ import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	releasegroup "github.com/AlanD20/groundplane/internal/controller/releasegroup"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
@@ -22,7 +23,7 @@ type BlueprintPreflightInput struct {
 	PriorProject       *composetypes.Project
 	PreviousIdentities composeidentity.Snapshot
 	ServiceExtensions  map[string]core.ServiceExtensionSpec
-	CurrentServices    []etcdstore.Versioned[etcd.ServiceRecord]
+	CurrentServices    []etcdstore.Versioned[servicerecord.ServiceRecord]
 	AuthoredGroups     map[string]core.ReleaseGroupSpec
 }
 

@@ -6,6 +6,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"math"
 	"slices"
 
@@ -69,7 +70,7 @@ func BuildAttachProvisionSteps(
 }
 
 type attachPlanServiceReader interface {
-	GetService(context.Context, string) (etcdstore.Versioned[etcd.ServiceRecord], error)
+	GetService(context.Context, string) (etcdstore.Versioned[servicerecord.ServiceRecord], error)
 }
 
 type attachPlanIdentityResolver interface {
@@ -282,7 +283,7 @@ func (resolver *TaskPlanResolver) resolveAttachPlan(
 	return plan, nil
 }
 
-func attachPlanServiceSnapshots(values []etcd.EnvironmentServiceProjection) []etcd.AttachTaskServiceSnapshot {
+func attachPlanServiceSnapshots(values []servicerecord.EnvironmentServiceProjection) []etcd.AttachTaskServiceSnapshot {
 	snapshots := make([]etcd.AttachTaskServiceSnapshot, len(values))
 	for index, value := range values {
 		snapshots[index] = etcd.AttachTaskServiceSnapshot{ID: value.Desired.ID, Name: value.Desired.Name}
