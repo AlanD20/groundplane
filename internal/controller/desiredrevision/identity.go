@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -23,7 +23,7 @@ func NewBlueprintIdentityAllocator(
 	claim blueprints.EnvironmentBlueprintStageClaim,
 ) (*BlueprintIdentityAllocator, error) {
 	if ids.Validate(ids.KindTask, claim.TaskID) != nil ||
-		!etcd.ValidDesiredRevisionTime(claim.CreatedAt) {
+		!blueprints.ValidBlueprintRecordTime(claim.CreatedAt) {
 		return nil, errs.New(errs.KindInternal, "Blueprint identity authority is invalid")
 	}
 	return &BlueprintIdentityAllocator{

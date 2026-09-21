@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 
@@ -32,7 +33,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) ReplayRootResponse(
 			"Environment Volume removal idempotency intent changed",
 		)
 	}
-	markerKey, err := etcd.CapabilityIdempotencyMarkerKey(locator)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(locator)
 	if err != nil {
 		return "", false, removalrecord.Corrupt()
 	}
@@ -84,7 +85,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 		)
 	}
 	primary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys:     []string{etcd.CapabilityTaskKey(input.TaskID), etcd.CapabilityTaskAssignmentIndexKey(input.TaskID)},
+		Keys:     []string{taskjournal.TaskStorageKey(input.TaskID), taskjournal.TaskAssignmentIndexKey(input.TaskID)},
 		Revision: revision,
 	})
 	if err != nil {
@@ -106,7 +107,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 			"Environment Volume removal Task changed",
 		)
 	}
-	assignment, err := etcd.DecodeCapabilityTaskAssignment(primary.Values[1].Value)
+	assignment, err := taskassignments.DecodeTaskAssignment(primary.Values[1].Value)
 	if err != nil || assignment.AssignmentID != input.AssignmentID ||
 		assignment.TaskID != input.TaskID || assignment.Executor != taskjournal.TaskExecutorAgent ||
 		assignment.AgentID != input.AgentID || assignment.AgentGeneration != input.AgentGeneration {
@@ -115,9 +116,9 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 			"Environment Volume removal assignment changed",
 		)
 	}
-	claimKey := etcd.CapabilityTaskExecutionClaimKey(taskjournal.TaskExecutorAgent, input.AgentID, input.TaskID)
+	claimKey := taskjournal.TaskExecutionClaimKey(taskjournal.TaskExecutorAgent, input.AgentID, input.TaskID)
 	claim, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys:     []string{claimKey, etcd.CapabilityTaskTimeoutIndexKey(input.TaskID, assignment.Deadline)},
+		Keys:     []string{claimKey, taskjournal.TaskTimeoutIndexKey(input.TaskID, assignment.Deadline)},
 		Revision: revision,
 	})
 	if err != nil {
@@ -140,11 +141,11 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) loadAssignedTask(
 		return etcd.TaskRecord{}, nil, err
 	}
 	return task, append(ownerFences, []etcdstore.Condition{
-		{Key: etcd.CapabilityTaskKey(input.TaskID), ModRevision: primary.Values[0].ModRevision},
-		{Key: etcd.CapabilityTaskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
+		{Key: taskjournal.TaskStorageKey(input.TaskID), ModRevision: primary.Values[0].ModRevision},
+		{Key: taskjournal.TaskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
 		{Key: claimKey, ModRevision: claim.Values[0].ModRevision},
 		{
-			Key:         etcd.CapabilityTaskTimeoutIndexKey(input.TaskID, assignment.Deadline),
+			Key:         taskjournal.TaskTimeoutIndexKey(input.TaskID, assignment.Deadline),
 			ModRevision: claim.Values[1].ModRevision,
 		},
 	}...), nil
@@ -184,7 +185,7 @@ func validateEnvironmentVolumeRemovalRootMarker(
 	value []byte,
 	runtime removalrecord.Runtime,
 ) error {
-	marker, err := etcd.DecodeCapabilityIdempotencyMarker(value, volumeRemovalRootLocator(runtime))
+	marker, err := idempotencyrecord.DecodeIdempotencyMarker(value, volumeRemovalRootLocator(runtime))
 	if err != nil || marker.Kind != idempotencyrecord.IdempotencyMarkerTask || marker.State != idempotencyrecord.IdempotencyMarkerPending ||
 		marker.TaskID != runtime.OriginTaskID || marker.Locator != volumeRemovalRootLocator(runtime) ||
 		marker.Response.Status != http.StatusAccepted ||

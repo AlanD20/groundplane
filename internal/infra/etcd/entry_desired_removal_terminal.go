@@ -120,7 +120,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 		descriptor.Claim.RevisionID != desired.RevisionID || descriptor.Claim.TaskID != desired.RevisionID ||
 		descriptor.Claim.RenderGeneration != desired.RenderGeneration ||
 		descriptor.Claim.BaselineHeadRevision != intent.EntryRevision ||
-		descriptor.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || seal != environmentBlueprintSealFromDescriptor(descriptor) {
+		descriptor.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || seal != blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal staged revision changed")
 	}
 	hierarchy := &HierarchyRepository{store: repository.store}
@@ -158,7 +158,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	descriptor.State, descriptor.UpdatedAt = blueprints.EnvironmentBlueprintStagePublished, nextBlueprintProgressTime(
+	descriptor.State, descriptor.UpdatedAt = blueprints.EnvironmentBlueprintStagePublished, blueprints.NextBlueprintProgressTime(
 		descriptor.UpdatedAt,
 	)
 	descriptorValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(descriptor)

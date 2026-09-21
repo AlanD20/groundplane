@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -90,7 +91,7 @@ func (repository *HierarchyRepository) ClaimBackingServiceCreationStage(
 }
 
 func backingServiceCreationStageKey(locator idempotencyrecord.IdempotencyLocator) (string, error) {
-	markerKey, err := CapabilityIdempotencyMarkerKey(locator)
+	markerKey, err := idempotencyrecord.IdempotencyMarkerKey(locator)
 	if err != nil {
 		return "", err
 	}
@@ -107,7 +108,7 @@ func decodeBackingServiceCreationStage(value []byte) (BackingServiceCreationStag
 }
 
 func validateBackingServiceCreationStage(record BackingServiceCreationStage) error {
-	if _, err := CapabilityIdempotencyMarkerKey(record.Locator); err != nil {
+	if _, err := idempotencyrecord.IdempotencyMarkerKey(record.Locator); err != nil {
 		return err
 	}
 	if record.Locator.ScopeKind != idempotencyrecord.IdempotencyScopePlatform || record.Locator.ScopeID != "-" {
@@ -119,7 +120,7 @@ func validateBackingServiceCreationStage(record BackingServiceCreationStage) err
 	}
 	if ids.Validate(ids.KindProject, record.ProjectID) != nil ||
 		ids.Validate(ids.KindEnvironment, record.EnvironmentID) != nil ||
-		ids.Validate(ids.KindTask, record.TaskID) != nil || !ValidDesiredRevisionTime(record.CreatedAt) {
+		ids.Validate(ids.KindTask, record.TaskID) != nil || !blueprints.ValidBlueprintRecordTime(record.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "Backing-service creation stage identity is invalid")
 	}
 	return nil

@@ -52,7 +52,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 		descriptor.Claim.DescriptorID != desired.DescriptorID || descriptor.Claim.EnvironmentID != intent.EnvironmentID ||
 		descriptor.Claim.RevisionID != desired.RevisionID || descriptor.Claim.TaskID != desired.RevisionID ||
 		descriptor.Claim.BaselineHeadRevision != intent.EntryRevision || descriptor.Claim.RenderGeneration != desired.RenderGeneration ||
-		descriptor.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || seal != environmentBlueprintSealFromDescriptor(descriptor) {
+		descriptor.Claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || seal != blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal retry staged candidate changed")
 	}
 	if intent.CurrentProjection != nil &&

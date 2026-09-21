@@ -216,7 +216,7 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 			"Volume removal terminal transaction exceeds its operation budget: %d compares, %d mutations",
 			len(conditions), len(mutations))
 	}
-	if err := validateBlueprintTransaction(repository.store, conditions, mutations, 52, 900*1024); err != nil {
+	if err := ValidateBlueprintTransaction(repository.store, conditions, mutations, 52, 900*1024); err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
 	return repository.store.Transact(ctx, conditions, mutations)
@@ -398,7 +398,7 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 			"Volume removal attempt terminal transaction exceeds its operation budget",
 		)
 	}
-	if err := validateBlueprintTransaction(repository.store, ancestry.conditions, ancestry.mutations, 48, 900*1024); err != nil {
+	if err := ValidateBlueprintTransaction(repository.store, ancestry.conditions, ancestry.mutations, 48, 900*1024); err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
 	return repository.store.Transact(ctx, ancestry.conditions, ancestry.mutations)

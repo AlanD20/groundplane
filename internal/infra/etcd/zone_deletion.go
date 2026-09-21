@@ -89,7 +89,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		marker.Locator.ScopeID != environment.Record.ID || marker.ReplayTarget == nil ||
 		*marker.ReplayTarget != wantReplayTarget || !marker.CreatedAt.Equal(task.CreatedAt) ||
 		!marker.UpdatedAt.Equal(marker.CreatedAt) || marker.Locator != intent.Claim.Locator ||
-		!sameBlueprintProtectedIntent(marker.Intent, intent.Claim.Intent) {
+		!blueprints.SameBlueprintProtectedIntent(marker.Intent, intent.Claim.Intent) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed,
 			"Zone deletion marker does not match its Task",

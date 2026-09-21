@@ -43,7 +43,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) Create(
 	runtime removalrecord.Runtime,
 	task etcd.TaskRecord,
 ) (EnvironmentVolumeRemovalResumeState, error) {
-	if err := etcd.ValidateCapabilityContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return EnvironmentVolumeRemovalResumeState{}, err
 	}
 	if runtime.Checkpoint != removalrecord.IntentSealed || runtime.AttemptOrdinal != 1 ||
@@ -128,7 +128,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) Resume(
 	ctx context.Context,
 	operationID string,
 ) (EnvironmentVolumeRemovalResumeState, error) {
-	if err := etcd.ValidateCapabilityContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return EnvironmentVolumeRemovalResumeState{}, err
 	}
 	if ids.Validate(ids.KindOperation, operationID) != nil {
@@ -381,7 +381,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) CompletePathCall(
 	ctx context.Context,
 	input EnvironmentVolumeRemovalPathResult,
 ) (etcdstore.Versioned[removalrecord.Progress], bool, error) {
-	if err := etcd.ValidateCapabilityContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return etcdstore.Versioned[removalrecord.Progress]{}, false, err
 	}
 	state, err := repository.Resume(ctx, input.Assignment.OperationID)
@@ -517,7 +517,7 @@ func (repository *EnvironmentVolumeRemovalRuntimeRepository) pendingRecoveryFenc
 		pending.AgentID == assignment.AgentID && pending.AgentGeneration == assignment.AgentGeneration {
 		return nil, nil
 	}
-	key := etcd.CapabilityTaskKey(pending.TaskID)
+	key := taskjournal.TaskStorageKey(pending.TaskID)
 	read, err := repository.store.GetMany(
 		ctx,
 		etcdstore.GetManyRequest{Keys: []string{key}, Revision: state.Runtime.ReadRevision},

@@ -207,7 +207,7 @@ func validateDirectZoneDesiredPublicationInput(input EnvironmentZoneDesiredPubli
 		return err
 	}
 	if input.Marker.Locator != input.Claim.Locator ||
-		!sameBlueprintProtectedIntent(input.Marker.Intent, input.Claim.Intent) ||
+		!blueprints.SameBlueprintProtectedIntent(input.Marker.Intent, input.Claim.Intent) ||
 		!input.Marker.CreatedAt.Equal(input.Claim.CreatedAt) {
 		return errs.New(errs.KindValidationFailed, "direct Zone desired publication marker is invalid")
 	}

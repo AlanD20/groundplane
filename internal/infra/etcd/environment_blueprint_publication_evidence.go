@@ -1,15 +1,12 @@
 package etcd
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-	"time"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -80,18 +77,18 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 		return environmentBlueprintPublicationEvidence{}, err
 	}
 	descriptorID, locatorDigest, err := blueprints.DecodeEnvironmentBlueprintStageLocator(result.Values[2].Value)
-	protectedDigest, digestErr := protectedBlueprintIntentDigest(descriptor.Claim.Intent)
+	protectedDigest, digestErr := blueprints.ProtectedBlueprintIntentDigest(descriptor.Claim.Intent)
 	taskEnvironmentID, materializes, taskEnvironmentErr := desiredRevisionTaskEnvironment(task)
 	if err != nil || digestErr != nil || !blueprints.SameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) ||
 		descriptorID != descriptor.Claim.DescriptorID || locatorDigest != protectedDigest ||
-		descriptor.State != blueprints.EnvironmentBlueprintStageSealed || seal != environmentBlueprintSealFromDescriptor(descriptor) ||
+		descriptor.State != blueprints.EnvironmentBlueprintStageSealed || seal != blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor) ||
 		seal.EnvironmentID != revision.EnvironmentID || seal.RevisionID != revision.RevisionID ||
 		seal.BaselineHeadRevision != expectedHeadRevision || seal.DependencyDigest != digest ||
 		descriptor.Claim.TaskID != task.ID || taskEnvironmentErr != nil || !materializes ||
 		taskEnvironmentID != revision.EnvironmentID ||
 		task.Params[blueprints.EnvironmentDesiredRevisionParam] != revision.RevisionID ||
 		uint64(task.RenderGeneration) != descriptor.Claim.RenderGeneration || marker.TaskID != task.ID ||
-		!sameBlueprintProtectedIntent(marker.Intent, descriptor.Claim.Intent) {
+		!blueprints.SameBlueprintProtectedIntent(marker.Intent, descriptor.Claim.Intent) {
 		return environmentBlueprintPublicationEvidence{}, errs.New(
 			errs.KindStateConflict,
 			"Blueprint sealed staging evidence changed",
@@ -99,7 +96,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 	}
 	published := descriptor
 	published.State = blueprints.EnvironmentBlueprintStagePublished
-	published.UpdatedAt = nextBlueprintProgressTime(descriptor.UpdatedAt)
+	published.UpdatedAt = blueprints.NextBlueprintProgressTime(descriptor.UpdatedAt)
 	publishedValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(published)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err
@@ -110,79 +107,6 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 		locatorRevision: result.Values[2].ModRevision, locatorKey: locatorKey,
 		publishedDescriptor: publishedValue,
 	}, nil
-}
-
-func sameBlueprintProtectedIntent(left, right idempotencyrecord.ProtectedIntentRecord) bool {
-	return left.EnvelopeVersion == right.EnvelopeVersion && left.Cipher == right.Cipher &&
-		left.DigestAlgorithm == right.DigestAlgorithm && left.CiphertextDigest == right.CiphertextDigest &&
-		bytes.Equal(left.Ciphertext, right.Ciphertext)
-}
-
-func environmentBlueprintChunkKeys(descriptor blueprints.EnvironmentBlueprintStageDescriptor) []string {
-	keys := make([]string, 0, int(descriptor.AuditChunks+descriptor.ProjectionChunks))
-	for index := uint32(0); index < descriptor.AuditChunks; index++ {
-		keys = append(keys, blueprints.EnvironmentBlueprintChunkKeyFor(
-			descriptor.Claim.EnvironmentID, descriptor.Claim.RevisionID, blueprints.EnvironmentBlueprintChunkAudit, index,
-		))
-	}
-	for index := uint32(0); index < descriptor.ProjectionChunks; index++ {
-		keys = append(keys, blueprints.EnvironmentBlueprintChunkKeyFor(
-			descriptor.Claim.EnvironmentID, descriptor.Claim.RevisionID, blueprints.EnvironmentBlueprintChunkProjection, index,
-		))
-	}
-	return keys
-}
-
-func verifyEnvironmentBlueprintChunks(descriptor blueprints.EnvironmentBlueprintStageDescriptor, values []*etcdstore.KeyValue) error {
-	if len(values) != int(descriptor.AuditChunks+descriptor.ProjectionChunks) {
-		return blueprints.CorruptEnvironmentBlueprintStage()
-	}
-	auditHasher := sha256.New()
-	projectionHasher := sha256.New()
-	var auditBytes, projectionBytes uint64
-	for index, entry := range values {
-		chunk, err := blueprints.DecodeEnvironmentBlueprintChunk(entry.Value)
-		if err != nil {
-			return err
-		}
-		if index < int(descriptor.AuditChunks) {
-			if chunk.Family != blueprints.EnvironmentBlueprintChunkAudit || chunk.Sequence != uint32(index) {
-				clear(chunk.Data)
-				return blueprints.CorruptEnvironmentBlueprintStage()
-			}
-			_, _ = auditHasher.Write(chunk.Data)
-			auditBytes += uint64(len(chunk.Data))
-		} else {
-			sequence := uint32(index) - descriptor.AuditChunks
-			if chunk.Family != blueprints.EnvironmentBlueprintChunkProjection || chunk.Sequence != sequence {
-				clear(chunk.Data)
-				return blueprints.CorruptEnvironmentBlueprintStage()
-			}
-			_, _ = projectionHasher.Write(chunk.Data)
-			projectionBytes += uint64(len(chunk.Data))
-		}
-		clear(chunk.Data)
-	}
-	var auditDigest, projectionDigest [sha256.Size]byte
-	copy(auditDigest[:], auditHasher.Sum(nil))
-	copy(projectionDigest[:], projectionHasher.Sum(nil))
-	if auditBytes != descriptor.AuditBytes || projectionBytes != descriptor.ProjectionBytes ||
-		auditDigest != descriptor.AuditSHA256 || projectionDigest != descriptor.ProjectionSHA256 {
-		return blueprints.CorruptEnvironmentBlueprintStage()
-	}
-	return nil
-}
-
-func environmentBlueprintSealFromDescriptor(descriptor blueprints.EnvironmentBlueprintStageDescriptor) blueprints.EnvironmentBlueprintSeal {
-	return blueprints.EnvironmentBlueprintSeal{
-		EnvironmentID: descriptor.Claim.EnvironmentID, RevisionID: descriptor.Claim.RevisionID,
-		SourceKind: descriptor.Claim.SourceKind, RenderGeneration: descriptor.Claim.RenderGeneration,
-		ProjectionSchema: descriptor.Claim.ProjectionSchema,
-		AuditChunks:      descriptor.AuditChunks, AuditBytes: descriptor.AuditBytes, AuditSHA256: descriptor.AuditSHA256,
-		ProjectionChunks: descriptor.ProjectionChunks, ProjectionBytes: descriptor.ProjectionBytes,
-		ProjectionSHA256: descriptor.ProjectionSHA256, ProjectionResources: descriptor.ProjectionResources,
-		BaselineHeadRevision: descriptor.Claim.BaselineHeadRevision, DependencyDigest: descriptor.DependencyDigest,
-	}
 }
 
 func (repository *HierarchyRepository) readEnvironmentBlueprintStream(
@@ -303,7 +227,7 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 	}, true, nil
 }
 
-func validateBlueprintTransaction(
+func ValidateBlueprintTransaction(
 	store hierarchyStore,
 	conditions []etcdstore.Condition,
 	mutations []etcdstore.Mutation,
@@ -342,44 +266,4 @@ func validateBlueprintTransaction(
 		}
 	}
 	return nil
-}
-
-func protectedBlueprintIntentDigest(intent idempotencyrecord.ProtectedIntentRecord) ([sha256.Size]byte, error) {
-	if err := idempotencyrecord.ValidateProtectedIntent(intent); err != nil {
-		return [sha256.Size]byte{}, err
-	}
-	decoded, err := hex.DecodeString(intent.CiphertextDigest)
-	if err != nil || len(decoded) != sha256.Size {
-		return [sha256.Size]byte{}, blueprints.CorruptEnvironmentBlueprintStage()
-	}
-	var result [sha256.Size]byte
-	copy(result[:], decoded)
-	return result, nil
-}
-
-func matchingEnvironmentBlueprintChunk(
-	chunk blueprints.EnvironmentBlueprintChunk,
-	family uint8,
-	sequence uint32,
-	data []byte,
-) bool {
-	return chunk.Family == family && chunk.Sequence == sequence &&
-		chunk.LogicalOffset == uint64(sequence)*blueprints.EnvironmentBlueprintChunkBytes &&
-		chunk.LogicalLength == uint32(len(data)) && chunk.Digest == sha256.Sum256(data) &&
-		string(chunk.Data) == string(data)
-}
-
-func sameEnvironmentBlueprintStageStreams(left, right blueprints.EnvironmentBlueprintStageDescriptor) bool {
-	return left.Bound == right.Bound && left.AuditChunks == right.AuditChunks && left.AuditBytes == right.AuditBytes &&
-		left.AuditSHA256 == right.AuditSHA256 && left.ProjectionChunks == right.ProjectionChunks &&
-		left.ProjectionBytes == right.ProjectionBytes && left.ProjectionSHA256 == right.ProjectionSHA256 &&
-		left.ProjectionResources == right.ProjectionResources && left.DependencyDigest == right.DependencyDigest
-}
-
-func nextBlueprintProgressTime(previous time.Time) time.Time {
-	now := time.Now().UTC()
-	if !now.After(previous) {
-		return previous.Add(time.Nanosecond)
-	}
-	return now
 }

@@ -138,7 +138,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 		clear(intentValue)
 		return entryDesiredRemovalPublication{}, blueprints.CorruptEnvironmentBlueprintStage()
 	}
-	descriptor.UpdatedAt = nextBlueprintProgressTime(descriptor.UpdatedAt)
+	descriptor.UpdatedAt = blueprints.NextBlueprintProgressTime(descriptor.UpdatedAt)
 	descriptorValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(descriptor)
 	if err != nil {
 		clear(tombstone)

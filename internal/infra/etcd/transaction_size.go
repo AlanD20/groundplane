@@ -2,8 +2,6 @@ package etcd
 
 import etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 
-import etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
-
 // transactionSize returns the exact protobuf request size after logical keys
 // have been expanded beneath this etcdstore.Store's configured root. Capability modules
 // use it to enforce ceilings narrower than the etcdstore.Store-wide 1 MiB limit.

@@ -257,7 +257,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 					"Volume removal retry exceeds its operation budget",
 				)
 			}
-			if err := validateBlueprintTransaction(repository.store, all, writes, 48, 900*1024); err != nil {
+			if err := ValidateBlueprintTransaction(repository.store, all, writes, 48, 900*1024); err != nil {
 				return etcdstore.TransactionResult{}, err
 			}
 			result, err := repository.store.Transact(ctx, all, writes)

@@ -59,7 +59,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		return IdempotencyTransactionResult{}, err
 	}
 	if input.Marker.Locator != input.Claim.Locator ||
-		!sameBlueprintProtectedIntent(input.Marker.Intent, input.Claim.Intent) ||
+		!blueprints.SameBlueprintProtectedIntent(input.Marker.Intent, input.Claim.Intent) ||
 		!input.Marker.CreatedAt.Equal(input.Claim.CreatedAt) {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "direct Service desired publication marker is invalid",
@@ -377,15 +377,15 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 		return environmentBlueprintPublicationEvidence{}, err
 	}
 	descriptorID, locatorDigest, err := blueprints.DecodeEnvironmentBlueprintStageLocator(result.Values[2].Value)
-	protectedDigest, digestErr := protectedBlueprintIntentDigest(descriptor.Claim.Intent)
+	protectedDigest, digestErr := blueprints.ProtectedBlueprintIntentDigest(descriptor.Claim.Intent)
 	if err != nil || digestErr != nil || !blueprints.SameEnvironmentBlueprintStageClaim(descriptor.Claim, claim) ||
 		descriptorID != claim.DescriptorID || locatorDigest != protectedDigest ||
-		descriptor.State != blueprints.EnvironmentBlueprintStageSealed || seal != environmentBlueprintSealFromDescriptor(descriptor) ||
+		descriptor.State != blueprints.EnvironmentBlueprintStageSealed || seal != blueprints.EnvironmentBlueprintSealFromDescriptor(descriptor) ||
 		seal.EnvironmentID != revision.EnvironmentID || seal.RevisionID != revision.RevisionID ||
 		seal.BaselineHeadRevision != expectedHeadRevision || seal.DependencyDigest != digest ||
 		claim.SourceKind != blueprints.EnvironmentBlueprintSourceMutation || claim.TaskID != revision.RevisionID ||
 		projection.RevisionID != revision.RevisionID || projection.RenderGeneration != claim.RenderGeneration ||
-		marker.Locator != claim.Locator || !sameBlueprintProtectedIntent(marker.Intent, claim.Intent) {
+		marker.Locator != claim.Locator || !blueprints.SameBlueprintProtectedIntent(marker.Intent, claim.Intent) {
 		return environmentBlueprintPublicationEvidence{}, errs.New(
 			errs.KindStateConflict,
 			"desired revision staging evidence changed",
@@ -393,7 +393,7 @@ func (repository *HierarchyRepository) prepareEnvironmentDirectPublication(
 	}
 	published := descriptor
 	published.State = blueprints.EnvironmentBlueprintStagePublished
-	published.UpdatedAt = nextBlueprintProgressTime(descriptor.UpdatedAt)
+	published.UpdatedAt = blueprints.NextBlueprintProgressTime(descriptor.UpdatedAt)
 	publishedValue, err := blueprints.EncodeEnvironmentBlueprintStageDescriptor(published)
 	if err != nil {
 		return environmentBlueprintPublicationEvidence{}, err

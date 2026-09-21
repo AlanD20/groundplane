@@ -7,7 +7,6 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	removal "github.com/AlanD20/groundplane/internal/infra/volumeremovalrecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -47,7 +46,7 @@ func (repository *EvidenceRepository) Manifest(
 	ctx context.Context,
 	operationID string,
 ) (removal.EvidenceManifest, bool, error) {
-	if err := etcd.ValidateCapabilityContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return removal.EvidenceManifest{}, false, err
 	}
 	if ids.Validate(ids.KindOperation, operationID) != nil {
@@ -282,7 +281,7 @@ func (repository *EvidenceRepository) Stage(
 func (repository *EvidenceRepository) read(
 	ctx context.Context, manifest removal.EvidenceManifest,
 ) (EvidenceState, bool, error) {
-	if err := etcd.ValidateCapabilityContext(ctx); err != nil {
+	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return EvidenceState{}, false, err
 	}
 	value, err := removal.EncodeEvidenceManifest(manifest)
