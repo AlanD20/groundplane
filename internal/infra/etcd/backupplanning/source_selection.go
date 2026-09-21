@@ -1,4 +1,4 @@
-package etcd
+package backupplanning
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *BackupRuntimeRepository) prepareManualBackupSource(
+func (repository *Planner) prepareManualBackupSource(
 	ctx context.Context,
 	run backupruntime.BackupRunRecord,
 	source backuppolicy.BackupSourceRecord,
@@ -53,7 +53,7 @@ func (repository *BackupRuntimeRepository) prepareManualBackupSource(
 				errs.KindStateConflict, "config backup source requires age encryption",
 			)
 		}
-		read, readErr := repository.ReadFixedKeys(
+		read, readErr := repository.reader.ReadFixedKeys(
 			ctx,
 			[]string{hierarchyrecord.EnvironmentKey(run.EnvironmentID)},
 			fixedRevision,

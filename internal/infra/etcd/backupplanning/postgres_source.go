@@ -1,4 +1,4 @@
-package etcd
+package backupplanning
 
 import (
 	"context"
@@ -11,14 +11,14 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
+func (repository *Planner) prepareManualPostgresSource(
 	ctx context.Context,
 	attempt backupruntime.BackupRunSourceAttemptRecord,
 	consumerEnvironmentID string,
 	fixedRevision int64,
 	resolvePostgres BackupPostgresIdentityResolver,
 ) (backupruntime.BackupRunSourceAttemptRecord, error) {
-	read, err := repository.ReadFixedKeys(
+	read, err := repository.reader.ReadFixedKeys(
 		ctx, []string{attachrecord.AttachKey(attempt.TargetID), attachrecord.AttachFactsKey(attempt.TargetID)}, fixedRevision,
 	)
 	if err != nil {
@@ -43,7 +43,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 		)
 	}
 	defer clear(facts.Ciphertext)
-	backingRead, err := repository.ReadFixedKeys(ctx, []string{
+	backingRead, err := repository.reader.ReadFixedKeys(ctx, []string{
 		hierarchyrecord.ProjectKey(attach.BackingProjectID),
 		hierarchyrecord.EnvironmentKey(attach.BackingEnvironmentID),
 		blueprints.EnvironmentBlueprintHeadKey(attach.BackingEnvironmentID),

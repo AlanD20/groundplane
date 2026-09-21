@@ -1,4 +1,4 @@
-package etcd
+package backupplanning
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"sort"
 )
 
-func (repository *BackupRuntimeRepository) prepareManualVolumeSource(
+func (repository *Planner) prepareManualVolumeSource(
 	ctx context.Context,
 	attempt backupruntime.BackupRunSourceAttemptRecord,
 	environmentID string,
@@ -53,7 +53,7 @@ func (repository *BackupRuntimeRepository) prepareManualVolumeSource(
 	return attempt, nil
 }
 
-func (repository *BackupRuntimeRepository) manualBackupVolumeConsumers(
+func (repository *Planner) manualBackupVolumeConsumers(
 	ctx context.Context,
 	environmentID string,
 	volumeID string,

@@ -1,4 +1,4 @@
-package etcd
+package backupplanning
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *BackupRuntimeRepository) manualBackupOwner(
+func (repository *Planner) manualBackupOwner(
 	ctx context.Context,
 	environment hierarchyrecord.EnvironmentRecord,
 	fixedRevision int64,
 ) (taskjournal.TaskOwner, error) {
-	read, err := repository.ReadFixedKeys(
+	read, err := repository.reader.ReadFixedKeys(
 		ctx,
 		[]string{hierarchyrecord.ProjectKey(environment.ProjectID)},
 		fixedRevision,
@@ -35,7 +35,7 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 			"backing Environments cannot run consumer backups",
 		)
 	}
-	tenantRead, err := repository.ReadFixedKeys(
+	tenantRead, err := repository.reader.ReadFixedKeys(
 		ctx,
 		[]string{hierarchyrecord.TenantKey(project.TenantID)},
 		fixedRevision,
@@ -54,13 +54,13 @@ func (repository *BackupRuntimeRepository) manualBackupOwner(
 	return taskjournal.EnvironmentTaskOwner(project, environment)
 }
 
-func (repository *BackupRuntimeRepository) manualBackupConnector(
+func (repository *Planner) manualBackupConnector(
 	ctx context.Context,
 	connectorID string,
 	environmentID string,
 	fixedRevision int64,
 ) (connectorrecord.Record, int64, int64, bool, error) {
-	read, err := repository.ReadFixedKeys(ctx, []string{
+	read, err := repository.reader.ReadFixedKeys(ctx, []string{
 		connectorrecord.RecordKey(connectorID), connectorrecord.CredentialValueKey(connectorID),
 	}, fixedRevision)
 	if err != nil {
@@ -107,7 +107,7 @@ func (repository *BackupRuntimeRepository) manualBackupConnector(
 	return connector, read.Values[0].ModRevision, read.Values[1].ModRevision, true, nil
 }
 
-func (repository *BackupRuntimeRepository) manualBackupKey(
+func (repository *Planner) manualBackupKey(
 	ctx context.Context,
 	run *backupruntime.BackupRunRecord,
 	fixedRevision int64,
@@ -118,7 +118,7 @@ func (repository *BackupRuntimeRepository) manualBackupKey(
 	if run.Encryption != backupruntime.BackupRuntimeEncryptionAge {
 		return errs.New(errs.KindStateConflict, "backup encryption strategy is unsupported")
 	}
-	read, err := repository.ReadFixedKeys(ctx, []string{
+	read, err := repository.reader.ReadFixedKeys(ctx, []string{
 		backuppolicy.BackupKeyKey(run.EnvironmentID), backuppolicy.BackupKeyValueKey(run.EnvironmentID),
 	}, fixedRevision)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"io"
 	"slices"
@@ -16,7 +17,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -234,7 +235,7 @@ func (service *FactService) ResolveBackupIdentity(
 	ctx context.Context,
 	current etcdstore.Versioned[attachrecord.Record],
 	stored attachrecord.EncryptedFacts,
-	consume func(etcd.BackupPostgresIdentity) error,
+	consume func(backupplanning.BackupPostgresIdentity) error,
 ) error {
 	if ctx == nil || consume == nil || current.Record.Status != core.AttachReady ||
 		!current.Record.OwnsCredential() ||
@@ -245,7 +246,7 @@ func (service *FactService) ResolveBackupIdentity(
 		if bundle.Identity.Database == "" || bundle.Identity.Role == "" {
 			return errs.New(errs.KindInternal, "backup Attach identity is incomplete")
 		}
-		return consume(etcd.BackupPostgresIdentity{
+		return consume(backupplanning.BackupPostgresIdentity{
 			Database: bundle.Identity.Database,
 			Role:     bundle.Identity.Role,
 		})

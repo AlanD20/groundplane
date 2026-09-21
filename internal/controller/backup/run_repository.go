@@ -3,6 +3,7 @@ package backup
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	backupplanning "github.com/AlanD20/groundplane/internal/infra/etcd/backupplanning"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -89,12 +90,12 @@ func (repository *durableBackupRunRepository) PrepareBackupRunRetry(
 
 type durableBackupRunRepository struct {
 	runtime         *etcd.BackupRuntimeRepository
-	resolvePostgres etcd.BackupPostgresIdentityResolver
+	resolvePostgres backupplanning.BackupPostgresIdentityResolver
 }
 
 func NewDurableBackupRunRepository(
 	runtime *etcd.BackupRuntimeRepository,
-	facts etcd.BackupPostgresIdentityResolver,
+	facts backupplanning.BackupPostgresIdentityResolver,
 ) (*durableBackupRunRepository, error) {
 	if runtime == nil || facts == nil {
 		return nil, errs.New(errs.KindInternal, "backup run repository dependencies are required")
@@ -106,7 +107,7 @@ func (repository *durableBackupRunRepository) PrepareBackupRun(
 	ctx context.Context,
 	input BackupRunPrepareInput,
 ) (BackupRunPrepared, error) {
-	prepared, err := repository.runtime.PrepareManualBackupRun(ctx, etcd.ManualBackupRunInput{
+	prepared, err := repository.runtime.PrepareManualBackupRun(ctx, backupplanning.ManualBackupRunInput{
 		EnvironmentID: input.EnvironmentID,
 		TaskID:        input.TaskID, OperationID: input.OperationID, PlanID: input.PlanID,
 		FixedRevision: input.FixedRevision, CreatedAt: input.CreatedAt,
