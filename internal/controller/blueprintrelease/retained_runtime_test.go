@@ -6,20 +6,25 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 func TestRetainedCaptureDoesNotReadSelectedOrNewServices(t *testing.T) {
 	service := &Service{} // A selected/new Service needs no retained-source I/O.
 	environmentID := ids.New(ids.KindEnvironment)
-	record := etcd.ServiceRecord{EnvironmentID: environmentID, Desired: core.Service{ID: ids.New(ids.KindService)}}
-	current := etcd.Versioned[etcd.ServiceRecord]{Record: record, Revision: 1, ReadRevision: 1}
-	selected := etcd.EnvironmentBlueprintServiceChange{Current: &current, Record: record}
+	record := testservices.ServiceRecord{
+		EnvironmentID: environmentID,
+		Desired:       core.Service{ID: ids.New(ids.KindService)},
+	}
+	current := testkeyvalue.Versioned[testservices.ServiceRecord]{Record: record, Revision: 1, ReadRevision: 1}
+	selected := testblueprints.EnvironmentBlueprintServiceChange{Current: &current, Record: record}
 	for _, input := range []struct {
-		changes, candidates []etcd.EnvironmentBlueprintServiceChange
+		changes, candidates []testblueprints.EnvironmentBlueprintServiceChange
 	}{
-		{changes: []etcd.EnvironmentBlueprintServiceChange{selected}, candidates: []etcd.EnvironmentBlueprintServiceChange{selected}},
-		{changes: []etcd.EnvironmentBlueprintServiceChange{{Record: record}}},
+		{changes: []testblueprints.EnvironmentBlueprintServiceChange{selected}, candidates: []testblueprints.EnvironmentBlueprintServiceChange{selected}},
+		{changes: []testblueprints.EnvironmentBlueprintServiceChange{{Record: record}}},
 	} {
 		captured, err := service.captureRetainedRuntime(
 			context.Background(),

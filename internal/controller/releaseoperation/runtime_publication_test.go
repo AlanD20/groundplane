@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -15,8 +15,14 @@ import (
 
 // Rationale: the actual publisher must retain post-activation inputs separately
 // from its prepared Compose artifact without promoting them before execution.
-func provePreparedReleaseRuntime(t *testing.T, store *directPublicationStore, marker etcd.ReleasePublicationMarker,
-	plan *agentpb.ExecutionPlan, serviceID string, detachedNetwork bool) {
+func provePreparedReleaseRuntime(
+	t *testing.T,
+	store *directPublicationStore,
+	marker testreleases.ReleasePublicationMarker,
+	plan *agentpb.ExecutionPlan,
+	serviceID string,
+	detachedNetwork bool,
+) {
 	t.Helper()
 	if len(marker.PreparedRuntimes) != 1 || marker.PreparedRuntimes[0].ServiceID != serviceID {
 		t.Fatal("publication omitted prepared member runtime")

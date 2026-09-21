@@ -7,7 +7,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -24,7 +24,7 @@ func TestReconcileBlueprintScriptsSelectsOnceForReplicatedLogicalService(t *test
 		map[string]core.ScriptSpec{
 			"release-hook": {Slug: "release", Service: "worker", When: core.ScriptPostDeploy, Script: "printf release"},
 		},
-		[]etcd.ServiceRecord{service},
+		[]testservices.ServiceRecord{service},
 		nil,
 		BlueprintScriptResources{},
 		func(kind ids.Kind, purpose string) string {
@@ -43,7 +43,7 @@ func TestReconcileBlueprintScriptsSelectsOnceForReplicatedLogicalService(t *test
 		map[string]core.ScriptSpec{
 			"release-hook": {Slug: "release", Service: "worker", When: core.ScriptPostDeploy, Script: "printf release"},
 		},
-		[]etcd.ServiceRecord{service},
+		[]testservices.ServiceRecord{service},
 		result.Current,
 		BlueprintScriptResources{},
 		func(ids.Kind, string) string {
@@ -64,10 +64,10 @@ func TestReconcileBlueprintScriptsSelectsOnceForReplicatedLogicalService(t *test
 func TestReconcileBlueprintScriptsRejectsIneligibleLogicalServices(t *testing.T) {
 	at := time.Date(2026, 8, 31, 13, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 10)
-	tests := map[string]func(*etcd.ServiceRecord){
-		"zero replicas":     func(service *etcd.ServiceRecord) { service.Desired.Replicas = 0 },
-		"negative replicas": func(service *etcd.ServiceRecord) { service.Desired.Replicas = -1 },
-		"managed backing": func(service *etcd.ServiceRecord) {
+	tests := map[string]func(*testservices.ServiceRecord){
+		"zero replicas":     func(service *testservices.ServiceRecord) { service.Desired.Replicas = 0 },
+		"negative replicas": func(service *testservices.ServiceRecord) { service.Desired.Replicas = -1 },
+		"managed backing": func(service *testservices.ServiceRecord) {
 			service.Desired.Adapter = "postgres:16"
 			service.BackingNetworkID = ids.NewAt(ids.KindNetwork, at, 14)
 		},
@@ -81,7 +81,7 @@ func TestReconcileBlueprintScriptsRejectsIneligibleLogicalServices(t *testing.T)
 				map[string]core.ScriptSpec{
 					"release-hook": {Slug: "release", Service: "api", When: core.ScriptManual, Script: "true"},
 				},
-				[]etcd.ServiceRecord{service},
+				[]testservices.ServiceRecord{service},
 				nil,
 				BlueprintScriptResources{},
 				func(kind ids.Kind, purpose string) string {

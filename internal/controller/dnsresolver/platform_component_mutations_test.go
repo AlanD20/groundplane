@@ -6,22 +6,23 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testplatformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 // Rationale: desired lifecycle and config mutations must retain the last
 // Controller-owned runtime projection until acknowledgement advances it.
 func TestPlatformComponentMutationCandidatesPreserveHealthyRuntime(t *testing.T) {
-	records, err := etcd.DefaultPlatformComponents(false)
+	records, err := testplatformcomponents.DefaultPlatformComponents(false)
 	if err != nil {
 		t.Fatalf("DefaultPlatformComponents() error = %v", err)
 	}
-	record, err := etcd.SetComponentRuntime(records[0], []string{ids.New(ids.KindService)}, "", true)
+	record, err := testcomponents.SetRuntime(records[0], []string{ids.New(ids.KindService)}, "", true)
 	if err != nil {
 		t.Fatalf("SetComponentRuntime() error = %v", err)
 	}
-	current, err := etcd.ProjectComponentRecord(record)
+	current, err := testcomponents.ProjectRecord(record)
 	if err != nil {
 		t.Fatalf("ProjectComponentRecord() error = %v", err)
 	}
@@ -34,7 +35,7 @@ func TestPlatformComponentMutationCandidatesPreserveHealthyRuntime(t *testing.T)
 		t.Fatalf("disable candidate = %#v, ensure=%t disable=%t", disabled, ensureService, disableService)
 	}
 	assertPlatformRuntimePreserved(t, current, disabled)
-	if _, err := etcd.ReplaceComponentDesired(record, disabled); err != nil {
+	if _, err := testcomponents.ReplaceDesired(record, disabled); err != nil {
 		t.Fatalf("ReplaceComponentDesired(disable) error = %v", err)
 	}
 
@@ -42,7 +43,7 @@ func TestPlatformComponentMutationCandidatesPreserveHealthyRuntime(t *testing.T)
 	config.TailnetDelegation = true
 	configured := platformComponentConfigCandidate(current, config)
 	assertPlatformRuntimePreserved(t, current, configured)
-	if _, err := etcd.ReplaceComponentDesired(record, configured); err != nil {
+	if _, err := testcomponents.ReplaceDesired(record, configured); err != nil {
 		t.Fatalf("ReplaceComponentDesired(config) error = %v", err)
 	}
 }

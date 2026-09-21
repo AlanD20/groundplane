@@ -12,7 +12,10 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -20,7 +23,7 @@ import (
 
 type acknowledgedRuntimeReader struct {
 	*authorityReader
-	runtimes []etcd.Versioned[serviceruntimerecord.Record]
+	runtimes []testkeyvalue.Versioned[serviceruntimerecord.Record]
 }
 
 func (reader *acknowledgedRuntimeReader) LoadAcknowledgedServiceRuntimesAtRevision(
@@ -28,7 +31,7 @@ func (reader *acknowledgedRuntimeReader) LoadAcknowledgedServiceRuntimesAtRevisi
 	_ string,
 	_ []string,
 	revision int64,
-) ([]etcd.Versioned[serviceruntimerecord.Record], error) {
+) ([]testkeyvalue.Versioned[serviceruntimerecord.Record], error) {
 	reader.revisions = append(reader.revisions, revision)
 	return reader.runtimes, nil
 }
@@ -42,8 +45,8 @@ func TestCaptureAcknowledgedRuntimePreservesReceiptBytesAndRetainedProxy(t *test
 	record := acknowledgedRuntimeFixture(t, environmentID, serviceID, releaseID, retainedReleaseID)
 	reader := acknowledgedRuntimeFixtureReader(record, revision)
 	reader.serving.Intent.PriorServingReleaseID = retainedReleaseID
-	reader.renders[releaseID] = etcd.Versioned[etcd.ReleaseRenderInput]{
-		Record: etcd.ReleaseRenderInput{
+	reader.renders[releaseID] = testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput]{
+		Record: testreleaserender.ReleaseRenderInput{
 			ReleaseID: releaseID, ServiceID: serviceID, EnvironmentID: environmentID,
 			Strategy: domain.StrategyBlueGreen, PriorStrategy: domain.StrategyBlueGreen,
 			CandidateTarget: domain.WorkloadBlue, PriorTarget: domain.WorkloadGreen,
@@ -55,7 +58,7 @@ func TestCaptureAcknowledgedRuntimePreservesReceiptBytesAndRetainedProxy(t *test
 	captured, err := CaptureAcknowledgedRuntime(
 		context.Background(),
 		reader,
-		etcd.Versioned[etcd.EnvironmentComposeProjection]{ReadRevision: revision},
+		testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{ReadRevision: revision},
 		environmentID,
 		serviceID,
 		newArtifactID,
@@ -102,8 +105,8 @@ func TestCaptureAcknowledgedRuntimeRejectsMissingForeignAndMismatchedReceipts(t 
 			reader.runtimes[0].Record.EnvironmentID = ids.New(ids.KindEnvironment)
 		}},
 		{name: "target mismatch", mutate: func(reader *acknowledgedRuntimeReader) {
-			reader.renders[releaseID] = etcd.Versioned[etcd.ReleaseRenderInput]{
-				Record: etcd.ReleaseRenderInput{ReleaseID: releaseID, ServiceID: serviceID,
+			reader.renders[releaseID] = testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput]{
+				Record: testreleaserender.ReleaseRenderInput{ReleaseID: releaseID, ServiceID: serviceID,
 					EnvironmentID: environmentID, CandidateTarget: domain.WorkloadGreen},
 				Revision: 83, ReadRevision: revision,
 			}
@@ -112,9 +115,7 @@ func TestCaptureAcknowledgedRuntimeRejectsMissingForeignAndMismatchedReceipts(t 
 		t.Run(test.name, func(t *testing.T) {
 			reader := acknowledgedRuntimeFixtureReader(record, revision)
 			test.mutate(reader)
-			if _, err := CaptureAcknowledgedRuntime(context.Background(), reader,
-				etcd.Versioned[etcd.EnvironmentComposeProjection]{ReadRevision: revision},
-				environmentID, serviceID, ids.New(ids.KindConfig)); err == nil {
+			if _, err := CaptureAcknowledgedRuntime(context.Background(), reader, testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{ReadRevision: revision}, environmentID, serviceID, ids.New(ids.KindConfig)); err == nil {
 				t.Fatal("invalid acknowledged runtime was accepted")
 			}
 		})
@@ -128,15 +129,15 @@ func acknowledgedRuntimeFixtureReader(
 	releaseID := record.Runtime.ReleaseID
 	return &acknowledgedRuntimeReader{
 		authorityReader: &authorityReader{
-			serving: etcd.ServingRelease{Intent: domain.Intent{ID: releaseID},
+			serving: testreleasequeries.ServingRelease{Intent: domain.Intent{ID: releaseID},
 				ProjectionRevision: 81, IntentRevision: 82, Revision: revision},
-			renders: map[string]etcd.Versioned[etcd.ReleaseRenderInput]{releaseID: {
-				Record: etcd.ReleaseRenderInput{ReleaseID: releaseID, ServiceID: record.Runtime.ServiceID,
+			renders: map[string]testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput]{releaseID: {
+				Record: testreleaserender.ReleaseRenderInput{ReleaseID: releaseID, ServiceID: record.Runtime.ServiceID,
 					EnvironmentID: record.EnvironmentID, CandidateTarget: domain.WorkloadBlue},
 				Revision: 83, ReadRevision: revision,
 			}},
 		},
-		runtimes: []etcd.Versioned[serviceruntimerecord.Record]{{
+		runtimes: []testkeyvalue.Versioned[serviceruntimerecord.Record]{{
 			Record: record, Revision: 89, ReadRevision: revision,
 		}},
 	}

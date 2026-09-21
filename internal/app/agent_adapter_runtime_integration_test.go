@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/agent"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/runner"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -155,7 +156,7 @@ func runAdapterProcedure(
 	defer stop()
 
 	now := time.Now()
-	if err := pool.Submit(ctx, agent.Assignment{
+	if err := pool.Submit(ctx, testtaskassignment.Assignment{
 		AssignmentID:     adapterRuntimeAssignmentID,
 		TaskID:           adapterRuntimeTaskID,
 		OperationID:      adapterRuntimeOperationID,

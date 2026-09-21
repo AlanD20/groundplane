@@ -13,6 +13,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	"github.com/AlanD20/groundplane/internal/controller/localagent"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -37,7 +40,7 @@ func TestCoordinatorHandsOffThenQualifiesSameTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	status, err = candidate.Execute(context.Background(), h.claim.Task.Record, h.claim.Assignment.Record.Deadline)
-	if err != nil || status != etcd.TaskStatusCompleted || h.store.current().Phase != upgrade.PhaseHealthy ||
+	if err != nil || status != testtaskjournal.TaskStatusCompleted || h.store.current().Phase != upgrade.PhaseHealthy ||
 		len(h.agents.goals) != 1 || h.agents.goals[0] != localagent.UpdateFinish {
 		t.Fatalf("qualification = %s, %v, journal %s", status, err, h.store.current().Phase)
 	}
@@ -61,7 +64,7 @@ func TestCoordinatorBusyDrainLeavesRuntimeAndDispatchUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	status, err := coordinator.Execute(context.Background(), h.claim.Task.Record, h.claim.Assignment.Record.Deadline)
-	if err != nil || status != etcd.TaskStatusFailed || h.store.found || h.unit.launches != 0 ||
+	if err != nil || status != testtaskjournal.TaskStatusFailed || h.store.found || h.unit.launches != 0 ||
 		len(h.agents.goals) != 0 || !session.AssignmentsAllowed() {
 		t.Fatalf("busy preparation = %s, %v, dispatch %t", status, err, session.AssignmentsAllowed())
 	}
@@ -91,7 +94,7 @@ func TestCoordinatorBadCandidateRequestsNativeRollbackAndPredecessorRecovers(t *
 		t.Fatal(err)
 	}
 	status, err = predecessor.Execute(context.Background(), h.claim.Task.Record, h.claim.Assignment.Record.Deadline)
-	if err != nil || status != etcd.TaskStatusFailed || h.store.current().Phase != upgrade.PhaseRecovered ||
+	if err != nil || status != testtaskjournal.TaskStatusFailed || h.store.current().Phase != upgrade.PhaseRecovered ||
 		h.agents.goals[len(h.agents.goals)-1] != localagent.UpdateRestore {
 		t.Fatalf("predecessor recovery = %s, %v, journal %s", status, err, h.store.current().Phase)
 	}
@@ -127,7 +130,8 @@ func TestCoordinatorAbortHasOneWinnerWithActivation(t *testing.T) {
 				h.claim.Task.Record,
 				h.claim.Assignment.Record.Deadline,
 			)
-			if err != nil || status != etcd.TaskStatusAborted || h.store.current().Phase != upgrade.PhaseCancelled ||
+			if err != nil || status != testtaskjournal.TaskStatusAborted ||
+				h.store.current().Phase != upgrade.PhaseCancelled ||
 				h.unit.launches != 0 {
 				t.Fatalf("prepared abort = %s, %v", status, err)
 			}
@@ -153,7 +157,7 @@ func TestCoordinatorExpiredRecoveryKeepsUnresolvedClaim(t *testing.T) {
 	}
 	h.agents.err = nil
 	status, err = coordinator.Execute(context.Background(), h.claim.Task.Record, h.claim.Assignment.Record.Deadline)
-	if err != nil || status != etcd.TaskStatusFailed || h.store.current().Phase != upgrade.PhaseRecovered {
+	if err != nil || status != testtaskjournal.TaskStatusFailed || h.store.current().Phase != upgrade.PhaseRecovered {
 		t.Fatalf("resolved late recovery = %s, %v", status, err)
 	}
 }
@@ -183,10 +187,12 @@ func newCoordinatorHarness(t *testing.T) *coordinatorHarness {
 		t.Fatal(err)
 	}
 	return &coordinatorHarness{input: input, expected: expected, now: now,
-		claim: etcd.TaskAssignment{Task: etcd.Versioned[etcd.TaskRecord]{Record: task},
-			Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-				TaskID: task.ID, Executor: etcd.TaskExecutorController, AssignedAt: now, Deadline: expected.Deadline,
-			}}},
+		claim: etcd.TaskAssignment{Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: task},
+			Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+				Record: testtaskassignments.TaskAssignmentRecord{
+					TaskID: task.ID, Executor: testtaskjournal.TaskExecutorController, AssignedAt: now, Deadline: expected.Deadline,
+				},
+			}},
 		store: &coordinatorStore{manifest: input.Manifest, installed: input.PreviousController},
 		unit:  &coordinatorUnit{}, work: &coordinatorWork{},
 		agents: &coordinatorAgents{agent: localagent.Agent{ID: input.Agent.ID, Image: input.Agent.Image,

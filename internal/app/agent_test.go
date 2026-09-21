@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/agentprotocol"
+	"github.com/AlanD20/groundplane/internal/infra/agentcredential"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -39,7 +40,7 @@ func TestReadAgentTokenRequiresExactEncoding(t *testing.T) {
 			if err := os.WriteFile(path, test.content, 0o400); err != nil {
 				t.Fatalf("write token: %v", err)
 			}
-			got, err := readAgentTokenForUID(context.Background(), path, uint32(os.Geteuid()))
+			got, err := agentcredential.ReadChannelToken(context.Background(), path, uint32(os.Geteuid()))
 			if (err != nil) != test.wantErr {
 				t.Fatalf("readAgentToken() error = %v, want error = %t", err, test.wantErr)
 			}
@@ -60,7 +61,7 @@ func TestReadAgentTokenDoesNotLeakMalformedCredential(t *testing.T) {
 	if err := os.WriteFile(path, plaintext, 0o400); err != nil {
 		t.Fatalf("write token: %v", err)
 	}
-	_, err := readAgentTokenForUID(context.Background(), path, uint32(os.Geteuid()))
+	_, err := agentcredential.ReadChannelToken(context.Background(), path, uint32(os.Geteuid()))
 	if err == nil {
 		t.Fatal("readAgentToken() error = nil, want malformed token failure")
 	}
@@ -138,7 +139,7 @@ func TestReadAgentTokenRejectsUnsafeFileMetadata(t *testing.T) {
 			t.Parallel()
 			path := filepath.Join(t.TempDir(), "token")
 			test.prepare(t, path)
-			if _, err := readAgentTokenForUID(context.Background(), path, test.expectedUID); err == nil {
+			if _, err := agentcredential.ReadChannelToken(context.Background(), path, test.expectedUID); err == nil {
 				t.Fatal("readAgentTokenForUID() error = nil, want unsafe-file rejection")
 			}
 		})

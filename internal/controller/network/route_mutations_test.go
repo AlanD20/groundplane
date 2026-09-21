@@ -10,55 +10,62 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type fakeRouteMutationRepository struct {
 	routeMutationRepository
-	environment etcd.Versioned[etcd.EnvironmentRecord]
-	project     etcd.Versioned[etcd.ProjectRecord]
-	target      etcd.Versioned[etcd.ServiceRecord]
-	record      etcd.RouteRecord
-	marker      etcd.IdempotencyMarker
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
+	project     testkeyvalue.Versioned[testhierarchy.ProjectRecord]
+	target      testkeyvalue.Versioned[testservices.ServiceRecord]
+	record      testroutes.Record
+	marker      testidempotency.IdempotencyMarker
 	createCalls int
 	task        etcd.TaskRecord
-	intent      etcd.RouteMutationIntent
+	intent      testenvironmentchanges.RouteMutationIntent
 }
 
 func (fake *fakeRouteMutationRepository) GetEnvironment(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], error) {
 	return fake.environment, nil
 }
 
 func (fake *fakeRouteMutationRepository) GetProject(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testhierarchy.ProjectRecord], error) {
 	return fake.project, nil
 }
 
 func (fake *fakeRouteMutationRepository) GetService(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.ServiceRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testservices.ServiceRecord], error) {
 	return fake.target, nil
 }
 
 func (fake *fakeRouteMutationRepository) BeginRouteMutationWithTask(
 	_ context.Context,
-	_ etcd.Versioned[etcd.EnvironmentRecord],
-	_ etcd.Versioned[etcd.ProjectRecord],
-	_ etcd.Versioned[etcd.ServiceRecord],
-	_ *etcd.Versioned[etcd.RouteRecord],
-	record etcd.RouteRecord,
-	intent etcd.RouteMutationIntent,
+	_ testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
+	_ testkeyvalue.Versioned[testhierarchy.ProjectRecord],
+	_ testkeyvalue.Versioned[testservices.ServiceRecord],
+	_ *testkeyvalue.Versioned[testroutes.Record],
+	record testroutes.Record,
+	intent testenvironmentchanges.RouteMutationIntent,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	fake.createCalls++
 	fake.record, fake.intent, fake.task, fake.marker = record, intent, task, marker
@@ -79,8 +86,8 @@ func (fake *fakeRouteMutationIdempotency) Prepare(
 }
 
 func (fake *fakeRouteMutationIdempotency) ResolveExisting(
-	context.Context,
-	etcd.IdempotencyLocator,
+	context.Context, testidempotency.IdempotencyLocator,
+
 	routeMutationEvidence,
 ) (idempotentintent.Resolution, bool, error) {
 	return idempotentintent.Resolution{}, false, nil
@@ -95,8 +102,8 @@ func (fake *fakeRouteMutationIdempotency) ResolveKnown(
 }
 
 func (fake *fakeRouteMutationIdempotency) ResolveUnknown(
-	context.Context,
-	etcd.IdempotencyLocator,
+	context.Context, testidempotency.IdempotencyLocator,
+
 	routeMutationEvidence,
 	error,
 ) (idempotentintent.Resolution, error) {
@@ -113,18 +120,21 @@ func TestRouteCreationDerivesIdentityAndCommitsExactReplayResponse(t *testing.T)
 	tenantID := ids.NewAt(ids.KindTenant, at, 4)
 	targetID := ids.NewAt(ids.KindService, at, 3)
 	repository := &fakeRouteMutationRepository{
-		environment: etcd.Versioned[etcd.EnvironmentRecord]{
-			Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID}, Revision: 7, ReadRevision: 7,
+		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+			Record: testhierarchy.EnvironmentRecord{
+				ID:        environmentID,
+				ProjectID: projectID,
+			}, Revision: 7, ReadRevision: 7,
 		},
-		project: etcd.Versioned[etcd.ProjectRecord]{
-			Record: etcd.ProjectRecord{
+		project: testkeyvalue.Versioned[testhierarchy.ProjectRecord]{
+			Record: testhierarchy.ProjectRecord{
 				ID:       projectID,
 				TenantID: tenantID,
-				Kind:     etcd.ProjectKindTenant,
+				Kind:     testhierarchy.ProjectKindTenant,
 			}, Revision: 8, ReadRevision: 8,
 		},
-		target: etcd.Versioned[etcd.ServiceRecord]{
-			Record: etcd.ServiceRecord{EnvironmentID: environmentID}, Revision: 9, ReadRevision: 9,
+		target: testkeyvalue.Versioned[testservices.ServiceRecord]{
+			Record: testservices.ServiceRecord{EnvironmentID: environmentID}, Revision: 9, ReadRevision: 9,
 		},
 	}
 	repository.target.Record.Desired.ID = targetID
@@ -161,9 +171,9 @@ func TestRouteCreationDerivesIdentityAndCommitsExactReplayResponse(t *testing.T)
 		t.Fatalf("CreateRoute() response = %#v/%#v", response, route)
 	}
 	if repository.record.Desired.ID != route.ID || repository.record.EnvironmentID != environmentID ||
-		repository.record.Observed.Status != etcd.RouteObservedUnserved || repository.task.ID != accepted.TaskID ||
-		repository.task.Executor != etcd.TaskExecutorController || repository.intent.TaskID != accepted.TaskID ||
-		repository.marker.Locator.ScopeKind != etcd.IdempotencyScopeEnvironment ||
+		repository.record.Observed.Status != testroutes.ObservedUnserved || repository.task.ID != accepted.TaskID ||
+		repository.task.Executor != testtaskjournal.TaskExecutorController || repository.intent.TaskID != accepted.TaskID ||
+		repository.marker.Locator.ScopeKind != testidempotency.IdempotencyScopeEnvironment ||
 		repository.marker.Locator.ScopeID != environmentID || repository.marker.Locator.Method != http.MethodPost ||
 		repository.marker.Locator.Route != routeCreationRoute || repository.marker.Locator.Key != "route-create-key-0001" ||
 		repository.marker.RetainUntil != now.Add(90*24*time.Hour) ||
@@ -200,18 +210,21 @@ func TestRouteCreationRejectsUnexposedTargetPort(t *testing.T) {
 	tenantID := ids.New(ids.KindTenant)
 	targetID := ids.New(ids.KindService)
 	repository := &fakeRouteMutationRepository{
-		environment: etcd.Versioned[etcd.EnvironmentRecord]{
-			Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID}, Revision: 7, ReadRevision: 7,
+		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+			Record: testhierarchy.EnvironmentRecord{
+				ID:        environmentID,
+				ProjectID: projectID,
+			}, Revision: 7, ReadRevision: 7,
 		},
-		project: etcd.Versioned[etcd.ProjectRecord]{
-			Record: etcd.ProjectRecord{
+		project: testkeyvalue.Versioned[testhierarchy.ProjectRecord]{
+			Record: testhierarchy.ProjectRecord{
 				ID:       projectID,
 				TenantID: tenantID,
-				Kind:     etcd.ProjectKindTenant,
+				Kind:     testhierarchy.ProjectKindTenant,
 			}, Revision: 8, ReadRevision: 8,
 		},
-		target: etcd.Versioned[etcd.ServiceRecord]{
-			Record: etcd.ServiceRecord{EnvironmentID: environmentID}, Revision: 9, ReadRevision: 9,
+		target: testkeyvalue.Versioned[testservices.ServiceRecord]{
+			Record: testservices.ServiceRecord{EnvironmentID: environmentID}, Revision: 9, ReadRevision: 9,
 		},
 	}
 	repository.target.Record.Desired.ID = targetID

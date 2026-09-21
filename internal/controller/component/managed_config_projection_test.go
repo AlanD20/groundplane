@@ -8,31 +8,34 @@ import (
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type previewTopology struct {
-	services func(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error)
-	zones    func(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error)
-	routes   func(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error)
+	services func(context.Context, string, testkeyvalue.PageRequest) (testkeyvalue.Page[testservices.ServiceRecord], error)
+	zones    func(context.Context, string, testkeyvalue.PageRequest) (testkeyvalue.Page[testzones.Record], error)
+	routes   func(context.Context, string, testkeyvalue.PageRequest) (testkeyvalue.Page[testroutes.Record], error)
 }
 
 func (topology previewTopology) ListServices(
-	ctx context.Context, id string, request etcd.PageRequest,
-) (etcd.Page[etcd.ServiceRecord], error) {
+	ctx context.Context, id string, request testkeyvalue.PageRequest,
+) (testkeyvalue.Page[testservices.ServiceRecord], error) {
 	return topology.services(ctx, id, request)
 }
 
 func (topology previewTopology) ListZones(
-	ctx context.Context, id string, request etcd.PageRequest,
-) (etcd.Page[etcd.ZoneRecord], error) {
+	ctx context.Context, id string, request testkeyvalue.PageRequest,
+) (testkeyvalue.Page[testzones.Record], error) {
 	return topology.zones(ctx, id, request)
 }
 
 func (topology previewTopology) ListRoutes(
-	ctx context.Context, id string, request etcd.PageRequest,
-) (etcd.Page[etcd.RouteRecord], error) {
+	ctx context.Context, id string, request testkeyvalue.PageRequest,
+) (testkeyvalue.Page[testroutes.Record], error) {
 	return topology.routes(ctx, id, request)
 }
 
@@ -46,14 +49,14 @@ func previewComponent() core.Component {
 
 func emptyPreviewTopology() previewTopology {
 	return previewTopology{
-		services: func(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error) {
-			return etcd.Page[etcd.ServiceRecord]{Revision: 42}, nil
+		services: func(context.Context, string, testkeyvalue.PageRequest) (testkeyvalue.Page[testservices.ServiceRecord], error) {
+			return testkeyvalue.Page[testservices.ServiceRecord]{Revision: 42}, nil
 		},
-		zones: func(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error) {
-			return etcd.Page[etcd.ZoneRecord]{Revision: 42}, nil
+		zones: func(context.Context, string, testkeyvalue.PageRequest) (testkeyvalue.Page[testzones.Record], error) {
+			return testkeyvalue.Page[testzones.Record]{Revision: 42}, nil
 		},
-		routes: func(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error) {
-			return etcd.Page[etcd.RouteRecord]{Revision: 42}, nil
+		routes: func(context.Context, string, testkeyvalue.PageRequest) (testkeyvalue.Page[testroutes.Record], error) {
+			return testkeyvalue.Page[testroutes.Record]{Revision: 42}, nil
 		},
 	}
 }
@@ -65,37 +68,46 @@ func TestConfigProjectorPinsCompleteDesiredView(t *testing.T) {
 	component := previewComponent()
 	topology := emptyPreviewTopology()
 	reads, plans := 0, 0
-	check := func(id string, request etcd.PageRequest) {
+	check := func(id string, request testkeyvalue.PageRequest) {
 		t.Helper()
 		reads++
-		if id != component.OwnerID || request.Revision != 42 || request.Limit != etcd.MaximumPageLimit {
+		if id != component.OwnerID || request.Revision != 42 || request.Limit != testkeyvalue.MaximumPageLimit {
 			t.Fatalf("preview read %q %#v", id, request)
 		}
 	}
-	topology.services = func(_ context.Context, id string, request etcd.PageRequest) (etcd.Page[etcd.ServiceRecord], error) {
+	topology.services = func(_ context.Context, id string, request testkeyvalue.PageRequest) (testkeyvalue.Page[testservices.ServiceRecord], error) {
 		check(id, request)
 		start, end, next := 0, 200, "next"
 		if request.Cursor == "next" {
 			start, end, next = 200, 201, ""
 		}
-		page := etcd.Page[etcd.ServiceRecord]{Revision: 42, NextCursor: next}
+		page := testkeyvalue.Page[testservices.ServiceRecord]{Revision: 42, NextCursor: next}
 		for index := start; index < end; index++ {
-			page.Items = append(page.Items, etcd.Versioned[etcd.ServiceRecord]{ReadRevision: 42,
-				Record: etcd.ServiceRecord{EnvironmentID: id, Desired: core.Service{Name: fmt.Sprint("app-", index)}}})
+			page.Items = append(page.Items, testkeyvalue.Versioned[testservices.ServiceRecord]{ReadRevision: 42,
+				Record: testservices.ServiceRecord{
+					EnvironmentID: id,
+					Desired:       core.Service{Name: fmt.Sprint("app-", index)},
+				}})
 		}
 		return page, nil
 	}
-	topology.zones = func(_ context.Context, id string, request etcd.PageRequest) (etcd.Page[etcd.ZoneRecord], error) {
+	topology.zones = func(_ context.Context, id string, request testkeyvalue.PageRequest) (testkeyvalue.Page[testzones.Record], error) {
 		check(id, request)
-		return etcd.Page[etcd.ZoneRecord]{Revision: 42, Items: []etcd.Versioned[etcd.ZoneRecord]{{ReadRevision: 42,
-			Record: etcd.ZoneRecord{EnvironmentID: id, Desired: core.Zone{Name: "edge"}},
-		}}}, nil
+		return testkeyvalue.Page[testzones.Record]{
+			Revision: 42,
+			Items: []testkeyvalue.Versioned[testzones.Record]{{ReadRevision: 42,
+				Record: testzones.Record{EnvironmentID: id, Desired: core.Zone{Name: "edge"}},
+			}},
+		}, nil
 	}
-	topology.routes = func(_ context.Context, id string, request etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error) {
+	topology.routes = func(_ context.Context, id string, request testkeyvalue.PageRequest) (testkeyvalue.Page[testroutes.Record], error) {
 		check(id, request)
-		return etcd.Page[etcd.RouteRecord]{Revision: 42, Items: []etcd.Versioned[etcd.RouteRecord]{{ReadRevision: 42,
-			Record: etcd.RouteRecord{EnvironmentID: id, Desired: core.Route{Host: "app.example.com"}},
-		}}}, nil
+		return testkeyvalue.Page[testroutes.Record]{
+			Revision: 42,
+			Items: []testkeyvalue.Versioned[testroutes.Record]{{ReadRevision: 42,
+				Record: testroutes.Record{EnvironmentID: id, Desired: core.Route{Host: "app.example.com"}},
+			}},
+		}, nil
 	}
 	registration := ManagedConfigRegistration{Kind: component.Kind, SourcePath: "caddy/Caddyfile",
 		Plan: func(environment core.Environment, input core.Component) (componentsdk.EnvironmentPlan, error) {
@@ -138,10 +150,13 @@ func TestConfigProjectorFailsClosedBeforePlanning(t *testing.T) {
 			if name == "no revision" {
 				revision = 0
 			}
-			topology.routes = func(context.Context, string, etcd.PageRequest) (etcd.Page[etcd.RouteRecord], error) {
-				page := etcd.Page[etcd.RouteRecord]{Revision: 42, Items: []etcd.Versioned[etcd.RouteRecord]{{
-					ReadRevision: 42, Record: etcd.RouteRecord{EnvironmentID: component.OwnerID},
-				}}}
+			topology.routes = func(context.Context, string, testkeyvalue.PageRequest) (testkeyvalue.Page[testroutes.Record], error) {
+				page := testkeyvalue.Page[testroutes.Record]{
+					Revision: 42,
+					Items: []testkeyvalue.Versioned[testroutes.Record]{{
+						ReadRevision: 42, Record: testroutes.Record{EnvironmentID: component.OwnerID},
+					}},
+				}
 				switch name {
 				case "page revision":
 					page.Revision = 43

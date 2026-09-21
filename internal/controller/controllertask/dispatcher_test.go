@@ -9,6 +9,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	corebackup "github.com/AlanD20/groundplane/internal/core/backup"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -43,18 +44,18 @@ func TestDispatcherRequiresAndRoutesExactBackupKeyRotationExecutor(t *testing.T)
 	task := etcd.TaskRecord{
 		ID:          ids.NewAt(ids.KindTask, now, 1),
 		OperationID: ids.NewAt(ids.KindOperation, now, 2),
-		Owner: etcd.TaskOwner{
-			WorkspaceType: etcd.TaskWorkspacePlatform,
+		Owner: testtaskjournal.TaskOwner{
+			WorkspaceType: testtaskjournal.TaskWorkspacePlatform,
 			ProjectID:     ids.NewAt(ids.KindProject, now, 3),
 			EnvironmentID: ids.NewAt(ids.KindEnvironment, now, 4),
 		},
-		Executor:         etcd.TaskExecutorController,
+		Executor:         testtaskjournal.TaskExecutorController,
 		PlanID:           ids.NewAt(ids.KindPlan, now, 5),
 		PlanHash:         corebackup.KeyRotationPlanHash(),
 		RenderGeneration: 1,
-		Type:             etcd.TaskRotate,
+		Type:             testtaskjournal.TaskRotate,
 		TimeoutSeconds:   corebackup.KeyRotationTimeoutSeconds,
-		Status:           etcd.TaskStatusRunning,
+		Status:           testtaskjournal.TaskStatusRunning,
 	}
 	task.Target = task.Owner.EnvironmentID
 	if err := dispatcher.Execute(context.Background(), task); err != nil {
@@ -65,7 +66,7 @@ func TestDispatcherRequiresAndRoutesExactBackupKeyRotationExecutor(t *testing.T)
 	}
 
 	ordinary := task
-	ordinary.Type = etcd.TaskRemove
+	ordinary.Type = testtaskjournal.TaskRemove
 	if err := dispatcher.Execute(context.Background(), ordinary); err != nil {
 		t.Fatalf("Execute(fallback) error = %v", err)
 	}

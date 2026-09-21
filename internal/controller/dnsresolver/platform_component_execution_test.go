@@ -12,35 +12,42 @@ import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testplatformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	testresolverbaseline "github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"google.golang.org/protobuf/proto"
 )
 
 type executionRepositoryStub struct {
-	input    etcd.PlatformComponentTaskRenderInput
-	current  etcd.Versioned[etcd.ComponentRecord]
-	baseline etcd.Versioned[etcd.HostResolverBaselineRecord]
+	input    testplatformcomponents.PlatformComponentTaskRenderInput
+	current  testkeyvalue.Versioned[testcomponents.Record]
+	baseline testkeyvalue.Versioned[testresolverbaseline.Record]
 }
 
 func (repository executionRepositoryStub) GetPlatformComponentTaskRenderInput(
 	_ context.Context,
 	_ string,
-) (etcd.Versioned[etcd.PlatformComponentTaskRenderInput], error) {
-	return etcd.Versioned[etcd.PlatformComponentTaskRenderInput]{Record: repository.input}, nil
+) (testkeyvalue.Versioned[testplatformcomponents.PlatformComponentTaskRenderInput], error) {
+	return testkeyvalue.Versioned[testplatformcomponents.PlatformComponentTaskRenderInput]{
+		Record: repository.input,
+	}, nil
 }
 
 func (repository executionRepositoryStub) GetComponent(
 	_ context.Context,
 	_ string,
-) (etcd.Versioned[etcd.ComponentRecord], error) {
+) (testkeyvalue.Versioned[testcomponents.Record], error) {
 	return repository.current, nil
 }
 
 func (repository executionRepositoryStub) GetHostResolverBaseline(
 	_ context.Context,
-) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error) {
+) (testkeyvalue.Versioned[testresolverbaseline.Record], bool, error) {
 	return repository.baseline, true, nil
 }
 
@@ -66,7 +73,7 @@ func TestPlatformExecutionDisableReusesSealedPredecessorOwnership(t *testing.T) 
 			UpstreamAuto:     true,
 		}},
 	}
-	record, err := etcd.NewComponentRecord(component)
+	record, err := testcomponents.NewRecord(component)
 	if err != nil {
 		t.Fatalf("NewComponentRecord() error = %v", err)
 	}
@@ -84,7 +91,7 @@ func TestPlatformExecutionDisableReusesSealedPredecessorOwnership(t *testing.T) 
 	}
 	artifactDigest := sha256.Sum256(registeredPlan.Files[0].Content)
 	registeredPlanDigest := componentsdk.DigestEnvironmentPlan(registeredPlan)
-	input := etcd.PlatformComponentTaskRenderInput{
+	input := testplatformcomponents.PlatformComponentTaskRenderInput{
 		PlanID:                         taskPlanID,
 		TaskID:                         taskID,
 		ComponentID:                    componentID,
@@ -125,21 +132,21 @@ func TestPlatformExecutionDisableReusesSealedPredecessorOwnership(t *testing.T) 
 		ID:               taskID,
 		PlanID:           taskPlanID,
 		RenderGeneration: 8,
-		Executor:         etcd.TaskExecutorAgent,
-		Type:             etcd.TaskUpdate,
+		Executor:         testtaskjournal.TaskExecutorAgent,
+		Type:             testtaskjournal.TaskUpdate,
 		Target:           componentID,
-		Actor:            etcd.TaskActorOperator,
+		Actor:            testtaskjournal.TaskActorOperator,
 		Params: map[string]string{
-			etcd.TaskResourceKindParam:                   etcd.TaskResourceComponent,
+			testtaskjournal.TaskResourceKindParam:        testtaskjournal.TaskResourceComponent,
 			etcd.TaskPlatformComponentDesiredSHA256Param: desiredDigest,
 		},
-		Steps: []etcd.TaskStepRecord{
-			{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 5)},
-			{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 9)},
+		Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 5)},
+			{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 9)},
 		},
 	}
-	input.ComposeArtifact, err = controllerpkg.RenderPlatformComponentCompose(
-		controllerpkg.PlatformComponentComposeInput{
+	input.ComposeArtifact, err = testcomposerender.RenderPlatformComponentCompose(
+		testcomposerender.PlatformComponentComposeInput{
 			ComponentID: componentID, PlanID: input.OwnershipPlanID,
 			RenderGeneration: input.OwnershipGeneration,
 			ArtifactID:       input.ComposeArtifactID, Plan: registeredPlan,
@@ -157,14 +164,15 @@ func TestPlatformExecutionDisableReusesSealedPredecessorOwnership(t *testing.T) 
 		t.Fatalf("sealPlatformComponentTaskPlanHash() error = %v", err)
 	}
 	task.PlanHash = input.ExecutionPlanSHA256
-	baseline := etcd.Versioned[etcd.HostResolverBaselineRecord]{Record: etcd.HostResolverBaselineRecord{
+	baseline := testkeyvalue.Versioned[testresolverbaseline.Record]{Record: testresolverbaseline.Record{
 		Generation: 1, Content: []byte("nameserver 1.1.1.1\n"), SHA256: input.BaselineSHA256,
 	}}
 	planner, err := NewPlatformComponentExecutionPlanner(
 		"/var/lib/groundplane",
 		executionRepositoryStub{
-			input: input, current: etcd.Versioned[etcd.ComponentRecord]{Record: record}, baseline: baseline,
+			input: input, current: testkeyvalue.Versioned[testcomponents.Record]{Record: record}, baseline: baseline,
 		},
+		executionRepositoryStub{baseline: baseline},
 		&executionCatalogStub{plan: registeredPlan},
 	)
 	if err != nil {
@@ -222,7 +230,7 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 			UpstreamAuto:     true,
 		}},
 	}
-	record, err := etcd.NewComponentRecord(component)
+	record, err := testcomponents.NewRecord(component)
 	if err != nil {
 		t.Fatalf("NewComponentRecord() error = %v", err)
 	}
@@ -241,7 +249,7 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	}
 	artifactDigest := sha256.Sum256(firstPlan.Files[0].Content)
 	registeredPlanDigest := componentsdk.DigestEnvironmentPlan(firstPlan)
-	input := etcd.PlatformComponentTaskRenderInput{
+	input := testplatformcomponents.PlatformComponentTaskRenderInput{
 		PlanID:                         planID,
 		TaskID:                         taskID,
 		ComponentID:                    componentID,
@@ -281,21 +289,21 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 		ID:               taskID,
 		PlanID:           planID,
 		RenderGeneration: 1,
-		Executor:         etcd.TaskExecutorAgent,
-		Type:             etcd.TaskUpdate,
+		Executor:         testtaskjournal.TaskExecutorAgent,
+		Type:             testtaskjournal.TaskUpdate,
 		Target:           componentID,
-		Actor:            etcd.TaskActorOperator,
+		Actor:            testtaskjournal.TaskActorOperator,
 		Params: map[string]string{
-			etcd.TaskResourceKindParam:                   etcd.TaskResourceComponent,
+			testtaskjournal.TaskResourceKindParam:        testtaskjournal.TaskResourceComponent,
 			etcd.TaskPlatformComponentDesiredSHA256Param: desiredDigest,
 		},
-		Steps: []etcd.TaskStepRecord{
-			{Kind: etcd.TaskStepOperation, ID: stepID},
-			{Kind: etcd.TaskStepOperation, ID: waitStepID},
+		Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: stepID},
+			{Kind: testtaskjournal.TaskStepOperation, ID: waitStepID},
 		},
 	}
-	input.ComposeArtifact, err = controllerpkg.RenderPlatformComponentCompose(
-		controllerpkg.PlatformComponentComposeInput{
+	input.ComposeArtifact, err = testcomposerender.RenderPlatformComponentCompose(
+		testcomposerender.PlatformComponentComposeInput{
 			ComponentID: componentID, PlanID: input.OwnershipPlanID,
 			RenderGeneration: input.OwnershipGeneration,
 			ArtifactID:       input.ComposeArtifactID, Plan: firstPlan,
@@ -313,7 +321,7 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 		t.Fatalf("sealPlatformComponentTaskPlanHash() error = %v", err)
 	}
 	task.PlanHash = input.ExecutionPlanSHA256
-	baseline := etcd.Versioned[etcd.HostResolverBaselineRecord]{Record: etcd.HostResolverBaselineRecord{
+	baseline := testkeyvalue.Versioned[testresolverbaseline.Record]{Record: testresolverbaseline.Record{
 		Generation: 1, Content: []byte("nameserver 1.1.1.1\n"), SHA256: input.BaselineSHA256,
 	}}
 	catalog := &executionCatalogStub{plan: firstPlan}
@@ -321,9 +329,10 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 		"/var/lib/groundplane",
 		executionRepositoryStub{
 			input:    input,
-			current:  etcd.Versioned[etcd.ComponentRecord]{Record: record},
+			current:  testkeyvalue.Versioned[testcomponents.Record]{Record: record},
 			baseline: baseline,
 		},
+		executionRepositoryStub{baseline: baseline},
 		catalog,
 	)
 	if err != nil {
@@ -357,8 +366,9 @@ func TestPlatformExecutionRejectsFullPlanDriftForExecutionAndManagedConfig(t *te
 	customRootPlanner, err := NewPlatformComponentExecutionPlanner(
 		"/srv/groundplane/vol",
 		executionRepositoryStub{
-			input: input, current: etcd.Versioned[etcd.ComponentRecord]{Record: record}, baseline: baseline,
+			input: input, current: testkeyvalue.Versioned[testcomponents.Record]{Record: record}, baseline: baseline,
 		},
+		executionRepositoryStub{baseline: baseline},
 		catalog,
 	)
 	if err != nil {

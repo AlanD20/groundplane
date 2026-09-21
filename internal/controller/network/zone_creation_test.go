@@ -10,9 +10,15 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -26,15 +32,15 @@ func TestZoneCreationServiceDerivesOwnershipAndPersistsExactResponse(t *testing.
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
 	projectID := ids.NewAt(ids.KindProject, at, 2)
 	repository := &fakeZoneCreationRepository{
-		environment: etcd.Versioned[etcd.EnvironmentRecord]{
-			Record: etcd.EnvironmentRecord{
+		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+			Record: testhierarchy.EnvironmentRecord{
 				ID: environmentID, ProjectID: projectID, NetworkPool: "10.34.0.0/16",
-				ProvisioningState: etcd.EnvironmentProvisioningReady,
+				ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 			},
 			Revision: 7, ReadRevision: 9,
 		},
-		project: etcd.Versioned[etcd.ProjectRecord]{
-			Record:   etcd.ProjectRecord{ID: projectID, Kind: etcd.ProjectKindTenant},
+		project: testkeyvalue.Versioned[testhierarchy.ProjectRecord]{
+			Record:   testhierarchy.ProjectRecord{ID: projectID, Kind: testhierarchy.ProjectKindTenant},
 			Revision: 8, ReadRevision: 9,
 		},
 		projection: zoneCreationProjectionForTest(t, environmentID, at),
@@ -73,16 +79,16 @@ func TestZoneCreationServiceDerivesOwnershipAndPersistsExactResponse(t *testing.
 		t.Fatalf("published Zone/calls = %#v/%d", repository.publication.Zone, repository.calls)
 	}
 	marker := repository.publication.Marker
-	if marker.Locator.ScopeKind != etcd.IdempotencyScopeEnvironment ||
+	if marker.Locator.ScopeKind != testidempotency.IdempotencyScopeEnvironment ||
 		marker.Locator.ScopeID != environmentID || marker.Locator.Method != http.MethodPost ||
 		marker.Locator.Route != zoneCreationRoute || marker.Locator.Key != "zone-create-key-0001" ||
 		marker.RetainUntil != now.Add(90*24*time.Hour) || !reflect.DeepEqual(marker.Response, response) {
 		t.Fatalf("published marker = %#v", marker)
 	}
-	if repository.claim.SourceKind != etcd.EnvironmentBlueprintSourceMutation ||
+	if repository.claim.SourceKind != testblueprints.EnvironmentBlueprintSourceMutation ||
 		repository.claim.BaselineHeadRevision != repository.projection.Revision ||
 		repository.stage.Mutation == nil || repository.stage.Mutation.Zone == nil ||
-		repository.stage.Mutation.Zone.Action != etcd.EnvironmentZoneMutationCreate ||
+		repository.stage.Mutation.Zone.Action != testblueprints.EnvironmentZoneMutationCreate ||
 		repository.stage.Mutation.Zone.ZoneID != zone.ID ||
 		repository.stage.Mutation.Zone.Request == nil ||
 		repository.stage.Mutation.Zone.Request.Name != input.Name {
@@ -100,7 +106,7 @@ func TestZoneCreationServiceReplaysBeforeHierarchyReads(t *testing.T) {
 	// changed after the original synchronous mutation committed.
 	t.Parallel()
 	environmentID := ids.NewAt(ids.KindEnvironment, time.Date(2026, time.August, 22, 16, 0, 0, 0, time.UTC), 1)
-	want := etcd.IdempotencyResponse{
+	want := testidempotency.IdempotencyResponse{
 		Status:      http.StatusCreated,
 		ContentKind: "application/json",
 		Body: []byte(
@@ -125,11 +131,11 @@ func TestZoneCreationServiceReplaysBeforeHierarchyReads(t *testing.T) {
 }
 
 type fakeZoneCreationRepository struct {
-	environment etcd.Versioned[etcd.EnvironmentRecord]
-	project     etcd.Versioned[etcd.ProjectRecord]
-	projection  etcd.Versioned[etcd.EnvironmentComposeProjection]
-	claim       etcd.EnvironmentBlueprintStageClaim
-	stage       etcd.EnvironmentBlueprintStageRequest
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
+	project     testkeyvalue.Versioned[testhierarchy.ProjectRecord]
+	projection  testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]
+	claim       testblueprints.EnvironmentBlueprintStageClaim
+	stage       testblueprints.EnvironmentBlueprintStageRequest
 	publication etcd.EnvironmentZoneDesiredPublication
 	result      etcd.IdempotencyTransactionResult
 	reads       int
@@ -140,7 +146,7 @@ func zoneCreationProjectionForTest(
 	t *testing.T,
 	environmentID string,
 	at time.Time,
-) etcd.Versioned[etcd.EnvironmentComposeProjection] {
+) testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection] {
 	t.Helper()
 	serviceID := ids.NewAt(ids.KindService, at, 5)
 	canonical := []byte("services:\n  api:\n    image: example.invalid/api:1\n")
@@ -157,48 +163,50 @@ func zoneCreationProjectionForTest(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return etcd.Versioned[etcd.EnvironmentComposeProjection]{
-		Record: etcd.EnvironmentComposeProjection{
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
+		Record: testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, at, 4),
 			RenderGeneration: 1, ComposeArtifact: artifact, NormalizedCompose: canonical,
-			DesiredServices: []etcd.EnvironmentServiceProjection{{EnvironmentID: environmentID, Desired: core.Service{
-				ID: serviceID, Name: "api", Image: "example.invalid/api:1",
-				Strategy: core.StrategyRecreate, Replicas: 1,
-			}}},
+			DesiredServices: []testservices.EnvironmentServiceProjection{
+				{EnvironmentID: environmentID, Desired: core.Service{
+					ID: serviceID, Name: "api", Image: "example.invalid/api:1",
+					Strategy: core.StrategyRecreate, Replicas: 1,
+				}},
+			},
 		},
 		Revision: 9, ReadRevision: 9,
 	}
 }
 
 func (repository *fakeZoneCreationRepository) GetEnvironment(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], error) {
 	repository.reads++
 	return repository.environment, nil
 }
 
 func (repository *fakeZoneCreationRepository) GetProject(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testhierarchy.ProjectRecord], error) {
 	repository.reads++
 	return repository.project, nil
 }
 
 func (repository *fakeZoneCreationRepository) GetEnvironmentComposeProjection(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection], bool, error) {
 	repository.reads++
 	return repository.projection, repository.projection.Record.EnvironmentID != "", nil
 }
 
 func (repository *fakeZoneCreationRepository) ClaimEnvironmentBlueprintStage(
 	_ context.Context,
-	request etcd.EnvironmentBlueprintStageClaimRequest,
-) (etcd.EnvironmentBlueprintStageClaim, error) {
-	repository.claim = etcd.EnvironmentBlueprintStageClaim{
+	request testblueprints.EnvironmentBlueprintStageClaimRequest,
+) (testblueprints.EnvironmentBlueprintStageClaim, error) {
+	repository.claim = testblueprints.EnvironmentBlueprintStageClaim{
 		EnvironmentID: request.EnvironmentID, RevisionID: request.CandidateRevisionID,
 		TaskID: request.CandidateTaskID, Locator: request.Locator, Intent: request.Intent,
 		BaselineHeadRevision: request.BaselineHeadRevision, SourceKind: request.SourceKind,
@@ -210,10 +218,10 @@ func (repository *fakeZoneCreationRepository) ClaimEnvironmentBlueprintStage(
 
 func (repository *fakeZoneCreationRepository) StageEnvironmentBlueprintRevision(
 	_ context.Context,
-	request etcd.EnvironmentBlueprintStageRequest,
-) (etcd.EnvironmentBlueprintSeal, error) {
+	request testblueprints.EnvironmentBlueprintStageRequest,
+) (testblueprints.EnvironmentBlueprintSeal, error) {
 	repository.stage = request
-	return etcd.EnvironmentBlueprintSeal{}, nil
+	return testblueprints.EnvironmentBlueprintSeal{}, nil
 }
 
 func (repository *fakeZoneCreationRepository) PublishEnvironmentZoneDesiredRevisionDirect(
@@ -241,8 +249,8 @@ func (idempotency *fakeZoneCreationIdempotency) Prepare(
 }
 
 func (idempotency *fakeZoneCreationIdempotency) ResolveExisting(
-	context.Context,
-	etcd.IdempotencyLocator,
+	context.Context, testidempotency.IdempotencyLocator,
+
 	zoneCreationEvidence,
 ) (idempotentintent.Resolution, bool, error) {
 	return idempotency.resolution, idempotency.existing, nil
@@ -257,8 +265,8 @@ func (idempotency *fakeZoneCreationIdempotency) ResolveKnown(
 }
 
 func (idempotency *fakeZoneCreationIdempotency) ResolveUnknown(
-	context.Context,
-	etcd.IdempotencyLocator,
+	context.Context, testidempotency.IdempotencyLocator,
+
 	zoneCreationEvidence,
 	error,
 ) (idempotentintent.Resolution, error) {
@@ -267,8 +275,8 @@ func (idempotency *fakeZoneCreationIdempotency) ResolveUnknown(
 
 func (idempotency *fakeZoneCreationIdempotency) MatchesStaged(
 	context.Context,
-	zoneCreationEvidence,
-	etcd.ProtectedIntentRecord,
+	zoneCreationEvidence, testidempotency.ProtectedIntentRecord,
+
 ) (bool, error) {
 	return true, nil
 }

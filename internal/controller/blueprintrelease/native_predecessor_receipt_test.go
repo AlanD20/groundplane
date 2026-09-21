@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 )
 
 // Rationale: SVC-15/JOURNEY-02 Blueprint recovery must carry the exact
@@ -23,9 +24,9 @@ func TestBlueprintNativePredecessorBindsAcknowledgedReceipt(t *testing.T) {
 		native:  etcd.BlueprintNativePredecessorCapture{ServiceID: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 	}
 	runtime := servicelifecycle.AcknowledgedRuntimeCapture{
-		Release: etcd.ServiceLifecycleRelease{
+		Release: testreleaserender.ServiceLifecycleRelease{
 			ServingReleaseID: releaseID,
-			Current:          etcd.ReleaseRenderInput{CandidateTarget: domain.WorkloadBlue},
+			Current:          testreleaserender.ReleaseRenderInput{CandidateTarget: domain.WorkloadBlue},
 		},
 		RuntimeRevision: 71, CurrentArtifact: current, RetainedPriorArtifact: retained,
 		RetainedPriorReleaseID: retainedID,

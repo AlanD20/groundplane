@@ -7,17 +7,19 @@ import (
 
 	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testhostresolution "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testresolverbaseline "github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
 )
 
 type previewProjectionReader struct {
-	record etcd.HostResolutionProjectionRecord
+	record testhostresolution.HostResolutionProjectionRecord
 }
 
 func (reader previewProjectionReader) GetHostResolutionProjection(
 	context.Context,
-) (etcd.Versioned[etcd.HostResolutionProjectionRecord], bool, error) {
-	return etcd.Versioned[etcd.HostResolutionProjectionRecord]{Record: reader.record}, true, nil
+) (testkeyvalue.Versioned[testhostresolution.HostResolutionProjectionRecord], bool, error) {
+	return testkeyvalue.Versioned[testhostresolution.HostResolutionProjectionRecord]{Record: reader.record}, true, nil
 }
 
 type previewBaselineReader struct {
@@ -27,9 +29,9 @@ type previewBaselineReader struct {
 
 func (reader *previewBaselineReader) GetHostResolverBaseline(
 	context.Context,
-) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error) {
+) (testkeyvalue.Versioned[testresolverbaseline.Record], bool, error) {
 	reader.reads++
-	return etcd.Versioned[etcd.HostResolverBaselineRecord]{Record: etcd.HostResolverBaselineRecord{
+	return testkeyvalue.Versioned[testresolverbaseline.Record]{Record: testresolverbaseline.Record{
 		Generation: 7,
 		Content:    []byte("nameserver 1.1.1.1\n"),
 	}}, reader.found, nil
@@ -51,7 +53,7 @@ func (*previewRenderer) Digest(componentdns.RenderInput) ([sha256.Size]byte, err
 // or publishing baseline state as a GET side effect.
 func TestManagedConfigProjectorUsesOnlyDurableReadInputs(t *testing.T) {
 	t.Parallel()
-	projection, err := etcd.NewHostResolutionProjectionRecord(11, nil)
+	projection, err := testhostresolution.NewHostResolutionProjectionRecord(11, nil)
 	if err != nil {
 		t.Fatalf("NewHostResolutionProjectionRecord() error = %v", err)
 	}
@@ -88,7 +90,7 @@ func TestManagedConfigProjectorUsesOnlyDurableReadInputs(t *testing.T) {
 // causing GET to capture and persist mutable host state.
 func TestManagedConfigProjectorDoesNotCreateMissingBaseline(t *testing.T) {
 	t.Parallel()
-	projection, err := etcd.NewHostResolutionProjectionRecord(11, nil)
+	projection, err := testhostresolution.NewHostResolutionProjectionRecord(11, nil)
 	if err != nil {
 		t.Fatalf("NewHostResolutionProjectionRecord() error = %v", err)
 	}

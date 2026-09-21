@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -14,15 +15,15 @@ import (
 // the recovery owner must prove a settled outcome before the claim is removed.
 func TestExpiredUpdateRunsRecoveryBeforeAcknowledgement(t *testing.T) {
 	now := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
-	for _, resource := range []string{etcd.TaskResourceAgent, etcd.TaskResourceController} {
+	for _, resource := range []string{testtaskjournal.TaskResourceAgent, testtaskjournal.TaskResourceController} {
 		t.Run(resource, func(t *testing.T) {
 			claim := controllerClaim(now.Add(-time.Hour), now.Add(-time.Minute))
-			claim.Task.Record.Type = etcd.TaskUpdate
-			claim.Task.Record.Params = map[string]string{etcd.TaskResourceKindParam: resource}
+			claim.Task.Record.Type = testtaskjournal.TaskUpdate
+			claim.Task.Record.Params = map[string]string{testtaskjournal.TaskResourceKindParam: resource}
 			store := &fakeStore{claims: []etcd.TaskAssignment{claim}}
 			handler := &fakeHandler{}
 			runner := testRunner(t, store, handler, now)
-			updates := &fakeUpdateExecutor{status: etcd.TaskStatusTimedOut}
+			updates := &fakeUpdateExecutor{status: testtaskjournal.TaskStatusTimedOut}
 			runner.updates = updates
 			if err := runner.Restore(context.Background()); err != nil {
 				t.Fatal(err)
@@ -33,7 +34,7 @@ func TestExpiredUpdateRunsRecoveryBeforeAcknowledgement(t *testing.T) {
 			if _, err := runner.runOne(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			if updates.executions != 1 || store.ackStatus != etcd.TaskStatusTimedOut || handler.calls != 0 {
+			if updates.executions != 1 || store.ackStatus != testtaskjournal.TaskStatusTimedOut || handler.calls != 0 {
 				t.Fatal("expired update bypassed recovery")
 			}
 		})
@@ -45,8 +46,10 @@ func TestExpiredUpdateRunsRecoveryBeforeAcknowledgement(t *testing.T) {
 func TestUnsettledUpdateDoesNotAcknowledgeClaim(t *testing.T) {
 	now := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 	claim := controllerClaim(now.Add(-time.Hour), now.Add(-time.Minute))
-	claim.Task.Record.Type = etcd.TaskUpdate
-	claim.Task.Record.Params = map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceAgent}
+	claim.Task.Record.Type = testtaskjournal.TaskUpdate
+	claim.Task.Record.Params = map[string]string{
+		testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceAgent,
+	}
 	store := &fakeStore{claims: []etcd.TaskAssignment{claim}}
 	runner := testRunner(t, store, &fakeHandler{}, now)
 	runner.updates = &fakeUpdateExecutor{err: errs.New(errs.KindStorageUnavailable, "unresolved")}
@@ -61,12 +64,14 @@ func TestUnsettledUpdateDoesNotAcknowledgeClaim(t *testing.T) {
 func TestCommittedUpdateRejectsAbortWithoutCancellingExecution(t *testing.T) {
 	now := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
 	claim := controllerClaim(now, now.Add(time.Minute))
-	claim.Task.Record.Type = etcd.TaskUpdate
-	claim.Task.Record.Params = map[string]string{etcd.TaskResourceKindParam: etcd.TaskResourceController}
+	claim.Task.Record.Type = testtaskjournal.TaskUpdate
+	claim.Task.Record.Params = map[string]string{
+		testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceController,
+	}
 	store := &fakeStore{claims: []etcd.TaskAssignment{claim}}
 	runner := testRunner(t, store, &fakeHandler{}, now)
 	updates := &fakeUpdateExecutor{
-		started: make(chan struct{}), finish: make(chan struct{}), status: etcd.TaskStatusCompleted,
+		started: make(chan struct{}), finish: make(chan struct{}), status: testtaskjournal.TaskStatusCompleted,
 		abortErr: errs.New(errs.KindResourceInUse, "activation is committed"),
 	}
 	runner.updates = updates
@@ -79,7 +84,7 @@ func TestCommittedUpdateRejectsAbortWithoutCancellingExecution(t *testing.T) {
 		t.Fatalf("committed abort = %v", err)
 	}
 	close(updates.finish)
-	if err := <-done; err != nil || store.ackStatus != etcd.TaskStatusCompleted {
+	if err := <-done; err != nil || store.ackStatus != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("committed execution = %v, status %s", err, store.ackStatus)
 	}
 }
@@ -87,7 +92,7 @@ func TestCommittedUpdateRejectsAbortWithoutCancellingExecution(t *testing.T) {
 type fakeUpdateExecutor struct {
 	restored   string
 	executions int
-	status     etcd.TaskStatus
+	status     testtaskjournal.TaskStatus
 	err        error
 	abortErr   error
 	started    chan struct{}
@@ -101,7 +106,7 @@ func (updates *fakeUpdateExecutor) Restore(_ context.Context, claim etcd.TaskAss
 
 func (updates *fakeUpdateExecutor) Execute(
 	ctx context.Context, _ etcd.TaskRecord, _ time.Time,
-) (etcd.TaskStatus, error) {
+) (testtaskjournal.TaskStatus, error) {
 	updates.executions++
 	if updates.started != nil {
 		close(updates.started)

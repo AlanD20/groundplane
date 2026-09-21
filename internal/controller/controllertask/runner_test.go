@@ -10,6 +10,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func TestRunnerResumesClaimBeforeClaimingAndAcknowledgesCompletion(t *testing.T) {
@@ -26,7 +29,7 @@ func TestRunnerResumesClaimBeforeClaimingAndAcknowledgesCompletion(t *testing.T)
 	if store.claimCalls != 0 || handler.calls != 1 || handler.task.ID != claim.Task.Record.ID {
 		t.Fatalf("resume calls = store %d, handler %d/%s", store.claimCalls, handler.calls, handler.task.ID)
 	}
-	if store.ackStatus != etcd.TaskStatusCompleted || store.ackTaskID != claim.Task.Record.ID {
+	if store.ackStatus != testtaskjournal.TaskStatusCompleted || store.ackTaskID != claim.Task.Record.ID {
 		t.Fatalf("ack = %s/%s", store.ackTaskID, store.ackStatus)
 	}
 }
@@ -42,7 +45,7 @@ func TestRunnerClaimsNewWorkAndTimesOutExpiredClaimWithoutExecuting(t *testing.T
 	if err != nil || !progressed {
 		t.Fatalf("runOne() = %v, %v", progressed, err)
 	}
-	if store.claimCalls != 1 || handler.calls != 0 || store.ackStatus != etcd.TaskStatusTimedOut {
+	if store.claimCalls != 1 || handler.calls != 0 || store.ackStatus != testtaskjournal.TaskStatusTimedOut {
 		t.Fatalf("timeout calls = claim %d, handler %d, status %s", store.claimCalls, handler.calls, store.ackStatus)
 	}
 }
@@ -112,12 +115,14 @@ func testRunner(t *testing.T, store Store, handler Handler, now time.Time) *Runn
 func controllerClaim(assignedAt time.Time, deadline time.Time) etcd.TaskAssignment {
 	taskID := ids.NewAt(ids.KindTask, assignedAt, 1)
 	return etcd.TaskAssignment{
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-			TaskID: taskID, Executor: etcd.TaskExecutorController,
-			ClaimedTaskRevision: 2, AssignedAt: assignedAt, Deadline: deadline,
-		}},
-		Task: etcd.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{
-			ID: taskID, Executor: etcd.TaskExecutorController,
+		Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+			Record: testtaskassignments.TaskAssignmentRecord{
+				TaskID: taskID, Executor: testtaskjournal.TaskExecutorController,
+				ClaimedTaskRevision: 2, AssignedAt: assignedAt, Deadline: deadline,
+			},
+		},
+		Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{
+			ID: taskID, Executor: testtaskjournal.TaskExecutorController,
 		}},
 	}
 }
@@ -129,7 +134,7 @@ type fakeStore struct {
 	claimCalls int
 	ackCalls   int
 	ackTaskID  string
-	ackStatus  etcd.TaskStatus
+	ackStatus  testtaskjournal.TaskStatus
 }
 
 func (store *fakeStore) ListControllerTaskClaims(context.Context) ([]etcd.TaskAssignment, error) {
@@ -147,13 +152,13 @@ func (store *fakeStore) ClaimNextControllerTask(
 func (store *fakeStore) AcknowledgeControllerTask(
 	_ context.Context,
 	taskID string,
-	status etcd.TaskStatus,
+	status testtaskjournal.TaskStatus,
 	_ time.Time,
-) (etcd.Versioned[etcd.TaskRecord], error) {
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
 	store.ackCalls++
 	store.ackTaskID = taskID
 	store.ackStatus = status
-	return etcd.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{ID: taskID, Status: status}}, nil
+	return testkeyvalue.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{ID: taskID, Status: status}}, nil
 }
 
 type fakeHandler struct {
@@ -203,13 +208,12 @@ func (store *wakeStore) ClaimNextControllerTask(
 }
 
 func (store *wakeStore) AcknowledgeControllerTask(
-	context.Context,
-	string,
-	etcd.TaskStatus,
+	context.Context, string, testtaskjournal.TaskStatus,
+
 	time.Time,
-) (etcd.Versioned[etcd.TaskRecord], error) {
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
 	store.ackOnce.Do(func() { close(store.acknowledged) })
-	return etcd.Versioned[etcd.TaskRecord]{}, nil
+	return testkeyvalue.Versioned[etcd.TaskRecord]{}, nil
 }
 
 func (handler *fakeHandler) Execute(ctx context.Context, task etcd.TaskRecord) error {

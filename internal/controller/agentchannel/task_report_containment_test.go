@@ -9,6 +9,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -17,7 +19,7 @@ type taskReportConflictStore struct {
 	*fakeTaskStore
 	conflictTaskID string
 	conflicts      int
-	conflictResult etcd.TaskResultRecord
+	conflictResult testtaskjournal.TaskResultRecord
 	fresh          *etcd.TaskAssignment
 }
 
@@ -39,10 +41,10 @@ func (store *taskReportConflictStore) AcknowledgeTask(
 	generation uint64,
 	taskID string,
 	assignmentID string,
-	terminal etcd.TaskStatus,
-	result etcd.TaskResultRecord,
+	terminal testtaskjournal.TaskStatus,
+	result testtaskjournal.TaskResultRecord,
 	at time.Time,
-) (etcd.Versioned[etcd.TaskRecord], error) {
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
 	if taskID == store.conflictTaskID {
 		store.conflicts++
 		store.conflictResult = result
@@ -56,7 +58,7 @@ func (store *taskReportConflictStore) AcknowledgeTask(
 		ctx, agentID, generation, taskID, assignmentID, terminal, result, at,
 	)
 	if err != nil {
-		return etcd.Versioned[etcd.TaskRecord]{}, err
+		return testkeyvalue.Versioned[etcd.TaskRecord]{}, err
 	}
 	for index, assignment := range store.assignments {
 		if assignment.Task.Record.ID == taskID {
@@ -97,7 +99,7 @@ func TestConnectContainsAppliedTaskReportConflict(t *testing.T) {
 	second.Task.Record.PlanHash = hex.EncodeToString(secondPlan.GetPlanHash())
 	base := &fakeTaskStore{
 		assignments: []etcd.TaskAssignment{first},
-		tasks: map[string]etcd.Versioned[etcd.TaskRecord]{
+		tasks: map[string]testkeyvalue.Versioned[etcd.TaskRecord]{
 			first.Task.Record.ID:  first.Task,
 			second.Task.Record.ID: second.Task,
 		},
@@ -140,11 +142,11 @@ func TestConnectContainsAppliedTaskReportConflict(t *testing.T) {
 		store.conflictResult.FailedStepID != first.Task.Record.Steps[0].ID {
 		t.Fatalf("conflicting result = %#v, want exact failed step, epoch 1 and compose_failed", store.conflictResult)
 	}
-	if firstTask := store.tasks[first.Task.Record.ID].Record; firstTask.Status != etcd.TaskStatusRunning {
+	if firstTask := store.tasks[first.Task.Record.ID].Record; firstTask.Status != testtaskjournal.TaskStatusRunning {
 		t.Fatalf("conflicting Task status = %q, want running", firstTask.Status)
 	}
 	if store.ackTaskID != second.Task.Record.ID ||
-		store.tasks[second.Task.Record.ID].Record.Status != etcd.TaskStatusCompleted {
+		store.tasks[second.Task.Record.ID].Record.Status != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf("unrelated Task did not complete after conflict: acknowledged=%q", store.ackTaskID)
 	}
 	if len(store.assignments) != 1 || store.assignments[0].Task.Record.ID != first.Task.Record.ID {
@@ -216,7 +218,7 @@ func TestDurableComposeTaskResultClassifiesComponentFailures(t *testing.T) {
 
 	for _, test := range []struct {
 		diagnostic agentpb.ComposeHelperDiagnostic
-		want       etcd.TaskResultDiagnostic
+		want       testtaskjournal.TaskResultDiagnostic
 	}{
 		{
 			diagnostic: agentpb.ComposeHelperDiagnostic_COMPOSE_HELPER_DIAGNOSTIC_COMPONENT_CONFIG_REJECTED,

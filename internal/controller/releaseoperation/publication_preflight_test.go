@@ -7,10 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testlocalagents "github.com/AlanD20/groundplane/internal/infra/etcd/localagents"
+	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -44,18 +48,13 @@ func TestPublishUnavailableImageResolutionDoesNotStage(t *testing.T) {
 				}
 			}
 			response, err := service.publish(
-				context.Background(),
-				etcd.ReleasePlanningScope{},
-				etcd.ReleaseDesiredService,
+				context.Background(), testreleasequeries.ReleasePlanningScope{}, etcd.ReleaseDesiredService,
 				"service",
 				1,
 				"",
 				[]releaseCandidateInput{
 					candidate,
-				},
-				etcd.IdempotencyLocator{},
-				etcd.ProtectedIntentRecord{},
-				idempotentintent.ProtectedEvidence{},
+				}, testidempotency.IdempotencyLocator{}, testidempotency.ProtectedIntentRecord{}, idempotentintent.ProtectedEvidence{},
 			)
 			if kind, ok := errs.KindOf(err); !ok || kind != errs.KindWorkloadImageResolutionUnavailable {
 				t.Fatalf("missing image error = %v", err)
@@ -69,8 +68,12 @@ func TestPublishUnavailableImageResolutionDoesNotStage(t *testing.T) {
 
 type publicationAgent struct{}
 
-func (publicationAgent) GetSingleton(context.Context) (etcd.Versioned[etcd.LocalAgentRecord], error) {
-	return etcd.Versioned[etcd.LocalAgentRecord]{Record: etcd.LocalAgentRecord{ID: "agent"}}, nil
+func (publicationAgent) GetSingleton(
+	context.Context,
+) (testkeyvalue.Versioned[testlocalagents.LocalAgentRecord], error) {
+	return testkeyvalue.Versioned[testlocalagents.LocalAgentRecord]{
+		Record: testlocalagents.LocalAgentRecord{ID: "agent"},
+	}, nil
 }
 
 type missingPublicationImage struct {
@@ -106,11 +109,15 @@ func (store *publicationStoreWitness) unexpected() {
 	store.t.Fatal("publication reached persistence before successful image preflight")
 }
 func (store *publicationStoreWitness) Health(context.Context) error { store.unexpected(); return nil }
-func (store *publicationStoreWitness) Get(context.Context, string) (*etcd.GetResult, error) {
+func (store *publicationStoreWitness) Get(context.Context, string) (*testkeyvalue.GetResult, error) {
 	store.unexpected()
 	return nil, nil
 }
-func (store *publicationStoreWitness) GetMany(context.Context, etcd.GetManyRequest) (*etcd.GetManyResult, error) {
+
+func (store *publicationStoreWitness) GetMany(
+	context.Context,
+	testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	store.unexpected()
 	return nil, nil
 }
@@ -124,29 +131,33 @@ func (store *publicationStoreWitness) Delete(context.Context, string) (int64, er
 	store.unexpected()
 	return 0, nil
 }
-func (store *publicationStoreWitness) Range(context.Context, etcd.RangeRequest) (*etcd.RangeResult, error) {
+
+func (store *publicationStoreWitness) Range(
+	context.Context,
+	testkeyvalue.RangeRequest,
+) (*testkeyvalue.RangeResult, error) {
 	store.unexpected()
 	return nil, nil
 }
 
 func (store *publicationStoreWitness) MeasureTransaction(
 	ctx context.Context,
-	conditions []etcd.Condition,
-	mutations []etcd.Mutation,
-) (etcd.TransactionBudget, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionBudget, error) {
 	return etcd.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
 }
 
 func (store *publicationStoreWitness) Transact(
 	context.Context,
-	[]etcd.Condition,
-	[]etcd.Mutation,
-) (etcd.TransactionResult, error) {
+	[]testkeyvalue.Condition,
+	[]testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	store.writes++
 	store.unexpected()
-	return etcd.TransactionResult{}, nil
+	return testkeyvalue.TransactionResult{}, nil
 }
-func (store *publicationStoreWitness) Watch(context.Context, string, int64) (*etcd.WatchStream, error) {
+func (store *publicationStoreWitness) Watch(context.Context, string, int64) (*testkeyvalue.WatchStream, error) {
 	store.unexpected()
 	return nil, nil
 }
@@ -167,8 +178,8 @@ func (store *publicationStoreWitness) ValidateBlueprintTaskTerminal(
 func (store *publicationStoreWitness) TransactBlueprintTaskTerminal(
 	context.Context,
 	etcd.BlueprintTaskTerminalTransaction,
-) (etcd.TransactionResult, error) {
+) (testkeyvalue.TransactionResult, error) {
 	store.writes++
 	store.unexpected()
-	return etcd.TransactionResult{}, errs.New(errs.KindInternal, "unexpected Blueprint terminal transaction")
+	return testkeyvalue.TransactionResult{}, errs.New(errs.KindInternal, "unexpected Blueprint terminal transaction")
 }

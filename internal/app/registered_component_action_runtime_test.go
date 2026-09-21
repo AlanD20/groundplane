@@ -1,37 +1,21 @@
 package app
 
 import (
-	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
-	"runtime"
-	"testing"
+	context "context"
+	sha256 "crypto/sha256"
+	hex "encoding/hex"
+	errors "errors"
+	runtime "runtime"
+	testing "testing"
 
-	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
-	componentdns "github.com/AlanD20/groundplane-component-sdk/dnsresolver"
 	registeredcoredns "github.com/AlanD20/groundplane-registered-components/coredns"
-	"github.com/AlanD20/groundplane/internal/agent"
-	"github.com/AlanD20/groundplane/internal/infra/docker/dnsresolverobserver"
-	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
-	"github.com/AlanD20/groundplane/proto/agentpb"
+	testcomponentaction "github.com/AlanD20/groundplane/internal/agent/componentaction"
+	testtaskassignment "github.com/AlanD20/groundplane/internal/agent/taskassignment"
+	"github.com/AlanD20/groundplane/internal/app/componentregistration"
+	dnsresolverobserver "github.com/AlanD20/groundplane/internal/infra/docker/dnsresolverobserver"
+	managedconfighelpercontainer "github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
+	agentpb "github.com/AlanD20/groundplane/proto/agentpb"
 )
-
-func TestRegisteredPlannerRejectsUnregisteredValidImage(t *testing.T) {
-	catalog, err := newRegisteredActionCatalog()
-	if err != nil {
-		t.Fatal(err)
-	}
-	unknown := registeredcoredns.Image
-	unknown.Platforms = append([]componentsdk.OCIPlatform(nil), unknown.Platforms...)
-	unknown.Repository = "example/unknown-resolver"
-	catalog.planners["coredns"] = func(string, componentdns.RenderInput) (componentsdk.EnvironmentPlan, error) {
-		return componentsdk.EnvironmentPlan{Services: []componentsdk.ManagedService{{Image: unknown}}}, nil
-	}
-	if _, err := catalog.Plan("coredns", "svc_test", componentdns.RenderInput{}); err == nil {
-		t.Fatal("Plan() accepted an unregistered valid managed image")
-	}
-}
 
 type componentActionManagedExecutorStub struct{}
 
@@ -102,7 +86,7 @@ func (observer *componentActionObserverStub) Observe(
 // content, and enable/update candidate checks must reach that same generic
 // runtime seam using the artifact digest carried by their action envelope.
 func TestRegisteredComponentActionRuntimeObservesDNSResolverWithoutManagedContent(t *testing.T) {
-	catalog, err := newRegisteredActionCatalog()
+	catalog, err := componentregistration.NewCatalog()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +109,7 @@ func TestRegisteredComponentActionRuntimeObservesDNSResolverWithoutManagedConten
 			observer := &componentActionObserverStub{
 				evidence: &agentpb.DNSResolverObservationEvidence{ComponentId: "cmp_exact"},
 			}
-			actionRuntime, runtimeErr := newRegisteredComponentActionRuntime(
+			actionRuntime, runtimeErr := testcomponentaction.New(
 				catalog,
 				componentActionManagedExecutorStub{},
 				componentActionComposeHelperStub{},
@@ -142,7 +126,7 @@ func TestRegisteredComponentActionRuntimeObservesDNSResolverWithoutManagedConten
 					ArtifactDigest: digest[:], Generation: 7,
 				}},
 			}
-			assignment := agent.Assignment{Plan: &agentpb.ExecutionPlan{
+			assignment := testtaskassignment.Assignment{Plan: &agentpb.ExecutionPlan{
 				Operation: agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY, ComponentLifecycleMode: mode,
 				Artifacts: []*agentpb.ComposeArtifact{{
 					ProjectName: "groundplane-infra",
@@ -158,7 +142,7 @@ func TestRegisteredComponentActionRuntimeObservesDNSResolverWithoutManagedConten
 				}},
 			}}
 			result, executeErr := actionRuntime.ExecuteComponentAction(
-				context.Background(), assignment, step, agent.ManagedConfigPayload{},
+				context.Background(), assignment, step, testcomponentaction.ManagedConfigPayload{},
 			)
 			if executeErr != nil {
 				t.Fatalf("ExecuteComponentAction() error = %v", executeErr)
@@ -169,68 +153,6 @@ func TestRegisteredComponentActionRuntimeObservesDNSResolverWithoutManagedConten
 				t.Fatalf("observation request = %#v, result = %#v", observer.request, result)
 			}
 		})
-	}
-}
-
-func TestRegisteredComponentActionRuntimeRecoversExactManagedConfigTransaction(t *testing.T) {
-	candidate := sha256.Sum256([]byte("candidate Corefile"))
-	previous := sha256.Sum256([]byte("previous Corefile"))
-	request := &agentpb.ManagedConfigHelperRequest{
-		Schema: 1, TransactionId: "mct_exact", Operation: agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_PUBLISH,
-		Sha256: candidate[:], ExpectedPreviousSha256: previous[:],
-	}
-	executor := &componentActionRecoveringManagedExecutor{response: &agentpb.ManagedConfigHelperResponse{
-		Schema: 1, TransactionId: request.GetTransactionId(), Operation: request.GetOperation(),
-		Disposition: agentpb.ManagedConfigReplayDisposition_MANAGED_CONFIG_REPLAY_DISPOSITION_RECOVERED,
-		LiveSha256:  candidate[:], PreviousSha256: previous[:],
-	}}
-	actionRuntime := &registeredComponentActionRuntime{managedHelper: executor}
-	state, err := actionRuntime.executeManagedConfig(context.Background(), request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if executor.calls != 2 || !state.Live.Present || state.Live.SHA256 != candidate ||
-		!state.Previous.Present || state.Previous.SHA256 != previous {
-		t.Fatalf("managed-config recovery calls = %d, state = %#v", executor.calls, state)
-	}
-}
-
-// Rationale: retry preserves the logical operation and sealed action but is a
-// new Task attempt. Its managed-config transaction must therefore differ from
-// a compensated predecessor while remaining stable across replay of one Task.
-func TestManagedConfigRequestIdentityIsTaskAttemptScoped(t *testing.T) {
-	t.Parallel()
-	action := &agentpb.ComponentApply{
-		ComponentId: "cmp_exact", ArtifactId: "cfg_exact", Generation: 7,
-	}
-	firstAssignment := agent.Assignment{OperationID: "op_exact", TaskID: "task_first"}
-	first := managedConfigRequest(
-		firstAssignment,
-		action,
-		"config/Corefile",
-		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_PUBLISH,
-	)
-	replay := managedConfigRequest(
-		firstAssignment,
-		action,
-		"config/Corefile",
-		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_ROLLBACK,
-	)
-	retry := managedConfigRequest(
-		agent.Assignment{OperationID: "op_exact", TaskID: "task_retry"},
-		action,
-		"config/Corefile",
-		agentpb.ManagedConfigOperation_MANAGED_CONFIG_OPERATION_PUBLISH,
-	)
-	if first.GetTransactionId() != replay.GetTransactionId() {
-		t.Fatalf(
-			"one Task attempt changed transaction identity: %q != %q",
-			first.GetTransactionId(),
-			replay.GetTransactionId(),
-		)
-	}
-	if first.GetTransactionId() == retry.GetTransactionId() {
-		t.Fatalf("retry reused compensated transaction identity %q", first.GetTransactionId())
 	}
 }
 

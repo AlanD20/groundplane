@@ -5,32 +5,32 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
-type managedConfigReadRepository struct{ record etcd.ComponentRecord }
+type managedConfigReadRepository struct{ record testcomponents.Record }
 
 func (repository managedConfigReadRepository) GetComponent(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.ComponentRecord], error) {
-	return etcd.Versioned[etcd.ComponentRecord]{Record: repository.record, ReadRevision: 42}, nil
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testcomponents.Record], error) {
+	return testkeyvalue.Versioned[testcomponents.Record]{Record: repository.record, ReadRevision: 42}, nil
 }
 
 func (managedConfigReadRepository) ListEnvironmentComponents(
-	context.Context,
-	string,
-	etcd.PageRequest,
-) (etcd.Page[etcd.ComponentRecord], error) {
-	return etcd.Page[etcd.ComponentRecord]{}, nil
+	context.Context, string, testkeyvalue.PageRequest,
+
+) (testkeyvalue.Page[testcomponents.Record], error) {
+	return testkeyvalue.Page[testcomponents.Record]{}, nil
 }
 
 func (managedConfigReadRepository) ListPlatformComponents(
-	context.Context,
-	etcd.PageRequest,
-) (etcd.Page[etcd.ComponentRecord], error) {
-	return etcd.Page[etcd.ComponentRecord]{}, nil
+	context.Context, testkeyvalue.PageRequest,
+
+) (testkeyvalue.Page[testcomponents.Record], error) {
+	return testkeyvalue.Page[testcomponents.Record]{}, nil
 }
 
 type managedConfigProjector struct {
@@ -81,7 +81,7 @@ func TestGetComponentConfigDelegatesManagedFileProjection(t *testing.T) {
 			UpstreamResolvers: []core.DNSResolverEndpoint{}, Forwarders: []core.DNSForwarder{},
 		}},
 	}
-	record, err := etcd.NewComponentRecord(component)
+	record, err := testcomponents.NewRecord(component)
 	if err != nil {
 		t.Fatalf("NewComponentRecord() error = %v", err)
 	}

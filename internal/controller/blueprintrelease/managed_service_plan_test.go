@@ -13,11 +13,21 @@ import (
 	component "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskmaterializationowner "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
@@ -83,13 +93,13 @@ func testPrepareManagedService(
 			},
 		},
 	}
-	render := controller.ComposeRenderInput{Project: project, ArtifactID: artifactID,
-		ProjectOwnerKind: controller.ComposeProjectOwnerTenant, TenantID: tenantID, ProjectID: projectID, EnvironmentID: environmentID,
+	render := testcomposerender.ComposeRenderInput{Project: project, ArtifactID: artifactID,
+		ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant, TenantID: tenantID, ProjectID: projectID, EnvironmentID: environmentID,
 		PlanID: planID, RenderGeneration: 1, AuthorizedVolumeDir: volumeDir,
-		Identities: controller.ComposeIdentitySnapshot{
-			Services: []controller.ComposeResourceIdentity{
+		Identities: testcomposeidentity.Snapshot{
+			Services: []testcomposeidentity.Resource{
 				{ID: serviceID, Name: "cloudflare-tunnel", ComponentID: componentID,
-					ComponentImage: &controller.SelectedComponentImage{
+					ComponentImage: &testcomposeidentity.ComponentImage{
 						Repository:  managedImage.Repository,
 						IndexDigest: managedImage.IndexDigest,
 						Reference:   reference,
@@ -98,7 +108,7 @@ func testPrepareManagedService(
 			},
 		}}
 	var previousRuntime *agentpb.ComposeArtifact
-	var changes []etcd.EnvironmentBlueprintServiceChange
+	var changes []testblueprints.EnvironmentBlueprintServiceChange
 	if retainedNative {
 		nativeID, releaseID := ids.New(ids.KindService), ids.New(ids.KindDeployment)
 		replicas := 2
@@ -109,30 +119,29 @@ func testPrepareManagedService(
 			Deploy: &composetypes.DeployConfig{Replicas: &replicas},
 		}
 		render.Identities.Services = append(
-			render.Identities.Services,
-			controller.ComposeResourceIdentity{ID: nativeID, Name: "http-proof"},
+			render.Identities.Services, testcomposeidentity.Resource{ID: nativeID, Name: "http-proof"},
 		)
 		routerImage := routerServiceTestImage()
 		caddyPlatform, _, ok := routerImage.Select(runtime.GOOS, runtime.GOARCH)
 		if !ok {
 			t.Fatal("unsupported proxy platform")
 		}
-		render.Releases = map[string]controller.ComposeReleaseIdentity{nativeID: {
+		render.Releases = map[string]testcomposerender.ComposeReleaseIdentity{nativeID: {
 			ReleaseID: releaseID, Image: "sha256:" + strings.Repeat("d", 64), Strategy: domain.StrategyRecreate,
 			Target: domain.WorkloadSingleton, ServingTarget: domain.WorkloadSingleton, ServingReleaseID: releaseID, ServingProxyGeneration: 1,
-			ProxyImage: &etcd.ReleaseProxyImage{
+			ProxyImage: &domain.ProxyImage{
 				Repository:  routerImage.Repository,
 				IndexDigest: routerImage.IndexDigest,
 				Platform:    caddyPlatform,
 			},
 		}}
 		var err error
-		previousRuntime, err = controller.RenderCompose(render)
+		previousRuntime, err = testcomposerender.RenderCompose(render)
 		if err != nil {
 			t.Fatal(err)
 		}
 		render.Releases, render.RenderGeneration, render.PlanID = nil, 2, ids.New(ids.KindPlan)
-		record := etcd.ServiceRecord{
+		record := testservices.ServiceRecord{
 			EnvironmentID: environmentID,
 			Desired: core.Service{
 				ID:       nativeID,
@@ -143,10 +152,10 @@ func testPrepareManagedService(
 			},
 			Runtime: core.ServiceRuntime{ServiceID: nativeID, RuntimeIntent: core.ServiceRuntimeIntentRunning},
 		}
-		current := etcd.Versioned[etcd.ServiceRecord]{Record: record, Revision: 1, ReadRevision: 1}
-		changes = []etcd.EnvironmentBlueprintServiceChange{{Current: &current, Record: record}}
+		current := testkeyvalue.Versioned[testservices.ServiceRecord]{Record: record, Revision: 1, ReadRevision: 1}
+		changes = []testblueprints.EnvironmentBlueprintServiceChange{{Current: &current, Record: record}}
 	}
-	artifact, err := controller.RenderCompose(render)
+	artifact, err := testcomposerender.RenderCompose(render)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +166,7 @@ func testPrepareManagedService(
 			t.Fatal(err)
 		}
 		render.PlanID, render.RenderGeneration = ids.New(ids.KindPlan), 2
-		artifact, err = controller.RenderCompose(render)
+		artifact, err = testcomposerender.RenderCompose(render)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -166,7 +175,7 @@ func testPrepareManagedService(
 		}
 	}
 	if retainedNative {
-		artifact, err = controller.RetainBlueprintNativeRuntime(
+		artifact, err = testcomposerender.RetainBlueprintNativeRuntime(
 			artifact,
 			previousRuntime,
 			[]string{changes[0].Record.Desired.ID},
@@ -180,20 +189,20 @@ func testPrepareManagedService(
 		t.Fatal(err)
 	}
 	planID = render.PlanID
-	materialization := etcd.TaskMaterializationRecord{
+	materialization := testtaskmaterializationowner.Record{
 		StepID:            ids.New(ids.KindStep),
 		MaterializationID: ids.New(ids.KindConfig),
 		EnvironmentID:     environmentID,
 		Destination:       "blueprints/" + planID + "/blueprint.yaml",
-		OutputKind:        etcd.TaskMaterializationOutputPlainFile,
+		OutputKind:        testtaskmaterializationowner.OutputPlainFile,
 		Mode:              0o444,
 		SHA256:            hex.EncodeToString(make([]byte, sha256.Size)),
 	}
-	prefix, err := controller.BuildTaskMaterializationStep(materialization, artifactID, 120)
+	prefix, err := testtaskmaterialization.BuildTaskMaterializationStep(materialization, artifactID, 120)
 	if err != nil {
 		t.Fatal(err)
 	}
-	projection := etcd.EnvironmentComposeProjection{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID:     environmentID,
 		RevisionID:        taskID,
 		RenderGeneration:  render.RenderGeneration,
@@ -202,23 +211,23 @@ func testPrepareManagedService(
 	}
 	if firstEnableProjectionSource {
 		digest := sha256.Sum256(artifactBytes)
-		projection.ManagedComponentRuntimeSources = []etcd.ManagedComponentRuntimeSource{{
+		projection.ManagedComponentRuntimeSources = []testenvironmentprojection.ManagedComponentRuntimeSource{{
 			ComponentKind: core.ComponentKindEdgeCloudflare, ComponentID: componentID, ServiceID: serviceID,
 			ComposeName: "cloudflare-tunnel", RevisionID: taskID, ArtifactID: artifactID,
 			ArtifactSHA256: hex.EncodeToString(digest[:]),
 		}}
 	}
 	reader := &managedPlanReader{
-		project: etcd.ProjectRecord{ID: projectID, TenantID: tenantID, Kind: etcd.ProjectKindTenant},
-		environment: etcd.EnvironmentRecord{
+		project: testhierarchy.ProjectRecord{ID: projectID, TenantID: tenantID, Kind: testhierarchy.ProjectKindTenant},
+		environment: testhierarchy.EnvironmentRecord{
 			ID:                environmentID,
 			ProjectID:         projectID,
 			VolumeDir:         volumeDir,
-			ProvisioningState: etcd.EnvironmentProvisioningReady,
+			ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 		},
 		projection: projection,
 	}
-	resolver, err := controller.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
+	resolver, err := testtaskplanning.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", reader, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,18 +241,17 @@ func testPrepareManagedService(
 	task := etcd.TaskRecord{
 		ID:               taskID,
 		OperationID:      ids.New(ids.KindOperation),
-		Executor:         etcd.TaskExecutorAgent,
+		Executor:         testtaskjournal.TaskExecutorAgent,
 		PlanID:           planID,
 		RenderGeneration: int32(render.RenderGeneration),
-		Type:             etcd.TaskUpdate,
+		Type:             testtaskjournal.TaskUpdate,
 		Target:           environmentID,
 		TimeoutSeconds:   120,
-		Materializations: []etcd.TaskMaterializationRecord{materialization},
+		Materializations: []testtaskmaterializationowner.Record{materialization},
 		Params: map[string]string{
 			taskcontract.EnvironmentBlueprintProcedureParam: string(
 				taskcontract.BlueprintComposeProcedureNone,
-			), etcd.EnvironmentDesiredRevisionParam: taskID,
-			etcd.TaskMaterializationEnvironmentParam: environmentID, controller.EnvironmentBlueprintArtifactParam: artifactID},
+			), testblueprints.EnvironmentDesiredRevisionParam: taskID, testtaskjournal.TaskMaterializationEnvironmentParam: environmentID, taskcontract.EnvironmentBlueprintArtifactParam: artifactID},
 	}
 	producer := &Service{ledger: &etcd.ReleaseLedger{}, plans: resolver}
 	prepared, err := producer.Prepare(
@@ -257,9 +265,11 @@ func testPrepareManagedService(
 			PrefixSteps: []*agentpb.ExecutionStep{
 				prefix,
 			},
-			Artifact:      artifact,
-			CreatedAt:     at,
-			AllocateNamed: func(kind ids.Kind, name string) string { return ids.DeriveAt(kind, at, taskID, name) },
+			Artifact:  artifact,
+			CreatedAt: at,
+			AllocateNamed: func(kind ids.Kind, name string) string {
+				return ids.DeriveAt(kind, at, taskID, name)
+			},
 		},
 	)
 	if err != nil {
@@ -393,40 +403,53 @@ func routerServiceTestImage() component.OCIImage {
 }
 
 type managedPlanReader struct {
-	project     etcd.ProjectRecord
-	environment etcd.EnvironmentRecord
-	projection  etcd.EnvironmentComposeProjection
+	project     testhierarchy.ProjectRecord
+	environment testhierarchy.EnvironmentRecord
+	projection  testenvironmentprojection.EnvironmentComposeProjection
 }
 
-func (r *managedPlanReader) GetTenant(context.Context, string) (etcd.Versioned[etcd.TenantRecord], error) {
-	return etcd.Versioned[etcd.TenantRecord]{}, nil
+func (r *managedPlanReader) GetTenant(
+	context.Context,
+	string,
+) (testkeyvalue.Versioned[testhierarchy.TenantRecord], error) {
+	return testkeyvalue.Versioned[testhierarchy.TenantRecord]{}, nil
 }
-func (r *managedPlanReader) GetProject(context.Context, string) (etcd.Versioned[etcd.ProjectRecord], error) {
-	return etcd.Versioned[etcd.ProjectRecord]{Record: r.project}, nil
+
+func (r *managedPlanReader) GetProject(
+	context.Context,
+	string,
+) (testkeyvalue.Versioned[testhierarchy.ProjectRecord], error) {
+	return testkeyvalue.Versioned[testhierarchy.ProjectRecord]{Record: r.project}, nil
 }
-func (r *managedPlanReader) GetEnvironment(context.Context, string) (etcd.Versioned[etcd.EnvironmentRecord], error) {
-	return etcd.Versioned[etcd.EnvironmentRecord]{Record: r.environment}, nil
+
+func (r *managedPlanReader) GetEnvironment(
+	context.Context,
+	string,
+) (testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], error) {
+	return testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{Record: r.environment}, nil
 }
 
 func (r *managedPlanReader) GetEnvironmentBlueprintRevision(
-	context.Context,
-	string,
-	string,
-) (etcd.Versioned[etcd.EnvironmentBlueprintRevision], bool, error) {
-	return etcd.Versioned[etcd.EnvironmentBlueprintRevision]{}, false, nil
+	context.Context, string, string,
+
+) (testkeyvalue.Versioned[testblueprints.EnvironmentBlueprintRevision], bool, error) {
+	return testkeyvalue.Versioned[testblueprints.EnvironmentBlueprintRevision]{}, false, nil
 }
 
 func (r *managedPlanReader) GetEnvironmentComposeProjection(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
-	return etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: r.projection}, true, nil
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection], bool, error) {
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
+		Record: r.projection,
+	}, true, nil
 }
 
 func (r *managedPlanReader) GetEnvironmentComposeProjectionRevision(
-	context.Context,
-	string,
-	string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
-	return etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: r.projection}, true, nil
+	context.Context, string, string,
+
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection], bool, error) {
+	return testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
+		Record: r.projection,
+	}, true, nil
 }

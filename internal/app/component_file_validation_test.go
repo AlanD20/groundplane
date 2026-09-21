@@ -10,13 +10,14 @@ import (
 
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	registeredcaddy "github.com/AlanD20/groundplane-registered-components/caddy"
+	"github.com/AlanD20/groundplane/internal/app/componentregistration"
 	"github.com/AlanD20/groundplane/internal/infra/docker/managedconfighelpercontainer"
 )
 
 func TestRegisteredComponentFilePreflightUsesPinnedNativeRecipe(t *testing.T) {
 	// Rationale: production wiring must connect Environment materialization to
 	// the compiled Caddy stdin validator, not only to its later reload action.
-	catalog, err := newRegisteredActionCatalog()
+	catalog, err := componentregistration.NewCatalog()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +55,7 @@ func TestRegisteredComponentFilePreflightUsesPinnedNativeRecipe(t *testing.T) {
 
 func componentFileValidationEnvelope(
 	t *testing.T,
-	catalog registeredActionCatalog,
+	catalog componentregistration.Catalog,
 	digest [32]byte,
 ) componentsdk.ActionEnvelope {
 	t.Helper()

@@ -7,6 +7,12 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testdeletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	testenvironmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+	testidempotencyowner "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 )
 
 // Rationale: a dependent Attach must detach before every grant target while
@@ -16,10 +22,10 @@ func TestBackingZoneCascadeOrdersDependentsBeforeGrantTargets(t *testing.T) {
 	first := ids.NewAt(ids.KindAttach, now, 1)
 	grant := ids.NewAt(ids.KindAttach, now, 2)
 	dependent := ids.NewAt(ids.KindAttach, now, 3)
-	ordered, err := orderBackingZoneCascadeAttaches([]etcd.Versioned[etcd.AttachRecord]{
-		{Record: etcd.AttachRecord{ID: grant}},
-		{Record: etcd.AttachRecord{ID: dependent, GrantAttachIDs: []string{grant}}},
-		{Record: etcd.AttachRecord{ID: first}},
+	ordered, err := orderBackingZoneCascadeAttaches([]testkeyvalue.Versioned[testattachments.Record]{
+		{Record: testattachments.Record{ID: grant}},
+		{Record: testattachments.Record{ID: dependent, GrantAttachIDs: []string{grant}}},
+		{Record: testattachments.Record{ID: first}},
 	})
 	if err != nil {
 		t.Fatalf("orderBackingZoneCascadeAttaches() error = %v", err)
@@ -31,10 +37,10 @@ func TestBackingZoneCascadeOrdersDependentsBeforeGrantTargets(t *testing.T) {
 	if positions[dependent] >= positions[grant] {
 		t.Fatalf("cascade order = %#v", ordered)
 	}
-	repeated, err := orderBackingZoneCascadeAttaches([]etcd.Versioned[etcd.AttachRecord]{
-		{Record: etcd.AttachRecord{ID: first}},
-		{Record: etcd.AttachRecord{ID: dependent, GrantAttachIDs: []string{grant}}},
-		{Record: etcd.AttachRecord{ID: grant}},
+	repeated, err := orderBackingZoneCascadeAttaches([]testkeyvalue.Versioned[testattachments.Record]{
+		{Record: testattachments.Record{ID: first}},
+		{Record: testattachments.Record{ID: dependent, GrantAttachIDs: []string{grant}}},
+		{Record: testattachments.Record{ID: grant}},
 	})
 	if err != nil || len(repeated) != len(ordered) {
 		t.Fatalf("orderBackingZoneCascadeAttaches(repeated) = %#v, %v", repeated, err)
@@ -49,57 +55,55 @@ func TestBackingZoneCascadeOrdersDependentsBeforeGrantTargets(t *testing.T) {
 type inertBackingZoneCascadeRepository struct{}
 
 func (inertBackingZoneCascadeRepository) GetZone(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.ZoneRecord], error) {
-	return etcd.Versioned[etcd.ZoneRecord]{}, nil
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testzones.Record], error) {
+	return testkeyvalue.Versioned[testzones.Record]{}, nil
 }
 
 func (inertBackingZoneCascadeRepository) GetDeletionTombstone(
-	context.Context,
-	etcd.DeletionTargetKind,
-	string,
-) (etcd.Versioned[etcd.DeletionTombstoneRecord], bool, error) {
-	return etcd.Versioned[etcd.DeletionTombstoneRecord]{}, false, nil
+	context.Context, testdeletions.DeletionTargetKind, string,
+
+) (testkeyvalue.Versioned[testdeletions.DeletionTombstoneRecord], bool, error) {
+	return testkeyvalue.Versioned[testdeletions.DeletionTombstoneRecord]{}, false, nil
 }
 
 func (inertBackingZoneCascadeRepository) ListAttachesByBackingNetworkAtRevision(
-	context.Context,
-	string,
-	string,
+	context.Context, string, string,
+
 	int64,
-) ([]etcd.Versioned[etcd.AttachRecord], error) {
+) ([]testkeyvalue.Versioned[testattachments.Record], error) {
 	return nil, nil
 }
 
 func (inertBackingZoneCascadeRepository) GetTask(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.TaskRecord], error) {
-	return etcd.Versioned[etcd.TaskRecord]{}, nil
+	context.Context, string,
+
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
+	return testkeyvalue.Versioned[etcd.TaskRecord]{}, nil
 }
 
 func (inertBackingZoneCascadeRepository) GetSystemTaskInitiation(
-	context.Context,
-	string,
+	context.Context, string,
+
 ) (etcd.TaskInitiation, error) {
 	return etcd.TaskInitiation{}, nil
 }
 
 func (inertBackingZoneCascadeRepository) GetZoneRemovalIntent(
 	context.Context, string,
-) (etcd.Versioned[etcd.ZoneRemovalIntent], bool, error) {
-	return etcd.Versioned[etcd.ZoneRemovalIntent]{}, false, nil
+) (testkeyvalue.Versioned[testenvironmentchanges.ZoneRemovalIntent], bool, error) {
+	return testkeyvalue.Versioned[testenvironmentchanges.ZoneRemovalIntent]{}, false, nil
 }
 
 func (inertBackingZoneCascadeRepository) HandoffBackingZoneDeletion(
 	context.Context,
-	etcd.Versioned[etcd.ZoneRecord],
+	testkeyvalue.Versioned[testzones.Record],
 	string,
-	etcd.Versioned[etcd.DeletionTombstoneRecord],
-	etcd.ZoneRemovalIntent,
+	testkeyvalue.Versioned[testdeletions.DeletionTombstoneRecord],
+	testenvironmentchanges.ZoneRemovalIntent,
 	etcd.TaskRecord,
-	etcd.IdempotencyMarker,
+	testidempotencyowner.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	return etcd.IdempotencyTransactionResult{}, nil
 }
@@ -107,21 +111,19 @@ func (inertBackingZoneCascadeRepository) HandoffBackingZoneDeletion(
 type inertBackingZoneCascadeMutations struct{}
 
 func (inertBackingZoneCascadeMutations) DetachAttachWithInitiation(
-	context.Context,
-	string,
-	string,
+	context.Context, string, string,
+
 	etcd.TaskInitiation,
-) (etcd.IdempotencyResponse, error) {
-	return etcd.IdempotencyResponse{}, nil
+) (testidempotencyowner.IdempotencyResponse, error) {
+	return testidempotencyowner.IdempotencyResponse{}, nil
 }
 
 func (inertBackingZoneCascadeMutations) RetryTaskWithInitiation(
-	context.Context,
-	string,
-	string,
+	context.Context, string, string,
+
 	etcd.TaskInitiation,
-) (etcd.IdempotencyResponse, error) {
-	return etcd.IdempotencyResponse{}, nil
+) (testidempotencyowner.IdempotencyResponse, error) {
+	return testidempotencyowner.IdempotencyResponse{}, nil
 }
 
 func testBackingZoneCascade(t *testing.T) *backingZoneCascadeService {

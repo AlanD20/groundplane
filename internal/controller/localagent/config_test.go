@@ -97,8 +97,8 @@ func (repository *configTestRepository) UpdateConfig(
 }
 
 func (repository *configTestRepository) MarkReady(
-	context.Context,
-	string,
+	context.Context, string,
+
 	uint64,
 	int64,
 	time.Time,
@@ -107,16 +107,16 @@ func (repository *configTestRepository) MarkReady(
 }
 func (repository *configTestRepository) BeginReplacement(
 	context.Context,
-	StoredRecord,
-	string,
+	StoredRecord, string,
+
 	Credential,
 	time.Time,
 ) (StoredRecord, error) {
 	return StoredRecord{}, nil
 }
 func (repository *configTestRepository) MarkReplacementReady(
-	context.Context,
-	string,
+	context.Context, string,
+
 	uint64,
 	int64,
 ) (StoredRecord, error) {
@@ -157,13 +157,25 @@ type configTestSessions struct{}
 func (configTestSessions) Ready(context.Context, string, uint64) (<-chan struct{}, error) {
 	return make(chan struct{}), nil
 }
-func (configTestSessions) Snapshot(string) (SessionSnapshot, bool)               { return SessionSnapshot{}, false }
-func (configTestSessions) StopAssignments(context.Context, string, uint64) error { return nil }
-func (configTestSessions) FenceThrough(context.Context, string, uint64) error    { return nil }
-func (configTestSessions) Revoke(context.Context, string, uint64) error          { return nil }
-func (configTestSessions) WaitOffline(context.Context, string, uint64) error     { return nil }
+func (configTestSessions) Snapshot(string) (SessionSnapshot, bool) {
+	return SessionSnapshot{}, false
+}
+func (configTestSessions) StopAssignments(context.Context, string, uint64) error {
+	return nil
+}
+func (configTestSessions) FenceThrough(context.Context, string, uint64) error {
+	return nil
+}
+func (configTestSessions) Revoke(context.Context, string, uint64) error { return nil }
+func (configTestSessions) WaitOffline(context.Context, string, uint64) error {
+	return nil
+}
 
 type configTestTasks struct{}
 
-func (configTestTasks) RequireIdle(context.Context, string, uint64, int32) error         { return nil }
-func (configTestTasks) AbortActive(context.Context, string, uint64, int32, string) error { return nil }
+func (configTestTasks) RequireIdle(context.Context, string, uint64, int32) error {
+	return nil
+}
+func (configTestTasks) AbortActive(context.Context, string, uint64, int32, string) error {
+	return nil
+}

@@ -8,7 +8,7 @@ import (
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/jcs"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: native recovery must replay exact immutable inputs from its Task,
@@ -52,7 +52,7 @@ func TestNativeUpdateTaskRejectsChangedAuthority(t *testing.T) {
 			case "target":
 				task.Target = ids.New(ids.KindAgent)
 			case "executor":
-				task.Executor = etcd.TaskExecutorAgent
+				task.Executor = testtaskjournal.TaskExecutorAgent
 			case "extra":
 				task.Params["path"] = "/other/controller"
 			case "timeout":

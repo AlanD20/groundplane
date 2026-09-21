@@ -5,13 +5,13 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 func TestScriptResponseProjectsOnlyThePublicContract(t *testing.T) {
 	// Rationale: the public response exposes both stable references and mutable operator labels.
-	record, err := etcd.NewScriptRecord(ids.New(ids.KindEnvironment), ids.New(ids.KindService), core.Script{
+	record, err := testscripts.NewRecord(ids.New(ids.KindEnvironment), ids.New(ids.KindService), core.Script{
 		ID: ids.New(ids.KindScript), Slug: "migrate", ServiceName: "api",
 		Body: "php artisan migrate --force", When: core.ScriptHook("manual"),
 	})
@@ -62,7 +62,7 @@ func TestScriptOrderCreateEditResponse(t *testing.T) {
 	if edited.Order != 0 || edited.ID != desired.ID || edited.Body != desired.Body {
 		t.Errorf("edited Script = %#v", edited)
 	}
-	if got := Response(etcd.ScriptRecord{Desired: desired}).Order; got != 65535 {
+	if got := Response(testscripts.Record{Desired: desired}).Order; got != 65535 {
 		t.Errorf("response order = %d", got)
 	}
 }

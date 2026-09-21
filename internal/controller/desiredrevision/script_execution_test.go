@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 // Rationale: names resolve against this candidate, never a stale live primary;
@@ -30,17 +31,19 @@ func TestReconcileBlueprintScriptExecutionUsesCandidateIdentities(t *testing.T) 
 		},
 	}}
 	resources := BlueprintScriptResources{
-		Volumes: []controller.ComposeResourceIdentity{{ID: volumeID, Name: "storage"}},
-		Entries: []etcd.EntryRecord{{EnvironmentID: environmentID, BlueprintKey: "SETUP_INPUT",
+		Volumes: []testcomposeidentity.Resource{{ID: volumeID, Name: "storage"}},
+		Entries: []testentries.Record{{EnvironmentID: environmentID, BlueprintKey: "SETUP_INPUT",
 			Entry: core.EnvEntry{ID: entryID, Kind: core.EntryKindEnv, Key: "SETUP_INPUT", Exposure: []string{"api"},
 				Source: core.EntrySource{Kind: core.SourceLiteral, Literal: "input"}},
 		}},
 	}
-	allocate := func(kind ids.Kind, purpose string) string { return ids.DeriveAt(kind, at, environmentID, purpose) }
+	allocate := func(kind ids.Kind, purpose string) string {
+		return ids.DeriveAt(kind, at, environmentID, purpose)
+	}
 	first, err := ReconcileBlueprintScripts(
 		environmentID,
 		authored,
-		[]etcd.ServiceRecord{service},
+		[]testservices.ServiceRecord{service},
 		nil,
 		resources,
 		allocate,
@@ -63,7 +66,7 @@ func TestReconcileBlueprintScriptExecutionUsesCandidateIdentities(t *testing.T) 
 	next, err := ReconcileBlueprintScripts(
 		environmentID,
 		authored,
-		[]etcd.ServiceRecord{service},
+		[]testservices.ServiceRecord{service},
 		first.Current,
 		resources,
 		allocate,
@@ -79,7 +82,7 @@ func TestReconcileBlueprintScriptExecutionUsesCandidateIdentities(t *testing.T) 
 	last, err := ReconcileBlueprintScripts(
 		environmentID,
 		authored,
-		[]etcd.ServiceRecord{service},
+		[]testservices.ServiceRecord{service},
 		next.Current,
 		resources,
 		allocate,
@@ -99,8 +102,8 @@ func TestReconcileBlueprintScriptExecutionRejectsInvalidCandidateGrants(t *testi
 		t.Run(name, func(t *testing.T) {
 			readOnly, uid := false, uint32(0)
 			resources := BlueprintScriptResources{
-				Volumes: []controller.ComposeResourceIdentity{{ID: ids.NewAt(ids.KindVolume, at, 12), Name: "storage"}},
-				Entries: []etcd.EntryRecord{{EnvironmentID: environmentID, BlueprintKey: "SETUP_INPUT",
+				Volumes: []testcomposeidentity.Resource{{ID: ids.NewAt(ids.KindVolume, at, 12), Name: "storage"}},
+				Entries: []testentries.Record{{EnvironmentID: environmentID, BlueprintKey: "SETUP_INPUT",
 					Entry: core.EnvEntry{ID: ids.NewAt(ids.KindEnvEntry, at, 13), Kind: core.EntryKindEnv,
 						Key: "SETUP_INPUT", Exposure: []string{"api"}, Source: core.EntrySource{Kind: core.SourceLiteral, Literal: "input"}},
 				}},
@@ -129,8 +132,16 @@ func TestReconcileBlueprintScriptExecutionRejectsInvalidCandidateGrants(t *testi
 						}, Entries: []string{"SETUP_INPUT"}},
 				},
 			}
-			_, err := ReconcileBlueprintScripts(environmentID, authored, []etcd.ServiceRecord{service}, nil, resources,
-				func(kind ids.Kind, purpose string) string { return ids.DeriveAt(kind, at, environmentID, purpose) })
+			_, err := ReconcileBlueprintScripts(
+				environmentID,
+				authored,
+				[]testservices.ServiceRecord{service},
+				nil,
+				resources,
+				func(kind ids.Kind, purpose string) string {
+					return ids.DeriveAt(kind, at, environmentID, purpose)
+				},
+			)
 			if err == nil {
 				t.Fatal("accepted invalid candidate resources")
 			}

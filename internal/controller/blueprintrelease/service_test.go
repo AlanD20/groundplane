@@ -10,10 +10,19 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
+	testtaskmaterializationowner "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
@@ -29,14 +38,14 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 	artifactID := ids.NewAt(ids.KindConfig, at, 202)
 	volumeID := ids.NewAt(ids.KindVolume, at, 203)
 	planID := ids.NewAt(ids.KindPlan, at, 209)
-	materialization := etcd.TaskMaterializationRecord{
+	materialization := testtaskmaterializationowner.Record{
 		StepID:            ids.NewAt(ids.KindStep, at, 204),
 		MaterializationID: ids.NewAt(ids.KindConfig, at, 205),
 		EnvironmentID:     environmentID, Destination: "blueprints/" + planID + "/blueprint.yaml",
-		OutputKind: etcd.TaskMaterializationOutputPlainFile, Mode: 0o444,
+		OutputKind: testtaskmaterializationowner.OutputPlainFile, Mode: 0o444,
 		SHA256: hex.EncodeToString(make([]byte, sha256.Size)),
 	}
-	materializeStep, err := controller.BuildTaskMaterializationStep(materialization, artifactID, 120)
+	materializeStep, err := testtaskmaterialization.BuildTaskMaterializationStep(materialization, artifactID, 120)
 	if err != nil {
 		t.Fatalf("BuildTaskMaterializationStep() error = %v", err)
 	}
@@ -64,7 +73,11 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 			},
 		}},
 	}
-	resolver, err := controller.NewTaskPlanResolverWithBlueprints("/var/lib/groundplane/vol", &managedPlanReader{}, nil)
+	resolver, err := testtaskplanning.NewTaskPlanResolverWithBlueprints(
+		"/var/lib/groundplane/vol",
+		&managedPlanReader{},
+		nil,
+	)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolver() error = %v", err)
 	}
@@ -76,25 +89,28 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 	taskID := ids.NewAt(ids.KindTask, at, 207)
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, at, 208),
-		Executor: etcd.TaskExecutorAgent, PlanID: planID,
-		RenderGeneration: 1, Type: etcd.TaskUpdate, Target: environmentID,
+		Executor: testtaskjournal.TaskExecutorAgent, PlanID: planID,
+		RenderGeneration: 1, Type: testtaskjournal.TaskUpdate, Target: environmentID,
 		Params: map[string]string{
-			taskcontract.EnvironmentBlueprintProcedureParam: string(taskcontract.BlueprintComposeProcedureNone),
-			etcd.EnvironmentDesiredRevisionParam:            taskID,
+			taskcontract.EnvironmentBlueprintProcedureParam: string(
+				taskcontract.BlueprintComposeProcedureNone,
+			), testblueprints.EnvironmentDesiredRevisionParam: taskID,
 		},
 		TimeoutSeconds: 120,
 	}
 	prepared, err := service.Prepare(context.Background(), PrepareInput{
 		VolumeRoot: "/var/lib/groundplane/vol",
-		Projection: etcd.EnvironmentComposeProjection{
+		Projection: testenvironmentprojection.EnvironmentComposeProjection{
 			EnvironmentID:     environmentID,
 			RevisionID:        task.ID,
 			NormalizedCompose: []byte("services: {}\n"),
 		},
 		Memberships: memberships,
 		Task:        task, PrefixSteps: []*agentpb.ExecutionStep{materializeStep, volumeStep}, Artifact: artifact,
-		AllocateNamed: func(kind ids.Kind, name string) string { return ids.NewAt(kind, at, int64(len(name)+300)) },
-		CreatedAt:     at,
+		AllocateNamed: func(kind ids.Kind, name string) string {
+			return ids.NewAt(kind, at, int64(len(name)+300))
+		},
+		CreatedAt: at,
 	})
 	if err != nil {
 		t.Fatalf("Prepare() error = %v", err)
@@ -105,7 +121,7 @@ func TestPrepareWithoutCandidatesPreservesMaterializationAndVolumePrefix(t *test
 		prepared.Task.Params[taskcontract.EnvironmentBlueprintProcedureParam] != string(
 			taskcontract.BlueprintComposeProcedureNone,
 		) ||
-		prepared.Task.Params[etcd.TaskReleasePublicationParam] != "" {
+		prepared.Task.Params[testreleaserender.TaskReleasePublicationParam] != "" {
 		t.Fatalf("no-candidate Blueprint preparation = %#v / %#v", prepared.Task, prepared.Plan)
 	}
 }
@@ -118,27 +134,27 @@ func TestSealedCandidateSelectsRunningChangedSingletonsInDependencyOrder(t *test
 	apiID := ids.NewAt(ids.KindService, at, 3)
 	workerID := ids.NewAt(ids.KindService, at, 4)
 	stoppedID := ids.NewAt(ids.KindService, at, 5)
-	current := func(id, name, image string, intent core.ServiceRuntimeIntent) *etcd.Versioned[etcd.ServiceRecord] {
-		record, err := etcd.NewServiceRecord(environmentID, core.Service{
+	current := func(id, name, image string, intent core.ServiceRuntimeIntent) *testkeyvalue.Versioned[testservices.ServiceRecord] {
+		record, err := testservices.NewServiceRecord(environmentID, core.Service{
 			ID: id, Name: name, Image: image, Strategy: core.StrategyRecreate, Replicas: 1,
 		}, "")
 		if err != nil {
 			t.Fatal(err)
 		}
 		record.Runtime.RuntimeIntent = intent
-		versioned := etcd.Versioned[etcd.ServiceRecord]{Record: record, Revision: 7, ReadRevision: 9}
+		versioned := testkeyvalue.Versioned[testservices.ServiceRecord]{Record: record, Revision: 7, ReadRevision: 9}
 		return &versioned
 	}
-	change := func(existing *etcd.Versioned[etcd.ServiceRecord], image string) etcd.EnvironmentBlueprintServiceChange {
+	change := func(existing *testkeyvalue.Versioned[testservices.ServiceRecord], image string) testblueprints.EnvironmentBlueprintServiceChange {
 		desired := existing.Record.Desired
 		desired.Image = image
-		record, err := etcd.ReplaceServiceDesired(existing.Record, desired)
+		record, err := testservices.ReplaceServiceDesired(existing.Record, desired)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return etcd.EnvironmentBlueprintServiceChange{Current: existing, Record: record}
+		return testblueprints.EnvironmentBlueprintServiceChange{Current: existing, Record: record}
 	}
-	database, err := etcd.NewServiceRecord(environmentID, core.Service{
+	database, err := testservices.NewServiceRecord(environmentID, core.Service{
 		ID: databaseID, Name: "database", Image: "registry.example/database:v1",
 		Strategy: core.StrategyRecreate, Replicas: 1,
 	}, "")
@@ -148,13 +164,13 @@ func TestSealedCandidateSelectsRunningChangedSingletonsInDependencyOrder(t *test
 	api := current(apiID, "api", "registry.example/api:v1", core.ServiceRuntimeIntentRunning)
 	worker := current(workerID, "worker", "registry.example/worker:v1", core.ServiceRuntimeIntentRunning)
 	stopped := current(stoppedID, "stopped", "registry.example/stopped:v1", core.ServiceRuntimeIntentStopped)
-	changes := []etcd.EnvironmentBlueprintServiceChange{
+	changes := []testblueprints.EnvironmentBlueprintServiceChange{
 		change(api, "registry.example/api:v2"),
 		{Record: database},
 		change(worker, "registry.example/worker:v2"),
 		change(stopped, "registry.example/stopped:v2"),
 	}
-	projection := etcd.EnvironmentComposeProjection{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID,
 		ServiceDependencyPlans: core.ServiceDependencyPlans{
 			DeployDependencyPlan: core.ServiceDependencyPhasePlan{
@@ -203,34 +219,38 @@ func TestSelectCandidatesExcludesNewAndChangedProfileDisabledServices(t *testing
 	enabledChangedID := ids.NewAt(ids.KindService, at, 403)
 	disabledNewID := ids.NewAt(ids.KindService, at, 404)
 	disabledChangedID := ids.NewAt(ids.KindService, at, 405)
-	newService := func(id, name, image string) etcd.EnvironmentBlueprintServiceChange {
-		record, err := etcd.NewServiceRecord(environmentID, core.Service{
+	newService := func(id, name, image string) testblueprints.EnvironmentBlueprintServiceChange {
+		record, err := testservices.NewServiceRecord(environmentID, core.Service{
 			ID: id, Name: name, Image: image, Strategy: core.StrategyRecreate, Replicas: 1,
 		}, "")
 		if err != nil {
 			t.Fatal(err)
 		}
 		record.Runtime.RuntimeIntent = core.ServiceRuntimeIntentRunning
-		return etcd.EnvironmentBlueprintServiceChange{Record: record}
+		return testblueprints.EnvironmentBlueprintServiceChange{Record: record}
 	}
-	changedService := func(id, name string) etcd.EnvironmentBlueprintServiceChange {
+	changedService := func(id, name string) testblueprints.EnvironmentBlueprintServiceChange {
 		current := newService(id, name, "registry.example/"+name+":v1").Record
-		currentVersion := &etcd.Versioned[etcd.ServiceRecord]{Record: current, Revision: 7, ReadRevision: 9}
+		currentVersion := &testkeyvalue.Versioned[testservices.ServiceRecord]{
+			Record:       current,
+			Revision:     7,
+			ReadRevision: 9,
+		}
 		desired := current.Desired
 		desired.Image = "registry.example/" + name + ":v2"
-		record, err := etcd.ReplaceServiceDesired(current, desired)
+		record, err := testservices.ReplaceServiceDesired(current, desired)
 		if err != nil {
 			t.Fatal(err)
 		}
-		return etcd.EnvironmentBlueprintServiceChange{Current: currentVersion, Record: record}
+		return testblueprints.EnvironmentBlueprintServiceChange{Current: currentVersion, Record: record}
 	}
-	changes := []etcd.EnvironmentBlueprintServiceChange{
+	changes := []testblueprints.EnvironmentBlueprintServiceChange{
 		newService(enabledNewID, "frontend", "registry.example/frontend:v1"),
 		changedService(enabledChangedID, "api"),
 		newService(disabledNewID, "migrate", "registry.example/migrate:v1"),
 		changedService(disabledChangedID, "worker"),
 	}
-	projection := etcd.EnvironmentComposeProjection{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID,
 		NormalizedCompose: []byte(
 			"services:\n" +
@@ -276,7 +296,7 @@ func TestSelectCandidatesIncludesProfileDisabledToActiveTransition(t *testing.T)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 451)
 	serviceID := ids.NewAt(ids.KindService, at, 452)
 	equalActiveID := ids.NewAt(ids.KindService, at, 453)
-	record, err := etcd.NewServiceRecord(environmentID, core.Service{
+	record, err := testservices.NewServiceRecord(environmentID, core.Service{
 		ID: serviceID, Name: "worker", Image: "registry.example/worker:v1",
 		Strategy: core.StrategyRecreate, Replicas: 1,
 	}, "")
@@ -284,8 +304,8 @@ func TestSelectCandidatesIncludesProfileDisabledToActiveTransition(t *testing.T)
 		t.Fatal(err)
 	}
 	record.Runtime.RuntimeIntent = core.ServiceRuntimeIntentRunning
-	current := &etcd.Versioned[etcd.ServiceRecord]{Record: record, Revision: 7, ReadRevision: 9}
-	equalActive, err := etcd.NewServiceRecord(environmentID, core.Service{
+	current := &testkeyvalue.Versioned[testservices.ServiceRecord]{Record: record, Revision: 7, ReadRevision: 9}
+	equalActive, err := testservices.NewServiceRecord(environmentID, core.Service{
 		ID: equalActiveID, Name: "api", Image: "registry.example/api:v1",
 		Strategy: core.StrategyRecreate, Replicas: 1,
 	}, "")
@@ -293,7 +313,11 @@ func TestSelectCandidatesIncludesProfileDisabledToActiveTransition(t *testing.T)
 		t.Fatal(err)
 	}
 	equalActive.Runtime.RuntimeIntent = core.ServiceRuntimeIntentRunning
-	equalActiveCurrent := &etcd.Versioned[etcd.ServiceRecord]{Record: equalActive, Revision: 8, ReadRevision: 9}
+	equalActiveCurrent := &testkeyvalue.Versioned[testservices.ServiceRecord]{
+		Record:       equalActive,
+		Revision:     8,
+		ReadRevision: 9,
+	}
 	memberships, err := BuildNormalizedServiceMemberships(
 		&composetypes.Project{
 			Services: composetypes.Services{"api": {Name: "api", Image: "registry.example/api:v1"}},
@@ -310,8 +334,8 @@ func TestSelectCandidatesIncludesProfileDisabledToActiveTransition(t *testing.T)
 		t.Fatalf("BuildNormalizedServiceMemberships() error = %v", err)
 	}
 	selected, err := selectCandidates(
-		etcd.EnvironmentComposeProjection{EnvironmentID: environmentID},
-		[]etcd.EnvironmentBlueprintServiceChange{
+		testenvironmentprojection.EnvironmentComposeProjection{EnvironmentID: environmentID},
+		[]testblueprints.EnvironmentBlueprintServiceChange{
 			{Current: current, Record: record},
 			{Current: equalActiveCurrent, Record: equalActive},
 		},
@@ -333,7 +357,7 @@ func TestPrepareRejectsChangedOrNewServiceMissingFromSealedProjection(t *testing
 	at := time.Date(2026, 9, 2, 19, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 501)
 	serviceID := ids.NewAt(ids.KindService, at, 502)
-	record, err := etcd.NewServiceRecord(environmentID, core.Service{
+	record, err := testservices.NewServiceRecord(environmentID, core.Service{
 		ID: serviceID, Name: "worker", Image: "registry.example/worker:v2",
 		Strategy: core.StrategyRecreate, Replicas: 1,
 	}, "")
@@ -343,13 +367,13 @@ func TestPrepareRejectsChangedOrNewServiceMissingFromSealedProjection(t *testing
 	record.Runtime.RuntimeIntent = core.ServiceRuntimeIntentRunning
 	current := record
 	current.Desired.Image = "registry.example/worker:v1"
-	currentVersion := &etcd.Versioned[etcd.ServiceRecord]{Record: current, Revision: 7, ReadRevision: 9}
-	resolver, err := controller.NewTaskPlanResolver("/var/lib/groundplane/vol", nil)
+	currentVersion := &testkeyvalue.Versioned[testservices.ServiceRecord]{Record: current, Revision: 7, ReadRevision: 9}
+	resolver, err := testtaskplanning.NewTaskPlanResolver("/var/lib/groundplane/vol", nil)
 	if err != nil {
 		t.Fatalf("NewTaskPlanResolver() error = %v", err)
 	}
 	releaseService := &Service{ledger: &etcd.ReleaseLedger{}, plans: resolver}
-	for name, change := range map[string]etcd.EnvironmentBlueprintServiceChange{
+	for name, change := range map[string]testblueprints.EnvironmentBlueprintServiceChange{
 		"new":     {Record: record},
 		"changed": {Current: currentVersion, Record: record},
 	} {
@@ -368,10 +392,10 @@ func TestPrepareRejectsChangedOrNewServiceMissingFromSealedProjection(t *testing
 			task := etcd.TaskRecord{
 				ID:               ids.NewAt(ids.KindTask, at, int64(510+len(name))),
 				OperationID:      ids.NewAt(ids.KindOperation, at, int64(520+len(name))),
-				Executor:         etcd.TaskExecutorAgent,
+				Executor:         testtaskjournal.TaskExecutorAgent,
 				PlanID:           ids.NewAt(ids.KindPlan, at, int64(530+len(name))),
 				RenderGeneration: 1,
-				Type:             etcd.TaskUpdate,
+				Type:             testtaskjournal.TaskUpdate,
 				Target:           environmentID,
 				Params: map[string]string{
 					taskcontract.EnvironmentBlueprintProcedureParam: string(taskcontract.BlueprintComposeProcedureNone),
@@ -380,12 +404,12 @@ func TestPrepareRejectsChangedOrNewServiceMissingFromSealedProjection(t *testing
 			}
 			prepared, prepareErr := releaseService.Prepare(context.Background(), PrepareInput{
 				VolumeRoot: "/var/lib/groundplane/vol",
-				Projection: etcd.EnvironmentComposeProjection{
+				Projection: testenvironmentprojection.EnvironmentComposeProjection{
 					EnvironmentID:     environmentID,
 					RevisionID:        task.ID,
 					NormalizedCompose: []byte("services: {}\n"),
 				},
-				ServiceChanges: []etcd.EnvironmentBlueprintServiceChange{change},
+				ServiceChanges: []testblueprints.EnvironmentBlueprintServiceChange{change},
 				Memberships:    memberships,
 				Task:           task,
 				Artifact:       &agentpb.ComposeArtifact{},
@@ -428,7 +452,7 @@ func TestPostDeployHookBoundsRejectBeforePublication(t *testing.T) {
 func TestDeployScriptSelectionIncludesBothPhasesAndExcludesManual(t *testing.T) {
 	t.Parallel()
 	serviceID := "svc_new"
-	selected := deployScriptsByService([]etcd.ScriptRecord{
+	selected := deployScriptsByService([]testscripts.Record{
 		{ServiceID: serviceID, Desired: core.Script{ID: "scr_pre", Slug: "a-prepare", When: core.ScriptPreDeploy}},
 		{
 			ServiceID: serviceID,

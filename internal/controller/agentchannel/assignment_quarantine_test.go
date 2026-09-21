@@ -9,6 +9,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -90,18 +93,22 @@ func assignmentQuarantineFixture(at time.Time, agentID string, entropy int64) et
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, at, entropy),
 		PlanID: ids.NewAt(ids.KindPlan, at, entropy), PlanHash: strings.Repeat("0", 64),
-		Type: etcd.TaskDeploy, Target: ids.NewAt(ids.KindService, at, entropy),
-		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, entropy)}},
-		TimeoutSeconds: 60, RenderGeneration: 7, Status: etcd.TaskStatusRunning,
+		Type: testtaskjournal.TaskDeploy, Target: ids.NewAt(ids.KindService, at, entropy),
+		Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, at, entropy)},
+		},
+		TimeoutSeconds: 60, RenderGeneration: 7, Status: testtaskjournal.TaskStatusRunning,
 		CreatedAt: at, UpdatedAt: at, StartedAt: &at,
 	}
 	return etcd.TaskAssignment{
-		Task: etcd.Versioned[etcd.TaskRecord]{Record: task},
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-			AssignmentID: assignmentID, TaskID: taskID, Executor: etcd.TaskExecutorAgent,
-			AgentID: agentID, AgentGeneration: 7, ClaimedTaskRevision: 1,
-			AssignedAt: at, Deadline: at.Add(time.Minute), RecoveryDeadline: at.Add(2 * time.Minute),
-			ExecutionEpoch: 1, ExecutionMode: etcd.TaskExecutionModeForward,
-		}},
+		Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: task},
+		Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+			Record: testtaskassignments.TaskAssignmentRecord{
+				AssignmentID: assignmentID, TaskID: taskID, Executor: testtaskjournal.TaskExecutorAgent,
+				AgentID: agentID, AgentGeneration: 7, ClaimedTaskRevision: 1,
+				AssignedAt: at, Deadline: at.Add(time.Minute), RecoveryDeadline: at.Add(2 * time.Minute),
+				ExecutionEpoch: 1, ExecutionMode: testtaskassignments.TaskExecutionModeForward,
+			},
+		},
 	}
 }

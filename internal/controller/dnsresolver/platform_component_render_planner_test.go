@@ -12,34 +12,40 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testhostresolution "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testplatformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	testresolverbaseline "github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 type renderPlannerBaselineRepository struct {
-	record etcd.HostResolverBaselineRecord
+	record testresolverbaseline.Record
 }
 
 func (repository renderPlannerBaselineRepository) GetHostResolverBaseline(
 	context.Context,
-) (etcd.Versioned[etcd.HostResolverBaselineRecord], bool, error) {
-	return etcd.Versioned[etcd.HostResolverBaselineRecord]{Record: repository.record}, true, nil
+) (testkeyvalue.Versioned[testresolverbaseline.Record], bool, error) {
+	return testkeyvalue.Versioned[testresolverbaseline.Record]{Record: repository.record}, true, nil
 }
 
 func (repository renderPlannerBaselineRepository) EnsureHostResolverBaseline(
 	context.Context,
 	[]byte,
 	time.Time,
-) (etcd.Versioned[etcd.HostResolverBaselineRecord], error) {
-	return etcd.Versioned[etcd.HostResolverBaselineRecord]{Record: repository.record}, nil
+) (testkeyvalue.Versioned[testresolverbaseline.Record], error) {
+	return testkeyvalue.Versioned[testresolverbaseline.Record]{Record: repository.record}, nil
 }
 
 type renderPlannerObservationRepository struct{}
 
 func (renderPlannerObservationRepository) GetPlatformComponentObservation(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.ComponentObservationRecord], bool, error) {
-	return etcd.Versioned[etcd.ComponentObservationRecord]{}, false, nil
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testplatformcomponents.ComponentObservationRecord], bool, error) {
+	return testkeyvalue.Versioned[testplatformcomponents.ComponentObservationRecord]{}, false, nil
 }
 
 type renderPlannerCatalog struct {
@@ -133,22 +139,22 @@ func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testin
 			if test.hasGeneratedService {
 				component.GeneratedServices = []string{ids.NewAt(ids.KindService, now, 8)}
 			}
-			record, err := etcd.NewComponentRecord(component)
+			record, err := testcomponents.NewRecord(component)
 			if err != nil {
 				t.Fatalf("NewComponentRecord() error = %v", err)
 			}
-			desired, err := etcd.ProjectComponentRecord(record)
+			desired, err := testcomponents.ProjectRecord(record)
 			if err != nil {
 				t.Fatalf("ProjectComponentRecord() error = %v", err)
 			}
 			desired.Enabled = true
-			projection, err := etcd.NewHostResolutionProjectionRecord(1, nil)
+			projection, err := testhostresolution.NewHostResolutionProjectionRecord(1, nil)
 			if err != nil {
 				t.Fatalf("NewHostResolutionProjectionRecord() error = %v", err)
 			}
 			baselineContent := []byte("nameserver 1.1.1.1\n")
 			baselineDigest := sha256.Sum256(baselineContent)
-			baseline := etcd.HostResolverBaselineRecord{
+			baseline := testresolverbaseline.Record{
 				Generation: 1, Content: baselineContent, SHA256: hex.EncodeToString(baselineDigest[:]), CapturedAt: now,
 			}
 			definition := testResolverDefinition(t)
@@ -164,19 +170,19 @@ func TestPrepareConfigTaskRequiresObservationOnlyForServingPredecessor(t *testin
 			}
 			task := etcd.TaskRecord{
 				ID: ids.NewAt(ids.KindTask, now, 2), PlanID: ids.NewAt(ids.KindPlan, now, 3),
-				RenderGeneration: 1, Steps: []etcd.TaskStepRecord{
+				RenderGeneration: 1, Steps: []testtaskjournal.TaskStepRecord{
 					{
-						Kind: etcd.TaskStepOperation,
+						Kind: testtaskjournal.TaskStepOperation,
 						ID:   ids.NewAt(ids.KindStep, now, 4),
-					}, {Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 5)},
+					}, {Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 5)},
 					{
-						Kind: etcd.TaskStepOperation,
+						Kind: testtaskjournal.TaskStepOperation,
 						ID:   ids.NewAt(ids.KindStep, now, 6),
-					}, {Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 7)},
+					}, {Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 7)},
 				},
 			}
-			current := etcd.Versioned[etcd.ComponentRecord]{Record: record}
-			var input etcd.PlatformComponentTaskRenderInput
+			current := testkeyvalue.Versioned[testcomponents.Record]{Record: record}
+			var input testplatformcomponents.PlatformComponentTaskRenderInput
 			if test.bootstrapProvenance {
 				input, err = planner.PrepareBootstrapConfigTaskAtProjection(
 					context.Background(), current, desired, task, projection,

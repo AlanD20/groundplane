@@ -6,7 +6,7 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
@@ -25,7 +25,7 @@ func TestScriptExecutionCreateEditAndResponse(t *testing.T) {
 		len(desired.Execution.Volumes) != 1 || desired.Execution.Volumes[0].ReadOnly {
 		t.Fatalf("create lost execution: %#v", desired.Execution)
 	}
-	record, err := etcd.NewScriptRecord(input.EnvironmentID, input.ServiceID, desired)
+	record, err := testscripts.NewRecord(input.EnvironmentID, input.ServiceID, desired)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestScriptExecutionCreateEditAndResponse(t *testing.T) {
 	if edited.Execution == nil || len(edited.Execution.Volumes) != 0 || len(edited.Execution.EntryIDs) != 0 {
 		t.Fatalf("execution patch merged grants: %#v", edited.Execution)
 	}
-	updated, err := etcd.ReplaceScriptDesired(record, edited)
+	updated, err := testscripts.ReplaceDesired(record, edited)
 	if err != nil || updated.ActiveGeneration != record.ActiveGeneration ||
 		updated.Desired.Body != record.Desired.Body {
 		t.Fatalf("context-only edit changed body generation: %#v, %v", updated, err)
@@ -60,7 +60,7 @@ func TestScriptExecutionCreateEditAndResponse(t *testing.T) {
 		"consumer",
 		apiTypes.ScriptEdit{Execution: &apiTypes.ScriptExecution{Mode: "inherited"}},
 	)
-	if reset.Execution != nil || Response(etcd.ScriptRecord{Desired: reset}).Execution.Mode != "inherited" {
+	if reset.Execution != nil || Response(testscripts.Record{Desired: reset}).Execution.Mode != "inherited" {
 		t.Fatal("reset did not expose canonical inheritance")
 	}
 }

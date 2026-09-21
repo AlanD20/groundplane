@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -113,7 +114,8 @@ func TestSendBackupPruneSlotsWithMixedResolvedEvidence(t *testing.T) {
 		chunk := stream.sent[offset+1].GetBackupSecretSlotTransfer()
 		end := stream.sent[offset+2].GetBackupSecretSlotTransfer()
 		if header.GetPurpose() != want.purpose || header.GetHeader() == nil ||
-			string(chunk.GetChunk().GetContent()) != want.value || end.GetEnd() == nil {
+			string(chunk.GetChunk().GetContent()) != want.value ||
+			end.GetEnd() == nil {
 			t.Fatalf("slot %d frames = %#v/%#v/%#v", index, header, chunk, end)
 		}
 	}
@@ -452,11 +454,11 @@ func controllerBackupSecretTask(t *testing.T) (etcd.TaskRecord, *agentpb.Executi
 		OperationID:       operationID,
 		PlanID:            planID,
 		PlanHash:          hex.EncodeToString(plan.PlanHash),
-		Type:              etcd.TaskBackup,
+		Type:              testtaskjournal.TaskBackup,
 		Target:            environmentID,
-		Steps:             []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}},
+		Steps:             []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: stepID}},
 		TimeoutSeconds:    120,
-		Status:            etcd.TaskStatusRunning,
+		Status:            testtaskjournal.TaskStatusRunning,
 		NextEventSequence: 1,
 		CreatedAt:         time.Date(2026, time.August, 24, 12, 0, 0, 0, time.UTC),
 	}, plan
@@ -508,14 +510,14 @@ func controllerBackupPruneSecretTask(t *testing.T) (etcd.TaskRecord, *agentpb.Ex
 		OperationID: operationID,
 		PlanID:      planID,
 		PlanHash:    hex.EncodeToString(plan.PlanHash),
-		Type:        etcd.TaskBackupPrune,
+		Type:        testtaskjournal.TaskBackupPrune,
 		Target:      environmentID,
-		Steps: []etcd.TaskStepRecord{
-			{Kind: etcd.TaskStepOperation, ID: plan.Steps[0].StepId},
-			{Kind: etcd.TaskStepOperation, ID: plan.Steps[1].StepId},
+		Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: plan.Steps[0].StepId},
+			{Kind: testtaskjournal.TaskStepOperation, ID: plan.Steps[1].StepId},
 		},
 		TimeoutSeconds:    120,
-		Status:            etcd.TaskStatusRunning,
+		Status:            testtaskjournal.TaskStatusRunning,
 		NextEventSequence: 1,
 		CreatedAt:         time.Date(2026, time.August, 24, 12, 0, 0, 0, time.UTC),
 	}, plan

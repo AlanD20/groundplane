@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 const publicationCurrentAttachNetwork = "gp_attach_net_01arz3ndektsv4rrffq69g5faw"
@@ -18,19 +19,31 @@ const publicationCurrentAttachNetwork = "gp_attach_net_01arz3ndektsv4rrffq69g5fa
 func seedPublicationReadyAttach(t *testing.T, store *directPublicationStore, environmentID, serviceID string) {
 	t.Helper()
 	attachID, taskID := ids.New(ids.KindAttach), ids.New(ids.KindTask)
-	record, err := etcd.NewPendingAttachRecord(
-		attachID, environmentID, "current-backing", ids.New(ids.KindProject), ids.New(ids.KindEnvironment),
-		ids.New(ids.KindService), "net_01ARZ3NDEKTSV4RRFFQ69G5FAW", serviceID, attachID, nil,
-		[]etcd.AttachFactSetMetadata{{Facts: []etcd.AttachFactDefinition{{Key: "HOST"}}}}, taskID, time.Now().UTC(),
+	record, err := testattachments.NewPendingAttachRecord(
+		attachID,
+		environmentID,
+		"current-backing",
+		ids.New(ids.KindProject),
+		ids.New(ids.KindEnvironment),
+		ids.New(ids.KindService),
+		"net_01ARZ3NDEKTSV4RRFFQ69G5FAW",
+		serviceID,
+		attachID,
+		nil,
+		[]testattachments.FactSetMetadata{
+			{Facts: []testattachments.FactDefinition{{Key: "HOST"}}},
+		},
+		taskID,
+		time.Now().UTC(),
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	record, err = etcd.MarkAttachProvisioning(record, taskID)
+	record, err = testattachments.MarkAttachProvisioning(record, taskID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	record, err = etcd.CompleteAttachProvisioning(record, taskID, true)
+	record, err = testattachments.CompleteAttachProvisioning(record, taskID, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,10 +51,13 @@ func seedPublicationReadyAttach(t *testing.T, store *directPublicationStore, env
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = store.Transact(context.Background(), nil, []etcd.Mutation{
-		{Type: etcd.MutationPut, Key: "/v1/records/attaches/" + attachID, Value: value},
-		{Type: etcd.MutationPut, Key: "/v1/indexes/attaches/by-owner/environment/" + environmentID + "/" + attachID,
-			Value: []byte(attachID)},
+	_, err = store.Transact(context.Background(), nil, []testkeyvalue.Mutation{
+		{Type: testkeyvalue.MutationPut, Key: "/v1/records/attaches/" + attachID, Value: value},
+		{
+			Type:  testkeyvalue.MutationPut,
+			Key:   "/v1/indexes/attaches/by-owner/environment/" + environmentID + "/" + attachID,
+			Value: []byte(attachID),
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

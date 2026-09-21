@@ -8,7 +8,10 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 )
 
 // Rationale: mutable Volume slugs and current file destinations are not authored
@@ -17,7 +20,7 @@ func TestAuthoringScriptExecutionResolvesStableIDsToKeys(t *testing.T) {
 	at := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, at, 1)
 	volumeID, entryID := ids.NewAt(ids.KindVolume, at, 2), ids.NewAt(ids.KindEnvEntry, at, 3)
-	record := etcd.ScriptRecord{EnvironmentID: environmentID, Origin: "blueprint", ReconciliationKey: "setup-hook",
+	record := testscripts.Record{EnvironmentID: environmentID, Origin: "blueprint", ReconciliationKey: "setup-hook",
 		Desired: core.Script{Slug: "setup", ServiceName: "api", When: core.ScriptPreDeploy, Body: "echo setup",
 			Execution: &core.ScriptExecution{Mode: core.ScriptExecutionExplicit, User: "0:0",
 				Image: "example.invalid/setup@sha256:" + strings.Repeat("a", 64),
@@ -26,12 +29,14 @@ func TestAuthoringScriptExecutionResolvesStableIDsToKeys(t *testing.T) {
 				}, EntryIDs: []string{entryID}},
 		},
 	}
-	volumes := []etcd.EnvironmentVolumeIdentity{{ID: volumeID, Key: "storage", Slug: "renamed-storage"}}
-	entries := []etcd.EntryRecord{{EnvironmentID: environmentID, BlueprintKey: "SETUP_INPUT",
+	volumes := []testenvironmentprojection.EnvironmentVolumeIdentity{
+		{ID: volumeID, Key: "storage", Slug: "renamed-storage"},
+	}
+	entries := []testentries.Record{{EnvironmentID: environmentID, BlueprintKey: "SETUP_INPUT",
 		Entry: core.EnvEntry{ID: entryID, Kind: core.EntryKindEnv, Key: "SETUP_INPUT", Exposure: []string{"api"},
 			Source: core.EntrySource{Kind: core.SourceLiteral, Literal: "not exported by Script"}},
 	}}
-	result, err := Authoring([]etcd.Versioned[etcd.ScriptRecord]{{Record: record}}, volumes, entries)
+	result, err := Authoring([]testkeyvalue.Versioned[testscripts.Record]{{Record: record}}, volumes, entries)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +61,7 @@ func TestAuthoringScriptExecutionResolvesStableIDsToKeys(t *testing.T) {
 
 	for _, name := range []string{"missing volume", "missing entry", "foreign entry", "no Blueprint key"} {
 		t.Run(name, func(t *testing.T) {
-			selectedVolumes, selectedEntries := volumes, append([]etcd.EntryRecord(nil), entries...)
+			selectedVolumes, selectedEntries := volumes, append([]testentries.Record(nil), entries...)
 			switch name {
 			case "missing volume":
 				selectedVolumes = nil
@@ -67,7 +72,7 @@ func TestAuthoringScriptExecutionResolvesStableIDsToKeys(t *testing.T) {
 			case "no Blueprint key":
 				selectedEntries[0].BlueprintKey = ""
 			}
-			if _, err := Authoring([]etcd.Versioned[etcd.ScriptRecord]{{Record: record}}, selectedVolumes, selectedEntries); err == nil {
+			if _, err := Authoring([]testkeyvalue.Versioned[testscripts.Record]{{Record: record}}, selectedVolumes, selectedEntries); err == nil {
 				t.Fatal("silently dropped an unrepresentable grant")
 			}
 		})

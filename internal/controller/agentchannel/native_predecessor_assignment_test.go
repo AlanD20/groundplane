@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -28,26 +31,28 @@ func TestCandidateReleaseAssignmentAuthorityCarriesNativeWitnessAndDigest(t *tes
 	planHash := bytes.Repeat([]byte{0x21}, 32)
 	current := []byte{0x0a, 0x01, 0xc1}
 	retained := []byte{0x0a, 0x01, 0xb1}
-	authority := &etcd.ReleaseRestorationAuthority{
+	authority := &testtaskassignments.ReleaseRestorationAuthority{
 		Schema: 1, TaskID: taskID, OperationID: operationID,
 		PlanHash: hex.EncodeToString(planHash), EnvironmentID: environment,
 		CandidateArtifactID: artifactID,
-		Candidates: []etcd.ReleaseRestorationCandidate{{
-			ServiceID: serviceID, ReleaseID: candidateID, Target: etcd.ReleaseRestorationServingPredecessor,
+		Candidates: []testtaskassignments.ReleaseRestorationCandidate{{
+			ServiceID: serviceID, ReleaseID: candidateID, Target: testtaskassignments.ReleaseRestorationServingPredecessor,
 		}},
-		NativePredecessors: []etcd.ReleaseNativePredecessorAuthority{{
+		NativePredecessors: []testtaskassignments.ReleaseNativePredecessorAuthority{{
 			ServiceID: serviceID, CurrentArtifact: current, RetainedPriorArtifact: retained,
 		}},
 	}
 	claim := etcd.TaskAssignment{
-		Task: etcd.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{
+		Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{
 			ID: taskID, OperationID: operationID, PlanHash: hex.EncodeToString(planHash),
-			Params: map[string]string{etcd.TaskReleasePublicationParam: publication},
+			Params: map[string]string{testreleaserender.TaskReleasePublicationParam: publication},
 		}},
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-			ExecutionMode:        etcd.TaskExecutionModeForward,
-			RestorationAuthority: authority, RestorationAuthoritySHA256: durableDigest,
-		}},
+		Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+			Record: testtaskassignments.TaskAssignmentRecord{
+				ExecutionMode:        testtaskassignments.TaskExecutionModeForward,
+				RestorationAuthority: authority, RestorationAuthoritySHA256: durableDigest,
+			},
+		},
 	}
 	plan := &agentpb.ExecutionPlan{
 		PlanHash: planHash,

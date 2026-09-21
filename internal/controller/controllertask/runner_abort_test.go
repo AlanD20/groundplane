@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 type abortBlockingHandler struct {
@@ -39,7 +40,7 @@ func TestRunnerOperatorAbortCancelsAndDurablyAcknowledgesTheActiveTask(t *testin
 		t.Fatalf("runOne() error = %v", err)
 	}
 	if store.ackCalls != 1 || store.ackTaskID != claim.Task.Record.ID ||
-		store.ackStatus != etcd.TaskStatusAborted {
+		store.ackStatus != testtaskjournal.TaskStatusAborted {
 		t.Fatalf("abort acknowledgement = %d/%s/%s", store.ackCalls, store.ackTaskID, store.ackStatus)
 	}
 }

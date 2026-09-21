@@ -14,6 +14,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -206,27 +209,31 @@ func controllerMaterializationTask(
 	now := time.Date(2026, time.August, 22, 12, 0, 0, 0, time.UTC)
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: operationID, PlanID: planID, PlanHash: hex.EncodeToString(plan.PlanHash),
-		RenderGeneration: 7, Type: etcd.TaskUpdate, Target: environmentID,
+		RenderGeneration: 7, Type: testtaskjournal.TaskUpdate, Target: environmentID,
 		Params: map[string]string{
 			taskcontract.EnvironmentBlueprintProcedureParam: string(
 				taskcontract.BlueprintComposeProcedureFullReconcile,
 			),
 		},
-		Steps: []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}}, TimeoutSeconds: 60,
-		Status: etcd.TaskStatusRunning, NextEventSequence: 1, CreatedAt: now,
+		Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: stepID},
+		}, TimeoutSeconds: 60,
+		Status: testtaskjournal.TaskStatusRunning, NextEventSequence: 1, CreatedAt: now,
 	}
 	return task, plan
 }
 
 func controllerMaterializationClaim(task etcd.TaskRecord) etcd.TaskAssignment {
 	return etcd.TaskAssignment{
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-			AssignmentID: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-			TaskID:       task.ID, Executor: etcd.TaskExecutorAgent,
-			AssignedAt: task.CreatedAt, Deadline: task.CreatedAt.Add(time.Minute),
-			RecoveryDeadline: task.CreatedAt.Add(2 * time.Minute), ExecutionEpoch: 1,
-			ExecutionMode: etcd.TaskExecutionModeForward,
-		}},
-		Task: etcd.Versioned[etcd.TaskRecord]{Record: task},
+		Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+			Record: testtaskassignments.TaskAssignmentRecord{
+				AssignmentID: "asgn_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+				TaskID:       task.ID, Executor: testtaskjournal.TaskExecutorAgent,
+				AssignedAt: task.CreatedAt, Deadline: task.CreatedAt.Add(time.Minute),
+				RecoveryDeadline: task.CreatedAt.Add(2 * time.Minute), ExecutionEpoch: 1,
+				ExecutionMode: testtaskassignments.TaskExecutionModeForward,
+			},
+		},
+		Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: task},
 	}
 }

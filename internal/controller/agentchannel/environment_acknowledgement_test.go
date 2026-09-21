@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -23,7 +25,7 @@ func TestEnvironmentDirectoryAcknowledgementUsesAtomicProvisioningPath(t *testin
 		planHash[index] = byte(index + 1)
 	}
 	store := &environmentAcknowledgementStore{task: etcd.TaskRecord{
-		ID: taskID, Type: etcd.TaskCreate, Target: environmentID, PlanHash: hex.EncodeToString(planHash),
+		ID: taskID, Type: testtaskjournal.TaskCreate, Target: environmentID, PlanHash: hex.EncodeToString(planHash),
 	}}
 	server := &Server{tasks: store, plans: &fakePlanResolver{plan: &agentpb.ExecutionPlan{
 		Steps: []*agentpb.ExecutionStep{{Payload: &agentpb.ExecutionStep_EnvironmentDirectoryCreate{
@@ -44,7 +46,7 @@ func TestEnvironmentDirectoryAcknowledgementUsesAtomicProvisioningPath(t *testin
 		t.Fatalf("acknowledge() error = %v", err)
 	}
 	if store.genericCalled || !store.environmentCalled || store.environmentID != environmentID ||
-		store.result.Kind != etcd.TaskResultEnvironmentDirectory {
+		store.result.Kind != testtaskjournal.TaskResultEnvironmentDirectory {
 		t.Fatalf("acknowledgement path = generic %t, environment %t/%q, result %#v",
 			store.genericCalled, store.environmentCalled, store.environmentID, store.result)
 	}
@@ -55,7 +57,7 @@ type environmentAcknowledgementStore struct {
 	genericCalled     bool
 	environmentCalled bool
 	environmentID     string
-	result            etcd.TaskResultRecord
+	result            testtaskjournal.TaskResultRecord
 }
 
 func (store *environmentAcknowledgementStore) ListAgentAssignments(
@@ -72,8 +74,8 @@ func (store *environmentAcknowledgementStore) ClaimNextTask(
 
 func (store *environmentAcknowledgementStore) GetTask(
 	context.Context, string,
-) (etcd.Versioned[etcd.TaskRecord], error) {
-	return etcd.Versioned[etcd.TaskRecord]{Record: store.task, Revision: 1, ReadRevision: 1}, nil
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
+	return testkeyvalue.Versioned[etcd.TaskRecord]{Record: store.task, Revision: 1, ReadRevision: 1}, nil
 }
 
 func (store *environmentAcknowledgementStore) ListTaskEvents(
@@ -83,23 +85,20 @@ func (store *environmentAcknowledgementStore) ListTaskEvents(
 }
 
 func (store *environmentAcknowledgementStore) AppendTaskEvent(
-	context.Context, etcd.TaskEventInput, time.Time,
+	context.Context, testtaskjournal.TaskEventInput, time.Time,
 ) (etcd.TaskEventAppend, error) {
 	return etcd.TaskEventAppend{}, nil
 }
 
 func (store *environmentAcknowledgementStore) AcknowledgeTask(
-	context.Context,
-	string,
-	uint64,
-	string,
-	string,
-	etcd.TaskStatus,
-	etcd.TaskResultRecord,
+	context.Context, string,
+
+	uint64, string, string, testtaskjournal.TaskStatus, testtaskjournal.TaskResultRecord,
+
 	time.Time,
-) (etcd.Versioned[etcd.TaskRecord], error) {
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
 	store.genericCalled = true
-	return etcd.Versioned[etcd.TaskRecord]{}, nil
+	return testkeyvalue.Versioned[etcd.TaskRecord]{}, nil
 }
 
 func (store *environmentAcknowledgementStore) AcknowledgeEnvironmentCreation(
@@ -109,12 +108,12 @@ func (store *environmentAcknowledgementStore) AcknowledgeEnvironmentCreation(
 	_ string,
 	_ string,
 	environmentID string,
-	_ etcd.TaskStatus,
-	result etcd.TaskResultRecord,
+	_ testtaskjournal.TaskStatus,
+	result testtaskjournal.TaskResultRecord,
 	_ time.Time,
-) (etcd.Versioned[etcd.TaskRecord], error) {
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
 	store.environmentCalled = true
 	store.environmentID = environmentID
 	store.result = result
-	return etcd.Versioned[etcd.TaskRecord]{Record: store.task}, nil
+	return testkeyvalue.Versioned[etcd.TaskRecord]{Record: store.task}, nil
 }

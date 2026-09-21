@@ -12,6 +12,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testhostresolution "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testresolverbaseline "github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func TestStartupResolverTaskSealsAutomaticProcedure(t *testing.T) {
@@ -36,7 +41,8 @@ func TestStartupResolverTaskSealsAutomaticProcedure(t *testing.T) {
 			if len(task.Steps) != test.wantSteps {
 				t.Fatalf("len(Steps) = %d, want %d", len(task.Steps), test.wantSteps)
 			}
-			if len(task.Params) != 2 || task.Params[etcd.TaskResourceKindParam] != etcd.TaskResourceComponent ||
+			if len(task.Params) != 2 ||
+				task.Params[testtaskjournal.TaskResourceKindParam] != testtaskjournal.TaskResourceComponent ||
 				task.Params[etcd.TaskAutomaticReconcileParam] != "true" {
 				t.Fatalf("Params = %#v, want sealed automatic Component shape", task.Params)
 			}
@@ -62,21 +68,21 @@ func TestStartupResolverTaskPersistsResolvedExecutionPlanHash(t *testing.T) {
 			UpstreamAuto:     true,
 		}},
 	}
-	record, err := etcd.NewComponentRecord(component)
+	record, err := testcomponents.NewRecord(component)
 	if err != nil {
 		t.Fatalf("NewComponentRecord() error = %v", err)
 	}
-	desired, err := etcd.ProjectComponentRecord(record)
+	desired, err := testcomponents.ProjectRecord(record)
 	if err != nil {
 		t.Fatalf("ProjectComponentRecord() error = %v", err)
 	}
-	projection, err := etcd.NewHostResolutionProjectionRecord(1, nil)
+	projection, err := testhostresolution.NewHostResolutionProjectionRecord(1, nil)
 	if err != nil {
 		t.Fatalf("NewHostResolutionProjectionRecord() error = %v", err)
 	}
 	baselineContent := []byte("nameserver 1.1.1.1\n")
 	baselineDigest := sha256.Sum256(baselineContent)
-	baseline := etcd.HostResolverBaselineRecord{
+	baseline := testresolverbaseline.Record{
 		Generation: 1, Content: baselineContent, SHA256: hex.EncodeToString(baselineDigest[:]), CapturedAt: now,
 	}
 	definition := testResolverDefinition(t)
@@ -91,7 +97,7 @@ func TestStartupResolverTaskPersistsResolvedExecutionPlanHash(t *testing.T) {
 		t.Fatalf("NewPlatformRenderPlanner() error = %v", err)
 	}
 	task := startupResolverTask(componentID, now, true)
-	current := etcd.Versioned[etcd.ComponentRecord]{Record: record}
+	current := testkeyvalue.Versioned[testcomponents.Record]{Record: record}
 	input, err := renderPlanner.PrepareBootstrapConfigTaskAtProjection(
 		context.Background(), current, desired, task, projection,
 	)
@@ -115,8 +121,9 @@ func TestStartupResolverTaskPersistsResolvedExecutionPlanHash(t *testing.T) {
 		environmentpath.DefaultVolumeRoot,
 		executionRepositoryStub{
 			input: input, current: current,
-			baseline: etcd.Versioned[etcd.HostResolverBaselineRecord]{Record: baseline},
+			baseline: testkeyvalue.Versioned[testresolverbaseline.Record]{Record: baseline},
 		},
+		executionRepositoryStub{baseline: testkeyvalue.Versioned[testresolverbaseline.Record]{Record: baseline}},
 		&executionCatalogStub{plan: registeredPlan},
 	)
 	if err != nil {

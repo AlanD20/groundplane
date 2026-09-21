@@ -3,7 +3,7 @@ package entry
 import (
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskmaterialization "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 )
 
 // Rationale: the etcd adapter must map every capability-owned closed output
@@ -12,14 +12,14 @@ func TestPersistedRemovalMaterializationConvertsClosedKinds(t *testing.T) {
 	t.Parallel()
 	outputs := []struct {
 		input RemovalOutputKind
-		want  etcd.TaskMaterializationOutputKind
+		want  testtaskmaterialization.OutputKind
 	}{
-		{input: RemovalOutputGeneratedEnvironment, want: etcd.TaskMaterializationOutputGeneratedEnvironment},
-		{input: RemovalOutputPlainFile, want: etcd.TaskMaterializationOutputPlainFile},
-		{input: RemovalOutputSecretFile, want: etcd.TaskMaterializationOutputSecretFile},
-		{input: RemovalOutputRemoveGeneratedEnv, want: etcd.TaskMaterializationOutputRemoveGeneratedEnv},
-		{input: RemovalOutputRemovePlainFile, want: etcd.TaskMaterializationOutputRemovePlainFile},
-		{input: RemovalOutputRemoveSecretFile, want: etcd.TaskMaterializationOutputRemoveSecretFile},
+		{input: RemovalOutputGeneratedEnvironment, want: testtaskmaterialization.OutputGeneratedEnvironment},
+		{input: RemovalOutputPlainFile, want: testtaskmaterialization.OutputPlainFile},
+		{input: RemovalOutputSecretFile, want: testtaskmaterialization.OutputSecretFile},
+		{input: RemovalOutputRemoveGeneratedEnv, want: testtaskmaterialization.OutputRemoveGeneratedEnv},
+		{input: RemovalOutputRemovePlainFile, want: testtaskmaterialization.OutputRemovePlainFile},
+		{input: RemovalOutputRemoveSecretFile, want: testtaskmaterialization.OutputRemoveSecretFile},
 	}
 	for _, test := range outputs {
 		converted, err := persistedRemovalMaterialization(RemovalMaterialization{
@@ -31,10 +31,10 @@ func TestPersistedRemovalMaterializationConvertsClosedKinds(t *testing.T) {
 	}
 	for _, storage := range []struct {
 		input RemovalValueStorage
-		want  etcd.TaskEntryValueStorage
+		want  testtaskmaterialization.EntryValueStorage
 	}{
-		{input: RemovalValueStoragePlain, want: etcd.TaskEntryValueStoragePlain},
-		{input: RemovalValueStorageSecret, want: etcd.TaskEntryValueStorageSecret},
+		{input: RemovalValueStoragePlain, want: testtaskmaterialization.EntryValueStoragePlain},
+		{input: RemovalValueStorageSecret, want: testtaskmaterialization.EntryValueStorageSecret},
 	} {
 		converted, err := persistedRemovalMaterialization(generatedRemovalMaterialization(storage.input))
 		if err != nil || converted.Source.GeneratedEnvironment.Values[0].Value.Storage != storage.want {

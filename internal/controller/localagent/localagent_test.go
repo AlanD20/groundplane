@@ -508,8 +508,7 @@ func TestReconcileCompletesInterruptedUpdateAfterAuthenticatedReady(t *testing.T
 		got.Image != interrupted.Image || got.Generation != interrupted.Generation ||
 		got.Phase != PhaseReady || !got.ReadyAt.Equal(wantReadyAt) ||
 		!equalConfig(got.Config, wantConfig) ||
-		got.Credential.Digest != interrupted.Credential.Digest ||
-		string(got.Credential.EncryptedToken) != string(interrupted.Credential.EncryptedToken) {
+		got.Credential.Digest != interrupted.Credential.Digest || string(got.Credential.EncryptedToken) != string(interrupted.Credential.EncryptedToken) {
 		t.Fatalf("reconciled replacement = %#v, interrupted = %#v", got, interrupted)
 	}
 	if resumed.runtime.generateCalls != 0 {
@@ -570,8 +569,7 @@ func TestReconcileCompletesInterruptedRollbackAfterAuthenticatedReady(t *testing
 		got.Image != interrupted.Image || got.Generation != interrupted.Generation ||
 		got.Phase != PhaseReady || !got.ReadyAt.Equal(wantReadyAt) ||
 		!equalConfig(got.Config, wantConfig) ||
-		got.Credential.Digest != interrupted.Credential.Digest ||
-		string(got.Credential.EncryptedToken) != string(interrupted.Credential.EncryptedToken) {
+		got.Credential.Digest != interrupted.Credential.Digest || string(got.Credential.EncryptedToken) != string(interrupted.Credential.EncryptedToken) {
 		t.Fatalf("reconciled rollback = %#v, interrupted = %#v", got, interrupted)
 	}
 	if resumed.runtime.generateCalls != 0 {
@@ -862,9 +860,7 @@ func TestPublicProjectionAndErrorsNeverExposeCredentialMaterial(t *testing.T) {
 		}
 	}
 
-	harness.runtime.materializeError = errors.New(
-		string(credential.EncryptedToken) + ":" + credential.Digest,
-	)
+	harness.runtime.materializeError = errors.New(string(credential.EncryptedToken) + ":" + credential.Digest)
 	err = harness.manager.Reconcile(context.Background())
 	if err == nil {
 		t.Fatal("Reconcile() error = nil, want injected runtime error")

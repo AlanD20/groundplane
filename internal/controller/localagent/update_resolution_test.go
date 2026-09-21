@@ -219,8 +219,8 @@ func (repository *uncertainReplacementRepository) FenceReplacementAttempt(
 }
 
 func (repository *configTestRepository) FenceReplacementAttempt(
-	context.Context,
-	string,
+	context.Context, string,
+
 	uint64,
 	int64,
 ) (StoredRecord, error) {

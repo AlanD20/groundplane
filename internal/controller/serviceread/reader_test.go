@@ -8,7 +8,10 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -16,32 +19,32 @@ import (
 type fakeServiceReadRepository struct {
 	Environments
 	Services
-	environment etcd.Versioned[etcd.EnvironmentRecord]
-	projection  etcd.Versioned[etcd.EnvironmentComposeProjection]
-	page        etcd.Page[etcd.ServiceRecord]
-	wantRequest etcd.PageRequest
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
+	projection  testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]
+	page        testkeyvalue.Page[testservices.ServiceRecord]
+	wantRequest testkeyvalue.PageRequest
 	listed      bool
 }
 
 func (fake *fakeServiceReadRepository) GetEnvironmentComposeProjection(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.EnvironmentComposeProjection], bool, error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection], bool, error) {
 	return fake.projection, fake.projection.Record.RevisionID != "", nil
 }
 
 func (fake *fakeServiceReadRepository) GetEnvironment(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], error) {
 	return fake.environment, nil
 }
 
 func (fake *fakeServiceReadRepository) ListServices(
 	_ context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.ServiceRecord], error) {
+	request testkeyvalue.PageRequest,
+) (testkeyvalue.Page[testservices.ServiceRecord], error) {
 	fake.listed = environmentID == fake.environment.Record.ID && request == fake.wantRequest
 	return fake.page, nil
 }
@@ -51,11 +54,11 @@ func (fake *fakeServiceReadRepository) ListServices(
 func TestServiceListVerifiesOwnerAndPreservesPagination(t *testing.T) {
 	t.Parallel()
 	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	request := etcd.PageRequest{Limit: 23, Cursor: "opaque-cursor"}
-	want := etcd.Page[etcd.ServiceRecord]{NextCursor: "next-cursor", Revision: 91}
+	request := testkeyvalue.PageRequest{Limit: 23, Cursor: "opaque-cursor"}
+	want := testkeyvalue.Page[testservices.ServiceRecord]{NextCursor: "next-cursor", Revision: 91}
 	repository := &fakeServiceReadRepository{
-		environment: etcd.Versioned[etcd.EnvironmentRecord]{
-			Record: etcd.EnvironmentRecord{
+		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+			Record: testhierarchy.EnvironmentRecord{
 				NetworkPool: "10.40.0.0/16",
 				ID:          environmentID,
 			},
@@ -108,13 +111,15 @@ func TestServiceDetailProjectsCanonicalNativeComposeFromDesiredHead(t *testing.T
 		t.Fatal(err)
 	}
 	repository := &fakeServiceReadRepository{
-		environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{
+		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{Record: testhierarchy.EnvironmentRecord{
 			ID: environmentID, ProjectID: projectID, Name: "production", NetworkPool: "10.40.0.0/16",
 		}},
-		projection: etcd.Versioned[etcd.EnvironmentComposeProjection]{Record: etcd.EnvironmentComposeProjection{
-			EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
-			ComposeArtifact: artifact,
-		}},
+		projection: testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
+			Record: testenvironmentprojection.EnvironmentComposeProjection{
+				EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
+				ComposeArtifact: artifact,
+			},
+		},
 	}
 	service, err := New(repository, repository)
 	if err != nil {

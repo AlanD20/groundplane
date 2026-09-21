@@ -5,9 +5,10 @@ import (
 	"context"
 	"testing"
 
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 // QA: BACK-05, ATT-10; local source-copy proof, not live authentication.
@@ -25,12 +26,14 @@ func TestDraftAttachIdentityPreservesAuthenticationAndSecretOwnership(t *testing
 			} else if mode == core.BackingAuthenticationNone {
 				role, password = "", nil
 			}
-			current := etcd.Versioned[etcd.AttachRecord]{Record: etcd.AttachRecord{ID: "draft-attach"}}
+			current := testkeyvalue.Versioned[testattachments.Record]{
+				Record: testattachments.Record{ID: "draft-attach"},
+			}
 			state := draftAttachPlanState{
 				current: current,
-				identity: &controllerpkg.AttachPlanIdentity{
+				identity: &testtaskplanning.AttachPlanIdentity{
 					Authentication: mode, Database: "consumer", Role: role, Password: password,
-					Grants: []controllerpkg.AttachPlanGrantIdentity{{AttachID: "grant", Database: "shared"}},
+					Grants: []testtaskplanning.AttachPlanGrantIdentity{{AttachID: "grant", Database: "shared"}},
 				},
 			}
 			var consumedPassword []byte
@@ -39,7 +42,7 @@ func TestDraftAttachIdentityPreservesAuthenticationAndSecretOwnership(t *testing
 				t.Context(),
 				current,
 				"draft-task",
-				func(identity controllerpkg.AttachPlanIdentity) error {
+				func(identity testtaskplanning.AttachPlanIdentity) error {
 					called = true
 					if identity.Authentication != mode || identity.Database != "consumer" || identity.Role != role ||
 						!bytes.Equal(identity.Password, password) || len(identity.Grants) != 1 ||

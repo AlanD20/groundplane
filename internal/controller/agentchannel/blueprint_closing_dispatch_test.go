@@ -8,6 +8,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
@@ -16,7 +18,7 @@ type closingBlueprintTaskStore struct{ fakeTaskStore }
 func (store *closingBlueprintTaskStore) ReconnectAgentAssignment(
 	_ context.Context, assignment etcd.TaskAssignment,
 ) (etcd.TaskAssignment, error) {
-	assignment.Task.Record.Status = etcd.TaskStatusCompleted
+	assignment.Task.Record.Status = testtaskjournal.TaskStatusCompleted
 	return assignment, nil
 }
 
@@ -27,8 +29,8 @@ func TestDispatchReadySkipsControllerCompletedReconnect(t *testing.T) {
 	at := testTime()
 	agentID := ids.NewAt(ids.KindAgent, at, 921)
 	closing := assignmentQuarantineFixture(at, agentID, 922)
-	closing.Task.Record.Type = etcd.TaskUpdate
-	closing.Task.Record.Params = map[string]string{etcd.TaskReleasePublicationParam: "published"}
+	closing.Task.Record.Type = testtaskjournal.TaskUpdate
+	closing.Task.Record.Params = map[string]string{testreleaserender.TaskReleasePublicationParam: "published"}
 	next := assignmentQuarantineFixture(at, agentID, 923)
 	plan := testExecutionPlan(t, next.Task.Record)
 	next.Task.Record.PlanHash = hex.EncodeToString(plan.PlanHash)

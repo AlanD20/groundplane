@@ -4,13 +4,13 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 )
 
 // Rationale: initial apply and routine release planning use identical ordering
 // without crossing Service ownership or making manual scripts automatic.
 func TestBlueprintDeployHookSelectionUsesNumericOrder(t *testing.T) {
-	selected := deployScriptsByService([]etcd.ScriptRecord{
+	selected := deployScriptsByService([]testscripts.Record{
 		{ServiceID: "api", Desired: core.Script{Slug: "a-later", Order: 10, When: core.ScriptPreDeploy}},
 		{ServiceID: "api", Desired: core.Script{Slug: "z-first", Order: 0, When: core.ScriptPreDeploy}},
 		{ServiceID: "api", Desired: core.Script{Slug: "b-later", Order: 10, When: core.ScriptPreDeploy}},

@@ -4,13 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 )
 
-func networkTestProtectedIntent() etcd.ProtectedIntentRecord {
+func networkTestProtectedIntent() testidempotency.ProtectedIntentRecord {
 	ciphertext := []byte("protected-network-intent")
 	digest := sha256.Sum256(ciphertext)
-	return etcd.ProtectedIntentRecord{
+	return testidempotency.ProtectedIntentRecord{
 		EnvelopeVersion:  1,
 		Cipher:           "age-x25519",
 		DigestAlgorithm:  "sha256",

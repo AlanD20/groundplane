@@ -7,13 +7,13 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 )
 
 // Rationale: first addressable Blueprint candidates need generation-one config
 // authority; successors use current ports without rewriting historical config.
 func TestBlueprintProxyConfigSealsFirstAndSuccessor(t *testing.T) {
-	render := etcd.ReleaseRenderInput{
+	render := testreleaserender.ReleaseRenderInput{
 		ServiceName:     "api",
 		ReleaseID:       ids.New(ids.KindDeployment),
 		CandidateTarget: domain.WorkloadSingleton,
@@ -47,7 +47,7 @@ func TestBlueprintProxyConfigSealsFirstAndSuccessor(t *testing.T) {
 // proxy image/config or discard a still-serving proxy's authority.
 func TestBlueprintProxyConfigRejectsUnsealedAddressabilityTransitions(t *testing.T) {
 	for _, previouslyAddressable := range []bool{false, true} {
-		render := etcd.ReleaseRenderInput{
+		render := testreleaserender.ReleaseRenderInput{
 			ServiceName:     "api",
 			ReleaseID:       ids.New(ids.KindDeployment),
 			CandidateTarget: domain.WorkloadSingleton,

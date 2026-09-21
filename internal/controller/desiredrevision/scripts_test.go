@@ -9,7 +9,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -33,7 +34,7 @@ func TestReconcileBlueprintScriptsDerivesAndPreservesIdentityByReconciliationKey
 	first, err := ReconcileBlueprintScripts(
 		environmentID,
 		authored,
-		[]etcd.ServiceRecord{service},
+		[]testservices.ServiceRecord{service},
 		nil,
 		BlueprintScriptResources{},
 		allocate,
@@ -53,7 +54,7 @@ func TestReconcileBlueprintScriptsDerivesAndPreservesIdentityByReconciliationKey
 	replayed, err := ReconcileBlueprintScripts(
 		environmentID,
 		authored,
-		[]etcd.ServiceRecord{service},
+		[]testservices.ServiceRecord{service},
 		first.Current,
 		BlueprintScriptResources{},
 		func(ids.Kind, string) string {
@@ -75,7 +76,7 @@ func TestReconcileBlueprintScriptsDerivesAndPreservesIdentityByReconciliationKey
 	changed, err := ReconcileBlueprintScripts(
 		environmentID,
 		authored,
-		[]etcd.ServiceRecord{service},
+		[]testservices.ServiceRecord{service},
 		first.Current,
 		BlueprintScriptResources{},
 		allocate,
@@ -103,8 +104,8 @@ func TestReconcileBlueprintScriptsBodyChangeAppendsExactGeneration(t *testing.T)
 		map[string]core.ScriptSpec{
 			"migration-hook": {Slug: "migrate-renamed", Service: "api", When: core.ScriptPostDeploy, Script: body},
 		},
-		[]etcd.ServiceRecord{service},
-		[]etcd.ScriptRecord{previous},
+		[]testservices.ServiceRecord{service},
+		[]testscripts.Record{previous},
 		BlueprintScriptResources{},
 		func(ids.Kind, string) string {
 			t.Fatal("existing reconciliation key allocated a new Script id")
@@ -147,8 +148,8 @@ func TestReconcileBlueprintScriptsCarriesOmittedBlueprintAndAPIRecordsForward(t 
 	reconciled, err := ReconcileBlueprintScripts(
 		environmentID,
 		map[string]core.ScriptSpec{},
-		[]etcd.ServiceRecord{service},
-		[]etcd.ScriptRecord{api, blueprint},
+		[]testservices.ServiceRecord{service},
+		[]testscripts.Record{api, blueprint},
 		BlueprintScriptResources{},
 		func(ids.Kind, string) string {
 			t.Fatal("omission allocated a Script id")
@@ -158,7 +159,7 @@ func TestReconcileBlueprintScriptsCarriesOmittedBlueprintAndAPIRecordsForward(t 
 	if err != nil {
 		t.Fatalf("ReconcileBlueprintScripts() error = %v", err)
 	}
-	byID := make(map[string]etcd.ScriptRecord, len(reconciled.Current))
+	byID := make(map[string]testscripts.Record, len(reconciled.Current))
 	for _, record := range reconciled.Current {
 		byID[record.Desired.ID] = record
 	}
@@ -186,8 +187,8 @@ func TestReconcileBlueprintScriptsRejectsSlugCollisionAndTargetChange(t *testing
 			map[string]core.ScriptSpec{
 				"new-hook": {Slug: "shared", Service: "api", When: core.ScriptManual, Script: "printf new"},
 			},
-			[]etcd.ServiceRecord{apiService, workerService},
-			[]etcd.ScriptRecord{api},
+			[]testservices.ServiceRecord{apiService, workerService},
+			[]testscripts.Record{api},
 			BlueprintScriptResources{},
 			func(kind ids.Kind, purpose string) string {
 				return ids.DeriveAt(kind, at, ids.NewAt(ids.KindTask, at, 34), purpose)
@@ -210,8 +211,8 @@ func TestReconcileBlueprintScriptsRejectsSlugCollisionAndTargetChange(t *testing
 					Slug: "migrate", Service: "worker", When: core.ScriptPreDeploy, Script: "printf migrate",
 				},
 			},
-			[]etcd.ServiceRecord{apiService, workerService},
-			[]etcd.ScriptRecord{blueprint},
+			[]testservices.ServiceRecord{apiService, workerService},
+			[]testscripts.Record{blueprint},
 			BlueprintScriptResources{},
 			func(ids.Kind, string) string {
 				t.Fatal("target change allocated a Script id")
@@ -238,7 +239,7 @@ func TestReconcileBlueprintScriptsIgnoresReplicaCountOfUntargetedServices(t *tes
 		map[string]core.ScriptSpec{
 			"migration-hook": {Slug: "migrate", Service: "api", When: core.ScriptManual, Script: "printf migrate"},
 		},
-		[]etcd.ServiceRecord{target, unrelated},
+		[]testservices.ServiceRecord{target, unrelated},
 		nil,
 		BlueprintScriptResources{},
 		func(kind ids.Kind, purpose string) string {
@@ -255,9 +256,9 @@ func desiredRevisionScriptService(
 	environmentID string,
 	serviceID string,
 	name string,
-) etcd.ServiceRecord {
+) testservices.ServiceRecord {
 	t.Helper()
-	record, err := etcd.NewServiceRecord(environmentID, core.Service{
+	record, err := testservices.NewServiceRecord(environmentID, core.Service{
 		ID: serviceID, Name: name, Image: "example.invalid/" + name + ":1", Replicas: 1,
 	}, "")
 	if err != nil {
@@ -269,15 +270,15 @@ func desiredRevisionScriptService(
 func desiredRevisionScriptRecord(
 	t *testing.T,
 	environmentID string,
-	service etcd.ServiceRecord,
+	service testservices.ServiceRecord,
 	scriptID string,
 	reconciliationKey string,
 	slug string,
 	body string,
 	origin string,
-) etcd.ScriptRecord {
+) testscripts.Record {
 	t.Helper()
-	record, err := etcd.NewScriptRecord(environmentID, service.Desired.ID, core.Script{
+	record, err := testscripts.NewRecord(environmentID, service.Desired.ID, core.Script{
 		ID: scriptID, Slug: slug, ServiceName: service.Desired.Name, Body: body, When: core.ScriptManual,
 	})
 	if err != nil {

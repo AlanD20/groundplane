@@ -6,51 +6,52 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testattachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 type fakeZoneRemovalImpactZones struct {
-	zone etcd.Versioned[etcd.ZoneRecord]
+	zone testkeyvalue.Versioned[testzones.Record]
 }
 
 func (fake fakeZoneRemovalImpactZones) GetZone(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.ZoneRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testzones.Record], error) {
 	return fake.zone, nil
 }
 
 type fakeZoneRemovalImpactAttaches struct {
-	items []etcd.Versioned[etcd.AttachRecord]
+	items []testkeyvalue.Versioned[testattachments.Record]
 }
 
 func (fake fakeZoneRemovalImpactAttaches) ListAttachesByBackingNetworkAtRevision(
-	context.Context,
-	string,
-	string,
+	context.Context, string, string,
+
 	int64,
-) ([]etcd.Versioned[etcd.AttachRecord], error) {
-	return append([]etcd.Versioned[etcd.AttachRecord](nil), fake.items...), nil
+) ([]testkeyvalue.Versioned[testattachments.Record], error) {
+	return append([]testkeyvalue.Versioned[testattachments.Record](nil), fake.items...), nil
 }
 
 type fakeZoneRemovalImpactServices struct {
-	items map[string]etcd.Versioned[etcd.ServiceRecord]
+	items map[string]testkeyvalue.Versioned[testservices.ServiceRecord]
 }
 
 func (fake fakeZoneRemovalImpactServices) GetService(
 	_ context.Context,
 	id string,
-) (etcd.Versioned[etcd.ServiceRecord], error) {
+) (testkeyvalue.Versioned[testservices.ServiceRecord], error) {
 	return fake.items[id], nil
 }
 
 func (fakeZoneRemovalImpactServices) ListServices(
-	context.Context,
-	string,
-	etcd.PageRequest,
-) (etcd.Page[etcd.ServiceRecord], error) {
-	return etcd.Page[etcd.ServiceRecord]{}, nil
+	context.Context, string, testkeyvalue.PageRequest,
+
+) (testkeyvalue.Page[testservices.ServiceRecord], error) {
+	return testkeyvalue.Page[testservices.ServiceRecord]{}, nil
 }
 
 type fakeZoneRemovalImpactFacts struct {
@@ -59,7 +60,7 @@ type fakeZoneRemovalImpactFacts struct {
 
 func (fake fakeZoneRemovalImpactFacts) ResolveRemovalDatabase(
 	_ context.Context,
-	current etcd.Versioned[etcd.AttachRecord],
+	current testkeyvalue.Versioned[testattachments.Record],
 	consume func(string) error,
 ) error {
 	return consume(fake.databases[current.Record.ID])
@@ -78,32 +79,32 @@ func TestBackingZoneRemovalImpactIsCompleteAndDeterministic(t *testing.T) {
 	firstEnvironmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	secondEnvironmentID := "env_01BRZ3NDEKTSV4RRFFQ69G5FAV"
 	service, err := newZoneRemovalImpactService(
-		fakeZoneRemovalImpactZones{zone: etcd.Versioned[etcd.ZoneRecord]{
-			Record: etcd.ZoneRecord{EnvironmentID: firstEnvironmentID, Desired: core.Zone{
+		fakeZoneRemovalImpactZones{zone: testkeyvalue.Versioned[testzones.Record]{
+			Record: testzones.Record{EnvironmentID: firstEnvironmentID, Desired: core.Zone{
 				ID: zoneID, Name: "backing", Subnet: "10.0.0.0/24",
 				OwnerKind: core.ZoneOwnerBackingProject, OwnerID: projectID,
 			}},
 			Revision: 40, ReadRevision: 50,
 		}},
-		fakeZoneRemovalImpactAttaches{items: []etcd.Versioned[etcd.AttachRecord]{
-			{Record: etcd.AttachRecord{
+		fakeZoneRemovalImpactAttaches{items: []testkeyvalue.Versioned[testattachments.Record]{
+			{Record: testattachments.Record{
 				ID: secondAttachID, Name: "worker-db", EnvironmentID: secondEnvironmentID,
 				BackingProjectID: projectID, BackingNetworkID: zoneID, ServiceID: secondServiceID,
 				CredentialAttachID: secondAttachID,
 				Status:             core.AttachReady,
 			}, Revision: 12, ReadRevision: 50},
-			{Record: etcd.AttachRecord{
+			{Record: testattachments.Record{
 				ID: firstAttachID, Name: "api-db", EnvironmentID: firstEnvironmentID,
 				BackingProjectID: projectID, BackingNetworkID: zoneID, ServiceID: firstServiceID,
 				CredentialAttachID: firstAttachID,
 				Status:             core.AttachReady,
 			}, Revision: 11, ReadRevision: 50},
 		}},
-		fakeZoneRemovalImpactServices{items: map[string]etcd.Versioned[etcd.ServiceRecord]{
-			firstServiceID: {Record: etcd.ServiceRecord{
+		fakeZoneRemovalImpactServices{items: map[string]testkeyvalue.Versioned[testservices.ServiceRecord]{
+			firstServiceID: {Record: testservices.ServiceRecord{
 				EnvironmentID: firstEnvironmentID, Desired: core.Service{ID: firstServiceID, Name: "api"},
 			}, Revision: 21},
-			secondServiceID: {Record: etcd.ServiceRecord{
+			secondServiceID: {Record: testservices.ServiceRecord{
 				EnvironmentID: secondEnvironmentID, Desired: core.Service{ID: secondServiceID, Name: "worker"},
 			}, Revision: 22},
 		}},

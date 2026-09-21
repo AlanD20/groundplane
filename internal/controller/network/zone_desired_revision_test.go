@@ -7,7 +7,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -37,10 +38,10 @@ func TestZoneRemovalCandidatePreservesServicesAndRemovesAuthoredMembership(t *te
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
 	}
-	current := etcd.EnvironmentComposeProjection{
+	current := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: ids.NewAt(ids.KindTask, now, 7), RenderGeneration: 1,
 		ComposeArtifact: artifact, NormalizedCompose: []byte("services:\n  api:\n    image: example.invalid/api:1\n    networks:\n      frontend: {}\n      backend: {}\nnetworks:\n  frontend: {}\n  backend: {}\n"),
-		DesiredZones: []etcd.EnvironmentZoneProjection{
+		DesiredZones: []testenvironmentprojection.EnvironmentZoneProjection{
 			{
 				EnvironmentID: environmentID,
 				Desired: core.Zone{
@@ -62,7 +63,7 @@ func TestZoneRemovalCandidatePreservesServicesAndRemovesAuthoredMembership(t *te
 				},
 			},
 		},
-		DesiredServices: []etcd.EnvironmentServiceProjection{
+		DesiredServices: []testservices.EnvironmentServiceProjection{
 			{
 				EnvironmentID: environmentID,
 				Desired: core.Service{

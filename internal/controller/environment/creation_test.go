@@ -10,10 +10,16 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testnetworkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
@@ -24,50 +30,50 @@ const (
 )
 
 type fakeEnvironmentCreationRepository struct {
-	project      etcd.Versioned[etcd.ProjectRecord]
-	poolRegistry etcd.Versioned[etcd.EnvironmentPoolRegistry]
+	project      testkeyvalue.Versioned[testhierarchy.ProjectRecord]
+	poolRegistry testkeyvalue.Versioned[testnetworkreservations.EnvironmentPoolRegistry]
 	volumeRoot   string
-	environment  etcd.EnvironmentRecord
-	components   []etcd.ComponentRecord
+	environment  testhierarchy.EnvironmentRecord
+	components   []testcomponents.Record
 	task         etcd.TaskRecord
-	marker       etcd.IdempotencyMarker
+	marker       testidempotency.IdempotencyMarker
 	calls        int
 }
 
 func (repository *fakeEnvironmentCreationRepository) GetEnvironmentPoolRegistry(
 	context.Context,
-) (etcd.Versioned[etcd.EnvironmentPoolRegistry], error) {
+) (testkeyvalue.Versioned[testnetworkreservations.EnvironmentPoolRegistry], error) {
 	return repository.poolRegistry, nil
 }
 
 func (repository *fakeEnvironmentCreationRepository) GetProject(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.ProjectRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testhierarchy.ProjectRecord], error) {
 	return repository.project, nil
 }
 
 func (repository *fakeEnvironmentCreationRepository) CreateEnvironmentWithTask(
 	_ context.Context,
 	volumeRoot string,
-	_ etcd.Versioned[etcd.ProjectRecord],
-	poolRegistry etcd.Versioned[etcd.EnvironmentPoolRegistry],
-	environment etcd.EnvironmentRecord,
-	components []etcd.ComponentRecord,
+	_ testkeyvalue.Versioned[testhierarchy.ProjectRecord],
+	poolRegistry testkeyvalue.Versioned[testnetworkreservations.EnvironmentPoolRegistry],
+	environment testhierarchy.EnvironmentRecord,
+	components []testcomponents.Record,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	repository.calls++
 	repository.volumeRoot = volumeRoot
 	repository.poolRegistry = poolRegistry
 	repository.environment = environment
-	repository.components = append([]etcd.ComponentRecord(nil), components...)
+	repository.components = append([]testcomponents.Record(nil), components...)
 	repository.task = task
 	repository.task.Params = make(map[string]string, len(task.Params))
 	for key, value := range task.Params {
 		repository.task.Params[key] = value
 	}
-	repository.task.Steps = append([]etcd.TaskStepRecord(nil), task.Steps...)
+	repository.task.Steps = append([]testtaskjournal.TaskStepRecord(nil), task.Steps...)
 	repository.marker = marker
 	repository.marker.Response.Body = append([]byte(nil), marker.Response.Body...)
 	return etcd.IdempotencyTransactionResult{}, nil
@@ -87,8 +93,8 @@ func (idempotency *fakeEnvironmentCreationIdempotency) Prepare(
 }
 
 func (idempotency *fakeEnvironmentCreationIdempotency) ResolveExisting(
-	context.Context,
-	etcd.IdempotencyLocator,
+	context.Context, testidempotency.IdempotencyLocator,
+
 	environmentCreationEvidence,
 ) (idempotentintent.Resolution, bool, error) {
 	return idempotency.resolution, idempotency.existing, nil
@@ -103,8 +109,8 @@ func (idempotency *fakeEnvironmentCreationIdempotency) ResolveKnown(
 }
 
 func (idempotency *fakeEnvironmentCreationIdempotency) ResolveUnknown(
-	context.Context,
-	etcd.IdempotencyLocator,
+	context.Context, testidempotency.IdempotencyLocator,
+
 	environmentCreationEvidence,
 	error,
 ) (idempotentintent.Resolution, error) {
@@ -112,17 +118,17 @@ func (idempotency *fakeEnvironmentCreationIdempotency) ResolveUnknown(
 }
 
 func TestEnvironmentCreationBuildsAtomicReplayableTask(t *testing.T) {
-	project := etcd.Versioned[etcd.ProjectRecord]{
-		Record: etcd.ProjectRecord{
+	project := testkeyvalue.Versioned[testhierarchy.ProjectRecord]{
+		Record: testhierarchy.ProjectRecord{
 			ID: environmentCreationTestProjectID, TenantID: environmentCreationTestTenantID,
-			Slug: "console", Name: "Console", Kind: etcd.ProjectKindTenant,
+			Slug: "console", Name: "Console", Kind: testhierarchy.ProjectKindTenant,
 		},
 		Revision: 7, ReadRevision: 7,
 	}
 	repository := &fakeEnvironmentCreationRepository{
 		project: project,
-		poolRegistry: etcd.Versioned[etcd.EnvironmentPoolRegistry]{
-			Record: etcd.EnvironmentPoolRegistry{Reservations: map[string]string{}},
+		poolRegistry: testkeyvalue.Versioned[testnetworkreservations.EnvironmentPoolRegistry]{
+			Record: testnetworkreservations.EnvironmentPoolRegistry{Reservations: map[string]string{}},
 		},
 	}
 	idempotency := &fakeEnvironmentCreationIdempotency{
@@ -158,10 +164,10 @@ func TestEnvironmentCreationBuildsAtomicReplayableTask(t *testing.T) {
 	if repository.calls != 1 || repository.volumeRoot != "/var/lib/groundplane/vol" ||
 		environment.ProjectID != environmentCreationTestProjectID || environment.Name != "production" ||
 		environment.NetworkPool != "10.200.0.0/16" ||
-		environment.ProvisioningState != etcd.EnvironmentProvisioningProvisioning ||
+		environment.ProvisioningState != testhierarchy.EnvironmentProvisioningProvisioning ||
 		environment.CreateTaskID != task.ID || environment.CreatedAt != now || task.CreatedAt != now ||
-		task.Executor != etcd.TaskExecutorAgent || task.Type != etcd.TaskCreate || task.Target != environment.ID ||
-		task.Status != etcd.TaskStatusPending || task.NextEventSequence != 1 || len(task.Steps) != 1 {
+		task.Executor != testtaskjournal.TaskExecutorAgent || task.Type != testtaskjournal.TaskCreate || task.Target != environment.ID ||
+		task.Status != testtaskjournal.TaskStatusPending || task.NextEventSequence != 1 || len(task.Steps) != 1 {
 		t.Fatalf("atomic Environment/Task = %#v / %#v", environment, task)
 	}
 	if repository.poolRegistry.Record.Reservations[environment.ID] != environment.NetworkPool {
@@ -209,7 +215,7 @@ func TestEnvironmentCreationBuildsAtomicReplayableTask(t *testing.T) {
 		t.Fatalf("stored/resolved plan hash = %x / %x, %v", storedHash, plan.PlanHash, err)
 	}
 	if repository.marker.TaskID != task.ID || repository.marker.Response.Status != http.StatusAccepted ||
-		repository.marker.Locator.ScopeKind != etcd.IdempotencyScopeProject ||
+		repository.marker.Locator.ScopeKind != testidempotency.IdempotencyScopeProject ||
 		repository.marker.Locator.ScopeID != environmentCreationTestProjectID {
 		t.Fatalf("Task idempotency marker = %#v", repository.marker)
 	}

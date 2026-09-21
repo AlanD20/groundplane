@@ -4,14 +4,15 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testscripts "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 )
 
 // Rationale: exporting the current Blueprint must preserve order after human
 // edits; reapplying the exported input must not silently revert migration order.
 func TestAuthoringRetainsScriptOrder(t *testing.T) {
 	for _, order := range []uint16{0, 10, 65535} {
-		result, err := Authoring([]etcd.Versioned[etcd.ScriptRecord]{{Record: etcd.ScriptRecord{
+		result, err := Authoring([]testkeyvalue.Versioned[testscripts.Record]{{Record: testscripts.Record{
 			Origin: "blueprint", ReconciliationKey: "migration-hook",
 			Desired: core.Script{
 				Slug:        "renamed",

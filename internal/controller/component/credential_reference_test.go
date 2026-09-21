@@ -9,26 +9,32 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotencyowner "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
 type credentialHierarchyStub struct {
-	environment etcd.Versioned[etcd.EnvironmentRecord]
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
 }
 
 func (stub credentialHierarchyStub) GetEnvironment(
 	_ context.Context,
 	_ string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+) (testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], error) {
 	return stub.environment, nil
 }
 
 type credentialSecretsStub struct {
-	secret etcd.Versioned[etcd.SecretRecord]
+	secret testkeyvalue.Versioned[testsecrets.Record]
 }
 
-func (stub credentialSecretsStub) GetSecret(_ context.Context, _ string) (etcd.Versioned[etcd.SecretRecord], error) {
+func (stub credentialSecretsStub) GetSecret(
+	_ context.Context,
+	_ string,
+) (testkeyvalue.Versioned[testsecrets.Record], error) {
 	return stub.secret, nil
 }
 
@@ -41,10 +47,10 @@ func (stub *credentialCreatorStub) CreateSecret(
 	_ context.Context,
 	request apiTypes.SecretCreateRequest,
 	_ string,
-) (etcd.IdempotencyResponse, error) {
+) (testidempotencyowner.IdempotencyResponse, error) {
 	stub.request = request
 	body, _ := json.Marshal(stub.secret)
-	return etcd.IdempotencyResponse{Status: http.StatusCreated, Body: body}, nil
+	return testidempotencyowner.IdempotencyResponse{Status: http.StatusCreated, Body: body}, nil
 }
 
 func TestCredentialReferenceResolverCreatesProjectSecretWithoutReturningToken(t *testing.T) {
@@ -55,8 +61,8 @@ func TestCredentialReferenceResolverCreatesProjectSecretWithoutReturningToken(t 
 	creator := &credentialCreatorStub{secret: apiTypes.Secret{ID: secretID, ProjectID: projectID}}
 	resolver, err := NewCredentialReferenceResolver(
 		credentialHierarchyStub{
-			environment: etcd.Versioned[etcd.EnvironmentRecord]{
-				Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID},
+			environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+				Record: testhierarchy.EnvironmentRecord{ID: environmentID, ProjectID: projectID},
 			},
 		},
 		credentialSecretsStub{},
@@ -85,13 +91,15 @@ func TestCredentialReferenceResolverAcceptsOnlyProjectOrPlatformEnvSecret(t *tes
 	secretID := ids.NewAt(ids.KindSecret, now, 6)
 	resolver, err := NewCredentialReferenceResolver(
 		credentialHierarchyStub{
-			environment: etcd.Versioned[etcd.EnvironmentRecord]{
-				Record: etcd.EnvironmentRecord{ID: environmentID, ProjectID: projectID},
+			environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+				Record: testhierarchy.EnvironmentRecord{ID: environmentID, ProjectID: projectID},
 			},
 		},
-		credentialSecretsStub{secret: etcd.Versioned[etcd.SecretRecord]{Record: etcd.SecretRecord{Secret: core.Secret{
-			ID: secretID, Scope: core.SecretScopeProject, ProjectID: projectID, Kind: core.SecretKindEnvVar,
-		}}}},
+		credentialSecretsStub{
+			secret: testkeyvalue.Versioned[testsecrets.Record]{Record: testsecrets.Record{Secret: core.Secret{
+				ID: secretID, Scope: core.SecretScopeProject, ProjectID: projectID, Kind: core.SecretKindEnvVar,
+			}}},
+		},
 		&credentialCreatorStub{},
 	)
 	if err != nil {

@@ -9,7 +9,10 @@ import (
 	wire "github.com/AlanD20/groundplane/internal/common/serviceobservation"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -18,27 +21,30 @@ import (
 type serviceRead struct {
 	ctx           context.Context
 	environmentID string
-	request       etcd.PageRequest
+	request       testkeyvalue.PageRequest
 }
 
 type fakeServices struct {
-	pages  []etcd.Page[etcd.ServiceRecord]
+	pages  []testkeyvalue.Page[testservices.ServiceRecord]
 	calls  []serviceRead
 	failed bool
 }
 
 func (services *fakeServices) ListServices(
-	ctx context.Context, environmentID string, request etcd.PageRequest,
-) (etcd.Page[etcd.ServiceRecord], error) {
+	ctx context.Context, environmentID string, request testkeyvalue.PageRequest,
+) (testkeyvalue.Page[testservices.ServiceRecord], error) {
 	services.calls = append(services.calls, serviceRead{
 		ctx: ctx, environmentID: environmentID, request: request,
 	})
 	if services.failed {
-		return etcd.Page[etcd.ServiceRecord]{}, errs.New(errs.KindRequestFailed, "service read failed")
+		return testkeyvalue.Page[testservices.ServiceRecord]{}, errs.New(errs.KindRequestFailed, "service read failed")
 	}
 	index := len(services.calls) - 1
 	if index >= len(services.pages) {
-		return etcd.Page[etcd.ServiceRecord]{}, errs.New(errs.KindRequestFailed, "unexpected service page")
+		return testkeyvalue.Page[testservices.ServiceRecord]{}, errs.New(
+			errs.KindRequestFailed,
+			"unexpected service page",
+		)
 	}
 	return services.pages[index], nil
 }
@@ -109,8 +115,8 @@ func rebindEnvironment(t *testing.T, fixture sourceFixture, environmentID string
 	return fixture
 }
 
-func servicePage(revision int64, fixtures ...sourceFixture) etcd.Page[etcd.ServiceRecord] {
-	result := etcd.Page[etcd.ServiceRecord]{Revision: revision}
+func servicePage(revision int64, fixtures ...sourceFixture) testkeyvalue.Page[testservices.ServiceRecord] {
+	result := testkeyvalue.Page[testservices.ServiceRecord]{Revision: revision}
 	for _, fixture := range fixtures {
 		service := fixture.service
 		service.ReadRevision = revision
@@ -146,13 +152,13 @@ func TestObserveUsesOneBoundedBatchAndPreservesUnavailableDesiredReads(t *testin
 		newSourceFixture(t, 120, domain.StrategyBlueGreen, domain.SlotGreen, []uint16{8080}, 1),
 		first.service.Record.EnvironmentID,
 	)
-	input := []etcd.Versioned[etcd.ServiceRecord]{first.service, missing.service, last.service}
+	input := []testkeyvalue.Versioned[testservices.ServiceRecord]{first.service, missing.service, last.service}
 	before, err := domain.Digest(input)
 	if err != nil {
 		t.Fatal(err)
 	}
 	releases := &fakeReleases{fixtures: fixtureMap(first, last), followRevision: true}
-	services := &fakeServices{pages: []etcd.Page[etcd.ServiceRecord]{servicePage(60, first, last)}}
+	services := &fakeServices{pages: []testkeyvalue.Page[testservices.ServiceRecord]{servicePage(60, first, last)}}
 	channel := &fakeChannel{result: func(targets []*agentpb.ServiceObservationTarget) (
 		*agentpb.ServiceObservationResult, error,
 	) {
@@ -204,7 +210,8 @@ func TestObserveUsesOneBoundedBatchAndPreservesUnavailableDesiredReads(t *testin
 			t.Fatal("Service recheck did not share bounded context")
 		}
 	}
-	if len(services.calls) != 1 || services.calls[0].request != (etcd.PageRequest{Limit: etcd.MaximumPageLimit}) {
+	if len(services.calls) != 1 ||
+		services.calls[0].request != (testkeyvalue.PageRequest{Limit: testkeyvalue.MaximumPageLimit}) {
 		t.Fatalf("recheck page requests = %v", services.calls)
 	}
 	for _, call := range releases.resolveCalls[:3] {
@@ -224,7 +231,7 @@ func TestObserveUsesOneBoundedBatchAndPreservesUnavailableDesiredReads(t *testin
 func TestObserveDegradesHealthyWorkloadForProxyConfigMismatch(t *testing.T) {
 	fixture := newSourceFixture(t, 125, domain.StrategyBlueGreen, domain.SlotBlue, []uint16{8080}, 1)
 	releases := &fakeReleases{fixtures: fixtureMap(fixture), followRevision: true}
-	services := &fakeServices{pages: []etcd.Page[etcd.ServiceRecord]{servicePage(60, fixture)}}
+	services := &fakeServices{pages: []testkeyvalue.Page[testservices.ServiceRecord]{servicePage(60, fixture)}}
 	channel := &fakeChannel{result: func(targets []*agentpb.ServiceObservationTarget) (
 		*agentpb.ServiceObservationResult, error,
 	) {
@@ -241,7 +248,9 @@ func TestObserveDegradesHealthyWorkloadForProxyConfigMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	observations := observer.Observe(
-		t.Context(), ids.NewAt(ids.KindAgent, now, 1), []etcd.Versioned[etcd.ServiceRecord]{fixture.service},
+		t.Context(),
+		ids.NewAt(ids.KindAgent, now, 1),
+		[]testkeyvalue.Versioned[testservices.ServiceRecord]{fixture.service},
 	)
 	if len(observations) != 1 || observations[0].State != wire.Degraded ||
 		observations[0].Snapshot == nil || observations[0].Snapshot.Replicas.GetHealthy() != 1 {
@@ -254,12 +263,12 @@ func TestObserveDegradesHealthyWorkloadForProxyConfigMismatch(t *testing.T) {
 func TestObserveRejectsAcknowledgedProxyRuntimeRevisionABA(t *testing.T) {
 	fixture := newSourceFixture(t, 126, domain.StrategyRecreate, "", []uint16{8080}, 1)
 	releases := &fakeReleases{fixtures: fixtureMap(fixture), followRevision: true}
-	releases.mutateRuntime = func(_ string, call int, runtime *etcd.Versioned[serviceruntimerecord.Record]) {
+	releases.mutateRuntime = func(_ string, call int, runtime *testkeyvalue.Versioned[serviceruntimerecord.Record]) {
 		if call == 2 {
 			runtime.Revision++
 		}
 	}
-	services := &fakeServices{pages: []etcd.Page[etcd.ServiceRecord]{servicePage(60, fixture)}}
+	services := &fakeServices{pages: []testkeyvalue.Page[testservices.ServiceRecord]{servicePage(60, fixture)}}
 	channel := &fakeChannel{result: func(targets []*agentpb.ServiceObservationTarget) (
 		*agentpb.ServiceObservationResult, error,
 	) {
@@ -273,7 +282,9 @@ func TestObserveRejectsAcknowledgedProxyRuntimeRevisionABA(t *testing.T) {
 		t.Fatal(err)
 	}
 	observations := observer.Observe(
-		t.Context(), ids.NewAt(ids.KindAgent, now, 2), []etcd.Versioned[etcd.ServiceRecord]{fixture.service},
+		t.Context(),
+		ids.NewAt(ids.KindAgent, now, 2),
+		[]testkeyvalue.Versioned[testservices.ServiceRecord]{fixture.service},
 	)
 	if len(observations) != 1 || observations[0].State != wire.Unavailable || observations[0].Snapshot != nil {
 		t.Fatalf("stale acknowledged proxy authority escaped: %#v", observations)
@@ -285,14 +296,14 @@ func TestObserveRejectsAcknowledgedProxyRuntimeRevisionABA(t *testing.T) {
 func TestObserveRejectsInvalidBatchesBeforeReads(t *testing.T) {
 	fixture := newSourceFixture(t, 130, domain.StrategyRecreate, "", nil, 1)
 	stamp := time.Date(2026, 9, 12, 15, 0, 0, 0, time.UTC)
-	mixed := []etcd.Versioned[etcd.ServiceRecord]{fixture.service, fixture.service}
+	mixed := []testkeyvalue.Versioned[testservices.ServiceRecord]{fixture.service, fixture.service}
 	mixed[1].ReadRevision++
-	duplicate := []etcd.Versioned[etcd.ServiceRecord]{fixture.service, fixture.service}
-	oversized := make([]etcd.Versioned[etcd.ServiceRecord], wire.MaximumTargets+1)
+	duplicate := []testkeyvalue.Versioned[testservices.ServiceRecord]{fixture.service, fixture.service}
+	oversized := make([]testkeyvalue.Versioned[testservices.ServiceRecord], wire.MaximumTargets+1)
 	for index := range oversized {
 		oversized[index] = fixture.service
 	}
-	for name, input := range map[string][]etcd.Versioned[etcd.ServiceRecord]{
+	for name, input := range map[string][]testkeyvalue.Versioned[testservices.ServiceRecord]{
 		"mixed revisions": mixed,
 		"duplicate":       duplicate,
 		"oversized":       oversized,
@@ -374,7 +385,7 @@ func TestObserveReturnsUnavailableForUnusableOrExpiredEvidence(t *testing.T) {
 		{
 			name: "serving revision ABA",
 			configure: func(_ *fakeServices, releases *fakeReleases, _ *fakeChannel) {
-				releases.mutateServing = func(_ string, call int, serving *etcd.ServingRelease) {
+				releases.mutateServing = func(_ string, call int, serving *testreleasequeries.ServingRelease) {
 					if call == 2 {
 						serving.ProjectionRevision++
 					}
@@ -385,7 +396,7 @@ func TestObserveReturnsUnavailableForUnusableOrExpiredEvidence(t *testing.T) {
 		{
 			name: "intent revision ABA",
 			configure: func(_ *fakeServices, releases *fakeReleases, _ *fakeChannel) {
-				releases.mutateServing = func(_ string, call int, serving *etcd.ServingRelease) {
+				releases.mutateServing = func(_ string, call int, serving *testreleasequeries.ServingRelease) {
 					if call == 2 {
 						serving.IntentRevision++
 					}
@@ -396,7 +407,7 @@ func TestObserveReturnsUnavailableForUnusableOrExpiredEvidence(t *testing.T) {
 		{
 			name: "render revision ABA",
 			configure: func(_ *fakeServices, releases *fakeReleases, _ *fakeChannel) {
-				releases.mutateRender = func(_ string, call int, render *etcd.Versioned[etcd.ReleaseRenderInput]) {
+				releases.mutateRender = func(_ string, call int, render *testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput]) {
 					if call == 2 {
 						render.Revision++
 					}
@@ -414,7 +425,7 @@ func TestObserveReturnsUnavailableForUnusableOrExpiredEvidence(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			fixture := newSourceFixture(t, int64(150+index*10), domain.StrategyRecreate, "", nil, 1)
 			releases := &fakeReleases{fixtures: fixtureMap(fixture), followRevision: true}
-			services := &fakeServices{pages: []etcd.Page[etcd.ServiceRecord]{servicePage(60, fixture)}}
+			services := &fakeServices{pages: []testkeyvalue.Page[testservices.ServiceRecord]{servicePage(60, fixture)}}
 			channel := &fakeChannel{result: func(targets []*agentpb.ServiceObservationTarget) (
 				*agentpb.ServiceObservationResult, error,
 			) {
@@ -429,7 +440,7 @@ func TestObserveReturnsUnavailableForUnusableOrExpiredEvidence(t *testing.T) {
 			}
 			observations := observer.Observe(
 				t.Context(), ids.NewAt(ids.KindAgent, started, int64(index+10)),
-				[]etcd.Versioned[etcd.ServiceRecord]{fixture.service},
+				[]testkeyvalue.Versioned[testservices.ServiceRecord]{fixture.service},
 			)
 			if len(observations) != 1 || observations[0].State != wire.Unavailable ||
 				observations[0].Snapshot != nil {
@@ -444,7 +455,7 @@ func TestObserveReturnsUnavailableForUnusableOrExpiredEvidence(t *testing.T) {
 func TestObservePreservesAgentUnavailable(t *testing.T) {
 	fixture := newSourceFixture(t, 210, domain.StrategyRecreate, "", nil, 1)
 	releases := &fakeReleases{fixtures: fixtureMap(fixture), followRevision: true}
-	services := &fakeServices{pages: []etcd.Page[etcd.ServiceRecord]{servicePage(60, fixture)}}
+	services := &fakeServices{pages: []testkeyvalue.Page[testservices.ServiceRecord]{servicePage(60, fixture)}}
 	channel := &fakeChannel{result: func(targets []*agentpb.ServiceObservationTarget) (
 		*agentpb.ServiceObservationResult, error,
 	) {
@@ -457,7 +468,7 @@ func TestObservePreservesAgentUnavailable(t *testing.T) {
 	}
 	observations := observer.Observe(
 		t.Context(), ids.NewAt(ids.KindAgent, started, 30),
-		[]etcd.Versioned[etcd.ServiceRecord]{fixture.service},
+		[]testkeyvalue.Versioned[testservices.ServiceRecord]{fixture.service},
 	)
 	if len(observations) != 1 || observations[0].State != wire.Unavailable || observations[0].Snapshot != nil {
 		t.Fatalf("unavailable row = %#v", observations)
@@ -499,14 +510,16 @@ func TestCurrentServicesKeepsPaginationOnOneRevision(t *testing.T) {
 	)
 	for _, test := range []struct {
 		name   string
-		change func(*etcd.Page[etcd.ServiceRecord])
+		change func(*testkeyvalue.Page[testservices.ServiceRecord])
 		valid  bool
 	}{
-		{"same view", func(*etcd.Page[etcd.ServiceRecord]) {}, true},
-		{"changed view", func(page *etcd.Page[etcd.ServiceRecord]) { page.Revision++ }, false},
-		{"mixed row", func(page *etcd.Page[etcd.ServiceRecord]) { page.Items[0].ReadRevision++ }, false},
-		{"foreign row", func(page *etcd.Page[etcd.ServiceRecord]) { page.Items[0].Record.EnvironmentID = "foreign" }, false},
-		{"repeated cursor", func(page *etcd.Page[etcd.ServiceRecord]) {
+		{"same view", func(*testkeyvalue.Page[testservices.ServiceRecord]) {}, true},
+		{"changed view", func(page *testkeyvalue.Page[testservices.ServiceRecord]) { page.Revision++ }, false},
+		{"mixed row", func(page *testkeyvalue.Page[testservices.ServiceRecord]) { page.Items[0].ReadRevision++ }, false},
+		{"foreign row", func(page *testkeyvalue.Page[testservices.ServiceRecord]) {
+			page.Items[0].Record.EnvironmentID = "foreign"
+		}, false},
+		{"repeated cursor", func(page *testkeyvalue.Page[testservices.ServiceRecord]) {
 			page.Items, page.NextCursor = nil, "second"
 		}, false},
 	} {
@@ -515,14 +528,17 @@ func TestCurrentServicesKeepsPaginationOnOneRevision(t *testing.T) {
 			page.NextCursor = "second"
 			next := servicePage(60, last)
 			test.change(&next)
-			reader := &fakeServices{pages: []etcd.Page[etcd.ServiceRecord]{page, next}}
+			reader := &fakeServices{pages: []testkeyvalue.Page[testservices.ServiceRecord]{page, next}}
 			observer := &Observer{services: reader}
-			got, ok := observer.currentServices(t.Context(), []etcd.Versioned[etcd.ServiceRecord]{last.service})
+			got, ok := observer.currentServices(
+				t.Context(),
+				[]testkeyvalue.Versioned[testservices.ServiceRecord]{last.service},
+			)
 			if ok != test.valid || test.valid && got[last.service.Record.Desired.ID].ReadRevision != 60 {
 				t.Fatalf("current Services = %+v, %v", got, ok)
 			}
-			if len(reader.calls) != 2 || reader.calls[1].request != (etcd.PageRequest{
-				Limit: etcd.MaximumPageLimit, Cursor: "second", Revision: 60,
+			if len(reader.calls) != 2 || reader.calls[1].request != (testkeyvalue.PageRequest{
+				Limit: testkeyvalue.MaximumPageLimit, Cursor: "second", Revision: 60,
 			}) {
 				t.Fatalf("pagination calls = %+v", reader.calls)
 			}
@@ -536,7 +552,7 @@ func TestObserveDiscardsEvidenceAfterCancellation(t *testing.T) {
 	for _, before := range []bool{true, false} {
 		fixture := newSourceFixture(t, 320, domain.StrategyRecreate, "", nil, 1)
 		releases := &fakeReleases{fixtures: fixtureMap(fixture), followRevision: true}
-		services := &fakeServices{pages: []etcd.Page[etcd.ServiceRecord]{servicePage(60, fixture)}}
+		services := &fakeServices{pages: []testkeyvalue.Page[testservices.ServiceRecord]{servicePage(60, fixture)}}
 		ctx, cancel := context.WithCancel(t.Context())
 		channel := &fakeChannel{
 			result: func(targets []*agentpb.ServiceObservationTarget) (*agentpb.ServiceObservationResult, error) {
@@ -557,7 +573,7 @@ func TestObserveDiscardsEvidenceAfterCancellation(t *testing.T) {
 		got := observer.Observe(
 			ctx,
 			ids.NewAt(ids.KindAgent, time.Now(), 40),
-			[]etcd.Versioned[etcd.ServiceRecord]{fixture.service},
+			[]testkeyvalue.Versioned[testservices.ServiceRecord]{fixture.service},
 		)
 		cancel()
 		if len(got) != 1 || got[0].State != wire.Unavailable || got[0].Snapshot != nil || len(services.calls) != 0 {

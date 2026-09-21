@@ -5,10 +5,14 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
+	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 )
 
 // Native Compose state must participate in release selection even where the
@@ -50,15 +54,13 @@ func TestNativeComposeChangesSelectRunningBlueprintCandidates(t *testing.T) {
 				return parsed
 			}
 			before, after := parse(""), parse(test.fields)
-			identities, err := controller.ReconcileOwnedComposeIdentities(
-				before.Project,
-				controller.ComposeIdentitySnapshot{},
-				ids.New,
+			identities, err := testcomposeidentity.ReconcileOwned(
+				before.Project, testcomposeidentity.Snapshot{}, ids.New,
 			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			desired, err := controller.ProjectServiceProjection(
+			desired, err := testtaskplanning.ProjectServiceProjection(
 				before.Project,
 				identities.Current,
 				before.ServiceExtensions,
@@ -66,21 +68,28 @@ func TestNativeComposeChangesSelectRunningBlueprintCandidates(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			record, err := etcd.NewServiceRecord(environmentID, desired[0], "")
+			record, err := testservices.NewServiceRecord(environmentID, desired[0], "")
 			if err != nil {
 				t.Fatal(err)
 			}
-			next, err := controller.ProjectServiceProjection(after.Project, identities.Current, after.ServiceExtensions)
+			next, err := testtaskplanning.ProjectServiceProjection(
+				after.Project,
+				identities.Current,
+				after.ServiceExtensions,
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
-			normalized, err := controller.MarshalNormalizedEnvironmentProject(before.Project)
+			normalized, err := testcomposerender.MarshalNormalizedEnvironmentProject(before.Project)
 			if err != nil {
 				t.Fatal(err)
 			}
-			prior, err := controller.LoadNormalizedEnvironmentProject(
+			prior, err := testcomposerender.LoadNormalizedEnvironmentProject(
 				context.Background(),
-				etcd.EnvironmentComposeProjection{EnvironmentID: environmentID, NormalizedCompose: normalized},
+				testenvironmentprojection.EnvironmentComposeProjection{
+					EnvironmentID:     environmentID,
+					NormalizedCompose: normalized,
+				},
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -96,7 +105,9 @@ func TestNativeComposeChangesSelectRunningBlueprintCandidates(t *testing.T) {
 					changes, err := PrepareServiceChanges(
 						environmentID,
 						next,
-						[]etcd.Versioned[etcd.ServiceRecord]{{Record: current, Revision: 7, ReadRevision: 9}},
+						[]testkeyvalue.Versioned[testservices.ServiceRecord]{
+							{Record: current, Revision: 7, ReadRevision: 9},
+						},
 					)
 					if err != nil {
 						t.Fatal(err)
@@ -105,7 +116,12 @@ func TestNativeComposeChangesSelectRunningBlueprintCandidates(t *testing.T) {
 					if grouped {
 						groups["selected"] = core.ReleaseGroupSpec{Services: []string{current.Desired.Name}}
 					}
-					selected, err := selectCandidates(etcd.EnvironmentComposeProjection{}, changes, groups, memberships)
+					selected, err := selectCandidates(
+						testenvironmentprojection.EnvironmentComposeProjection{},
+						changes,
+						groups,
+						memberships,
+					)
 					if err != nil {
 						t.Fatal(err)
 					}

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )

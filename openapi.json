@@ -527,12 +527,18 @@
             "not": {
               "anyOf": [
                 {
+                  "properties": {
+                    "image": {}
+                  },
                   "required": [
                     "image"
                   ],
                   "type": "object"
                 },
                 {
+                  "properties": {
+                    "hooks": {}
+                  },
                   "required": [
                     "hooks"
                   ],
@@ -567,18 +573,27 @@
             "not": {
               "anyOf": [
                 {
+                  "properties": {
+                    "authentication": {}
+                  },
                   "required": [
                     "authentication"
                   ],
                   "type": "object"
                 },
                 {
+                  "properties": {
+                    "image": {}
+                  },
                   "required": [
                     "image"
                   ],
                   "type": "object"
                 },
                 {
+                  "properties": {
+                    "hooks": {}
+                  },
                   "required": [
                     "hooks"
                   ],
@@ -601,6 +616,9 @@
           },
           {
             "not": {
+              "properties": {
+                "authentication": {}
+              },
               "required": [
                 "authentication"
               ],

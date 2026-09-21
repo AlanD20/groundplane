@@ -10,8 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -19,14 +22,14 @@ const environmentPoolChangeTestID = "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 func TestEnvironmentPoolEditReplaysBeforeLookupAndPropagatesMismatch(t *testing.T) {
 	t.Parallel()
-	want := etcd.IdempotencyResponse{
+	want := testidempotency.IdempotencyResponse{
 		Status: 200, ContentKind: "application/json",
 		Body: []byte(`{"id":"` + environmentPoolChangeTestID + `","network_pool":"10.40.0.0/15"}`),
 	}
 	for _, test := range []struct {
 		name        string
 		idempotency *fakeEnvironmentPoolChangeIdempotency
-		want        etcd.IdempotencyResponse
+		want        testidempotency.IdempotencyResponse
 		wantKind    errs.Kind
 	}{
 		{
@@ -81,7 +84,7 @@ func TestEnvironmentPoolEditReplaysBeforeLookupAndPropagatesMismatch(t *testing.
 
 func TestEnvironmentPoolEditResolvesUnknownTransactionOutcomeToExactReplay(t *testing.T) {
 	t.Parallel()
-	want := etcd.IdempotencyResponse{
+	want := testidempotency.IdempotencyResponse{
 		Status: 200, ContentKind: "application/json",
 		Body: []byte(`{"id":"` + environmentPoolChangeTestID + `","network_pool":"10.40.0.0/15"}`),
 	}
@@ -124,9 +127,9 @@ func TestEnvironmentPoolEditResolvesUnknownTransactionOutcomeToExactReplay(t *te
 }
 
 type fakeEnvironmentPoolChangeRepository struct {
-	current     etcd.Versioned[etcd.EnvironmentRecord]
-	replacement etcd.EnvironmentRecord
-	marker      etcd.IdempotencyMarker
+	current     testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
+	replacement testhierarchy.EnvironmentRecord
+	marker      testidempotency.IdempotencyMarker
 	root        netip.Prefix
 	replaceErr  error
 	getCalls    int
@@ -134,16 +137,16 @@ type fakeEnvironmentPoolChangeRepository struct {
 }
 
 func (repository *fakeEnvironmentPoolChangeRepository) GetEnvironment(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], error) {
 	repository.getCalls++
 	return repository.current, nil
 }
 
 func (repository *fakeEnvironmentPoolChangeRepository) ListZoneSubnetReservationsAtRevision(
-	context.Context,
-	string,
+	context.Context, string,
+
 	int64,
 ) ([]string, error) {
 	return []string{}, nil
@@ -151,9 +154,9 @@ func (repository *fakeEnvironmentPoolChangeRepository) ListZoneSubnetReservation
 
 func (repository *fakeEnvironmentPoolChangeRepository) MutateEnvironmentIdempotent(
 	context.Context,
-	etcd.Versioned[etcd.EnvironmentRecord],
-	etcd.EnvironmentRecord,
-	etcd.IdempotencyMarker,
+	testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
+	testhierarchy.EnvironmentRecord,
+	testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	repository.mutateCalls++
 	return etcd.IdempotencyTransactionResult{}, nil
@@ -162,9 +165,9 @@ func (repository *fakeEnvironmentPoolChangeRepository) MutateEnvironmentIdempote
 func (repository *fakeEnvironmentPoolChangeRepository) ReplaceEnvironmentPoolIdempotent(
 	_ context.Context,
 	root netip.Prefix,
-	_ etcd.Versioned[etcd.EnvironmentRecord],
-	replacement etcd.EnvironmentRecord,
-	marker etcd.IdempotencyMarker,
+	_ testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
+	replacement testhierarchy.EnvironmentRecord,
+	marker testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	repository.mutateCalls++
 	repository.root = root
@@ -185,24 +188,24 @@ type fakeEnvironmentPoolChangeIdempotency struct {
 }
 
 func (idempotency *fakeEnvironmentPoolChangeIdempotency) PrepareEdit(
-	context.Context,
-	string,
+	context.Context, string,
+
 	EditEnvironmentInput,
 ) (environmentChangeEvidence, error) {
 	return idempotency.evidence, nil
 }
 
 func (idempotency *fakeEnvironmentPoolChangeIdempotency) PrepareRename(
-	context.Context,
-	string,
+	context.Context, string,
+
 	RenameEnvironmentInput,
 ) (environmentChangeEvidence, error) {
 	return idempotency.evidence, nil
 }
 
 func (idempotency *fakeEnvironmentPoolChangeIdempotency) ResolveExisting(
-	context.Context,
-	etcd.IdempotencyLocator,
+	context.Context, testidempotency.IdempotencyLocator,
+
 	environmentChangeEvidence,
 ) (idempotentintent.Resolution, bool, error) {
 	return idempotency.existingResolution, idempotency.existing, idempotency.existingErr
@@ -217,8 +220,8 @@ func (idempotency *fakeEnvironmentPoolChangeIdempotency) ResolveKnown(
 }
 
 func (idempotency *fakeEnvironmentPoolChangeIdempotency) ResolveUnknown(
-	context.Context,
-	etcd.IdempotencyLocator,
+	context.Context, testidempotency.IdempotencyLocator,
+
 	environmentChangeEvidence,
 	error,
 ) (idempotentintent.Resolution, error) {
@@ -226,15 +229,15 @@ func (idempotency *fakeEnvironmentPoolChangeIdempotency) ResolveUnknown(
 	return idempotency.unknownResolution, nil
 }
 
-func environmentPoolChangeCurrent() etcd.Versioned[etcd.EnvironmentRecord] {
-	return etcd.Versioned[etcd.EnvironmentRecord]{
-		Record: etcd.EnvironmentRecord{
+func environmentPoolChangeCurrent() testkeyvalue.Versioned[testhierarchy.EnvironmentRecord] {
+	return testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+		Record: testhierarchy.EnvironmentRecord{
 			ID:                environmentPoolChangeTestID,
 			ProjectID:         "prj_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 			Name:              "production",
 			NetworkPool:       "10.40.0.0/16",
 			VolumeDir:         "/var/lib/groundplane/vol/platform/prj_01ARZ3NDEKTSV4RRFFQ69G5FAV/" + environmentPoolChangeTestID,
-			ProvisioningState: etcd.EnvironmentProvisioningReady,
+			ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 			CreatedAt:         time.Date(2026, 8, 25, 8, 0, 0, 0, time.UTC),
 		},
 		Revision: 10, ReadRevision: 10,
@@ -244,7 +247,7 @@ func environmentPoolChangeCurrent() etcd.Versioned[etcd.EnvironmentRecord] {
 func environmentPoolChangeEvidence() environmentChangeEvidence {
 	ciphertext := []byte("protected-environment-pool-edit-intent")
 	digest := sha256.Sum256(ciphertext)
-	return environmentChangeEvidence{durable: etcd.ProtectedIntentRecord{
+	return environmentChangeEvidence{durable: testidempotency.ProtectedIntentRecord{
 		EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 		CiphertextDigest: hex.EncodeToString(digest[:]), Ciphertext: ciphertext,
 	}}

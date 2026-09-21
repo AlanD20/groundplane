@@ -12,6 +12,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -68,7 +71,7 @@ func TestTaskUpdatesExpiredUnchangedTaskRecoversBeforeReleasing(t *testing.T) {
 	}
 	defer session.Close()
 	status, err := updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline)
-	if err != nil || status != etcd.TaskStatusTimedOut || !session.AssignmentsAllowed() ||
+	if err != nil || status != testtaskjournal.TaskStatusTimedOut || !session.AssignmentsAllowed() ||
 		harness.runtime.generateCalls != 0 {
 		t.Fatalf("expired recovery = %s, %v, dispatch %t", status, err, session.AssignmentsAllowed())
 	}
@@ -89,7 +92,7 @@ func TestTaskUpdatesExpiredPartialCandidateRestoresBeforeTimeout(t *testing.T) {
 		t.Fatal(err)
 	}
 	status, err := updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline)
-	if err != nil || status != etcd.TaskStatusTimedOut || repository.record.Record.Phase != PhaseReady ||
+	if err != nil || status != testtaskjournal.TaskStatusTimedOut || repository.record.Record.Phase != PhaseReady ||
 		repository.record.Record.Image != testImage || repository.record.Record.Generation != initialGeneration+2 ||
 		harness.runtime.generateCalls != 1 {
 		t.Fatalf("partial recovery = %s, %v, generation %d", status, err, repository.record.Record.Generation)
@@ -121,7 +124,7 @@ func TestTaskUpdatesUnresolvedRecoveryRetainsHoldUntilStorageReturns(t *testing.
 	}
 	uncertain.resolutionUnavailable = false
 	status, err = updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline)
-	if err != nil || status != etcd.TaskStatusTimedOut || !session.AssignmentsAllowed() {
+	if err != nil || status != testtaskjournal.TaskStatusTimedOut || !session.AssignmentsAllowed() {
 		t.Fatalf("resolved recovery = %s, %v, dispatch %t", status, err, session.AssignmentsAllowed())
 	}
 }
@@ -141,7 +144,7 @@ func TestTaskUpdatesColdReadyReplayDoesNotRollBackOnExpiredAcknowledgement(t *te
 	}
 	for attempt := 0; attempt < 2; attempt++ {
 		status, err := updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline)
-		if err != nil || status != etcd.TaskStatusCompleted || harness.runtime.generateCalls != 0 {
+		if err != nil || status != testtaskjournal.TaskStatusCompleted || harness.runtime.generateCalls != 0 {
 			t.Fatalf("ready replay = %s, %v, rotations %d", status, err, harness.runtime.generateCalls)
 		}
 	}
@@ -160,7 +163,7 @@ func TestTaskUpdatesAbortWinsReadyQualificationRace(t *testing.T) {
 	}
 	lifecycle.taskID = claim.Task.Record.ID
 	status, err := updates.Execute(context.Background(), claim.Task.Record, claim.Assignment.Record.Deadline)
-	if err != nil || status != etcd.TaskStatusAborted || !lifecycle.restored {
+	if err != nil || status != testtaskjournal.TaskStatusAborted || !lifecycle.restored {
 		t.Fatalf("abort race = %s, %v, restored %t", status, err, lifecycle.restored)
 	}
 }
@@ -177,7 +180,7 @@ func TestDecodeUpdateTaskRejectsMalformedRecoveryAuthority(t *testing.T) {
 			case "target":
 				task.Target = ids.New(ids.KindService)
 			case "executor":
-				task.Executor = etcd.TaskExecutorAgent
+				task.Executor = testtaskjournal.TaskExecutorAgent
 			case "extra":
 				task.Params["extra"] = "ignored"
 			case "same-image":
@@ -203,17 +206,18 @@ func testTaskUpdates(t *testing.T, agents UpdateLifecycle, sessions UpdateAdmiss
 func updateClaim(started time.Time) etcd.TaskAssignment {
 	taskID := ids.New(ids.KindTask)
 	return etcd.TaskAssignment{
-		Task: etcd.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{
-			ID: taskID, Executor: etcd.TaskExecutorController, Type: etcd.TaskUpdate,
-			Target: testAgentID, Params: map[string]string{
-				etcd.TaskResourceKindParam: etcd.TaskResourceAgent, "image": replacementTestImage,
+		Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: etcd.TaskRecord{
+			ID: taskID, Executor: testtaskjournal.TaskExecutorController, Type: testtaskjournal.TaskUpdate,
+			Target: testAgentID, Params: map[string]string{testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceAgent, "image": replacementTestImage,
 				"previous_image": testImage, "starting_generation": "1",
 			},
 		}},
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-			TaskID: taskID, Executor: etcd.TaskExecutorController,
-			AssignedAt: started, Deadline: started.Add(300 * time.Second),
-		}},
+		Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+			Record: testtaskassignments.TaskAssignmentRecord{
+				TaskID: taskID, Executor: testtaskjournal.TaskExecutorController,
+				AssignedAt: started, Deadline: started.Add(300 * time.Second),
+			},
+		},
 	}
 }
 

@@ -10,7 +10,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
-	"github.com/AlanD20/groundplane/internal/infra/runtimeconfiguration"
+	runtimeconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/runtimeconfiguration"
+	testtaskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -153,8 +155,14 @@ func sourceFixture() (etcd.TaskRecord, *sourceReader) {
 	current := runtimeconfiguration.Reference{ID: ids.New(ids.KindConfig), EnvironmentID: environmentID, Generation: 2,
 		SHA256: sourceDigest("candidate manifest")}
 	return etcd.TaskRecord{ID: ids.New(ids.KindTask), PlanID: ids.New(ids.KindPlan), CreatedAt: at, RenderGeneration: 2,
-		Owner: etcd.TaskOwner{EnvironmentID: environmentID}, Materializations: []taskmaterialization.Record{next},
-		Configuration: &etcd.TaskConfiguration{Current: current, Prior: &reference, PriorRevision: 7}}, reader
+		Owner: testtaskjournal.TaskOwner{
+			EnvironmentID: environmentID,
+		}, Materializations: []taskmaterialization.Record{next},
+		Configuration: &testtaskconfiguration.TaskConfiguration{
+			Current:       current,
+			Prior:         &reference,
+			PriorRevision: 7,
+		}}, reader
 }
 
 func sourceDigest(value string) string {

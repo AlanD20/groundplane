@@ -6,37 +6,39 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testzones "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 )
 
 type fakeZoneReadRepository struct {
 	zoneReadRepository
-	environment etcd.Versioned[etcd.EnvironmentRecord]
-	zone        etcd.Versioned[etcd.ZoneRecord]
-	page        etcd.Page[etcd.ZoneRecord]
-	wantRequest etcd.PageRequest
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
+	zone        testkeyvalue.Versioned[testzones.Record]
+	page        testkeyvalue.Page[testzones.Record]
+	wantRequest testkeyvalue.PageRequest
 	listed      bool
 }
 
 func (fake *fakeZoneReadRepository) GetEnvironment(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], error) {
 	return fake.environment, nil
 }
 
 func (fake *fakeZoneReadRepository) GetZone(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.ZoneRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testzones.Record], error) {
 	return fake.zone, nil
 }
 
 func (fake *fakeZoneReadRepository) ListZones(
 	_ context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.ZoneRecord], error) {
+	request testkeyvalue.PageRequest,
+) (testkeyvalue.Page[testzones.Record], error) {
 	fake.listed = environmentID == fake.environment.Record.ID && request == fake.wantRequest
 	return fake.page, nil
 }
@@ -46,11 +48,11 @@ func (fake *fakeZoneReadRepository) ListZones(
 func TestZoneListVerifiesOwnerAndPreservesPagination(t *testing.T) {
 	t.Parallel()
 	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	request := etcd.PageRequest{Limit: 23, Cursor: "opaque-cursor"}
-	want := etcd.Page[etcd.ZoneRecord]{NextCursor: "next-cursor", Revision: 91}
+	request := testkeyvalue.PageRequest{Limit: 23, Cursor: "opaque-cursor"}
+	want := testkeyvalue.Page[testzones.Record]{NextCursor: "next-cursor", Revision: 91}
 	repository := &fakeZoneReadRepository{
-		environment: etcd.Versioned[etcd.EnvironmentRecord]{
-			Record:   etcd.EnvironmentRecord{ID: environmentID, NetworkPool: "10.40.0.0/16"},
+		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+			Record:   testhierarchy.EnvironmentRecord{ID: environmentID, NetworkPool: "10.40.0.0/16"},
 			Revision: 12, ReadRevision: 12,
 		},
 		page: want, wantRequest: request,
@@ -69,8 +71,8 @@ func TestZoneListVerifiesOwnerAndPreservesPagination(t *testing.T) {
 // durable ownership record rather than resolving mutable labels.
 func TestZoneReadPreservesDurableRecord(t *testing.T) {
 	t.Parallel()
-	want := etcd.Versioned[etcd.ZoneRecord]{
-		Record: etcd.ZoneRecord{
+	want := testkeyvalue.Versioned[testzones.Record]{
+		Record: testzones.Record{
 			EnvironmentID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV",
 			Desired:       zoneReadTestZone(),
 		},

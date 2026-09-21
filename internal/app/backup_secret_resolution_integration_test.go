@@ -13,11 +13,20 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/backupsecret"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	controllerpkg "github.com/AlanD20/groundplane/internal/controller"
 	"github.com/AlanD20/groundplane/internal/controller/agentchannel"
+	testbackup "github.com/AlanD20/groundplane/internal/controller/backup"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testbackupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	backupsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/backupsecrets"
+	testconnectors "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc/metadata"
@@ -41,7 +50,7 @@ const (
 // recovered dispatch, exact S3 slots, and owned cleanup.
 func TestBackupSecretReaderResolverAgentChannelComposition(t *testing.T) {
 	fixture := newAppBackupSecretFixture(t)
-	reader, err := etcd.NewBackupSecretResolutionReader(fixture.store)
+	reader, err := backupsecrets.NewReader(fixture.store)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +59,7 @@ func TestBackupSecretReaderResolverAgentChannelComposition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolver, err := controllerpkg.NewBackupSecretResolver(reader, protector)
+	resolver, err := testbackup.NewBackupSecretResolver(reader, protector)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,14 +172,14 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 	agentID := ids.NewAt(ids.KindAgent, assignedAt, 14)
 	secretID := ids.NewAt(ids.KindSecret, environmentCreatedAt, 15)
 
-	project := etcd.ProjectRecord{
+	project := testhierarchy.ProjectRecord{
 		ID:       projectID,
 		TenantID: tenantID,
 		Slug:     "production",
 		Name:     "Production",
-		Kind:     etcd.ProjectKindTenant,
+		Kind:     testhierarchy.ProjectKindTenant,
 	}
-	environment, err := etcd.NewProvisioningEnvironment(
+	environment, err := testhierarchy.NewProvisioningEnvironment(
 		"/var/lib/groundplane/vol",
 		project,
 		environmentID,
@@ -182,16 +191,16 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 	if err != nil {
 		t.Fatalf("create environment fixture: %v", err)
 	}
-	environment, err = etcd.CompleteEnvironmentProvisioning(environment, createTaskID, true)
+	environment, err = testhierarchy.CompleteEnvironmentProvisioning(environment, createTaskID, true)
 	if err != nil {
 		t.Fatalf("complete environment fixture: %v", err)
 	}
-	owner, err := etcd.EnvironmentTaskOwner(project, environment)
+	owner, err := testtaskjournal.EnvironmentTaskOwner(project, environment)
 	if err != nil {
 		t.Fatalf("create task owner fixture: %v", err)
 	}
 
-	connector, err := etcd.NewConnectorRecord(core.Connector{
+	connector, err := testconnectors.NewRecord(core.Connector{
 		ID: connectorID, EnvironmentID: environmentID, Name: "backups",
 		Kind: core.ConnectorKindS3Compatible, Endpoint: "https://objects.example.test",
 		Bucket: "groundplane-backups", Prefix: "production/", Region: "auto", PathStyle: true,
@@ -206,13 +215,13 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 		t.Fatalf("create connector fixture: %v", err)
 	}
 	directCiphertext := []byte("app-direct-envelope")
-	directCredentials, err := etcd.NewConnectorEncryptedCredentials(connectorID, directCiphertext)
+	directCredentials, err := testconnectors.NewEncryptedCredentials(connectorID, directCiphertext)
 	if err != nil {
 		t.Fatalf("create connector credentials fixture: %v", err)
 	}
 	defer clear(directCredentials.Ciphertext)
 
-	secretRecord, err := etcd.NewProjectSecretRecord(
+	secretRecord, err := testsecrets.NewProjectRecord(
 		secretID,
 		projectID,
 		"C16_SECRET",
@@ -225,44 +234,44 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 	}
 	secretCiphertext := []byte("app-secret-envelope")
 	secretDigest := sha256.Sum256(secretCiphertext)
-	secretValue := etcd.SecretEncryptedValue{
+	secretValue := testsecrets.EncryptedValue{
 		SecretID: secretID, EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 		CiphertextSHA256: hex.EncodeToString(secretDigest[:]), Ciphertext: secretCiphertext,
 	}
 
-	source := etcd.BackupSourceRecord{
+	source := testbackuppolicy.BackupSourceRecord{
 		ID: sourceID, EnvironmentID: environmentID, Kind: core.BackupSourceVolume,
 		TargetID: volumeID, CreatedAt: environmentCreatedAt,
 	}
 	storedDigest := sha256.Sum256([]byte("stored-artifact"))
-	point := etcd.BackupRecoveryPointRecord{
-		BackupRecoveryPointSnapshot: etcd.BackupRecoveryPointSnapshot{
+	point := testbackupruntime.BackupRecoveryPointRecord{
+		BackupRecoveryPointSnapshot: testbackupruntime.BackupRecoveryPointSnapshot{
 			ID:              pointID,
 			EnvironmentID:   environmentID,
 			SourceID:        sourceID,
-			SourceKind:      etcd.BackupRuntimeSourceVolume,
+			SourceKind:      testbackupruntime.BackupRuntimeSourceVolume,
 			TargetID:        volumeID,
 			ConnectorID:     connectorID,
 			ConnectorPrefix: "production/",
 			ObjectKey:       "production/" + environmentID + "/" + sourceID + "/" + pointID + "/artifact.bin",
-			SourceFormat:    etcd.BackupRuntimeFormatVolume,
-			Encryption:      etcd.BackupRuntimeEncryptionNone,
+			SourceFormat:    testbackupruntime.BackupRuntimeFormatVolume,
+			Encryption:      testbackupruntime.BackupRuntimeEncryptionNone,
 			SizeBytes:       4096,
 			SHA256:          hex.EncodeToString(storedDigest[:]),
 			CreatedAt:       pointCreatedAt,
 		},
 		VerifiedAt: verifiedAt,
 	}
-	pendingPrune := etcd.BackupRecoveryPointPruneRecord{
+	pendingPrune := testbackupruntime.BackupRecoveryPointPruneRecord{
 		Point: point.BackupRecoveryPointSnapshot, PointRevision: appBackupPointRevision,
-		OperationID: operationID, State: etcd.BackupPrunePending,
+		OperationID: operationID, State: testbackupruntime.BackupPrunePending,
 		CreatedAt: pruneCreatedAt, UpdatedAt: pruneCreatedAt,
 	}
 	assignedPrune := pendingPrune
-	assignedPrune.State = etcd.BackupPruneAssigned
+	assignedPrune.State = testbackupruntime.BackupPruneAssigned
 	assignedPrune.TaskID = taskID
 	assignedPrune.UpdatedAt = dispatchAt
-	dispatch := etcd.BackupRecoveryPointPruneDispatchRecord{
+	dispatch := testbackupruntime.BackupRecoveryPointPruneDispatchRecord{
 		TaskID: taskID, OperationID: operationID, EnvironmentID: environmentID,
 		RecoveryPointIDs: []string{pointID}, CreatedAt: dispatchAt,
 	}
@@ -308,15 +317,15 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 		ID:                taskID,
 		OperationID:       operationID,
 		Owner:             owner,
-		Actor:             etcd.TaskActorSystem,
-		Executor:          etcd.TaskExecutorAgent,
+		Actor:             testtaskjournal.TaskActorSystem,
+		Executor:          testtaskjournal.TaskExecutorAgent,
 		PlanID:            planID,
 		PlanHash:          hex.EncodeToString(plan.PlanHash),
-		Type:              etcd.TaskBackupPrune,
+		Type:              testtaskjournal.TaskBackupPrune,
 		Target:            environmentID,
-		Steps:             []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: stepID}},
+		Steps:             []testtaskjournal.TaskStepRecord{{Kind: testtaskjournal.TaskStepOperation, ID: stepID}},
 		TimeoutSeconds:    appBackupTaskTimeoutSeconds,
-		Status:            etcd.TaskStatusRunning,
+		Status:            testtaskjournal.TaskStatusRunning,
 		NextEventSequence: 1,
 		CreatedAt:         dispatchAt,
 		UpdatedAt:         assignedAt,
@@ -324,19 +333,19 @@ func newAppBackupSecretFixture(t *testing.T) appBackupSecretFixture {
 	}
 	deadline := assignedAt.Add(time.Duration(appBackupTaskTimeoutSeconds) * time.Second)
 	recoveryDeadline := deadline.Add(time.Duration(appBackupTaskTimeoutSeconds) * time.Second)
-	assignment := etcd.TaskAssignmentRecord{
-		AssignmentID: assignmentID, TaskID: taskID, Executor: etcd.TaskExecutorAgent,
+	assignment := testtaskassignments.TaskAssignmentRecord{
+		AssignmentID: assignmentID, TaskID: taskID, Executor: testtaskjournal.TaskExecutorAgent,
 		AgentID: agentID, AgentGeneration: 1, ClaimedTaskRevision: appBackupPublicationRevision,
 		AssignedAt: assignedAt, Deadline: deadline, RecoveryDeadline: recoveryDeadline,
-		ExecutionMode: etcd.TaskExecutionModeForward, ExecutionEpoch: 1,
+		ExecutionMode: testtaskassignments.TaskExecutionModeForward, ExecutionEpoch: 1,
 	}
 	claim := etcd.TaskAssignment{
-		Task: etcd.Versioned[etcd.TaskRecord]{
+		Task: testkeyvalue.Versioned[etcd.TaskRecord]{
 			Record:       task,
 			Revision:     appBackupAssignmentRevision,
 			ReadRevision: appBackupAssignmentRevision,
 		},
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{
+		Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
 			Record:       assignment,
 			Revision:     appBackupAssignmentRevision,
 			ReadRevision: appBackupAssignmentRevision,
@@ -400,8 +409,8 @@ type appBackupSecretStoredValue struct {
 
 func (store *appBackupSecretStore) GetMany(
 	_ context.Context,
-	request etcd.GetManyRequest,
-) (*etcd.GetManyResult, error) {
+	request testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	store.calls++
 	var readRevision int64
 	var values []appBackupSecretStoredValue
@@ -464,15 +473,15 @@ func (store *appBackupSecretStore) GetMany(
 	default:
 		return nil, errs.New(errs.KindInternal, "unexpected backup secret read")
 	}
-	result := &etcd.GetManyResult{
-		Values: make([]*etcd.KeyValue, len(values)), ReadRevision: readRevision,
+	result := &testkeyvalue.GetManyResult{
+		Values: make([]*testkeyvalue.KeyValue, len(values)), ReadRevision: readRevision,
 		ResponseRevision: appBackupAssignmentRevision,
 	}
 	for index, value := range values {
 		if value.value == nil {
 			continue
 		}
-		result.Values[index] = &etcd.KeyValue{
+		result.Values[index] = &testkeyvalue.KeyValue{
 			Key:         request.Keys[index],
 			Value:       append([]byte(nil), value.value...),
 			ModRevision: value.modRevision,
@@ -535,24 +544,24 @@ func appBackupEnvelope(t *testing.T, kind string, data any) []byte {
 func appBackupTaskValue(t *testing.T, task etcd.TaskRecord) []byte {
 	t.Helper()
 	data := struct {
-		ID                string                `json:"id"`
-		OperationID       string                `json:"operation_id"`
-		Owner             etcd.TaskOwner        `json:"owner"`
-		Actor             etcd.TaskActor        `json:"actor"`
-		Executor          etcd.TaskExecutor     `json:"executor"`
-		PlanID            string                `json:"plan_id"`
-		PlanHash          string                `json:"plan_hash"`
-		RenderGeneration  int32                 `json:"render_generation"`
-		Type              etcd.TaskType         `json:"type"`
-		Target            string                `json:"target"`
-		Steps             []etcd.TaskStepRecord `json:"steps"`
-		TimeoutSeconds    int64                 `json:"timeout_seconds"`
-		Status            etcd.TaskStatus       `json:"status"`
-		NextEventSequence uint64                `json:"next_event_sequence"`
-		EventCount        uint32                `json:"event_count"`
-		CreatedAt         string                `json:"created_at"`
-		UpdatedAt         string                `json:"updated_at"`
-		StartedAt         string                `json:"started_at"`
+		ID                string                           `json:"id"`
+		OperationID       string                           `json:"operation_id"`
+		Owner             testtaskjournal.TaskOwner        `json:"owner"`
+		Actor             testtaskjournal.TaskActor        `json:"actor"`
+		Executor          testtaskjournal.TaskExecutor     `json:"executor"`
+		PlanID            string                           `json:"plan_id"`
+		PlanHash          string                           `json:"plan_hash"`
+		RenderGeneration  int32                            `json:"render_generation"`
+		Type              testtaskjournal.TaskType         `json:"type"`
+		Target            string                           `json:"target"`
+		Steps             []testtaskjournal.TaskStepRecord `json:"steps"`
+		TimeoutSeconds    int64                            `json:"timeout_seconds"`
+		Status            testtaskjournal.TaskStatus       `json:"status"`
+		NextEventSequence uint64                           `json:"next_event_sequence"`
+		EventCount        uint32                           `json:"event_count"`
+		CreatedAt         string                           `json:"created_at"`
+		UpdatedAt         string                           `json:"updated_at"`
+		StartedAt         string                           `json:"started_at"`
 	}{
 		ID:                task.ID,
 		OperationID:       task.OperationID,
@@ -578,21 +587,21 @@ func appBackupTaskValue(t *testing.T, task etcd.TaskRecord) []byte {
 	return appBackupEnvelope(t, "task", data)
 }
 
-func appBackupAssignmentValue(t *testing.T, assignment etcd.TaskAssignmentRecord) []byte {
+func appBackupAssignmentValue(t *testing.T, assignment testtaskassignments.TaskAssignmentRecord) []byte {
 	t.Helper()
 	value, err := json.Marshal(struct {
-		Schema              int                    `json:"schema"`
-		AssignmentID        string                 `json:"assignment_id"`
-		TaskID              string                 `json:"task_id"`
-		Executor            etcd.TaskExecutor      `json:"executor"`
-		AgentID             string                 `json:"agent_id"`
-		AgentGeneration     uint64                 `json:"agent_generation"`
-		ClaimedTaskRevision int64                  `json:"claimed_task_revision"`
-		AssignedAt          string                 `json:"assigned_at"`
-		Deadline            string                 `json:"forward_deadline"`
-		RecoveryDeadline    string                 `json:"recovery_deadline"`
-		ExecutionMode       etcd.TaskExecutionMode `json:"execution_mode"`
-		ExecutionEpoch      uint32                 `json:"execution_epoch"`
+		Schema              int                                   `json:"schema"`
+		AssignmentID        string                                `json:"assignment_id"`
+		TaskID              string                                `json:"task_id"`
+		Executor            testtaskjournal.TaskExecutor          `json:"executor"`
+		AgentID             string                                `json:"agent_id"`
+		AgentGeneration     uint64                                `json:"agent_generation"`
+		ClaimedTaskRevision int64                                 `json:"claimed_task_revision"`
+		AssignedAt          string                                `json:"assigned_at"`
+		Deadline            string                                `json:"forward_deadline"`
+		RecoveryDeadline    string                                `json:"recovery_deadline"`
+		ExecutionMode       testtaskassignments.TaskExecutionMode `json:"execution_mode"`
+		ExecutionEpoch      uint32                                `json:"execution_epoch"`
 	}{
 		Schema:              3,
 		AssignmentID:        assignment.AssignmentID,
@@ -694,9 +703,9 @@ func (*appBackupSecretTaskStore) ClaimNextTask(
 func (store *appBackupSecretTaskStore) GetTask(
 	_ context.Context,
 	taskID string,
-) (etcd.Versioned[etcd.TaskRecord], error) {
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
 	if taskID != store.claim.Task.Record.ID {
-		return etcd.Versioned[etcd.TaskRecord]{}, errs.New(errs.KindTaskNotFound, "unexpected task")
+		return testkeyvalue.Versioned[etcd.TaskRecord]{}, errs.New(errs.KindTaskNotFound, "unexpected task")
 	}
 	return store.claim.Task, nil
 }
@@ -715,8 +724,8 @@ func (store *appBackupSecretTaskStore) ListTaskEvents(
 }
 
 func (*appBackupSecretTaskStore) AppendTaskEvent(
-	context.Context,
-	etcd.TaskEventInput,
+	context.Context, testtaskjournal.TaskEventInput,
+
 	time.Time,
 ) (etcd.TaskEventAppend, error) {
 	return etcd.TaskEventAppend{}, errs.New(errs.KindInternal, "unexpected task event")
@@ -727,12 +736,11 @@ func (*appBackupSecretTaskStore) AcknowledgeTask(
 	string,
 	uint64,
 	string,
-	string,
-	etcd.TaskStatus,
-	etcd.TaskResultRecord,
+	string, testtaskjournal.TaskStatus, testtaskjournal.TaskResultRecord,
+
 	time.Time,
-) (etcd.Versioned[etcd.TaskRecord], error) {
-	return etcd.Versioned[etcd.TaskRecord]{}, errs.New(
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
+	return testkeyvalue.Versioned[etcd.TaskRecord]{}, errs.New(
 		errs.KindInternal,
 		"unexpected task acknowledgement",
 	)

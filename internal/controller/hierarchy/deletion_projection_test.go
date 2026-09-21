@@ -4,16 +4,19 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	etcdinfra "github.com/AlanD20/groundplane/internal/infra/etcd"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 func TestDeletionTaskIDSurvivesHierarchyPersistenceConversion(t *testing.T) {
 	taskID := "task_01K3D7R40G0000000000000000"
 	tenant := tenantFromEtcd(
-		etcdinfra.Versioned[etcdinfra.TenantRecord]{Record: etcdinfra.TenantRecord{DeletionTaskID: taskID}},
+		testkeyvalue.Versioned[testhierarchy.TenantRecord]{Record: testhierarchy.TenantRecord{DeletionTaskID: taskID}},
 	)
 	project := projectFromEtcd(
-		etcdinfra.Versioned[etcdinfra.ProjectRecord]{Record: etcdinfra.ProjectRecord{DeletionTaskID: taskID}},
+		testkeyvalue.Versioned[testhierarchy.ProjectRecord]{
+			Record: testhierarchy.ProjectRecord{DeletionTaskID: taskID},
+		},
 	)
 	if tenant.Record.DeletionTaskID == nil || *tenant.Record.DeletionTaskID != taskID {
 		t.Fatalf("Tenant deletion_task_id = %#v", tenant.Record.DeletionTaskID)

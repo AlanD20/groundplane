@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/controller"
+	testhandlers "github.com/AlanD20/groundplane/internal/controller/handlers"
 )
 
 const (
@@ -31,7 +31,11 @@ func TestProductionConsoleReleaseSmoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("controllerConsoleAssets() error = %v", err)
 	}
-	server := controller.New(nil, slog.New(slog.NewTextHandler(io.Discard, nil)), controller.Options{Console: assets})
+	server := testhandlers.New(
+		nil,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		testhandlers.Options{Console: assets},
+	)
 	handler := server.HTTPHandler()
 
 	index := httptest.NewRecorder()

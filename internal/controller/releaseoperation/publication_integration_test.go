@@ -16,12 +16,23 @@ import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	testcomposeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	testcomposerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
+	testtaskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testreleases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"google.golang.org/protobuf/proto"
@@ -54,26 +65,24 @@ func TestPublishFirstBlueGreenPreservesProfileDisabledService(t *testing.T) {
 func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bool) {
 	t.Helper()
 	ctx := context.Background()
-	store := &directPublicationStore{values: make(map[string]*etcd.KeyValue)}
+	store := &directPublicationStore{values: make(map[string]*testkeyvalue.KeyValue)}
 	hierarchy, err := etcd.NewHierarchyRepository(store)
 	if err != nil {
 		t.Fatal(err)
 	}
 	tenant, err := hierarchy.CreateTenant(
-		ctx,
-		etcd.TenantRecord{ID: ids.New(ids.KindTenant), Slug: "tenant", Name: "Tenant"},
+		ctx, testhierarchy.TenantRecord{ID: ids.New(ids.KindTenant), Slug: "tenant", Name: "Tenant"},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	project, err := hierarchy.CreateProject(
-		ctx,
-		etcd.ProjectRecord{
+		ctx, testhierarchy.ProjectRecord{
 			ID:       ids.New(ids.KindProject),
 			TenantID: tenant.Record.ID,
 			Slug:     "project",
 			Name:     "Project",
-			Kind:     etcd.ProjectKindTenant,
+			Kind:     testhierarchy.ProjectKindTenant,
 		},
 	)
 	if err != nil {
@@ -82,14 +91,13 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	environmentID := ids.New(ids.KindEnvironment)
 	volumeDir := "/var/lib/groundplane/vol/" + tenant.Record.ID + "/" + project.Record.ID + "/" + environmentID
 	environment, err := hierarchy.CreateEnvironment(
-		ctx,
-		etcd.EnvironmentRecord{
+		ctx, testhierarchy.EnvironmentRecord{
 			ID:                environmentID,
 			ProjectID:         project.Record.ID,
 			Name:              "proof",
 			NetworkPool:       "10.96.0.0/16",
 			VolumeDir:         volumeDir,
-			ProvisioningState: etcd.EnvironmentProvisioningReady,
+			ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 			CreateTaskID:      ids.New(ids.KindTask),
 			CreatedAt:         time.Now().UTC(),
 		},
@@ -107,27 +115,27 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 		service.Profiles = []string{"configured"}
 		projectInput.Services["api"] = service
 	}
-	normalized, err := controller.MarshalNormalizedEnvironmentProject(projectInput)
+	normalized, err := testcomposerender.MarshalNormalizedEnvironmentProject(projectInput)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var externalNetworks []controller.ComposeResourceIdentity
+	var externalNetworks []testcomposeidentity.Resource
 	if detachedNetwork {
 		const oldNetwork = "gp_attach_net_01arz3ndektsv4rrffq69g5fav"
 		api := projectInput.Services["api"]
 		api.Networks[oldNetwork] = &composetypes.ServiceNetworkConfig{}
 		projectInput.Services["api"] = api
 		projectInput.Networks[oldNetwork] = composetypes.NetworkConfig{External: true}
-		externalNetworks = []controller.ComposeResourceIdentity{{
+		externalNetworks = []testcomposeidentity.Resource{{
 			ID: "net_01ARZ3NDEKTSV4RRFFQ69G5FAV", Name: oldNetwork,
 		}}
 	}
-	artifact, err := controller.RenderCompose(controller.ComposeRenderInput{
-		Project: projectInput, ArtifactID: ids.New(ids.KindConfig), ProjectOwnerKind: controller.ComposeProjectOwnerTenant,
+	artifact, err := testcomposerender.RenderCompose(testcomposerender.ComposeRenderInput{
+		Project: projectInput, ArtifactID: ids.New(ids.KindConfig), ProjectOwnerKind: testcomposerender.ComposeProjectOwnerTenant,
 		TenantID: tenant.Record.ID, ProjectID: project.Record.ID, EnvironmentID: environmentID, PlanID: ids.New(ids.KindPlan), RenderGeneration: 1, AuthorizedVolumeDir: volumeDir,
-		Identities: controller.ComposeIdentitySnapshot{
-			Services: []controller.ComposeResourceIdentity{{ID: serviceID, Name: "api"}},
-			Networks: []controller.ComposeResourceIdentity{{ID: networkID, Name: "backend"}},
+		Identities: testcomposeidentity.Snapshot{
+			Services: []testcomposeidentity.Resource{{ID: serviceID, Name: "api"}},
+			Networks: []testcomposeidentity.Resource{{ID: networkID, Name: "backend"}},
 		},
 		ExternalNetworks: externalNetworks,
 	})
@@ -146,14 +154,16 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 		Replicas: 1,
 		Expose:   []string{"8080"},
 	}
-	projection := etcd.EnvironmentComposeProjection{
+	projection := testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID:     environmentID,
 		RevisionID:        ids.New(ids.KindTask),
 		RenderGeneration:  1,
 		ComposeArtifact:   artifactBytes,
 		NormalizedCompose: normalized,
-		DesiredServices:   []etcd.EnvironmentServiceProjection{{EnvironmentID: environmentID, Desired: desired}},
-		DesiredZones: []etcd.EnvironmentZoneProjection{
+		DesiredServices: []testservices.EnvironmentServiceProjection{
+			{EnvironmentID: environmentID, Desired: desired},
+		},
+		DesiredZones: []testenvironmentprojection.EnvironmentZoneProjection{
 			{
 				EnvironmentID: environmentID,
 				Desired: core.Zone{
@@ -192,7 +202,7 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	if err != nil {
 		t.Fatal(err)
 	}
-	plans, err := controller.NewTaskPlanResolver("/var/lib/groundplane/vol", nil)
+	plans, err := testtaskplanning.NewTaskPlanResolver("/var/lib/groundplane/vol", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,12 +265,12 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	if epoch == nil {
 		t.Fatal("fixture missing real environment epoch")
 	}
-	scope := etcd.ReleasePlanningScope{
+	scope := testreleasequeries.ReleasePlanningScope{
 		ReadRevision: store.revision,
 		Tenant:       tenant,
 		Project:      project,
 		Environment:  environment,
-		Compose: etcd.Versioned[etcd.EnvironmentComposeProjection]{
+		Compose: testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
 			Record:       projection,
 			Revision:     headRevision,
 			ReadRevision: store.revision,
@@ -276,25 +286,23 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 		ledger:      ledger,
 		plans:       plans,
 		scripts:     scripts,
-		preparation: &controller.ScriptRunnerPreparationService{},
+		preparation: &testtaskplanning.ScriptRunnerPreparationService{},
 		agents:      publicationAgent{},
 		images:      directPublicationImages{},
 		coordinator: coordinator,
 		now:         time.Now,
 		timeout:     time.Hour,
 	}
-	planning := etcd.ReleasePlanningService{
-		Service: etcd.Versioned[etcd.ServiceRecord]{
-			Record: etcd.ServiceRecord{EnvironmentID: environmentID, Desired: desired},
+	planning := testreleasequeries.ReleasePlanningService{
+		Service: testkeyvalue.Versioned[testservices.ServiceRecord]{
+			Record: testservices.ServiceRecord{EnvironmentID: environmentID, Desired: desired},
 		},
 	}
 	candidate, err := producer.deployCandidate(
 		ctx,
 		scope,
 		planning,
-		"first",
-		string(domain.StrategyBlueGreen),
-		domain.OnFailureSwitchBack,
+		"first", string(domain.StrategyBlueGreen), domain.OnFailureSwitchBack,
 	)
 	if err != nil {
 		t.Fatalf("actual first blue-green candidate: %v", err)
@@ -306,15 +314,13 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 		serviceID,
 		headRevision,
 		"",
-		[]releaseCandidateInput{candidate},
-		etcd.IdempotencyLocator{
-			ScopeKind: etcd.IdempotencyScopeEnvironment,
+		[]releaseCandidateInput{candidate}, testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeEnvironment,
 			ScopeID:   environmentID,
 			Method:    http.MethodPost,
 			Route:     "/services/{id}/deploy",
 			Key:       "first-blue-green",
-		},
-		durable,
+		}, durable,
 		protected,
 	)
 	if err != nil {
@@ -334,13 +340,13 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 		t.Fatal(err)
 	}
 	descriptor, err := tasks.CandidateReleaseDescriptor(ctx, stored.Record, stored.ReadRevision)
-	if err != nil || stored.Record.Params[etcd.TaskComposeArtifactParam] == "" ||
+	if err != nil || stored.Record.Params[testtaskjournal.TaskComposeArtifactParam] == "" ||
 		descriptor.PlanID != stored.Record.PlanID {
 		t.Fatalf("published candidate authority cannot be reopened: %v", err)
 	}
 	procedure, err := executionplan.OpenCandidateReleaseDescriptor(descriptor)
 	if err != nil || len(procedure.GetMembers()) != 1 || procedure.GetMembers()[0].GetServingPredecessor() != nil ||
-		procedure.GetMembers()[0].GetCandidateAbsence() == nil || procedure.GetMembers()[0].GetCandidateArtifactId() != stored.Record.Params[etcd.TaskComposeArtifactParam] {
+		procedure.GetMembers()[0].GetCandidateAbsence() == nil || procedure.GetMembers()[0].GetCandidateArtifactId() != stored.Record.Params[testtaskjournal.TaskComposeArtifactParam] {
 		t.Fatalf("first publication lost its exact artifact or absence recovery authority: %v", err)
 	}
 	render, err := ledger.GetReleaseRenderInputAt(
@@ -361,7 +367,7 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	}
 	var reconstructedArtifact *agentpb.ComposeArtifact
 	for _, candidateArtifact := range reconstructed.GetArtifacts() {
-		if candidateArtifact.GetArtifactId() == stored.Record.Params[etcd.TaskComposeArtifactParam] {
+		if candidateArtifact.GetArtifactId() == stored.Record.Params[testtaskjournal.TaskComposeArtifactParam] {
 			reconstructedArtifact = candidateArtifact
 			break
 		}
@@ -380,9 +386,9 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 	if err != nil {
 		t.Fatal(err)
 	}
-	publication := store.values["/v1/records/release-publications/"+stored.Record.Params[etcd.TaskReleasePublicationParam]]
+	publication := store.values["/v1/records/release-publications/"+stored.Record.Params[testreleaserender.TaskReleasePublicationParam]]
 	var envelope struct {
-		Data etcd.ReleasePublicationMarker `json:"data"`
+		Data testreleases.ReleasePublicationMarker `json:"data"`
 	}
 	if publication == nil || json.Unmarshal(publication.Value, &envelope) != nil ||
 		!bytes.Equal(envelope.Data.ExecutedComposeArtifact, wantArtifact) {
@@ -423,7 +429,8 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 		t.Fatal("expected interrupted cleanup")
 	}
 	interrupted, err := tasks.GetTask(ctx, stored.Record.ID)
-	if err != nil || interrupted.Record.Status != etcd.TaskStatusAborted || interrupted.Record.StartedAt != nil {
+	if err != nil || interrupted.Record.Status != testtaskjournal.TaskStatusAborted ||
+		interrupted.Record.StartedAt != nil {
 		t.Fatalf("cleanup interruption lost unassigned terminal Task: %v", err)
 	}
 	fence, err := store.Get(ctx, "/v1/runtime/release-fence-sets/"+environmentID)
@@ -431,7 +438,7 @@ func testPublishFirstBlueGreen(t *testing.T, detachedNetwork, profileDisabled bo
 		t.Fatalf("expected owned fence awaiting replay: %v", err)
 	}
 	aborted, err := tasks.AbortPendingTask(ctx, stored.Record.ID, time.Now().UTC().Add(2*time.Second))
-	if err != nil || aborted.Record.Status != etcd.TaskStatusAborted {
+	if err != nil || aborted.Record.Status != testtaskjournal.TaskStatusAborted {
 		t.Fatalf("abort unassigned Release: %v", err)
 	}
 	if !aborted.Record.FinishedAt.Equal(*interrupted.Record.FinishedAt) {
@@ -484,13 +491,13 @@ func (directPublicationImages) ResolveWorkloadImages(
 // Minimal revisioned CAS store for this sequential publication journey.
 type directPublicationStore struct {
 	revision         int64
-	values           map[string]*etcd.KeyValue
+	values           map[string]*testkeyvalue.KeyValue
 	failAbortCleanup bool
 }
 
 func (s *directPublicationStore) Health(context.Context) error { return nil }
 func (s *directPublicationStore) Close() error                 { return nil }
-func (s *directPublicationStore) Watch(context.Context, string, int64) (*etcd.WatchStream, error) {
+func (s *directPublicationStore) Watch(context.Context, string, int64) (*testkeyvalue.WatchStream, error) {
 	return nil, fmt.Errorf("unexpected watch")
 }
 func (s *directPublicationStore) Snapshot(context.Context, io.Writer) error {
@@ -498,15 +505,15 @@ func (s *directPublicationStore) Snapshot(context.Context, io.Writer) error {
 }
 func (s *directPublicationStore) MeasureTransaction(
 	ctx context.Context,
-	conditions []etcd.Condition,
-	mutations []etcd.Mutation,
-) (etcd.TransactionBudget, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionBudget, error) {
 	return etcd.MeasureTransactionBudget(ctx, "/groundplane/", conditions, mutations)
 }
-func (s *directPublicationStore) Get(_ context.Context, key string) (*etcd.GetResult, error) {
-	return &etcd.GetResult{Entry: s.copyAt(key, s.revision), ReadRevision: s.revision}, nil
+func (s *directPublicationStore) Get(_ context.Context, key string) (*testkeyvalue.GetResult, error) {
+	return &testkeyvalue.GetResult{Entry: s.copyAt(key, s.revision), ReadRevision: s.revision}, nil
 }
-func (s *directPublicationStore) copyAt(key string, revision int64) *etcd.KeyValue {
+func (s *directPublicationStore) copyAt(key string, revision int64) *testkeyvalue.KeyValue {
 	v := s.values[key]
 	if v == nil {
 		return nil
@@ -518,7 +525,11 @@ func (s *directPublicationStore) copyAt(key string, revision int64) *etcd.KeyVal
 	c.Value = append([]byte(nil), v.Value...)
 	return &c
 }
-func (s *directPublicationStore) GetMany(_ context.Context, r etcd.GetManyRequest) (*etcd.GetManyResult, error) {
+
+func (s *directPublicationStore) GetMany(
+	_ context.Context,
+	r testkeyvalue.GetManyRequest,
+) (*testkeyvalue.GetManyResult, error) {
 	if s.failAbortCleanup && len(r.Keys) == 2 && strings.HasPrefix(r.Keys[1], "/v1/runtime/release-fence-sets/") {
 		s.failAbortCleanup = false
 		return nil, context.Canceled
@@ -527,13 +538,17 @@ func (s *directPublicationStore) GetMany(_ context.Context, r etcd.GetManyReques
 	if revision == 0 {
 		revision = s.revision
 	}
-	v := make([]*etcd.KeyValue, len(r.Keys))
+	v := make([]*testkeyvalue.KeyValue, len(r.Keys))
 	for i, k := range r.Keys {
 		v[i] = s.copyAt(k, revision)
 	}
-	return &etcd.GetManyResult{Values: v, ReadRevision: revision, ResponseRevision: s.revision}, nil
+	return &testkeyvalue.GetManyResult{Values: v, ReadRevision: revision, ResponseRevision: s.revision}, nil
 }
-func (s *directPublicationStore) Range(_ context.Context, r etcd.RangeRequest) (*etcd.RangeResult, error) {
+
+func (s *directPublicationStore) Range(
+	_ context.Context,
+	r testkeyvalue.RangeRequest,
+) (*testkeyvalue.RangeResult, error) {
 	revision := r.Revision
 	if revision == 0 {
 		revision = s.revision
@@ -545,7 +560,7 @@ func (s *directPublicationStore) Range(_ context.Context, r etcd.RangeRequest) (
 		}
 	}
 	sort.Strings(keys)
-	out := &etcd.RangeResult{ReadRevision: revision, ResponseRevision: s.revision}
+	out := &testkeyvalue.RangeResult{ReadRevision: revision, ResponseRevision: s.revision}
 	for _, k := range keys {
 		if r.Limit > 0 && int64(len(out.Values)) == r.Limit {
 			out.More = true
@@ -556,19 +571,19 @@ func (s *directPublicationStore) Range(_ context.Context, r etcd.RangeRequest) (
 	return out, nil
 }
 func (s *directPublicationStore) Put(ctx context.Context, k string, v []byte) (int64, error) {
-	r, e := s.Transact(ctx, nil, []etcd.Mutation{{Type: etcd.MutationPut, Key: k, Value: v}})
+	r, e := s.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: k, Value: v}})
 	return r.Revision, e
 }
 func (s *directPublicationStore) Delete(ctx context.Context, k string) (int64, error) {
-	r, e := s.Transact(ctx, nil, []etcd.Mutation{{Type: etcd.MutationDelete, Key: k}})
+	r, e := s.Transact(ctx, nil, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationDelete, Key: k}})
 	return r.Revision, e
 }
 
 func (s *directPublicationStore) Transact(
 	_ context.Context,
-	conditions []etcd.Condition,
-	mutations []etcd.Mutation,
-) (etcd.TransactionResult, error) {
+	conditions []testkeyvalue.Condition,
+	mutations []testkeyvalue.Mutation,
+) (testkeyvalue.TransactionResult, error) {
 	for _, c := range conditions {
 		actual := int64(0)
 		if v := s.values[c.Key]; v != nil {
@@ -583,11 +598,11 @@ func (s *directPublicationStore) Transact(
 			}
 		}
 		if actual != c.ModRevision {
-			values := make([]*etcd.KeyValue, len(conditions))
+			values := make([]*testkeyvalue.KeyValue, len(conditions))
 			for i, c := range conditions {
 				values[i] = s.copyAt(c.Key, s.revision)
 			}
-			return etcd.TransactionResult{Revision: s.revision, FailureReads: values}, nil
+			return testkeyvalue.TransactionResult{Revision: s.revision, FailureReads: values}, nil
 		}
 	}
 	s.revision++
@@ -595,7 +610,7 @@ func (s *directPublicationStore) Transact(
 		if m.Prefix {
 			panic("unexpected prefix mutation")
 		}
-		if m.Type == etcd.MutationDelete {
+		if m.Type == testkeyvalue.MutationDelete {
 			delete(s.values, m.Key)
 			continue
 		}
@@ -603,14 +618,14 @@ func (s *directPublicationStore) Transact(
 		if old := s.values[m.Key]; old != nil {
 			version = old.Version + 1
 		}
-		s.values[m.Key] = &etcd.KeyValue{
+		s.values[m.Key] = &testkeyvalue.KeyValue{
 			Key:         m.Key,
 			Value:       append([]byte(nil), m.Value...),
 			ModRevision: s.revision,
 			Version:     version,
 		}
 	}
-	return etcd.TransactionResult{Succeeded: true, Revision: s.revision}, nil
+	return testkeyvalue.TransactionResult{Succeeded: true, Revision: s.revision}, nil
 }
 
 func (s *directPublicationStore) ValidateBlueprintTaskTerminal(
@@ -623,10 +638,10 @@ func (s *directPublicationStore) ValidateBlueprintTaskTerminal(
 func (s *directPublicationStore) TransactBlueprintTaskTerminal(
 	ctx context.Context,
 	envelope etcd.BlueprintTaskTerminalTransaction,
-) (etcd.TransactionResult, error) {
+) (testkeyvalue.TransactionResult, error) {
 	conditions, mutations, err := envelope.Operations()
 	if err != nil {
-		return etcd.TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	defer func() {
 		for _, mutation := range mutations {

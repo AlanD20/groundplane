@@ -6,11 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -47,8 +49,8 @@ func TestReleaseImageWithTagPreservesDigestPinnedRedeploy(t *testing.T) {
 
 func TestValidateReleaseDependencyOrderRejectsConsumerBeforePrerequisite(t *testing.T) {
 	candidate := func(name string) releaseCandidateInput {
-		return releaseCandidateInput{planning: etcd.ReleasePlanningService{
-			Service: etcd.Versioned[etcd.ServiceRecord]{Record: etcd.ServiceRecord{
+		return releaseCandidateInput{planning: testreleasequeries.ReleasePlanningService{
+			Service: testkeyvalue.Versioned[testservices.ServiceRecord]{Record: testservices.ServiceRecord{
 				Desired: core.Service{Name: name},
 			}},
 		}}

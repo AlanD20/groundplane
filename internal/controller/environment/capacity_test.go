@@ -1,6 +1,8 @@
 package environment
 
-import "testing"
+import (
+	"testing"
+)
 
 // Rationale: capacity is a deterministic projection of CIDR reservation size,
 // independent of iteration order or host-address policy.

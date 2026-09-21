@@ -13,7 +13,11 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/internal/infra/serviceruntimerecord"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -21,10 +25,10 @@ import (
 )
 
 type sourceFixture struct {
-	service etcd.Versioned[etcd.ServiceRecord]
-	serving etcd.ServingRelease
-	render  etcd.Versioned[etcd.ReleaseRenderInput]
-	runtime *etcd.Versioned[serviceruntimerecord.Record]
+	service testkeyvalue.Versioned[testservices.ServiceRecord]
+	serving testreleasequeries.ServingRelease
+	render  testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput]
+	runtime *testkeyvalue.Versioned[serviceruntimerecord.Record]
 }
 
 type sourceRead struct {
@@ -41,9 +45,9 @@ type fakeReleases struct {
 	resolveCounts  map[string]int
 	renderCounts   map[string]int
 	followRevision bool
-	mutateServing  func(string, int, *etcd.ServingRelease)
-	mutateRender   func(string, int, *etcd.Versioned[etcd.ReleaseRenderInput])
-	mutateRuntime  func(string, int, *etcd.Versioned[serviceruntimerecord.Record])
+	mutateServing  func(string, int, *testreleasequeries.ServingRelease)
+	mutateRender   func(string, int, *testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput])
+	mutateRuntime  func(string, int, *testkeyvalue.Versioned[serviceruntimerecord.Record])
 	runtimeCounts  map[string]int
 }
 
@@ -52,7 +56,7 @@ func (releases *fakeReleases) LoadAcknowledgedServiceRuntimesAtRevision(
 	environmentID string,
 	serviceIDs []string,
 	revision int64,
-) ([]etcd.Versioned[serviceruntimerecord.Record], error) {
+) ([]testkeyvalue.Versioned[serviceruntimerecord.Record], error) {
 	if len(serviceIDs) != 1 {
 		return nil, errs.New(errs.KindValidationFailed, "unexpected runtime selection")
 	}
@@ -73,16 +77,16 @@ func (releases *fakeReleases) LoadAcknowledgedServiceRuntimesAtRevision(
 	if releases.mutateRuntime != nil {
 		releases.mutateRuntime(serviceID, releases.runtimeCounts[serviceID], &result)
 	}
-	return []etcd.Versioned[serviceruntimerecord.Record]{result}, nil
+	return []testkeyvalue.Versioned[serviceruntimerecord.Record]{result}, nil
 }
 
 func (releases *fakeReleases) ResolveServing(
 	ctx context.Context, environmentID, serviceID string, revision int64,
-) (etcd.ServingRelease, error) {
+) (testreleasequeries.ServingRelease, error) {
 	releases.resolveCalls = append(releases.resolveCalls, sourceRead{ctx: ctx, identity: serviceID, revision: revision})
 	fixture, ok := releases.fixtures[serviceID]
 	if !ok || fixture.service.Record.EnvironmentID != environmentID {
-		return etcd.ServingRelease{}, errs.New(errs.KindReleaseNotFound, "Service has no serving Release")
+		return testreleasequeries.ServingRelease{}, errs.New(errs.KindReleaseNotFound, "Service has no serving Release")
 	}
 	if releases.resolveCounts == nil {
 		releases.resolveCounts = make(map[string]int)
@@ -100,7 +104,7 @@ func (releases *fakeReleases) ResolveServing(
 
 func (releases *fakeReleases) GetReleaseRenderInputAt(
 	ctx context.Context, releaseID string, revision int64,
-) (etcd.Versioned[etcd.ReleaseRenderInput], error) {
+) (testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput], error) {
 	releases.renderCalls = append(releases.renderCalls, sourceRead{ctx: ctx, identity: releaseID, revision: revision})
 	for serviceID, fixture := range releases.fixtures {
 		if fixture.serving.Intent.ID != releaseID {
@@ -119,7 +123,7 @@ func (releases *fakeReleases) GetReleaseRenderInputAt(
 		}
 		return result, nil
 	}
-	return etcd.Versioned[etcd.ReleaseRenderInput]{}, errs.New(
+	return testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput]{}, errs.New(
 		errs.KindReleaseNotFound,
 		"Release render input not found",
 	)
@@ -155,18 +159,21 @@ func newSourceFixture(
 	desired := core.Service{
 		ID: serviceID, Name: "api", Image: "registry.example/app:desired", Replicas: int(expected) + 8,
 	}
-	record, err := etcd.NewServiceRecord(environmentID, desired, "")
+	record, err := testservices.NewServiceRecord(environmentID, desired, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := etcd.ReleaseRenderInput{
+	input := testreleaserender.ReleaseRenderInput{
 		ReleaseID: releaseID, PlanID: planID, ArtifactID: artifactID,
 		ServiceID: serviceID, ServiceName: desired.Name, CandidateWorkload: seal,
 		Strategy: strategy, Slot: slot, CandidateTarget: target, ProxyPorts: proxyPorts,
 		EnvironmentID: environmentID,
-		Projection:    etcd.EnvironmentComposeProjection{EnvironmentID: environmentID, RenderGeneration: 7},
+		Projection: testenvironmentprojection.EnvironmentComposeProjection{
+			EnvironmentID:    environmentID,
+			RenderGeneration: 7,
+		},
 	}
-	var runtime *etcd.Versioned[serviceruntimerecord.Record]
+	var runtime *testkeyvalue.Versioned[serviceruntimerecord.Record]
 	if len(proxyPorts) != 0 {
 		proxyConfig, proxyErr := domain.RenderProxyConfig(desired.Name, releaseID, target, 5, proxyPorts)
 		if proxyErr != nil {
@@ -180,8 +187,8 @@ func newSourceFixture(
 		t.Fatal(err)
 	}
 	return sourceFixture{
-		service: etcd.Versioned[etcd.ServiceRecord]{Record: record, Revision: 29, ReadRevision: 40},
-		serving: etcd.ServingRelease{
+		service: testkeyvalue.Versioned[testservices.ServiceRecord]{Record: record, Revision: 29, ReadRevision: 40},
+		serving: testreleasequeries.ServingRelease{
 			Projection: domain.ServiceProjection{
 				EnvironmentID: environmentID, ServiceID: serviceID, ServingReleaseID: releaseID,
 				CurrentSuccessfulReleaseID: ids.NewAt(ids.KindDeployment, stamp, seed+5), ServingSlot: slot,
@@ -194,7 +201,7 @@ func newSourceFixture(
 			},
 			IntentRevision: 32, Revision: 40,
 		},
-		render: etcd.Versioned[etcd.ReleaseRenderInput]{
+		render: testkeyvalue.Versioned[testreleaserender.ReleaseRenderInput]{
 			Record:       input,
 			Revision:     33,
 			ReadRevision: 40,
@@ -206,9 +213,9 @@ func sourceRuntimeFixture(
 	t *testing.T,
 	stamp time.Time,
 	seed int64,
-	input etcd.ReleaseRenderInput,
+	input testreleaserender.ReleaseRenderInput,
 	config domain.ProxyConfig,
-) *etcd.Versioned[serviceruntimerecord.Record] {
+) *testkeyvalue.Versioned[serviceruntimerecord.Record] {
 	t.Helper()
 	proxyPlan := ids.NewAt(ids.KindPlan, stamp, seed+6)
 	proxyGeneration := uint64(17)
@@ -278,7 +285,7 @@ func sourceRuntimeFixture(
 	if err := serviceruntimerecord.Validate(record); err != nil {
 		t.Fatal(err)
 	}
-	return &etcd.Versioned[serviceruntimerecord.Record]{Record: record, Revision: 34, ReadRevision: 40}
+	return &testkeyvalue.Versioned[serviceruntimerecord.Record]{Record: record, Revision: 34, ReadRevision: 40}
 }
 
 func sourceRuntimeLabels(

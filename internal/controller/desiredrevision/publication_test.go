@@ -11,9 +11,18 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprintplanning "github.com/AlanD20/groundplane/internal/infra/etcd/blueprintplanning"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponentplanning "github.com/AlanD20/groundplane/internal/infra/etcd/componentplanning"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasegroups "github.com/AlanD20/groundplane/internal/infra/etcd/releasegroups"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
@@ -24,12 +33,12 @@ type boundaryRepository struct {
 	stages                int
 	publications          int
 	retainClaim           bool
-	winner                *etcd.EnvironmentBlueprintStageClaim
+	winner                *testblueprints.EnvironmentBlueprintStageClaim
 	stagedTaskID          string
 	publishedClaimTaskID  string
 	publishedTaskID       string
 	abandonments          int
-	abandonedLocator      etcd.IdempotencyLocator
+	abandonedLocator      testidempotency.IdempotencyLocator
 	abandonmentContextErr error
 	publicationErr        error
 	publicationStarted    chan struct{}
@@ -38,7 +47,7 @@ type boundaryRepository struct {
 
 func (repository *boundaryRepository) AbandonEnvironmentBlueprintStage(
 	ctx context.Context,
-	claim etcd.EnvironmentBlueprintStageClaim,
+	claim testblueprints.EnvironmentBlueprintStageClaim,
 ) error {
 	repository.abandonmentContextErr = ctx.Err()
 	if repository.abandonmentContextErr != nil {
@@ -51,8 +60,8 @@ func (repository *boundaryRepository) AbandonEnvironmentBlueprintStage(
 
 func (repository *boundaryRepository) ClaimEnvironmentBlueprintStage(
 	_ context.Context,
-	request etcd.EnvironmentBlueprintStageClaimRequest,
-) (etcd.EnvironmentBlueprintStageClaim, error) {
+	request testblueprints.EnvironmentBlueprintStageClaimRequest,
+) (testblueprints.EnvironmentBlueprintStageClaim, error) {
 	repository.claims++
 	if repository.retainClaim && repository.winner != nil {
 		winner := *repository.winner
@@ -60,7 +69,7 @@ func (repository *boundaryRepository) ClaimEnvironmentBlueprintStage(
 		winner.Existing = true
 		return winner, nil
 	}
-	claim := etcd.EnvironmentBlueprintStageClaim{
+	claim := testblueprints.EnvironmentBlueprintStageClaim{
 		DescriptorID:  strings.TrimPrefix(request.CandidateTaskID, "task_"),
 		EnvironmentID: request.EnvironmentID, RevisionID: request.CandidateRevisionID,
 		TaskID: request.CandidateTaskID, Locator: request.Locator, Intent: request.Intent,
@@ -78,15 +87,15 @@ func (repository *boundaryRepository) ClaimEnvironmentBlueprintStage(
 
 func (repository *boundaryRepository) StageEnvironmentBlueprintRevision(
 	_ context.Context,
-	request etcd.EnvironmentBlueprintStageRequest,
-) (etcd.EnvironmentBlueprintSeal, error) {
+	request testblueprints.EnvironmentBlueprintStageRequest,
+) (testblueprints.EnvironmentBlueprintSeal, error) {
 	repository.stages++
 	repository.stagedTaskID = request.Claim.TaskID
-	projection, err := etcd.EncodeEnvironmentComposeProjectionStorage(request.Projection)
+	projection, err := testenvironmentprojection.EncodeEnvironmentComposeProjectionStorage(request.Projection)
 	if err != nil {
-		return etcd.EnvironmentBlueprintSeal{}, err
+		return testblueprints.EnvironmentBlueprintSeal{}, err
 	}
-	return etcd.EnvironmentBlueprintSeal{
+	return testblueprints.EnvironmentBlueprintSeal{
 		EnvironmentID:        request.Claim.EnvironmentID,
 		RevisionID:           request.Claim.RevisionID,
 		SourceKind:           request.Claim.SourceKind,
@@ -103,24 +112,24 @@ func (repository *boundaryRepository) PublishEnvironmentBlueprintDesiredRevision
 	_ context.Context,
 	_ netip.Prefix,
 	_ string,
-	_ etcd.Versioned[etcd.ProjectRecord],
-	_ etcd.Versioned[etcd.EnvironmentRecord],
+	_ testkeyvalue.Versioned[testhierarchy.ProjectRecord],
+	_ testkeyvalue.Versioned[testhierarchy.EnvironmentRecord],
 	_ int64,
-	claim etcd.EnvironmentBlueprintStageClaim,
-	_ etcd.EnvironmentDesiredRevisionIdentity,
-	_ etcd.EnvironmentComposeProjection,
-	_ []etcd.EnvironmentBlueprintZoneChange,
-	_ []etcd.EnvironmentBlueprintServiceChange,
-	_ []etcd.EnvironmentBlueprintRouteChange,
-	_ etcd.ReleaseGroupBlueprintPreparedMutation,
-	_ etcd.ComponentTaskPreparation,
-	_ etcd.BlueprintAttachTaskPreparation,
-	_ etcd.BlueprintBackupPolicyPreparation,
+	claim testblueprints.EnvironmentBlueprintStageClaim,
+	_ testblueprints.EnvironmentDesiredRevisionIdentity,
+	_ testenvironmentprojection.EnvironmentComposeProjection,
+	_ []testblueprints.EnvironmentBlueprintZoneChange,
+	_ []testblueprints.EnvironmentBlueprintServiceChange,
+	_ []testblueprints.EnvironmentBlueprintRouteChange,
+	_ testreleasegroups.ReleaseGroupBlueprintPreparedMutation,
+	_ testcomponentplanning.ComponentTaskPreparation,
+	_ testblueprintplanning.BlueprintAttachTaskPreparation,
+	_ testblueprintplanning.BlueprintBackupPolicyPreparation,
 	_ etcd.BlueprintScriptPublication,
 	_ etcd.BlueprintReleasePublication,
 	_ etcd.BlueprintRequirementGate,
 	task etcd.TaskRecord,
-	_ etcd.IdempotencyMarker,
+	_ testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	repository.publications++
 	repository.publishedClaimTaskID = claim.TaskID
@@ -152,7 +161,7 @@ func (idempotency *boundaryPublicationIdempotency) ResolveKnown(
 
 func (idempotency *boundaryPublicationIdempotency) ResolveUnknown(
 	_ context.Context,
-	_ etcd.IdempotencyLocator,
+	_ testidempotency.IdempotencyLocator,
 	_ Evidence,
 	_ error,
 ) (idempotentintent.Resolution, error) {
@@ -168,7 +177,7 @@ func TestPreflightAndClaimEnforcesExactNormalizedProjectionBoundary(t *testing.T
 	revisionID := ids.NewAt(ids.KindTask, now, 2)
 
 	low, high := 1, int(limit)
-	var exact etcd.EnvironmentComposeProjection
+	var exact testenvironmentprojection.EnvironmentComposeProjection
 	var exactEvidence ProjectionEvidence
 	for low <= high {
 		middle := low + (high-low)/2
@@ -239,7 +248,7 @@ func TestPreflightAndClaimEnforcesExactNormalizedProjectionBoundary(t *testing.T
 	}
 
 	over := exact
-	over.DesiredRoutes = append([]etcd.EnvironmentRouteProjection(nil), exact.DesiredRoutes...)
+	over.DesiredRoutes = append([]testenvironmentprojection.EnvironmentRouteProjection(nil), exact.DesiredRoutes...)
 	over.DesiredRoutes[0].Desired.Path += "a"
 	rejected := &boundaryRepository{}
 	if _, evidence, err := PreflightAndClaim(
@@ -318,25 +327,14 @@ func TestBlueprintClaimCrashReplayResumesWithStableTaskAndReleaseGroupIDs(t *tes
 	if _, err := repository.PublishEnvironmentBlueprintDesiredRevision(
 		ctx,
 		netip.Prefix{},
-		"",
-		etcd.Versioned[etcd.ProjectRecord]{},
-		etcd.Versioned[etcd.EnvironmentRecord]{},
-		0,
-		staged.state.claim,
-		etcd.EnvironmentDesiredRevisionIdentity{EnvironmentID: environmentID, RevisionID: recovered.TaskID},
-		staged.state.projection,
+		"", testkeyvalue.Versioned[testhierarchy.ProjectRecord]{}, testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{}, 0,
+		staged.state.claim, testblueprints.EnvironmentDesiredRevisionIdentity{EnvironmentID: environmentID, RevisionID: recovered.TaskID}, staged.state.projection,
 		nil,
 		nil,
-		nil,
-		etcd.ReleaseGroupBlueprintPreparedMutation{},
-		etcd.ComponentTaskPreparation{},
-		etcd.BlueprintAttachTaskPreparation{},
-		etcd.BlueprintBackupPolicyPreparation{},
-		etcd.BlueprintScriptPublication{},
+		nil, testreleasegroups.ReleaseGroupBlueprintPreparedMutation{}, testcomponentplanning.ComponentTaskPreparation{}, testblueprintplanning.BlueprintAttachTaskPreparation{}, testblueprintplanning.BlueprintBackupPolicyPreparation{}, etcd.BlueprintScriptPublication{},
 		etcd.BlueprintReleasePublication{},
 		etcd.BlueprintRequirementGate{},
-		etcd.TaskRecord{ID: recovered.TaskID},
-		etcd.IdempotencyMarker{},
+		etcd.TaskRecord{ID: recovered.TaskID}, testidempotency.IdempotencyMarker{},
 	); err != nil {
 		t.Fatalf("PublishEnvironmentBlueprintDesiredRevision(recovered) error = %v", err)
 	}
@@ -484,7 +482,7 @@ func boundaryStagedPublication(
 	t *testing.T,
 	now time.Time,
 	sequence int64,
-) (*boundaryRepository, etcd.EnvironmentBlueprintStageClaim, PublishInput) {
+) (*boundaryRepository, testblueprints.EnvironmentBlueprintStageClaim, PublishInput) {
 	t.Helper()
 	ctx := context.Background()
 	environmentID := ids.NewAt(ids.KindEnvironment, now, sequence)
@@ -500,10 +498,12 @@ func boundaryStagedPublication(
 		t.Fatalf("Stage() error = %v", err)
 	}
 	return repository, claim, PublishInput{
-		Environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{ID: environmentID}},
-		Staged:      staged,
-		Locator:     claim.Locator,
-		Task:        etcd.TaskRecord{ID: taskID},
+		Environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+			Record: testhierarchy.EnvironmentRecord{ID: environmentID},
+		},
+		Staged:  staged,
+		Locator: claim.Locator,
+		Task:    etcd.TaskRecord{ID: taskID},
 	}
 }
 
@@ -514,7 +514,7 @@ func boundaryProjection(
 	revisionID string,
 	yamlBytes int,
 	pathPadding int,
-) etcd.EnvironmentComposeProjection {
+) testenvironmentprojection.EnvironmentComposeProjection {
 	t.Helper()
 	canonicalYAML := []byte(strings.Repeat("x", yamlBytes))
 	serviceID := ids.NewAt(ids.KindService, now, 6)
@@ -532,18 +532,22 @@ func boundaryProjection(
 	if err != nil {
 		t.Fatal(err)
 	}
-	return etcd.EnvironmentComposeProjection{
+	return testenvironmentprojection.EnvironmentComposeProjection{
 		EnvironmentID: environmentID, RevisionID: revisionID, RenderGeneration: 1,
 		ComposeArtifact: artifact, NormalizedCompose: []byte("services: {}\n"),
-		DesiredZones: []etcd.EnvironmentZoneProjection{{EnvironmentID: environmentID, Desired: core.Zone{
-			ID: networkID, Name: "frontend", Subnet: "10.70.0.0/24",
-			OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
-		}}},
-		DesiredServices: []etcd.EnvironmentServiceProjection{{EnvironmentID: environmentID, Desired: core.Service{
-			ID: serviceID, Name: "api", Image: "example.invalid/api:1",
-			Zones: []string{"frontend"}, Strategy: core.StrategyRecreate, Replicas: 1,
-		}}},
-		DesiredRoutes: []etcd.EnvironmentRouteProjection{{
+		DesiredZones: []testenvironmentprojection.EnvironmentZoneProjection{
+			{EnvironmentID: environmentID, Desired: core.Zone{
+				ID: networkID, Name: "frontend", Subnet: "10.70.0.0/24",
+				OwnerKind: core.ZoneOwnerEnvironment, OwnerID: environmentID,
+			}},
+		},
+		DesiredServices: []testservices.EnvironmentServiceProjection{
+			{EnvironmentID: environmentID, Desired: core.Service{
+				ID: serviceID, Name: "api", Image: "example.invalid/api:1",
+				Zones: []string{"frontend"}, Strategy: core.StrategyRecreate, Replicas: 1,
+			}},
+		},
+		DesiredRoutes: []testenvironmentprojection.EnvironmentRouteProjection{{
 			EnvironmentID: environmentID, DesiredGeneration: 1, Desired: core.Route{
 				ID: routeID, Host: "boundary.example.test",
 				Path: "/" + strings.Repeat("a", pathPadding), TargetServiceID: serviceID,
@@ -556,21 +560,21 @@ func boundaryProjection(
 func boundaryClaimInput(now time.Time, environmentID, revisionID string) ClaimInput {
 	ciphertext := []byte("protected-boundary-intent")
 	digest := sha256.Sum256(ciphertext)
-	intent := etcd.ProtectedIntentRecord{
+	intent := testidempotency.ProtectedIntentRecord{
 		EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 		CiphertextDigest: stringDigest(digest), Ciphertext: ciphertext,
 	}
 	return ClaimInput{
 		EnvironmentID: environmentID, CandidateTaskID: revisionID,
-		Locator: etcd.IdempotencyLocator{
-			ScopeKind: etcd.IdempotencyScopeEnvironment, ScopeID: environmentID,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeEnvironment, ScopeID: environmentID,
 			Method: "PUT", Route: blueprintRoute, Key: "boundary-idempotency-key-0001",
 		},
 		Intent: intent,
-		MatchExistingIntent: func(_ context.Context, existing etcd.ProtectedIntentRecord) (bool, error) {
+		MatchExistingIntent: func(_ context.Context, existing testidempotency.ProtectedIntentRecord) (bool, error) {
 			return reflect.DeepEqual(existing, intent), nil
 		},
-		SourceKind: etcd.EnvironmentBlueprintSourceApply, RenderGeneration: 1, CreatedAt: now,
+		SourceKind: testblueprints.EnvironmentBlueprintSourceApply, RenderGeneration: 1, CreatedAt: now,
 	}
 }
 

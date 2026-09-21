@@ -9,7 +9,11 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testreleasequeries "github.com/AlanD20/groundplane/internal/infra/etcd/releasequeries"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/protobuf/proto"
 )
@@ -30,7 +34,7 @@ func TestBlueprintPredecessorPreservesHistoricalImageAndLatestAppliedArtifact(t 
 		CandidateWorkload: old,
 		Strategy:          domain.StrategyRecreate,
 	}
-	historical := etcd.ReleaseRenderInput{
+	historical := testreleaserender.ReleaseRenderInput{
 		ReleaseID:         priorID,
 		EnvironmentID:     environmentID,
 		ServiceID:         serviceID,
@@ -66,8 +70,8 @@ func TestBlueprintPredecessorPreservesHistoricalImageAndLatestAppliedArtifact(t 
 		}
 		return value
 	}
-	newRender := func() etcd.ReleaseRenderInput {
-		return etcd.ReleaseRenderInput{
+	newRender := func() testreleaserender.ReleaseRenderInput {
+		return testreleaserender.ReleaseRenderInput{
 			ReleaseID:     candidateID,
 			EnvironmentID: environmentID,
 			ServiceID:     serviceID,
@@ -82,7 +86,7 @@ func TestBlueprintPredecessorPreservesHistoricalImageAndLatestAppliedArtifact(t 
 	}
 	intent := domain.Intent{ID: candidateID, PriorServingReleaseID: priorID, PriorSuccessfulReleaseID: priorID}
 	render := newRender()
-	if err := bindPredecessor(&render, &intent, serving, historical, etcd.EnvironmentComposeProjection{EnvironmentID: environmentID, ComposeArtifact: encode()}); err != nil {
+	if err := bindPredecessor(&render, &intent, serving, historical, testenvironmentprojection.EnvironmentComposeProjection{EnvironmentID: environmentID, ComposeArtifact: encode()}); err != nil {
 		t.Fatal(err)
 	}
 	if render.PriorWorkload == nil || *render.PriorWorkload != old || render.PriorArtifactID != appliedArtifactID ||
@@ -116,7 +120,7 @@ func TestBlueprintPredecessorPreservesHistoricalImageAndLatestAppliedArtifact(t 
 				t.Fatal(err)
 			}
 			next := newRender()
-			if err := bindPredecessor(&next, &intent, serving, previous, etcd.EnvironmentComposeProjection{EnvironmentID: environmentID, ComposeArtifact: value}); err == nil {
+			if err := bindPredecessor(&next, &intent, serving, previous, testenvironmentprojection.EnvironmentComposeProjection{EnvironmentID: environmentID, ComposeArtifact: value}); err == nil {
 				t.Fatal("divergent predecessor was accepted")
 			}
 		})
@@ -129,7 +133,7 @@ func TestBlueprintPredecessorPreservesHistoricalImageAndLatestAppliedArtifact(t 
 			"d",
 			64,
 		)
-		previous.ProxyImage = &etcd.ReleaseProxyImage{
+		previous.ProxyImage = &domain.ProxyImage{
 			Repository:  "docker.io/library/caddy",
 			IndexDigest: strings.Repeat("a", 64),
 			Platform: componentsdk.OCIPlatform{
@@ -140,7 +144,7 @@ func TestBlueprintPredecessorPreservesHistoricalImageAndLatestAppliedArtifact(t 
 			},
 		}
 		next := newRender()
-		if err := bindPredecessor(&next, &intent, serving, previous, etcd.EnvironmentComposeProjection{EnvironmentID: environmentID, ComposeArtifact: encode()}); err != nil {
+		if err := bindPredecessor(&next, &intent, serving, previous, testenvironmentprojection.EnvironmentComposeProjection{EnvironmentID: environmentID, ComposeArtifact: encode()}); err != nil {
 			t.Fatal(err)
 		}
 		if next.ProxyImage == nil || *next.ProxyImage != *previous.ProxyImage ||
@@ -150,16 +154,16 @@ func TestBlueprintPredecessorPreservesHistoricalImageAndLatestAppliedArtifact(t 
 			t.Fatal("historical proxy authority was replaced or aliased")
 		}
 		previous.ProxyImage = nil
-		if err := bindPredecessor(&next, &intent, serving, previous, etcd.EnvironmentComposeProjection{EnvironmentID: environmentID, ComposeArtifact: encode()}); err == nil {
+		if err := bindPredecessor(&next, &intent, serving, previous, testenvironmentprojection.EnvironmentComposeProjection{EnvironmentID: environmentID, ComposeArtifact: encode()}); err == nil {
 			t.Fatal("missing historical proxy image was accepted")
 		}
 	})
 }
 
 func TestBlueprintFirstCandidateDoesNotInventPredecessor(t *testing.T) {
-	render := etcd.ReleaseRenderInput{}
+	render := testreleaserender.ReleaseRenderInput{}
 	intent := domain.Intent{}
-	if err := (&Service{}).preparePredecessor(context.Background(), PrepareInput{}, etcd.EnvironmentBlueprintServiceChange{}, &render, &intent); err != nil {
+	if err := (&Service{}).preparePredecessor(context.Background(), PrepareInput{}, testblueprints.EnvironmentBlueprintServiceChange{}, &render, &intent); err != nil {
 		t.Fatal(err)
 	}
 	if render.PriorWorkload != nil || render.PriorArtifactID != "" || intent.PriorServingReleaseID != "" ||
@@ -170,9 +174,9 @@ func TestBlueprintFirstCandidateDoesNotInventPredecessor(t *testing.T) {
 
 func TestBlueprintPredecessorCaptureRejectsPostPreflightDrift(t *testing.T) {
 	baseline := predecessorSnapshot{
-		planning: etcd.ReleasePlanningService{ProjectionRevision: 10},
-		applied: etcd.Versioned[etcd.EnvironmentComposeProjection]{
-			Revision: 11, Record: etcd.EnvironmentComposeProjection{ComposeArtifact: []byte("captured")},
+		planning: testreleasequeries.ReleasePlanningService{ProjectionRevision: 10},
+		applied: testkeyvalue.Versioned[testenvironmentprojection.EnvironmentComposeProjection]{
+			Revision: 11, Record: testenvironmentprojection.EnvironmentComposeProjection{ComposeArtifact: []byte("captured")},
 		},
 		appliedPresent: true,
 	}

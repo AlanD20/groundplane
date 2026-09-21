@@ -14,9 +14,13 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	etcdinfra "github.com/AlanD20/groundplane/internal/infra/etcd"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -33,7 +37,7 @@ func TestEtcdRepositoryReplayAfterRetryRejectsCorruptTaskLocator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := hierarchy.CreateTenant(ctx, etcdinfra.TenantRecord{
+	if _, err := hierarchy.CreateTenant(ctx, testhierarchy.TenantRecord{
 		ID: tenantID, Slug: "controller-replay", Name: "Controller Replay",
 	}); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
@@ -80,7 +84,7 @@ func TestEtcdRepositoryReplayAfterRetryRejectsCorruptTaskLocator(t *testing.T) {
 	if err != nil || !found || claim.Task.Record.ID != accepted.TaskID {
 		t.Fatalf("ClaimNextControllerTask() = %#v/%t/%v", claim, found, err)
 	}
-	if _, err := tasks.AcknowledgeControllerTask(ctx, accepted.TaskID, etcdinfra.TaskStatusFailed, now.Add(2*time.Second)); err != nil {
+	if _, err := tasks.AcknowledgeControllerTask(ctx, accepted.TaskID, testtaskjournal.TaskStatusFailed, now.Add(2*time.Second)); err != nil {
 		t.Fatalf("AcknowledgeControllerTask() error = %v", err)
 	}
 	retryID := ids.NewAt(ids.KindTask, now, 904)
@@ -90,7 +94,7 @@ func TestEtcdRepositoryReplayAfterRetryRejectsCorruptTaskLocator(t *testing.T) {
 		now.Add(3*time.Second),
 		"controller-hierarchy-retry-0001",
 	)
-	retry, err := tasks.RetryTask(ctx, accepted.TaskID, retryID, etcdinfra.TaskActorOperator, retryMarker)
+	retry, err := tasks.RetryTask(ctx, accepted.TaskID, retryID, testtaskjournal.TaskActorOperator, retryMarker)
 	if err != nil {
 		t.Fatalf("RetryTask() error = %v", err)
 	}
@@ -115,7 +119,7 @@ func TestEtcdRepositoryReplayAfterRetryRejectsCorruptTaskLocator(t *testing.T) {
 	if bytes.Equal(corrupt, stored.Entry.Value) {
 		t.Fatal("root Task marker locator was not changed")
 	}
-	if result, err := store.Transact(ctx, []etcdinfra.Condition{{Key: taskKey, ModRevision: stored.Entry.ModRevision}}, []etcdinfra.Mutation{{Type: etcdinfra.MutationPut, Key: taskKey, Value: corrupt}}); err != nil ||
+	if result, err := store.Transact(ctx, []testkeyvalue.Condition{{Key: taskKey, ModRevision: stored.Entry.ModRevision}}, []testkeyvalue.Mutation{{Type: testkeyvalue.MutationPut, Key: taskKey, Value: corrupt}}); err != nil ||
 		!result.Succeeded {
 		t.Fatalf("corrupt Task locator write = %#v/%v", result, err)
 	}
@@ -140,14 +144,14 @@ func TestEtcdRepositoryRejectsSameTenantDifferentProjectReplay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := hierarchy.CreateTenant(ctx, etcdinfra.TenantRecord{
+	if _, err := hierarchy.CreateTenant(ctx, testhierarchy.TenantRecord{
 		ID: tenantID, Slug: "project-replay", Name: "Project Replay",
 	}); err != nil {
 		t.Fatalf("CreateTenant() error = %v", err)
 	}
-	for _, project := range []etcdinfra.ProjectRecord{
-		{ID: projectOneID, TenantID: tenantID, Slug: "one", Name: "One", Kind: etcdinfra.ProjectKindTenant},
-		{ID: projectTwoID, TenantID: tenantID, Slug: "two", Name: "Two", Kind: etcdinfra.ProjectKindTenant},
+	for _, project := range []testhierarchy.ProjectRecord{
+		{ID: projectOneID, TenantID: tenantID, Slug: "one", Name: "One", Kind: testhierarchy.ProjectKindTenant},
+		{ID: projectTwoID, TenantID: tenantID, Slug: "two", Name: "Two", Kind: testhierarchy.ProjectKindTenant},
 	} {
 		if _, err := hierarchy.CreateProject(ctx, project); err != nil {
 			t.Fatalf("CreateProject(%s) error = %v", project.ID, err)
@@ -209,23 +213,23 @@ func (controllerReplayCipher) Open(_ context.Context, ciphertext []byte) ([]byte
 	return append([]byte(nil), ciphertext...), nil
 }
 
-func controllerReplayRetryMarker(tenantID, taskID string, at time.Time, key string) etcdinfra.IdempotencyMarker {
+func controllerReplayRetryMarker(tenantID, taskID string, at time.Time, key string) testidempotency.IdempotencyMarker {
 	ciphertext := []byte("controller-retry-intent")
 	digest := sha256.Sum256(ciphertext)
 	body, _ := json.Marshal(struct {
 		TaskID string `json:"task_id"`
 	}{TaskID: taskID})
-	return etcdinfra.IdempotencyMarker{
-		Kind: etcdinfra.IdempotencyMarkerTask, State: etcdinfra.IdempotencyMarkerPending,
-		Locator: etcdinfra.IdempotencyLocator{
-			ScopeKind: etcdinfra.IdempotencyScopeTenant, ScopeID: tenantID,
+	return testidempotency.IdempotencyMarker{
+		Kind: testidempotency.IdempotencyMarkerTask, State: testidempotency.IdempotencyMarkerPending,
+		Locator: testidempotency.IdempotencyLocator{
+			ScopeKind: testidempotency.IdempotencyScopeTenant, ScopeID: tenantID,
 			Method: http.MethodPost, Route: "/tasks/{id}/retry", Key: key,
 		},
-		Intent: etcdinfra.ProtectedIntentRecord{
+		Intent: testidempotency.ProtectedIntentRecord{
 			EnvelopeVersion: 1, Cipher: "age-x25519", DigestAlgorithm: "sha256",
 			CiphertextDigest: hex.EncodeToString(digest[:]), Ciphertext: ciphertext,
 		},
-		Response: etcdinfra.IdempotencyResponse{
+		Response: testidempotency.IdempotencyResponse{
 			Status:      http.StatusAccepted,
 			ContentKind: "application/json",
 			Body:        body,
@@ -243,7 +247,7 @@ func etcdAcceptanceEndpoint(t *testing.T) string {
 	return endpoint
 }
 
-func etcdAcceptanceStore(t *testing.T, ctx context.Context, endpoint, prefix string) etcdinfra.Store {
+func etcdAcceptanceStore(t *testing.T, ctx context.Context, endpoint, prefix string) testkeyvalue.Store {
 	t.Helper()
 	store, err := etcdinfra.New(
 		ctx,

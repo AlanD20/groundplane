@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testidempotencyowner "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"gopkg.in/yaml.v3"
 )
@@ -33,11 +34,14 @@ func (fixture *enableBlueprintFixture) ApplyComponentBlueprint(
 	bundle core.BlueprintBundle,
 	expectedRevision string,
 	_ string,
-) (etcd.IdempotencyResponse, error) {
+) (testidempotencyowner.IdempotencyResponse, error) {
 	fixture.calls++
 	fixture.expectedRevision = expectedRevision
 	fixture.bundle = bundle
-	return etcd.IdempotencyResponse{Status: 202, Body: []byte(`{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`)}, nil
+	return testidempotencyowner.IdempotencyResponse{
+		Status: 202,
+		Body:   []byte(`{"task_id":"task_01ARZ3NDEKTSV4RRFFQ69G5FAV"}`),
+	}, nil
 }
 
 // Rationale: enable must author placement and enabled=true in one Blueprint
@@ -48,7 +52,7 @@ func TestEnableComponentAuthorsConfigurationInOneApply(t *testing.T) {
 		RootPath: "compose.yaml", Files: []core.BlueprintFile{{Path: "compose.yaml", Content: []byte("x-gp-components:\n  http-router:\n    implementation: caddy\n    enabled: false\n")}},
 	}}
 	service := &MutationService{
-		components: managedConfigReadRepository{record: etcd.ComponentRecord{Desired: etcd.ComponentDesiredRecord{
+		components: managedConfigReadRepository{record: testcomponents.Record{Desired: testcomponents.DesiredRecord{
 			ID: "cmp_01ARZ3NDEKTSV4RRFFQ69G5FAV", Owner: core.ComponentOwnerEnvironment,
 			OwnerID: "env_01ARZ3NDEKTSV4RRFFQ69G5FAV", Kind: core.ComponentKindIngressCaddy,
 		}}}, applier: fixture,
@@ -75,7 +79,7 @@ func TestEnableComponentAuthorsConfigurationInOneApply(t *testing.T) {
 // publishing desired state, including callers that bypass JSON decoding.
 func TestEnvironmentComponentConfigRejectsInvalidPlacementBeforeCredentials(t *testing.T) {
 	service := &MutationService{}
-	_, err := service.environmentComponentConfig(context.Background(), etcd.ComponentDesiredRecord{
+	_, err := service.environmentComponentConfig(context.Background(), testcomponents.DesiredRecord{
 		Kind: core.ComponentKindEdgeCloudflare,
 	}, apiTypes.ComponentConfigMutationInput{CloudflareTunnel: &apiTypes.CloudflareTunnelComponentConfigMutationInput{
 		Credential: apiTypes.CloudflareTunnelCredentialInput{

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/scriptsourcereference"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -34,12 +34,16 @@ func TestInitializeScriptSourceReferencesRequiresRecovery(t *testing.T) {
 // Unused Store operations intentionally have no implementation: startup with
 // an empty preparation range must not issue unrelated reads or writes.
 type scriptSourceStartupStore struct {
-	etcd.Store
+	testkeyvalue.Store
+
 	failAt int
 	calls  int
 }
 
-func (store *scriptSourceStartupStore) Range(_ context.Context, request etcd.RangeRequest) (*etcd.RangeResult, error) {
+func (store *scriptSourceStartupStore) Range(
+	_ context.Context,
+	request testkeyvalue.RangeRequest,
+) (*testkeyvalue.RangeResult, error) {
 	store.calls++
 	expected := []string{"/v1/staging/task-secret-pin-sets/", "/v1/indexes/task-secret-pin-sets/releasing/",
 		scriptsourcereference.PreparationPrefix}
@@ -50,5 +54,5 @@ func (store *scriptSourceStartupStore) Range(_ context.Context, request etcd.Ran
 	if store.calls == store.failAt {
 		return nil, errs.New(errs.KindInternal, "unreadable preparation state")
 	}
-	return &etcd.RangeResult{ReadRevision: 1}, nil
+	return &testkeyvalue.RangeResult{ReadRevision: 1}, nil
 }

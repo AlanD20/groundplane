@@ -9,9 +9,10 @@ import (
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -125,7 +126,7 @@ type serviceHarness struct {
 func newServiceHarness(t *testing.T) *serviceHarness {
 	t.Helper()
 	h := newCoordinatorHarness(t)
-	storage := &publicationStore{revision: 1, entries: make(map[string]etcd.KeyValue)}
+	storage := &publicationStore{revision: 1, entries: make(map[string]testkeyvalue.KeyValue)}
 	tasks, err := etcd.NewTaskRepository(storage)
 	if err != nil {
 		t.Fatal(err)

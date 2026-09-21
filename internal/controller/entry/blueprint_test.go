@@ -6,7 +6,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testentries "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 // Rationale: candidate Script references and Blueprint export use immutable
@@ -14,7 +15,7 @@ import (
 func TestEnvironmentEntryProjectionPreservesBlueprintKey(t *testing.T) {
 	now := time.Date(2026, 8, 29, 14, 0, 0, 0, time.UTC)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 11)
-	record, err := etcd.NewBlueprintEntryRecord(environmentID, "APP_MODE", core.EnvEntry{
+	record, err := testentries.NewBlueprintRecord(environmentID, "APP_MODE", core.EnvEntry{
 		ID: ids.NewAt(ids.KindEnvEntry, now, 12), Kind: core.EntryKindEnv, Key: "APP_MODE",
 		Source: core.EntrySource{Kind: core.SourceLiteral, Literal: "acceptance"}, Exposure: []string{"all"},
 	}, ids.NewAt(ids.KindConfig, now, 13))
@@ -22,7 +23,7 @@ func TestEnvironmentEntryProjectionPreservesBlueprintKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	projected, err := BlueprintProjection(
-		[]etcd.Versioned[etcd.EntryRecord]{{Record: record, Revision: 1, ReadRevision: 1}},
+		[]testkeyvalue.Versioned[testentries.Record]{{Record: record, Revision: 1, ReadRevision: 1}},
 	)
 	if err != nil || len(projected) != 1 || projected[0].BlueprintKey != record.BlueprintKey {
 		t.Fatalf("BlueprintProjection() = %#v, %v", projected, err)

@@ -7,9 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testbackuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	testbackuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 )
 
@@ -21,22 +25,22 @@ const (
 type recordingRotationRepository struct {
 	input    etcd.BackupKeyRotationInput
 	task     etcd.TaskRecord
-	marker   etcd.IdempotencyMarker
-	material etcd.BackupPolicyInitialKeyMaterial
+	marker   testidempotency.IdempotencyMarker
+	material testbackuppolicymutations.BackupPolicyInitialKeyMaterial
 }
 
 func (repository *recordingRotationRepository) PrepareBackupKeyRotation(
 	_ context.Context,
 	input etcd.BackupKeyRotationInput,
-	material etcd.BackupPolicyInitialKeyMaterial,
+	material testbackuppolicymutations.BackupPolicyInitialKeyMaterial,
 ) (etcd.PreparedBackupKeyRotation, error) {
 	repository.input = input
-	repository.material = etcd.BackupPolicyInitialKeyMaterial{
+	repository.material = testbackuppolicymutations.BackupPolicyInitialKeyMaterial{
 		Recipient:  material.Recipient,
 		Ciphertext: append([]byte(nil), material.Ciphertext...),
 	}
-	return etcd.PreparedBackupKeyRotation{Owner: etcd.TaskOwner{
-		WorkspaceType: etcd.TaskWorkspacePlatform,
+	return etcd.PreparedBackupKeyRotation{Owner: testtaskjournal.TaskOwner{
+		WorkspaceType: testtaskjournal.TaskWorkspacePlatform,
 		ProjectID:     testProjectID,
 		EnvironmentID: input.EnvironmentID,
 	}}, nil
@@ -46,7 +50,7 @@ func (repository *recordingRotationRepository) PublishBackupKeyRotation(
 	_ context.Context,
 	_ etcd.PreparedBackupKeyRotation,
 	task etcd.TaskRecord,
-	marker etcd.IdempotencyMarker,
+	marker testidempotency.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
 	repository.task = task
 	repository.marker = marker
@@ -56,10 +60,10 @@ func (repository *recordingRotationRepository) PublishBackupKeyRotation(
 }
 
 func (*recordingRotationRepository) GetBackupKey(
-	context.Context,
-	string,
-) (etcd.VersionedBackupKey, bool, error) {
-	return etcd.VersionedBackupKey{}, false, nil
+	context.Context, string,
+
+) (testbackuppolicy.VersionedBackupKey, bool, error) {
+	return testbackuppolicy.VersionedBackupKey{}, false, nil
 }
 
 func (*recordingRotationRepository) ApplyBackupKeyRotation(context.Context, string) error {
@@ -70,9 +74,11 @@ type fixedRotationKeyFactory struct {
 	ciphertext []byte
 }
 
-func (factory *fixedRotationKeyFactory) Create(context.Context) (etcd.BackupPolicyInitialKeyMaterial, error) {
+func (factory *fixedRotationKeyFactory) Create(
+	context.Context,
+) (testbackuppolicymutations.BackupPolicyInitialKeyMaterial, error) {
 	factory.ciphertext = []byte("wrapped-next-private-identity")
-	return etcd.BackupPolicyInitialKeyMaterial{
+	return testbackuppolicymutations.BackupPolicyInitialKeyMaterial{
 		Recipient:  "age1test",
 		Ciphertext: factory.ciphertext,
 	}, nil
@@ -85,8 +91,8 @@ func (*appliedRotationIdempotency) Prepare(context.Context, string) (idempotenti
 }
 
 func (*appliedRotationIdempotency) ResolveExisting(
-	context.Context,
-	etcd.IdempotencyLocator,
+	context.Context, testidempotency.IdempotencyLocator,
+
 	idempotentintent.ProtectedEvidence,
 ) (idempotentintent.Resolution, bool, error) {
 	return idempotentintent.Resolution{}, false, nil
@@ -94,12 +100,12 @@ func (*appliedRotationIdempotency) ResolveExisting(
 
 func (*appliedRotationIdempotency) NewMarker(
 	_ idempotentintent.ProtectedEvidence,
-	locator etcd.IdempotencyLocator,
-	response etcd.IdempotencyResponse,
+	locator testidempotency.IdempotencyLocator,
+	response testidempotency.IdempotencyResponse,
 	taskID string,
 	now time.Time,
-) (etcd.IdempotencyMarker, error) {
-	return newPendingRotationMarker(etcd.ProtectedIntentRecord{}, locator, response, taskID, now), nil
+) (testidempotency.IdempotencyMarker, error) {
+	return newPendingRotationMarker(testidempotency.ProtectedIntentRecord{}, locator, response, taskID, now), nil
 }
 
 func (*appliedRotationIdempotency) ResolveKnown(
@@ -111,8 +117,8 @@ func (*appliedRotationIdempotency) ResolveKnown(
 }
 
 func (*appliedRotationIdempotency) ResolveUnknown(
-	context.Context,
-	etcd.IdempotencyLocator,
+	context.Context, testidempotency.IdempotencyLocator,
+
 	idempotentintent.ProtectedEvidence,
 	error,
 ) (idempotentintent.Resolution, error) {
@@ -140,7 +146,7 @@ func TestServiceRotationPublishesPendingTaskMarkerAndReturnsOwnedBody(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	service, err := newService(repository, keys, &appliedRotationIdempotency{}, protector)
+	service, err := newService(repository, repository, keys, &appliedRotationIdempotency{}, protector)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,8 +173,8 @@ func TestServiceRotationPublishesPendingTaskMarkerAndReturnsOwnedBody(t *testing
 	if accepted.TaskID == "" || accepted.TaskID != repository.task.ID {
 		t.Fatalf("TaskAccepted task id = %q, published %q", accepted.TaskID, repository.task.ID)
 	}
-	if repository.marker.Kind != etcd.IdempotencyMarkerTask ||
-		repository.marker.State != etcd.IdempotencyMarkerPending ||
+	if repository.marker.Kind != testidempotency.IdempotencyMarkerTask ||
+		repository.marker.State != testidempotency.IdempotencyMarkerPending ||
 		repository.marker.TaskID != repository.task.ID ||
 		!bytes.Equal(repository.marker.Response.Body, response.Body) {
 		t.Fatalf("published marker = %#v", repository.marker)

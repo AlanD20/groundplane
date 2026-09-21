@@ -10,7 +10,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/secretvalue"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testentryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testsecrets "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -82,8 +84,8 @@ func TestEntryGenerationServiceGeneratesReusableSecret(t *testing.T) {
 	secretID := ids.NewAt(ids.KindSecret, now, 2)
 	stored := sealEntryGenerationTestSecret(t, protector, secretID, []byte("database-password"))
 	secrets := &entryGenerationTestSecretRepository{
-		record: etcd.Versioned[etcd.SecretRecord]{
-			Record: etcd.SecretRecord{Secret: core.Secret{
+		record: testkeyvalue.Versioned[testsecrets.Record]{
+			Record: testsecrets.Record{Secret: core.Secret{
 				ID: secretID, Scope: core.SecretScopeProject, ProjectID: projectID,
 				Key: "DB_PASSWORD", Kind: core.SecretKindEnvVar, Ref: "secrets/.env." + projectID, UpdatedAt: now,
 			}},
@@ -145,8 +147,8 @@ func TestEntryGenerationServiceEnforcesFactSecrecy(t *testing.T) {
 }
 
 type entryGenerationTestSecretRepository struct {
-	record   etcd.Versioned[etcd.SecretRecord]
-	value    etcd.SecretEncryptedValue
+	record   testkeyvalue.Versioned[testsecrets.Record]
+	value    testsecrets.EncryptedValue
 	resolves int
 	reads    int
 }
@@ -155,18 +157,18 @@ func (repository *entryGenerationTestSecretRepository) ResolveSecret(
 	_ context.Context,
 	projectID string,
 	_ string,
-) (etcd.Versioned[etcd.SecretRecord], error) {
+) (testkeyvalue.Versioned[testsecrets.Record], error) {
 	repository.resolves++
 	if repository.record.Record.Secret.ProjectID != projectID {
-		return etcd.Versioned[etcd.SecretRecord]{}, errs.New(errs.KindSecretNotFound, "Secret was not found")
+		return testkeyvalue.Versioned[testsecrets.Record]{}, errs.New(errs.KindSecretNotFound, "Secret was not found")
 	}
 	return repository.record, nil
 }
 
 func (repository *entryGenerationTestSecretRepository) GetSecretValue(
 	_ context.Context,
-	_ etcd.Versioned[etcd.SecretRecord],
-) (etcd.SecretEncryptedValue, error) {
+	_ testkeyvalue.Versioned[testsecrets.Record],
+) (testsecrets.EncryptedValue, error) {
 	repository.reads++
 	value := repository.value
 	value.Ciphertext = append([]byte(nil), repository.value.Ciphertext...)
@@ -241,14 +243,14 @@ func sealEntryGenerationTestSecret(
 	protector *secretvalue.Protector,
 	secretID string,
 	plaintext []byte,
-) etcd.SecretEncryptedValue {
+) testsecrets.EncryptedValue {
 	t.Helper()
 	envelope, err := protector.Seal(context.Background(), plaintext)
 	if err != nil {
 		t.Fatalf("Seal() error = %v", err)
 	}
 	metadata := envelope.Metadata()
-	return etcd.SecretEncryptedValue{
+	return testsecrets.EncryptedValue{
 		SecretID:         secretID,
 		EnvelopeVersion:  uint8(metadata.Version),
 		Cipher:           string(metadata.Cipher),
@@ -261,7 +263,7 @@ func sealEntryGenerationTestSecret(
 func openEntryGenerationTestValue(
 	t *testing.T,
 	protector *secretvalue.Protector,
-	generation etcd.SecretEntryValueGeneration,
+	generation testentryvalues.SecretGeneration,
 ) string {
 	t.Helper()
 	envelope, err := secretvalue.Restore(secretvalue.Metadata{

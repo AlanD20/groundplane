@@ -8,9 +8,13 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/blueprintparser"
 	"github.com/AlanD20/groundplane/internal/controller/component"
-	"github.com/AlanD20/groundplane/internal/controller/idempotentintent"
+	idempotentintent "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testidempotency "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"gopkg.in/yaml.v3"
@@ -23,12 +27,12 @@ func TestComponentEnableAfterOrdinaryZoneCreation(t *testing.T) {
 	at := time.Date(2026, 9, 6, 8, 0, 0, 0, time.UTC)
 	environmentID, projectID := ids.NewAt(ids.KindEnvironment, at, 1), ids.NewAt(ids.KindProject, at, 2)
 	repository := &fakeZoneCreationRepository{
-		environment: etcd.Versioned[etcd.EnvironmentRecord]{Record: etcd.EnvironmentRecord{
+		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{Record: testhierarchy.EnvironmentRecord{
 			ID: environmentID, ProjectID: projectID, NetworkPool: "10.34.0.0/16",
-			ProvisioningState: etcd.EnvironmentProvisioningReady,
+			ProvisioningState: testhierarchy.EnvironmentProvisioningReady,
 		}, Revision: 7, ReadRevision: 9},
-		project: etcd.Versioned[etcd.ProjectRecord]{Record: etcd.ProjectRecord{
-			ID: projectID, Kind: etcd.ProjectKindTenant,
+		project: testkeyvalue.Versioned[testhierarchy.ProjectRecord]{Record: testhierarchy.ProjectRecord{
+			ID: projectID, Kind: testhierarchy.ProjectKindTenant,
 		}, Revision: 8, ReadRevision: 9},
 		projection: zoneCreationProjectionForTest(t, environmentID, at),
 	}
@@ -44,7 +48,7 @@ func TestComponentEnableAfterOrdinaryZoneCreation(t *testing.T) {
 	}, "create-component-zone"); err != nil {
 		t.Fatal(err)
 	}
-	if repository.claim.SourceKind != etcd.EnvironmentBlueprintSourceMutation {
+	if repository.claim.SourceKind != testblueprints.EnvironmentBlueprintSourceMutation {
 		t.Fatal("ordinary Zone creation did not publish mutation authority")
 	}
 	projection := repository.publication.Projection
@@ -59,7 +63,7 @@ func TestComponentEnableAfterOrdinaryZoneCreation(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture := &componentZoneAuthoring{
-		component: etcd.ComponentRecord{Desired: etcd.ComponentDesiredRecord{
+		component: testcomponents.Record{Desired: testcomponents.DesiredRecord{
 			ID: componentID, Owner: core.ComponentOwnerEnvironment, OwnerID: environmentID,
 			Kind: core.ComponentKindIngressCaddy,
 		}},
@@ -106,7 +110,7 @@ func TestComponentEnableAfterOrdinaryZoneCreation(t *testing.T) {
 // Only the authoring/publication and unused platform/credential side-effect
 // ports are doubled; Zone creation and Component mutation are real producers.
 type componentZoneAuthoring struct {
-	component etcd.ComponentRecord
+	component testcomponents.Record
 	document  apiTypes.EnvironmentBlueprintDocument
 	bundle    core.BlueprintBundle
 	expected  string
@@ -114,20 +118,23 @@ type componentZoneAuthoring struct {
 	reject    bool
 }
 
-func (f *componentZoneAuthoring) GetComponent(context.Context, string) (etcd.Versioned[etcd.ComponentRecord], error) {
-	return etcd.Versioned[etcd.ComponentRecord]{Record: f.component}, nil
+func (f *componentZoneAuthoring) GetComponent(
+	context.Context,
+	string,
+) (testkeyvalue.Versioned[testcomponents.Record], error) {
+	return testkeyvalue.Versioned[testcomponents.Record]{Record: f.component}, nil
 }
 func (f *componentZoneAuthoring) GetBlueprint(context.Context, string) (apiTypes.EnvironmentBlueprintDocument, error) {
 	return f.document, nil
 }
 func (f *componentZoneAuthoring) ApplyComponentBlueprint(_ context.Context, _, _ string,
-	bundle core.BlueprintBundle, expected, _ string) (etcd.IdempotencyResponse, error) {
+	bundle core.BlueprintBundle, expected, _ string) (testidempotency.IdempotencyResponse, error) {
 	f.calls++
 	f.bundle, f.expected = bundle, expected
 	if f.reject {
-		return etcd.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "authoring revision changed")
+		return testidempotency.IdempotencyResponse{}, errs.New(errs.KindStateConflict, "authoring revision changed")
 	}
-	return etcd.IdempotencyResponse{Status: 202}, nil
+	return testidempotency.IdempotencyResponse{Status: 202}, nil
 }
 func (*componentZoneAuthoring) ResolveCredentialReference(context.Context, string,
 	component.OpaqueSecretReferenceInput, string) (string, error) {
@@ -135,29 +142,26 @@ func (*componentZoneAuthoring) ResolveCredentialReference(context.Context, strin
 }
 
 func (*componentZoneAuthoring) EnablePlatformComponent(
-	context.Context,
-	string,
-	string,
-) (etcd.IdempotencyResponse, error) {
+	context.Context, string, string,
+
+) (testidempotency.IdempotencyResponse, error) {
 	panic("unexpected platform mutation")
 }
 
 func (*componentZoneAuthoring) DisablePlatformComponent(
-	context.Context,
-	string,
-	string,
-) (etcd.IdempotencyResponse, error) {
+	context.Context, string, string,
+
+) (testidempotency.IdempotencyResponse, error) {
 	panic("unexpected platform mutation")
 }
 
 func (*componentZoneAuthoring) UpdatePlatformComponent(
-	context.Context,
-	string,
-	string,
-) (etcd.IdempotencyResponse, error) {
+	context.Context, string, string,
+
+) (testidempotency.IdempotencyResponse, error) {
 	panic("unexpected platform mutation")
 }
 func (*componentZoneAuthoring) ReplacePlatformComponentConfig(context.Context, string,
-	apiTypes.ComponentConfigMutationRequest, string) (etcd.IdempotencyResponse, error) {
+	apiTypes.ComponentConfigMutationRequest, string) (testidempotency.IdempotencyResponse, error) {
 	panic("unexpected platform mutation")
 }

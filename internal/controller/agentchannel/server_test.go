@@ -16,6 +16,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testtaskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"google.golang.org/grpc/codes"
@@ -43,15 +46,15 @@ type pausedAuthenticator struct {
 type fakeTaskStore struct {
 	assignments     []etcd.TaskAssignment
 	claims          []etcd.TaskAssignment
-	tasks           map[string]etcd.Versioned[etcd.TaskRecord]
+	tasks           map[string]testkeyvalue.Versioned[etcd.TaskRecord]
 	ackAgentID      string
 	ackGeneration   uint64
 	ackTaskID       string
 	ackAssignmentID string
-	ackTerminal     etcd.TaskStatus
-	ackResult       etcd.TaskResultRecord
-	events          []etcd.TaskEventInput
-	durableEvents   []etcd.TaskEventRecord
+	ackTerminal     testtaskjournal.TaskStatus
+	ackResult       testtaskjournal.TaskResultRecord
+	events          []testtaskjournal.TaskEventInput
+	durableEvents   []testtaskjournal.TaskEventRecord
 	eventRevisions  []int64
 }
 
@@ -69,8 +72,8 @@ type wakeTaskStore struct {
 }
 
 func (store *wakeTaskStore) ListAgentAssignments(
-	context.Context,
-	string,
+	context.Context, string,
+
 	uint64,
 	int32,
 ) ([]etcd.TaskAssignment, error) {
@@ -80,8 +83,8 @@ func (store *wakeTaskStore) ListAgentAssignments(
 }
 
 func (store *wakeTaskStore) ClaimNextTask(
-	context.Context,
-	string,
+	context.Context, string,
+
 	uint64,
 	time.Time,
 ) (etcd.TaskAssignment, bool, error) {
@@ -143,20 +146,20 @@ func (resolver *blockingPlanResolver) ResolveExecutionPlan(
 // pairing while rejecting a plan sealed for another Task type.
 func TestOperationMatchesTaskAcceptsClosedPairingsAndRejectsCrossPairs(t *testing.T) {
 	pairs := []struct {
-		taskType  etcd.TaskType
+		taskType  testtaskjournal.TaskType
 		operation agentpb.PlanOperation
 	}{
-		{taskType: etcd.TaskDeploy, operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY},
-		{taskType: etcd.TaskRollback, operation: agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK},
-		{taskType: etcd.TaskStart, operation: agentpb.PlanOperation_PLAN_OPERATION_START},
-		{taskType: etcd.TaskStop, operation: agentpb.PlanOperation_PLAN_OPERATION_STOP},
-		{taskType: etcd.TaskDestroy, operation: agentpb.PlanOperation_PLAN_OPERATION_DESTROY},
-		{taskType: etcd.TaskRemove, operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE},
-		{taskType: etcd.TaskCreate, operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE},
-		{taskType: etcd.TaskAttach, operation: agentpb.PlanOperation_PLAN_OPERATION_ATTACH},
-		{taskType: etcd.TaskDetach, operation: agentpb.PlanOperation_PLAN_OPERATION_DETACH},
-		{taskType: etcd.TaskBackup, operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP},
-		{taskType: etcd.TaskBackupPrune, operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE},
+		{taskType: testtaskjournal.TaskDeploy, operation: agentpb.PlanOperation_PLAN_OPERATION_DEPLOY},
+		{taskType: testtaskjournal.TaskRollback, operation: agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK},
+		{taskType: testtaskjournal.TaskStart, operation: agentpb.PlanOperation_PLAN_OPERATION_START},
+		{taskType: testtaskjournal.TaskStop, operation: agentpb.PlanOperation_PLAN_OPERATION_STOP},
+		{taskType: testtaskjournal.TaskDestroy, operation: agentpb.PlanOperation_PLAN_OPERATION_DESTROY},
+		{taskType: testtaskjournal.TaskRemove, operation: agentpb.PlanOperation_PLAN_OPERATION_REMOVE},
+		{taskType: testtaskjournal.TaskCreate, operation: agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE},
+		{taskType: testtaskjournal.TaskAttach, operation: agentpb.PlanOperation_PLAN_OPERATION_ATTACH},
+		{taskType: testtaskjournal.TaskDetach, operation: agentpb.PlanOperation_PLAN_OPERATION_DETACH},
+		{taskType: testtaskjournal.TaskBackup, operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP},
+		{taskType: testtaskjournal.TaskBackupPrune, operation: agentpb.PlanOperation_PLAN_OPERATION_BACKUP_PRUNE},
 	}
 	for _, pair := range pairs {
 		if !operationMatchesTask(pair.operation, etcd.TaskRecord{Type: pair.taskType}) {
@@ -179,39 +182,36 @@ func TestOperationMatchesTaskAcceptsClosedPairingsAndRejectsCrossPairs(t *testin
 		}
 	}
 	backingCreation := etcd.TaskRecord{
-		Type: etcd.TaskUpdate,
-		Params: map[string]string{
-			etcd.TaskBackingServiceCreationParam: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV",
-		},
+		Type:   testtaskjournal.TaskUpdate,
+		Params: map[string]string{testtaskjournal.TaskBackingServiceCreationParam: "svc_01ARZ3NDEKTSV4RRFFQ69G5FAV"},
 	}
 	if !operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_ENVIRONMENT_CREATE, backingCreation) {
 		t.Error("backing-service TaskUpdate did not accept its Environment-create plan")
 	}
 	componentUpdate := etcd.TaskRecord{
-		Type: etcd.TaskUpdate,
-		Params: map[string]string{
-			etcd.TaskResourceKindParam: etcd.TaskResourceComponent,
-		},
+		Type:   testtaskjournal.TaskUpdate,
+		Params: map[string]string{testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceComponent},
 	}
 	if !operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY, componentUpdate) {
 		t.Error("Component TaskUpdate did not accept its Component-apply plan")
 	}
 	if operationMatchesTask(
 		agentpb.PlanOperation_PLAN_OPERATION_COMPONENT_APPLY,
-		etcd.TaskRecord{Type: etcd.TaskUpdate},
+		etcd.TaskRecord{Type: testtaskjournal.TaskUpdate},
 	) {
 		t.Error("ordinary TaskUpdate accepted a Component-apply plan")
 	}
 	volumeCreation := etcd.TaskRecord{
-		Type: etcd.TaskCreate,
-		Params: map[string]string{
-			etcd.TaskResourceKindParam: etcd.TaskResourceVolume,
-		},
+		Type:   testtaskjournal.TaskCreate,
+		Params: map[string]string{testtaskjournal.TaskResourceKindParam: testtaskjournal.TaskResourceVolume},
 	}
 	if !operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, volumeCreation) {
 		t.Error("Volume TaskCreate did not accept its reconciliation plan")
 	}
-	if operationMatchesTask(agentpb.PlanOperation_PLAN_OPERATION_RECONCILE, etcd.TaskRecord{Type: etcd.TaskCreate}) {
+	if operationMatchesTask(
+		agentpb.PlanOperation_PLAN_OPERATION_RECONCILE,
+		etcd.TaskRecord{Type: testtaskjournal.TaskCreate},
+	) {
 		t.Error("ordinary TaskCreate accepted a reconciliation plan")
 	}
 }
@@ -261,7 +261,7 @@ func TestOperationMatchesTaskRequiresClosedEnvironmentComposeProcedure(t *testin
 			if test.marker != "" {
 				params[taskcontract.EnvironmentBlueprintProcedureParam] = test.marker
 			}
-			task := etcd.TaskRecord{Type: etcd.TaskUpdate, Target: environmentID, Params: params}
+			task := etcd.TaskRecord{Type: testtaskjournal.TaskUpdate, Target: environmentID, Params: params}
 			if got := operationMatchesTask(test.operation, task); got != test.want {
 				t.Fatalf(
 					"operationMatchesTask(%s, marker %q) = %t, want %t",
@@ -286,8 +286,8 @@ func (resolver *fakePlanResolver) ResolveExecutionPlan(
 }
 
 func (store *fakeTaskStore) ListAgentAssignments(
-	context.Context,
-	string,
+	context.Context, string,
+
 	uint64,
 	int32,
 ) ([]etcd.TaskAssignment, error) {
@@ -295,8 +295,8 @@ func (store *fakeTaskStore) ListAgentAssignments(
 }
 
 func (store *fakeTaskStore) ClaimNextTask(
-	context.Context,
-	string,
+	context.Context, string,
+
 	uint64,
 	time.Time,
 ) (etcd.TaskAssignment, bool, error) {
@@ -311,10 +311,10 @@ func (store *fakeTaskStore) ClaimNextTask(
 func (store *fakeTaskStore) GetTask(
 	_ context.Context,
 	taskID string,
-) (etcd.Versioned[etcd.TaskRecord], error) {
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
 	task, ok := store.tasks[taskID]
 	if !ok {
-		return etcd.Versioned[etcd.TaskRecord]{}, errs.New(errs.KindTaskNotFound, "missing")
+		return testkeyvalue.Versioned[etcd.TaskRecord]{}, errs.New(errs.KindTaskNotFound, "missing")
 	}
 	return task, nil
 }
@@ -327,18 +327,18 @@ func (store *fakeTaskStore) ListTaskEvents(
 	store.eventRevisions = append(store.eventRevisions, revision)
 	task := store.tasks[taskID]
 	return etcd.TaskEventSnapshot{
-		Task: task.Record, Events: append([]etcd.TaskEventRecord(nil), store.durableEvents...), Revision: revision,
+		Task: task.Record, Events: append([]testtaskjournal.TaskEventRecord(nil), store.durableEvents...), Revision: revision,
 	}, nil
 }
 
 func (store *fakeTaskStore) AppendTaskEvent(
 	_ context.Context,
-	input etcd.TaskEventInput,
+	input testtaskjournal.TaskEventInput,
 	_ time.Time,
 ) (etcd.TaskEventAppend, error) {
 	store.events = append(store.events, input)
 	sequence := uint64(len(store.events))
-	store.durableEvents = append(store.durableEvents, etcd.TaskEventRecord{
+	store.durableEvents = append(store.durableEvents, testtaskjournal.TaskEventRecord{
 		Sequence: sequence, Identity: input.Identity, State: input.State, Payload: append([]byte(nil), input.Payload...),
 	})
 	return etcd.TaskEventAppend{Sequence: sequence, Revision: 6}, nil
@@ -350,10 +350,10 @@ func (store *fakeTaskStore) AcknowledgeTask(
 	generation uint64,
 	taskID string,
 	assignmentID string,
-	terminal etcd.TaskStatus,
-	result etcd.TaskResultRecord,
+	terminal testtaskjournal.TaskStatus,
+	result testtaskjournal.TaskResultRecord,
 	_ time.Time,
-) (etcd.Versioned[etcd.TaskRecord], error) {
+) (testkeyvalue.Versioned[etcd.TaskRecord], error) {
 	store.ackAgentID = agentID
 	store.ackGeneration = generation
 	store.ackTaskID = taskID
@@ -376,10 +376,10 @@ func TestAcknowledgeEnvironmentRemovalAcceptsDirectoryResult(t *testing.T) {
 	assignmentID := ids.NewAt(ids.KindAssignment, now, 92)
 	environmentID := ids.NewAt(ids.KindEnvironment, now, 93)
 	planHash := sha256.Sum256([]byte("environment-removal-plan"))
-	store := &fakeTaskStore{tasks: map[string]etcd.Versioned[etcd.TaskRecord]{
+	store := &fakeTaskStore{tasks: map[string]testkeyvalue.Versioned[etcd.TaskRecord]{
 		taskID: {Record: etcd.TaskRecord{
-			ID: taskID, Type: etcd.TaskRemove, Target: environmentID,
-			PlanHash: hex.EncodeToString(planHash[:]), Status: etcd.TaskStatusRunning,
+			ID: taskID, Type: testtaskjournal.TaskRemove, Target: environmentID,
+			PlanHash: hex.EncodeToString(planHash[:]), Status: testtaskjournal.TaskStatusRunning,
 		}},
 	}}
 	server := &Server{tasks: store, plans: &fakePlanResolver{plan: &agentpb.ExecutionPlan{
@@ -400,8 +400,8 @@ func TestAcknowledgeEnvironmentRemovalAcceptsDirectoryResult(t *testing.T) {
 		t.Fatalf("acknowledge(Environment remove) error = %v", err)
 	}
 	if store.ackTaskID != taskID || store.ackAssignmentID != assignmentID ||
-		store.ackTerminal != etcd.TaskStatusCompleted ||
-		store.ackResult.Kind != etcd.TaskResultEnvironmentDirectory {
+		store.ackTerminal != testtaskjournal.TaskStatusCompleted ||
+		store.ackResult.Kind != testtaskjournal.TaskResultEnvironmentDirectory {
 		t.Fatalf(
 			"acknowledgement = %q/%q/%q/%#v",
 			store.ackTaskID, store.ackAssignmentID, store.ackTerminal, store.ackResult,
@@ -417,11 +417,15 @@ func TestAcknowledgeTerminalRecoveryReplaySurvivesAssignmentCleanup(t *testing.T
 	serviceID := ids.NewAt(ids.KindService, now, 193)
 	planHash := sha256.Sum256([]byte("terminal-recovery-plan"))
 	recoveryDigest := sha256.Sum256([]byte("terminal-recovery-record"))
-	result := &etcd.TaskResultRecord{Kind: etcd.TaskResultCompose, Diagnostic: etcd.TaskResultDiagnosticNone,
-		ExecutionEpoch: 2, ReleaseRecoveryRecordSHA256: hex.EncodeToString(recoveryDigest[:])}
-	base := &fakeTaskStore{tasks: map[string]etcd.Versioned[etcd.TaskRecord]{taskID: {Record: etcd.TaskRecord{
-		ID: taskID, Type: etcd.TaskDeploy, Target: serviceID, PlanHash: hex.EncodeToString(planHash[:]),
-		Status: etcd.TaskStatusFailed, Result: result, TerminalAssignment: &etcd.TaskTerminalAssignmentRecord{
+	result := &testtaskjournal.TaskResultRecord{
+		Kind:                        testtaskjournal.TaskResultCompose,
+		Diagnostic:                  testtaskjournal.TaskResultDiagnosticNone,
+		ExecutionEpoch:              2,
+		ReleaseRecoveryRecordSHA256: hex.EncodeToString(recoveryDigest[:]),
+	}
+	base := &fakeTaskStore{tasks: map[string]testkeyvalue.Versioned[etcd.TaskRecord]{taskID: {Record: etcd.TaskRecord{
+		ID: taskID, Type: testtaskjournal.TaskDeploy, Target: serviceID, PlanHash: hex.EncodeToString(planHash[:]),
+		Status: testtaskjournal.TaskStatusFailed, Result: result, TerminalAssignment: &testtaskjournal.TaskTerminalAssignmentRecord{
 			AssignmentID: assignmentID, AgentID: testAgentID, AgentGeneration: 1,
 		},
 	}}}}
@@ -737,8 +741,8 @@ func TestConnectDeliversFencedTaskAbort(t *testing.T) {
 	taskID := ids.NewAt(ids.KindTask, testTime(), 19)
 	assignmentID := ids.NewAt(ids.KindAssignment, testTime(), 18)
 	planHash := bytes.Repeat([]byte{0x19}, 32)
-	tasks := &fakeTaskStore{tasks: map[string]etcd.Versioned[etcd.TaskRecord]{taskID: {Record: etcd.TaskRecord{
-		ID: taskID, PlanHash: hex.EncodeToString(planHash), Status: etcd.TaskStatusRunning,
+	tasks := &fakeTaskStore{tasks: map[string]testkeyvalue.Versioned[etcd.TaskRecord]{taskID: {Record: etcd.TaskRecord{
+		ID: taskID, PlanHash: hex.EncodeToString(planHash), Status: testtaskjournal.TaskStatusRunning,
 	}}}}
 	result := make(chan error, 1)
 	go func() {
@@ -803,12 +807,14 @@ func TestConnectDoesNotDeliverAssignmentClaimedDuringPriorGenerationFence(t *tes
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 121),
 		IdempotencyKey: "channel-fence-0001",
-		Owner:          etcd.PlatformTaskOwner(), Actor: etcd.TaskActorOperator,
-		Executor: etcd.TaskExecutorAgent,
+		Owner:          testtaskjournal.PlatformTaskOwner(), Actor: testtaskjournal.TaskActorOperator,
+		Executor: testtaskjournal.TaskExecutorAgent,
 		PlanID:   ids.NewAt(ids.KindPlan, now, 122), RenderGeneration: 7,
-		Type: etcd.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 123),
-		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 124)}},
-		TimeoutSeconds: 120, Status: etcd.TaskStatusPending,
+		Type: testtaskjournal.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 123),
+		Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 124)},
+		},
+		TimeoutSeconds: 120, Status: testtaskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
 	plan := testExecutionPlan(t, task)
@@ -904,11 +910,13 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 21),
 		PlanID:           ids.NewAt(ids.KindPlan, now, 22),
-		RenderGeneration: 7, Type: etcd.TaskDeploy,
-		Target:         ids.NewAt(ids.KindService, now, 23),
-		Params:         map[string]string{"strategy": "blue-green"},
-		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 24)}},
-		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		RenderGeneration: 7, Type: testtaskjournal.TaskDeploy,
+		Target: ids.NewAt(ids.KindService, now, 23),
+		Params: map[string]string{"strategy": "blue-green"},
+		Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 24)},
+		},
+		TimeoutSeconds: 120, Status: testtaskjournal.TaskStatusRunning,
 		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
 	}
 	plan := testExecutionPlan(t, task)
@@ -916,18 +924,20 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 	planHash := append([]byte(nil), plan.PlanHash...)
 	assignmentID := ids.NewAt(ids.KindAssignment, now, 26)
 	deadline := now.Add(37 * time.Second)
-	versioned := etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5}
+	versioned := testkeyvalue.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5}
 	tasks := &fakeTaskStore{
 		claims: []etcd.TaskAssignment{{
-			Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-				AssignmentID: assignmentID, TaskID: taskID, Executor: etcd.TaskExecutorAgent,
-				AgentID: testAgentID, AgentGeneration: 1,
-				AssignedAt: now, Deadline: deadline, ExecutionEpoch: 1,
-				ExecutionMode: etcd.TaskExecutionModeForward, RecoveryDeadline: deadline.Add(time.Minute),
-			}},
+			Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+				Record: testtaskassignments.TaskAssignmentRecord{
+					AssignmentID: assignmentID, TaskID: taskID, Executor: testtaskjournal.TaskExecutorAgent,
+					AgentID: testAgentID, AgentGeneration: 1,
+					AssignedAt: now, Deadline: deadline, ExecutionEpoch: 1,
+					ExecutionMode: testtaskassignments.TaskExecutionModeForward, RecoveryDeadline: deadline.Add(time.Minute),
+				},
+			},
 			Task: versioned,
 		}},
-		tasks: map[string]etcd.Versioned[etcd.TaskRecord]{taskID: versioned},
+		tasks: map[string]testkeyvalue.Versioned[etcd.TaskRecord]{taskID: versioned},
 	}
 	stream := &scriptedStream{messages: []*agentpb.AgentMessage{
 		authenticateMessage(testAgentID, testToken(8)),
@@ -967,7 +977,7 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 	}
 	if tasks.ackAgentID != testAgentID || tasks.ackGeneration != 1 ||
 		tasks.ackTaskID != task.ID || tasks.ackAssignmentID != assignmentID ||
-		tasks.ackTerminal != etcd.TaskStatusCompleted {
+		tasks.ackTerminal != testtaskjournal.TaskStatusCompleted {
 		t.Fatalf(
 			"ack = agent %q generation %d task %q terminal %q",
 			tasks.ackAgentID,
@@ -984,7 +994,7 @@ func TestConnectClaimsAssignmentAndPersistsAcknowledgement(t *testing.T) {
 		tasks.events[0].Identity.StepID != task.Steps[0].ID ||
 		tasks.events[0].Identity.Attempt != 1 ||
 		tasks.events[0].Identity.Ordinal != 2 ||
-		tasks.events[0].State != etcd.TaskEventStateCompleted ||
+		tasks.events[0].State != testtaskjournal.TaskEventStateCompleted ||
 		!bytes.Equal(tasks.events[0].Payload, []byte(`{}`)) {
 		t.Fatalf("persisted Task events = %#v", tasks.events)
 	}
@@ -1001,29 +1011,31 @@ func TestConnectWakeDispatchesPublishedTaskWithoutAnotherReady(t *testing.T) {
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 271),
 		PlanID:           ids.NewAt(ids.KindPlan, now, 272),
-		RenderGeneration: 7, Type: etcd.TaskDeploy,
+		RenderGeneration: 7, Type: testtaskjournal.TaskDeploy,
 		Target:         ids.NewAt(ids.KindService, now, 273),
-		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 274)}},
-		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		Steps:          []testtaskjournal.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 274)}},
+		TimeoutSeconds: 120, Status: testtaskjournal.TaskStatusRunning,
 		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
 	}
 	plan := testExecutionPlan(t, task)
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
 	assignmentID := ids.NewAt(ids.KindAssignment, now, 275)
 	claim := etcd.TaskAssignment{
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-			AssignmentID: assignmentID, TaskID: taskID, Executor: etcd.TaskExecutorAgent,
-			AgentID: testAgentID, AgentGeneration: 1, AssignedAt: now,
-			Deadline: now.Add(time.Minute), RecoveryDeadline: now.Add(2 * time.Minute),
-			ExecutionEpoch: 1, ExecutionMode: etcd.TaskExecutionModeForward,
-		}},
-		Task: etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
+		Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+			Record: testtaskassignments.TaskAssignmentRecord{
+				AssignmentID: assignmentID, TaskID: taskID, Executor: testtaskjournal.TaskExecutorAgent,
+				AgentID: testAgentID, AgentGeneration: 1, AssignedAt: now,
+				Deadline: now.Add(time.Minute), RecoveryDeadline: now.Add(2 * time.Minute),
+				ExecutionEpoch: 1, ExecutionMode: testtaskassignments.TaskExecutionModeForward,
+			},
+		},
+		Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
 	}
 	authenticator := authorizedAuthenticator()
 	authenticator.authorization.Config.PullIntervalSeconds = 60
 	registry := NewRegistry()
 	tasks := &wakeTaskStore{fakeTaskStore: fakeTaskStore{
-		tasks: map[string]etcd.Versioned[etcd.TaskRecord]{taskID: claim.Task},
+		tasks: map[string]testkeyvalue.Versioned[etcd.TaskRecord]{taskID: claim.Task},
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1102,27 +1114,29 @@ func TestConnectWakeRequiresFreshReadyAfterConfigUpdate(t *testing.T) {
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 281),
 		PlanID: ids.NewAt(ids.KindPlan, now, 282), RenderGeneration: 7,
-		Type: etcd.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 283),
-		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 284)}},
-		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		Type: testtaskjournal.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 283),
+		Steps:          []testtaskjournal.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 284)}},
+		TimeoutSeconds: 120, Status: testtaskjournal.TaskStatusRunning,
 		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
 	}
 	plan := testExecutionPlan(t, task)
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
 	claim := etcd.TaskAssignment{
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-			AssignmentID: ids.NewAt(ids.KindAssignment, now, 285), TaskID: taskID,
-			Executor: etcd.TaskExecutorAgent, AgentID: testAgentID, AgentGeneration: 1,
-			AssignedAt: now, Deadline: now.Add(time.Minute), RecoveryDeadline: now.Add(2 * time.Minute),
-			ExecutionEpoch: 1, ExecutionMode: etcd.TaskExecutionModeForward,
-		}},
-		Task: etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
+		Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+			Record: testtaskassignments.TaskAssignmentRecord{
+				AssignmentID: ids.NewAt(ids.KindAssignment, now, 285), TaskID: taskID,
+				Executor: testtaskjournal.TaskExecutorAgent, AgentID: testAgentID, AgentGeneration: 1,
+				AssignedAt: now, Deadline: now.Add(time.Minute), RecoveryDeadline: now.Add(2 * time.Minute),
+				ExecutionEpoch: 1, ExecutionMode: testtaskassignments.TaskExecutionModeForward,
+			},
+		},
+		Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
 	}
 	authenticator := authorizedAuthenticator()
 	authenticator.authorization.Config.MaxConcurrentTasks = 2
 	registry := NewRegistry()
 	tasks := &wakeTaskStore{fakeTaskStore: fakeTaskStore{
-		tasks: map[string]etcd.Versioned[etcd.TaskRecord]{taskID: claim.Task},
+		tasks: map[string]testkeyvalue.Versioned[etcd.TaskRecord]{taskID: claim.Task},
 	}}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1276,21 +1290,23 @@ func TestConnectRevocationRacingPlanResolutionDoesNotSendAssignment(t *testing.T
 	task := etcd.TaskRecord{
 		ID: taskID, OperationID: ids.NewAt(ids.KindOperation, now, 291),
 		PlanID: ids.NewAt(ids.KindPlan, now, 292), RenderGeneration: 7,
-		Type: etcd.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 293),
-		Steps:          []etcd.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 294)}},
-		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		Type: testtaskjournal.TaskDeploy, Target: ids.NewAt(ids.KindService, now, 293),
+		Steps:          []testtaskjournal.TaskStepRecord{{ID: ids.NewAt(ids.KindStep, now, 294)}},
+		TimeoutSeconds: 120, Status: testtaskjournal.TaskStatusRunning,
 		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
 	}
 	plan := testExecutionPlan(t, task)
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
 	claim := etcd.TaskAssignment{
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-			AssignmentID: ids.NewAt(ids.KindAssignment, now, 295), TaskID: taskID,
-			Executor: etcd.TaskExecutorAgent, AgentID: testAgentID, AgentGeneration: 1,
-			AssignedAt: now, Deadline: now.Add(time.Minute), RecoveryDeadline: now.Add(2 * time.Minute),
-			ExecutionEpoch: 1, ExecutionMode: etcd.TaskExecutionModeForward,
-		}},
-		Task: etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
+		Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+			Record: testtaskassignments.TaskAssignmentRecord{
+				AssignmentID: ids.NewAt(ids.KindAssignment, now, 295), TaskID: taskID,
+				Executor: testtaskjournal.TaskExecutorAgent, AgentID: testAgentID, AgentGeneration: 1,
+				AssignedAt: now, Deadline: now.Add(time.Minute), RecoveryDeadline: now.Add(2 * time.Minute),
+				ExecutionEpoch: 1, ExecutionMode: testtaskassignments.TaskExecutionModeForward,
+			},
+		},
+		Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
 	}
 	tasks := &fakeTaskStore{claims: []etcd.TaskAssignment{claim}}
 	resolver := &blockingPlanResolver{
@@ -1468,26 +1484,30 @@ func TestTaskAssignmentMessageUsesDurableExecutionEpochAcrossSessions(t *testing
 		ID:               ids.NewAt(ids.KindTask, now, 8201),
 		OperationID:      ids.NewAt(ids.KindOperation, now, 8202),
 		PlanID:           ids.NewAt(ids.KindPlan, now, 8203),
-		RenderGeneration: 7, Type: etcd.TaskDeploy,
-		Target:         ids.NewAt(ids.KindService, now, 8204),
-		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 8205)}},
-		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		RenderGeneration: 7, Type: testtaskjournal.TaskDeploy,
+		Target: ids.NewAt(ids.KindService, now, 8204),
+		Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 8205)},
+		},
+		TimeoutSeconds: 120, Status: testtaskjournal.TaskStatusRunning,
 		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
 	}
 	plan := testExecutionPlan(t, task)
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
 	deadline := now.Add(37 * time.Second)
 	claim := etcd.TaskAssignment{
-		Task: etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-			AssignmentID: ids.NewAt(ids.KindAssignment, now, 8206),
-			TaskID:       task.ID, Executor: etcd.TaskExecutorAgent,
-			AgentID: testAgentID, AgentGeneration: 1,
-			AssignedAt: now, Deadline: deadline, ExecutionEpoch: 1,
-			ExecutionMode: etcd.TaskExecutionModeForward, RecoveryDeadline: deadline.Add(time.Minute),
-		}},
+		Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
+		Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+			Record: testtaskassignments.TaskAssignmentRecord{
+				AssignmentID: ids.NewAt(ids.KindAssignment, now, 8206),
+				TaskID:       task.ID, Executor: testtaskjournal.TaskExecutorAgent,
+				AgentID: testAgentID, AgentGeneration: 1,
+				AssignedAt: now, Deadline: deadline, ExecutionEpoch: 1,
+				ExecutionMode: testtaskassignments.TaskExecutionModeForward, RecoveryDeadline: deadline.Add(time.Minute),
+			},
+		},
 	}
-	tasks := &fakeTaskStore{tasks: map[string]etcd.Versioned[etcd.TaskRecord]{task.ID: claim.Task}}
+	tasks := &fakeTaskStore{tasks: map[string]testkeyvalue.Versioned[etcd.TaskRecord]{task.ID: claim.Task}}
 	server := New(
 		authorizedAuthenticator(), NewRegistry(), tasks,
 		&fakePlanResolver{plan: plan},
@@ -1500,7 +1520,7 @@ func TestTaskAssignmentMessageUsesDurableExecutionEpochAcrossSessions(t *testing
 	if first.GetExecutionEpoch() != 1 {
 		t.Fatalf("first delivery execution epoch = %d, want 1", first.GetExecutionEpoch())
 	}
-	tasks.durableEvents = []etcd.TaskEventRecord{{Identity: etcd.TaskEventIdentity{
+	tasks.durableEvents = []testtaskjournal.TaskEventRecord{{Identity: testtaskjournal.TaskEventIdentity{
 		AssignmentID: claim.Assignment.Record.AssignmentID,
 		AgentID:      testAgentID, AgentGeneration: 1,
 		TaskID: task.ID, StepID: task.Steps[0].ID, Attempt: 1, Ordinal: 1,
@@ -1532,27 +1552,31 @@ func TestConnectDoesNotDispatchRecoveredAssignmentThatExpiresDuringResolution(t 
 	startedAt := now
 	task := etcd.TaskRecord{
 		ID: ids.NewAt(ids.KindTask, now, 8210), OperationID: ids.NewAt(ids.KindOperation, now, 8211),
-		PlanID: ids.NewAt(ids.KindPlan, now, 8212), RenderGeneration: 7, Type: etcd.TaskDeploy,
-		Target:         ids.NewAt(ids.KindService, now, 8213),
-		Steps:          []etcd.TaskStepRecord{{Kind: etcd.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 8214)}},
-		TimeoutSeconds: 120, Status: etcd.TaskStatusRunning,
+		PlanID: ids.NewAt(ids.KindPlan, now, 8212), RenderGeneration: 7, Type: testtaskjournal.TaskDeploy,
+		Target: ids.NewAt(ids.KindService, now, 8213),
+		Steps: []testtaskjournal.TaskStepRecord{
+			{Kind: testtaskjournal.TaskStepOperation, ID: ids.NewAt(ids.KindStep, now, 8214)},
+		},
+		TimeoutSeconds: 120, Status: testtaskjournal.TaskStatusRunning,
 		NextEventSequence: 1, CreatedAt: now, StartedAt: &startedAt,
 	}
 	plan := testExecutionPlan(t, task)
 	task.PlanHash = hex.EncodeToString(plan.PlanHash)
 	claim := etcd.TaskAssignment{
-		Task: etcd.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
-		Assignment: etcd.Versioned[etcd.TaskAssignmentRecord]{Record: etcd.TaskAssignmentRecord{
-			AssignmentID: ids.NewAt(ids.KindAssignment, now, 8215), TaskID: task.ID,
-			Executor: etcd.TaskExecutorAgent, AgentID: testAgentID, AgentGeneration: 1,
-			AssignedAt: now.Add(-time.Minute), Deadline: now,
-			ExecutionEpoch: 1, ExecutionMode: etcd.TaskExecutionModeForward,
-			RecoveryDeadline: now.Add(time.Minute),
-		}},
+		Task: testkeyvalue.Versioned[etcd.TaskRecord]{Record: task, Revision: 5, ReadRevision: 5},
+		Assignment: testkeyvalue.Versioned[testtaskassignments.TaskAssignmentRecord]{
+			Record: testtaskassignments.TaskAssignmentRecord{
+				AssignmentID: ids.NewAt(ids.KindAssignment, now, 8215), TaskID: task.ID,
+				Executor: testtaskjournal.TaskExecutorAgent, AgentID: testAgentID, AgentGeneration: 1,
+				AssignedAt: now.Add(-time.Minute), Deadline: now,
+				ExecutionEpoch: 1, ExecutionMode: testtaskassignments.TaskExecutionModeForward,
+				RecoveryDeadline: now.Add(time.Minute),
+			},
+		},
 	}
 	tasks := &fakeTaskStore{
 		assignments: []etcd.TaskAssignment{claim},
-		tasks:       map[string]etcd.Versioned[etcd.TaskRecord]{task.ID: claim.Task},
+		tasks:       map[string]testkeyvalue.Versioned[etcd.TaskRecord]{task.ID: claim.Task},
 	}
 	stream := &scriptedStream{messages: []*agentpb.AgentMessage{
 		authenticateMessage(testAgentID, testToken(13)), readyMessage(1),

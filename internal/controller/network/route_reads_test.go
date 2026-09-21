@@ -5,37 +5,39 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testhierarchy "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	testroutes "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 )
 
 type fakeRouteReadRepository struct {
 	routeReadRepository
-	environment etcd.Versioned[etcd.EnvironmentRecord]
-	route       etcd.Versioned[etcd.RouteRecord]
-	page        etcd.Page[etcd.RouteRecord]
-	wantRequest etcd.PageRequest
+	environment testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]
+	route       testkeyvalue.Versioned[testroutes.Record]
+	page        testkeyvalue.Page[testroutes.Record]
+	wantRequest testkeyvalue.PageRequest
 	listed      bool
 }
 
 func (fake *fakeRouteReadRepository) GetEnvironment(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.EnvironmentRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testhierarchy.EnvironmentRecord], error) {
 	return fake.environment, nil
 }
 
 func (fake *fakeRouteReadRepository) GetRoute(
-	context.Context,
-	string,
-) (etcd.Versioned[etcd.RouteRecord], error) {
+	context.Context, string,
+
+) (testkeyvalue.Versioned[testroutes.Record], error) {
 	return fake.route, nil
 }
 
 func (fake *fakeRouteReadRepository) ListRoutes(
 	_ context.Context,
 	environmentID string,
-	request etcd.PageRequest,
-) (etcd.Page[etcd.RouteRecord], error) {
+	request testkeyvalue.PageRequest,
+) (testkeyvalue.Page[testroutes.Record], error) {
 	fake.listed = environmentID == fake.environment.Record.ID && request == fake.wantRequest
 	return fake.page, nil
 }
@@ -46,15 +48,18 @@ func TestRouteReadsVerifyOwnerAndPreserveDurableResults(t *testing.T) {
 	t.Parallel()
 	environmentID := "env_01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	routeID := "rte_01ARZ3NDEKTSV4RRFFQ69G5FAV"
-	request := etcd.PageRequest{Limit: 17, Cursor: "opaque"}
-	wantRoute := etcd.Versioned[etcd.RouteRecord]{
-		Record: etcd.RouteRecord{EnvironmentID: environmentID}, Revision: 19, ReadRevision: 19,
+	request := testkeyvalue.PageRequest{Limit: 17, Cursor: "opaque"}
+	wantRoute := testkeyvalue.Versioned[testroutes.Record]{
+		Record: testroutes.Record{EnvironmentID: environmentID}, Revision: 19, ReadRevision: 19,
 	}
 	wantRoute.Record.Desired.ID = routeID
-	want := etcd.Page[etcd.RouteRecord]{Items: []etcd.Versioned[etcd.RouteRecord]{wantRoute}, NextCursor: "next"}
+	want := testkeyvalue.Page[testroutes.Record]{
+		Items:      []testkeyvalue.Versioned[testroutes.Record]{wantRoute},
+		NextCursor: "next",
+	}
 	repository := &fakeRouteReadRepository{
-		environment: etcd.Versioned[etcd.EnvironmentRecord]{
-			Record: etcd.EnvironmentRecord{ID: environmentID}, Revision: 11, ReadRevision: 11,
+		environment: testkeyvalue.Versioned[testhierarchy.EnvironmentRecord]{
+			Record: testhierarchy.EnvironmentRecord{ID: environmentID}, Revision: 11, ReadRevision: 11,
 		},
 		route: wantRoute, page: want, wantRequest: request,
 	}

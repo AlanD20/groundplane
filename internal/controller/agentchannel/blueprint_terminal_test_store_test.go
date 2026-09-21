@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testkeyvalue "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 )
 
 func (store *channelMemoryStore) ValidateBlueprintTaskTerminal(
@@ -33,10 +34,10 @@ func (store *blockingClaimTaskStore) ReconnectAgentAssignment(
 
 func (store *channelMemoryStore) TransactBlueprintTaskTerminal(
 	ctx context.Context, envelope etcd.BlueprintTaskTerminalTransaction,
-) (etcd.TransactionResult, error) {
+) (testkeyvalue.TransactionResult, error) {
 	conditions, mutations, err := envelope.Operations()
 	if err != nil {
-		return etcd.TransactionResult{}, err
+		return testkeyvalue.TransactionResult{}, err
 	}
 	defer func() {
 		for _, mutation := range mutations {

@@ -6,7 +6,9 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testblueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	testenvironmentprojection "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	testservices "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 )
 
@@ -20,13 +22,13 @@ func TestSelectCandidatesIncludesReplicatedService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	change := etcd.EnvironmentBlueprintServiceChange{Record: etcd.ServiceRecord{
+	change := testblueprints.EnvironmentBlueprintServiceChange{Record: testservices.ServiceRecord{
 		Desired: core.Service{ID: "service", Name: "api", Image: "app:v1", Replicas: 2},
 	}}
 	change.Record.Runtime.RuntimeIntent = core.ServiceRuntimeIntentRunning
 	selected, err := selectCandidates(
-		etcd.EnvironmentComposeProjection{},
-		[]etcd.EnvironmentBlueprintServiceChange{change},
+		testenvironmentprojection.EnvironmentComposeProjection{},
+		[]testblueprints.EnvironmentBlueprintServiceChange{change},
 		nil,
 		memberships,
 	)
@@ -34,8 +36,8 @@ func TestSelectCandidatesIncludesReplicatedService(t *testing.T) {
 		t.Fatalf("replicated candidate selection: %v, %v", selected, err)
 	}
 	selected, err = selectCandidates(
-		etcd.EnvironmentComposeProjection{},
-		[]etcd.EnvironmentBlueprintServiceChange{change},
+		testenvironmentprojection.EnvironmentComposeProjection{},
+		[]testblueprints.EnvironmentBlueprintServiceChange{change},
 		map[string]core.ReleaseGroupSpec{"selected": {Services: []string{"api"}}},
 		memberships,
 	)

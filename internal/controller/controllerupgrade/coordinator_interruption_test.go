@@ -7,7 +7,7 @@ import (
 	"time"
 
 	upgrade "github.com/AlanD20/groundplane/internal/common/controllerupgrade"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -81,7 +81,7 @@ func TestCoordinatorHealthyReplayCompletesAfterDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	status, err := coordinator.Execute(context.Background(), h.claim.Task.Record, h.expected.Deadline)
-	if err != nil || status != etcd.TaskStatusCompleted || h.unit.launches != 0 ||
+	if err != nil || status != testtaskjournal.TaskStatusCompleted || h.unit.launches != 0 ||
 		h.store.current().Phase != upgrade.PhaseHealthy {
 		t.Fatalf("healthy replay = %s, %v", status, err)
 	}
@@ -106,7 +106,7 @@ func TestCoordinatorChangedPredecessorFailsWithoutActivation(t *testing.T) {
 				t.Fatal(err)
 			}
 			status, err := coordinator.Execute(context.Background(), h.claim.Task.Record, h.expected.Deadline)
-			if err != nil || status != etcd.TaskStatusFailed || h.store.found || h.unit.launches != 0 ||
+			if err != nil || status != testtaskjournal.TaskStatusFailed || h.store.found || h.unit.launches != 0 ||
 				len(h.agents.goals) != 0 {
 				t.Fatalf("changed predecessor = %s, %v", status, err)
 			}

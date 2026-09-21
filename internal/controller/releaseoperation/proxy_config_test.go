@@ -6,13 +6,13 @@ import (
 	"testing"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testreleaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 )
 
 // Rationale: first addressable recreate has no workload to restore. Publishing
 // invented prior proxy authority contradicts the sealed absent predecessor.
 func TestConfigureReleaseProxyFirstRecreateHasNoPriorAuthority(t *testing.T) {
-	render := etcd.ReleaseRenderInput{
+	render := testreleaserender.ReleaseRenderInput{
 		ReleaseID: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceName: "api",
 		Strategy: domain.StrategyRecreate, PriorStrategy: domain.StrategyRecreate,
 		CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
@@ -37,7 +37,7 @@ func TestConfigureReleaseProxyFirstRecreateHasNoPriorAuthority(t *testing.T) {
 }
 
 func TestConfigureReleaseProxyFirstBlueGreenHasNoPriorAuthority(t *testing.T) {
-	render := etcd.ReleaseRenderInput{
+	render := testreleaserender.ReleaseRenderInput{
 		ReleaseID: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceName: "api",
 		Strategy: domain.StrategyBlueGreen, PriorStrategy: domain.StrategyRecreate,
 		Slot: domain.SlotBlue, CandidateTarget: domain.WorkloadBlue, PriorTarget: domain.WorkloadSingleton,
@@ -64,7 +64,7 @@ func TestConfigureReleaseProxyFirstBlueGreenHasNoPriorAuthority(t *testing.T) {
 
 func TestConfigureReleaseProxyPreservesServingPredecessor(t *testing.T) {
 	const priorID = "dep_01ARZ3NDEKTSV4RRFFQ69G5FAW"
-	render := etcd.ReleaseRenderInput{
+	render := testreleaserender.ReleaseRenderInput{
 		ReleaseID: "dep_01ARZ3NDEKTSV4RRFFQ69G5FAV", ServiceName: "api",
 		Strategy: domain.StrategyRecreate, PriorStrategy: domain.StrategyRecreate,
 		CandidateTarget: domain.WorkloadSingleton, PriorTarget: domain.WorkloadSingleton,
@@ -78,7 +78,7 @@ func TestConfigureReleaseProxyPreservesServingPredecessor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prior := &etcd.ReleaseRenderInput{ReleaseID: priorID, ProxyGeneration: 7,
+	prior := &testreleaserender.ReleaseRenderInput{ReleaseID: priorID, ProxyGeneration: 7,
 		ProxyConfigDigest: hex.EncodeToString(want.SHA256[:])}
 	// A ledger revision is not the serving proxy generation. Exposure edits
 	// also must not reconstruct historical proxy bytes from current decisions.

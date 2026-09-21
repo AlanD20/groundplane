@@ -7,6 +7,8 @@ import (
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	testplatformcomponents "github.com/AlanD20/groundplane/internal/infra/etcd/platformcomponents"
+	testtaskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 func TestComponentTaskEnsureServiceUsesSealedProcedureShape(t *testing.T) {
@@ -23,7 +25,7 @@ func TestComponentTaskEnsureServiceUsesSealedProcedureShape(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			task := etcd.TaskRecord{Steps: make([]etcd.TaskStepRecord, test.count)}
+			task := etcd.TaskRecord{Steps: make([]testtaskjournal.TaskStepRecord, test.count)}
 			got, err := componentTaskEnsureService(task)
 			if (err != nil) != test.wantError || got != test.want {
 				t.Fatalf("componentTaskEnsureService() = %t, %v", got, err)
@@ -52,7 +54,7 @@ func TestFinalizePlatformComponentTaskBindsEveryOperatorProcedure(t *testing.T) 
 			task := newPlatformComponentLifecycleTask(
 				componentID, "operator-plan-hash-0001", now, test.ensureService, test.disableService,
 			)
-			input := etcd.PlatformComponentTaskRenderInput{
+			input := testplatformcomponents.PlatformComponentTaskRenderInput{
 				TaskID: task.ID, PlanID: task.PlanID, ComponentID: task.Target,
 				ExecutionPlanSHA256: strings.Repeat("a", 64),
 			}
