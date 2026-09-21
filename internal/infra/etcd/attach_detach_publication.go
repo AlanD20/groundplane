@@ -125,7 +125,7 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 		)
 	}
 	revision := mutationContext.readRevision
-	exclusionCondition, err := requireAttachBackupSourceExclusionAbsent(
+	exclusionCondition, err := attachrecord.RequireAttachBackupSourceExclusionAbsent(
 		ctx, repository.store, current.Record.ID, revision,
 	)
 	if err != nil {
@@ -414,7 +414,7 @@ func validateAttachDetachTask(
 	marker idempotencyrecord.IdempotencyMarker,
 ) error {
 	validOwnership := detaching.Status == core.AttachDetaching && detaching.Operation == attachrecord.AttachOperationDetach &&
-		detaching.TaskID == task.ID && attachImmutableEqual(current, detaching)
+		detaching.TaskID == task.ID && attachrecord.AttachImmutableEqual(current, detaching)
 	validTaskShape := task.Type == taskjournal.TaskDetach && task.Target == current.ID && task.Executor == taskjournal.TaskExecutorAgent &&
 		task.Status == taskjournal.TaskStatusPending && len(task.Params) == 1 && len(task.Materializations) == 0 &&
 		task.Params[taskjournal.TaskMutationEnvironmentParam] == current.EnvironmentID

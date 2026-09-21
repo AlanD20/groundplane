@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	attachments "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -411,7 +412,7 @@ func classifyTaskRetryConflict(
 			if attachConditions < 2 {
 				return errs.New(errs.KindInternal, "attach detach retry exclusion evidence is incomplete")
 			}
-			if exclusionErr := classifyAttachBackupSourceExclusionEvidence(
+			if exclusionErr := attachments.ClassifyAttachBackupSourceExclusionEvidence(
 				values[6],
 				attachTargetID,
 			); exclusionErr != nil {

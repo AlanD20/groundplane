@@ -1,7 +1,6 @@
 package etcd
 
 import (
-	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -26,18 +25,14 @@ type AttachCreateScope struct {
 }
 
 type AttachRepository struct {
+	*attachrecord.Lifecycle
 	*attachrecord.Reader
 	store etcdstore.Store
-}
-
-type attachRemovalStore interface {
-	Range(context.Context, etcdstore.RangeRequest) (*etcdstore.RangeResult, error)
-	GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
 }
 
 func NewAttachRepository(store etcdstore.Store) (*AttachRepository, error) {
 	if store == nil {
 		return nil, errs.New(errs.KindValidationFailed, "Attach repository store is required")
 	}
-	return &AttachRepository{Reader: attachrecord.NewReader(store), store: store}, nil
+	return &AttachRepository{Lifecycle: attachrecord.NewLifecycle(store), Reader: attachrecord.NewReader(store), store: store}, nil
 }

@@ -90,7 +90,7 @@ func (repository *TaskRepository) prepareAttachTaskRetry(
 		return attachTaskChange{}, err
 	}
 	if source.Type == taskjournal.TaskDetach {
-		exclusionCondition, exclusionErr := requireAttachBackupSourceExclusionAbsent(
+		exclusionCondition, exclusionErr := attachrecord.RequireAttachBackupSourceExclusionAbsent(
 			ctx, repository.store, source.Target, revision,
 		)
 		if exclusionErr != nil {
@@ -153,7 +153,7 @@ func (repository *TaskRepository) prepareAttachTaskAcknowledgement(
 			conditions: []etcdstore.Condition{{Key: attachrecord.AttachKey(task.Target), ModRevision: current.Revision}},
 		}, terminal)
 	}
-	conditions, mutations, values, err := prepareAttachRemoval(
+	conditions, mutations, values, err := attachrecord.PrepareAttachRemoval(
 		ctx,
 		repository.store,
 		current,

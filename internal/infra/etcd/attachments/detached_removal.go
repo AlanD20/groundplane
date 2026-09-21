@@ -1,20 +1,19 @@
-package etcd
+package attachments
 
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/core"
-	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletions "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func (repository *AttachRepository) DeleteDetachedAttach(
+func (repository *Lifecycle) DeleteDetachedAttach(
 	ctx context.Context,
-	current etcdstore.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[Record],
 ) (int64, error) {
-	if err := attachrecord.ValidateAttachVersion(current); err != nil {
+	if err := ValidateAttachVersion(current); err != nil {
 		return 0, err
 	}
 	if current.Record.Status != core.AttachDetached {
@@ -24,7 +23,7 @@ func (repository *AttachRepository) DeleteDetachedAttach(
 	if revision == 0 {
 		revision = current.Revision
 	}
-	conditions, mutations, values, err := prepareAttachRemoval(ctx, repository.store, current, revision)
+	conditions, mutations, values, err := PrepareAttachRemoval(ctx, repository.store, current, revision)
 	if err != nil {
 		return 0, err
 	}
@@ -43,26 +42,26 @@ func (repository *AttachRepository) DeleteDetachedAttach(
 	return result.Revision, nil
 }
 
-func prepareAttachRemoval(
+func PrepareAttachRemoval(
 	ctx context.Context,
 	store attachRemovalStore,
-	current etcdstore.Versioned[attachrecord.Record],
+	current etcdstore.Versioned[Record],
 	revision int64,
 ) ([]etcdstore.Condition, []etcdstore.Mutation, [][]byte, error) {
-	if err := attachrecord.ValidateAttachVersion(current); err != nil {
+	if err := ValidateAttachVersion(current); err != nil {
 		return nil, nil, nil, err
 	}
 	if revision <= 0 {
 		return nil, nil, nil, errs.New(errs.KindValidationFailed, "Attach removal revision must be positive")
 	}
-	exclusionCondition, err := requireAttachBackupSourceExclusionAbsent(
+	exclusionCondition, err := RequireAttachBackupSourceExclusionAbsent(
 		ctx, store, current.Record.ID, revision,
 	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	dependents, err := store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: attachrecord.AttachGrantedByPrefix(current.Record.ID), Limit: 1, Revision: revision,
+		Prefix: AttachGrantedByPrefix(current.Record.ID), Limit: 1, Revision: revision,
 	})
 	if err != nil {
 		return nil, nil, nil, err
@@ -77,7 +76,7 @@ func prepareAttachRemoval(
 		defer etcdstore.ClearRangeValues(dependents.Values)
 	}
 	credentialDependents, err := store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: attachrecord.AttachCredentialByPrefix(current.Record.ID), Limit: 1, Revision: revision,
+		Prefix: AttachCredentialByPrefix(current.Record.ID), Limit: 1, Revision: revision,
 	})
 	if err != nil {
 		return nil, nil, nil, err
@@ -90,7 +89,7 @@ func prepareAttachRemoval(
 	}
 	defer etcdstore.ClearRangeValues(credentialDependents.Values)
 	dependentGrants, err := store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: attachrecord.AttachDependentGrantPrefix(current.Record.ID),
+		Prefix: AttachDependentGrantPrefix(current.Record.ID),
 		Limit:  2, Revision: revision,
 	})
 	if err != nil {
@@ -98,51 +97,51 @@ func prepareAttachRemoval(
 	}
 	if dependentGrants == nil || dependentGrants.ReadRevision != revision ||
 		dependentGrants.More || len(dependentGrants.Values) > 1 {
-		return nil, nil, nil, attachrecord.CorruptAttachRecord()
+		return nil, nil, nil, CorruptAttachRecord()
 	}
 	defer etcdstore.ClearRangeValues(dependentGrants.Values)
-	if err := attachrecord.ValidateAttachDependentGrantRange(
+	if err := ValidateAttachDependentGrantRange(
 		dependentGrants, current.Record.ID, current.Record.GrantAttachIDs,
 	); err != nil {
 		return nil, nil, nil, err
 	}
 	if (len(current.Record.GrantAttachIDs) == 0 && len(dependentGrants.Values) != 0) ||
 		(len(current.Record.GrantAttachIDs) != 0 && len(dependentGrants.Values) != 1) {
-		return nil, nil, nil, attachrecord.CorruptAttachRecord()
+		return nil, nil, nil, CorruptAttachRecord()
 	}
 
 	conditions := []etcdstore.Condition{
-		{Key: attachrecord.AttachKey(current.Record.ID), ModRevision: current.Revision},
+		{Key: AttachKey(current.Record.ID), ModRevision: current.Revision},
 		{Key: deletions.TombstoneKey("attach", current.Record.ID)},
 		exclusionCondition,
-		{Key: attachrecord.AttachGrantedByPrefix(current.Record.ID), Prefix: true},
-		{Key: attachrecord.AttachCredentialByPrefix(current.Record.ID), Prefix: true},
+		{Key: AttachGrantedByPrefix(current.Record.ID), Prefix: true},
+		{Key: AttachCredentialByPrefix(current.Record.ID), Prefix: true},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationDelete, Key: attachrecord.AttachKey(current.Record.ID)},
-		{Type: etcdstore.MutationDelete, Key: attachrecord.AttachNameKey(current.Record.EnvironmentID, current.Record.Name)},
-		{Type: etcdstore.MutationDelete, Key: attachrecord.AttachOwnerKey(current.Record.EnvironmentID, current.Record.ID)},
-		{Type: etcdstore.MutationDelete, Key: attachrecord.AttachBackingServiceKey(current.Record.BackingServiceID, current.Record.ID)},
-		{Type: etcdstore.MutationDelete, Key: attachrecord.AttachBackingProjectKey(current.Record.BackingProjectID, current.Record.ID)},
-		{Type: etcdstore.MutationDelete, Key: attachrecord.AttachFactsKey(current.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: AttachKey(current.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: AttachNameKey(current.Record.EnvironmentID, current.Record.Name)},
+		{Type: etcdstore.MutationDelete, Key: AttachOwnerKey(current.Record.EnvironmentID, current.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: AttachBackingServiceKey(current.Record.BackingServiceID, current.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: AttachBackingProjectKey(current.Record.BackingProjectID, current.Record.ID)},
+		{Type: etcdstore.MutationDelete, Key: AttachFactsKey(current.Record.ID)},
 	}
 	mutations = append(mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationDelete, Key: attachrecord.AttachServiceKey(current.Record.ServiceID, current.Record.ID),
+		Type: etcdstore.MutationDelete, Key: AttachServiceKey(current.Record.ServiceID, current.Record.ID),
 	})
 	if len(current.Record.GrantAttachIDs) != 0 {
 		dependent := dependentGrants.Values[0]
 		conditions = append(conditions, etcdstore.Condition{
-			Key: attachrecord.AttachDependentGrantKey(current.Record.ID), ModRevision: dependent.ModRevision,
+			Key: AttachDependentGrantKey(current.Record.ID), ModRevision: dependent.ModRevision,
 		})
 		mutations = append(mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationDelete, Key: attachrecord.AttachDependentGrantKey(current.Record.ID),
+			Type: etcdstore.MutationDelete, Key: AttachDependentGrantKey(current.Record.ID),
 		})
 	}
 	values := make([][]byte, 0, len(current.Record.GrantAttachIDs)+1)
 	if !current.Record.OwnsCredential() {
 		keys := []string{
-			attachrecord.AttachKey(current.Record.CredentialAttachID),
-			attachrecord.AttachCredentialByKey(current.Record.CredentialAttachID, current.Record.ID),
+			AttachKey(current.Record.CredentialAttachID),
+			AttachCredentialByKey(current.Record.CredentialAttachID, current.Record.ID),
 		}
 		result, readErr := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 		if readErr != nil {
@@ -151,24 +150,24 @@ func prepareAttachRemoval(
 		if result == nil || result.ReadRevision != revision || len(result.Values) != 2 ||
 			result.Values[0] == nil || result.Values[1] == nil ||
 			string(result.Values[1].Value) != current.Record.ID {
-			return nil, nil, values, attachrecord.CorruptAttachRecord()
+			return nil, nil, values, CorruptAttachRecord()
 		}
-		owner, decodeErr := attachrecord.DecodeAttachRecord(result.Values[0].Value)
+		owner, decodeErr := DecodeAttachRecord(result.Values[0].Value)
 		if decodeErr != nil || owner.ID != current.Record.CredentialAttachID || !owner.OwnsCredential() {
-			return nil, nil, values, attachrecord.CorruptAttachRecord()
+			return nil, nil, values, CorruptAttachRecord()
 		}
-		ownerValue, encodeErr := attachrecord.EncodeAttachRecord(owner)
+		ownerValue, encodeErr := EncodeAttachRecord(owner)
 		if encodeErr != nil {
 			return nil, nil, values, encodeErr
 		}
 		values = append(values, ownerValue)
 		conditions = append(conditions,
-			etcdstore.Condition{Key: attachrecord.AttachKey(owner.ID), ModRevision: result.Values[0].ModRevision},
+			etcdstore.Condition{Key: AttachKey(owner.ID), ModRevision: result.Values[0].ModRevision},
 			etcdstore.Condition{Key: keys[1], ModRevision: result.Values[1].ModRevision},
 		)
 		mutations = append(mutations,
 			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: keys[1]},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(owner.ID), Value: ownerValue},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: AttachKey(owner.ID), Value: ownerValue},
 		)
 		etcdstore.ClearValues(result.Values)
 	}
@@ -177,43 +176,43 @@ func prepareAttachRemoval(
 	}
 	keys := make([]string, 0, len(current.Record.GrantAttachIDs)*2)
 	for _, grantID := range current.Record.GrantAttachIDs {
-		keys = append(keys, attachrecord.AttachKey(grantID), attachrecord.AttachGrantedByKey(grantID, current.Record.ID))
+		keys = append(keys, AttachKey(grantID), AttachGrantedByKey(grantID, current.Record.ID))
 	}
 	result, err := store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if result == nil || result.ReadRevision != revision || len(result.Values) != len(keys) {
-		return nil, nil, nil, attachrecord.CorruptAttachRecord()
+		return nil, nil, nil, CorruptAttachRecord()
 	}
 	for index, grantID := range current.Record.GrantAttachIDs {
 		target := result.Values[index*2]
 		reverse := result.Values[index*2+1]
 		if target == nil || reverse == nil || string(reverse.Value) != current.Record.ID {
-			return nil, nil, values, attachrecord.CorruptAttachRecord()
+			return nil, nil, values, CorruptAttachRecord()
 		}
-		targetRecord, decodeErr := attachrecord.DecodeAttachRecord(target.Value)
+		targetRecord, decodeErr := DecodeAttachRecord(target.Value)
 		if decodeErr != nil || targetRecord.ID != grantID {
-			return nil, nil, values, attachrecord.CorruptAttachRecord()
+			return nil, nil, values, CorruptAttachRecord()
 		}
-		targetValue, encodeErr := attachrecord.EncodeAttachRecord(targetRecord)
+		targetValue, encodeErr := EncodeAttachRecord(targetRecord)
 		if encodeErr != nil {
 			return nil, nil, values, encodeErr
 		}
 		values = append(values, targetValue)
 		conditions = append(conditions,
-			etcdstore.Condition{Key: attachrecord.AttachKey(grantID), ModRevision: target.ModRevision},
-			etcdstore.Condition{Key: attachrecord.AttachGrantedByKey(grantID, current.Record.ID), ModRevision: reverse.ModRevision},
+			etcdstore.Condition{Key: AttachKey(grantID), ModRevision: target.ModRevision},
+			etcdstore.Condition{Key: AttachGrantedByKey(grantID, current.Record.ID), ModRevision: reverse.ModRevision},
 		)
 		mutations = append(mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: attachrecord.AttachGrantedByKey(grantID, current.Record.ID)},
-			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(grantID), Value: targetValue},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: AttachGrantedByKey(grantID, current.Record.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: AttachKey(grantID), Value: targetValue},
 		)
 	}
 	return conditions, mutations, values, nil
 }
 
-func requireAttachBackupSourceExclusionAbsent(
+func RequireAttachBackupSourceExclusionAbsent(
 	ctx context.Context,
 	store interface {
 		GetMany(context.Context, etcdstore.GetManyRequest) (*etcdstore.GetManyResult, error)
@@ -233,14 +232,14 @@ func requireAttachBackupSourceExclusionAbsent(
 		return etcdstore.Condition{}, errs.New(errs.KindInternal, "attach backup source exclusion read is incomplete")
 	}
 	if result.Values[0] != nil {
-		if evidenceErr := classifyAttachBackupSourceExclusionEvidence(result.Values[0], attachID); evidenceErr != nil {
+		if evidenceErr := ClassifyAttachBackupSourceExclusionEvidence(result.Values[0], attachID); evidenceErr != nil {
 			return etcdstore.Condition{}, evidenceErr
 		}
 	}
 	return etcdstore.Condition{Key: key}, nil
 }
 
-func classifyAttachBackupSourceExclusionEvidence(evidence *etcdstore.KeyValue, attachID string) error {
+func ClassifyAttachBackupSourceExclusionEvidence(evidence *etcdstore.KeyValue, attachID string) error {
 	if evidence == nil {
 		return nil
 	}
