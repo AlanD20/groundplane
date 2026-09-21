@@ -9,6 +9,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -28,7 +29,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentBlueprintPlan(
 	}
 	var blueprintReleases etcd.ReleaseTaskRenderInput
 	hasBlueprintReleases := procedure == taskcontract.BlueprintComposeProcedureCandidateReleases
-	hasReleasePublication := task.Params[etcd.TaskReleasePublicationParam] != ""
+	hasReleasePublication := task.Params[releaserender.TaskReleasePublicationParam] != ""
 	if hasBlueprintReleases != hasReleasePublication {
 		return nil, errs.New(errs.KindInternal, "durable Blueprint Release procedure is inconsistent")
 	}

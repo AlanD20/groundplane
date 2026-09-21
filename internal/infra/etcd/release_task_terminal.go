@@ -5,6 +5,7 @@ import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -32,7 +33,7 @@ func (repository *TaskRepository) finalizeReleaseTaskBatch(
 	readRevision int64,
 	proofConditions ...etcdstore.Condition,
 ) (bool, error) {
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	if publicationID == "" {
 		return false, nil
 	}

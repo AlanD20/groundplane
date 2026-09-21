@@ -7,6 +7,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -107,7 +108,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	terminalAt time.Time,
 	revision int64,
 ) (blueprintCandidateTerminalChange, error) {
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	if publicationID == "" || task.Type != taskjournal.TaskUpdate {
 		return blueprintCandidateTerminalChange{}, nil
 	}
@@ -253,7 +254,7 @@ func (repository *TaskRepository) validateBlueprintCandidateUnpublished(
 		if decodeErr != nil {
 			return nil, decodeErr
 		}
-		render, decodeErr := decodeReleaseRenderInput(rawRender)
+		render, decodeErr := releaserender.DecodeReleaseRenderInput(rawRender)
 		renderDigest, _ := domain.Digest(rawRender)
 		if decodeErr != nil || renderDigest != member.RenderDigest ||
 			renderDigest != intent.RenderInputDigest || render.ReleaseID != intent.ID ||
@@ -294,7 +295,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	terminalStatus taskjournal.TaskStatus,
 	revision int64,
 ) error {
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	if publicationID == "" || task.Type != taskjournal.TaskUpdate {
 		return nil
 	}
@@ -380,7 +381,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 			return releases.CorruptReleaseRecord()
 		}
 		rawRender, decodeErr := releases.DecodeReleaseRecord[json.RawMessage](values[1].Value, "release-render-input")
-		render, renderErr := decodeReleaseRenderInput(rawRender)
+		render, renderErr := releaserender.DecodeReleaseRenderInput(rawRender)
 		renderDigest, _ := domain.Digest(rawRender)
 		if decodeErr != nil || renderErr != nil || renderDigest != member.RenderDigest ||
 			renderDigest != intent.RenderInputDigest || render.ReleaseID != intent.ID ||
@@ -451,11 +452,11 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 	retry TaskRecord,
 	revision int64,
 ) (releaseTaskRetryChange, error) {
-	publicationID := source.Params[TaskReleasePublicationParam]
+	publicationID := source.Params[releaserender.TaskReleasePublicationParam]
 	if source.Type != taskjournal.TaskUpdate || retry.Type != taskjournal.TaskUpdate ||
 		source.Executor != taskjournal.TaskExecutorAgent || retry.Executor != source.Executor ||
 		retry.OperationID != source.OperationID || retry.RetryOf != source.ID ||
-		retry.Params[TaskReleasePublicationParam] != publicationID ||
+		retry.Params[releaserender.TaskReleasePublicationParam] != publicationID ||
 		source.Result == nil || source.Result.ReconciliationRequired ||
 		(source.Status != taskjournal.TaskStatusFailed && source.Status != taskjournal.TaskStatusAborted && source.Status != taskjournal.TaskStatusTimedOut) {
 		return releaseTaskRetryChange{}, errs.New(

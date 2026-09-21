@@ -8,6 +8,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -76,7 +77,7 @@ func (repository *TaskRepository) prepareTaskMaterializationWriter(
 		return taskMaterializationWriterRecord{}, nil, err
 	}
 	conditions := append(entryRuntimeConditions, predecessorCondition)
-	if record.RetryOf != "" && record.Type == taskjournal.TaskUpdate && record.Params[TaskReleasePublicationParam] != "" {
+	if record.RetryOf != "" && record.Type == taskjournal.TaskUpdate && record.Params[releaserender.TaskReleasePublicationParam] != "" {
 		authority, authorityCondition, authorityErr := repository.blueprintCandidateAttemptAuthority(
 			ctx, record, readRevision,
 		)
@@ -170,7 +171,7 @@ func validateTaskMaterializationWriterForTask(
 }
 
 func taskHasBlueprintCandidateAppliedAuthority(record TaskRecord) bool {
-	return record.Type == taskjournal.TaskUpdate && record.Params[TaskReleasePublicationParam] != ""
+	return record.Type == taskjournal.TaskUpdate && record.Params[releaserender.TaskReleasePublicationParam] != ""
 }
 
 func taskMaterializationEnvironment(record TaskRecord) (string, bool, error) {

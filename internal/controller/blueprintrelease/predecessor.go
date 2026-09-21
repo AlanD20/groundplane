@@ -6,6 +6,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	"slices"
 
@@ -19,7 +20,7 @@ import (
 type predecessorSnapshot struct {
 	planning       etcd.ReleasePlanningService
 	serving        *domain.Intent
-	historical     etcdstore.Versioned[etcd.ReleaseRenderInput]
+	historical     etcdstore.Versioned[releaserender.ReleaseRenderInput]
 	applied        etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	appliedPresent bool
 	native         etcd.BlueprintNativePredecessorCapture
@@ -29,7 +30,7 @@ func (service *Service) preparePredecessor(
 	ctx context.Context,
 	input PrepareInput,
 	candidate blueprints.EnvironmentBlueprintServiceChange,
-	render *etcd.ReleaseRenderInput,
+	render *releaserender.ReleaseRenderInput,
 	intent *domain.Intent,
 ) error {
 	if candidate.Current == nil {
@@ -124,10 +125,10 @@ func (captured predecessorSnapshot) matches(
 }
 
 func bindPredecessor(
-	render *etcd.ReleaseRenderInput,
+	render *releaserender.ReleaseRenderInput,
 	intent *domain.Intent,
 	serving domain.Intent,
-	historical etcd.ReleaseRenderInput,
+	historical releaserender.ReleaseRenderInput,
 	applied projectionrecord.EnvironmentComposeProjection,
 ) error {
 	if serving.ID != intent.PriorServingReleaseID || serving.ServiceID != render.ServiceID ||

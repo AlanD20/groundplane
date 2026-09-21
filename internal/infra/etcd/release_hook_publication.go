@@ -3,6 +3,7 @@ package etcd
 import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -52,7 +53,7 @@ func prepareReleaseHookPublicationFragment(
 			scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			!execution.ActiveReference || execution.CurrentTaskID != evidence.Task.ID ||
 			execution.OperationID != evidence.Task.OperationID || execution.PlanHash != evidence.Task.PlanHash ||
-			evidence.Task.Params[ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID ||
+			evidence.Task.Params[releaserender.ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID ||
 			sources.Revision != evidence.Manifest.ReadRevision {
 			return releaseHookPublicationFragment{}, errs.New(
 				errs.KindValidationFailed,

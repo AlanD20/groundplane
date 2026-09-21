@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -13,7 +14,7 @@ import (
 func unassignedReleaseAbort(task TaskRecord, status taskjournal.TaskStatus) bool {
 	return status == taskjournal.TaskStatusAborted && task.Status == taskjournal.TaskStatusAborted && task.StartedAt == nil &&
 		task.FinishedAt != nil && task.Executor == taskjournal.TaskExecutorAgent &&
-		(task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback) && task.Params[TaskReleasePublicationParam] != ""
+		(task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback) && task.Params[releaserender.TaskReleasePublicationParam] != ""
 }
 
 // Task terminalization wins its assignment race first. Only then may the

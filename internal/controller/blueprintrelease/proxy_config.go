@@ -2,15 +2,16 @@ package blueprintrelease
 
 import (
 	"encoding/hex"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 // configureBlueprintProxy binds current exposure decisions without replacing
 // the predecessor's independently captured proxy generation or config digest.
-func configureBlueprintProxy(render *etcd.ReleaseRenderInput, exposures []string) error {
+func configureBlueprintProxy(render *releaserender.ReleaseRenderInput, exposures []string) error {
 	priorAddressable := render.PriorProxyGeneration != 0
 	if render.PriorWorkload != nil && priorAddressable != (len(exposures) != 0) {
 		return errs.New(

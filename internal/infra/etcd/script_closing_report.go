@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
@@ -53,7 +54,7 @@ func scriptClosingReportEnvelope(task TaskRecord) string {
 }
 
 func taskHasScriptClosingReport(task TaskRecord) bool {
-	return task.Type == taskjournal.TaskScript || (task.Type == taskjournal.TaskUpdate && task.Params[TaskReleasePublicationParam] != "")
+	return task.Type == taskjournal.TaskScript || (task.Type == taskjournal.TaskUpdate && task.Params[releaserender.TaskReleasePublicationParam] != "")
 }
 
 func (report scriptClosingReport) matches(status taskjournal.TaskStatus, result taskjournal.TaskResultRecord) bool {

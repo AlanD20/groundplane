@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -33,7 +34,7 @@ func validateCandidateReleaseAssignment(
 	claim etcd.TaskAssignment,
 	plan *agentpb.ExecutionPlan,
 ) error {
-	if claim.Task.Record.Params[etcd.TaskReleasePublicationParam] == "" {
+	if claim.Task.Record.Params[releaserender.TaskReleasePublicationParam] == "" {
 		return nil
 	}
 	descriptors, ok := store.(candidateReleaseDescriptorStore)

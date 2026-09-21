@@ -7,6 +7,7 @@ import (
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
 
@@ -35,7 +36,7 @@ func (resolver *TaskPlanResolver) PrepareReleaseTask(
 ) (etcd.TaskRecord, *agentpb.ExecutionPlan, error) {
 	if resolver == nil || ctx == nil || len(input.Members) == 0 || len(input.Members) > 32 ||
 		task.Executor != taskjournal.TaskExecutorAgent || task.OperationID != input.Operation.OperationID ||
-		task.Params[etcd.TaskReleasePublicationParam] != input.PublicationID {
+		task.Params[releaserender.TaskReleasePublicationParam] != input.PublicationID {
 		return etcd.TaskRecord{}, nil, errs.New(errs.KindValidationFailed, "release Task preparation is invalid")
 	}
 	prepared := task

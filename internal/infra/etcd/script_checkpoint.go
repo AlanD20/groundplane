@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -195,7 +196,7 @@ func taskOwnsScriptExecution(task TaskRecord, execution scriptexecutions.ScriptE
 			task.Params[scriptexecutions.ScriptExecutionIDParam] == execution.ID
 	case taskjournal.TaskDeploy, taskjournal.TaskRollback:
 		if task.Owner.EnvironmentID != execution.EnvironmentID ||
-			task.Params[TaskReleasePublicationParam] == "" {
+			task.Params[releaserender.TaskReleasePublicationParam] == "" {
 			return false
 		}
 		for _, step := range task.Steps {
@@ -206,7 +207,7 @@ func taskOwnsScriptExecution(task TaskRecord, execution scriptexecutions.ScriptE
 	case taskjournal.TaskUpdate:
 		return blueprintScriptTaskShape(task) &&
 			task.Owner.EnvironmentID == execution.EnvironmentID &&
-			task.Params[ReleaseHookStepExecutionParam(execution.StepID)] == execution.ID
+			task.Params[releaserender.ReleaseHookStepExecutionParam(execution.StepID)] == execution.ID
 	}
 	return false
 }

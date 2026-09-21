@@ -1,7 +1,8 @@
 package taskplanning
 
 import (
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -14,7 +15,7 @@ type blueprintTaskScriptIdentity struct {
 
 func blueprintTaskStepRecords(
 	steps []*agentpb.ExecutionStep,
-	members []etcd.ReleaseTaskRenderMember,
+	members []releaserender.ReleaseTaskRenderMember,
 ) ([]taskjournal.TaskStepRecord, error) {
 	byExecution := make(map[string]blueprintTaskScriptIdentity)
 	for _, member := range members {

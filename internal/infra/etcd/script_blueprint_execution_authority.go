@@ -7,6 +7,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -16,7 +17,7 @@ import (
 
 func blueprintScriptTaskShape(task TaskRecord) bool {
 	return task.Type == taskjournal.TaskUpdate && task.Executor == taskjournal.TaskExecutorAgent &&
-		releases.ValidatePublicationID(task.Params[TaskReleasePublicationParam]) == nil &&
+		releases.ValidatePublicationID(task.Params[releaserender.TaskReleasePublicationParam]) == nil &&
 		task.Owner.EnvironmentID != "" && task.Target == task.Owner.EnvironmentID &&
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] == task.Owner.EnvironmentID &&
 		ids.Validate(ids.KindTask, task.Params[blueprints.EnvironmentDesiredRevisionParam]) == nil
@@ -42,10 +43,10 @@ func (repository *ScriptRepository) blueprintScriptExecutionAuthority(
 		execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
 		execution.EnvironmentID != task.Owner.EnvironmentID ||
 		execution.PlanHash != task.PlanHash ||
-		task.Params[ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID {
+		task.Params[releaserender.ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID {
 		return nil, errs.New(errs.KindStateConflict, "Blueprint Script execution does not match its Task")
 	}
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	keys := []string{releases.ReleasePublicationKey(publicationID), releases.ReleaseManifestStagingKey(publicationID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {

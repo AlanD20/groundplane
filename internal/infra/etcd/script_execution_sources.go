@@ -10,6 +10,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -34,7 +35,7 @@ type ScriptExecutionSources struct {
 	Script            etcdstore.Versioned[scriptrecord.Record]
 	BodyGeneration    etcdstore.Versioned[scriptrecord.BodyGenerationRecord]
 	Release           ServingRelease
-	RenderInput       etcdstore.Versioned[ReleaseRenderInput]
+	RenderInput       etcdstore.Versioned[releaserender.ReleaseRenderInput]
 	DesiredHead       etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]
 	DesiredProjection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	Networks          []etcdstore.Versioned[zonerecord.Record]
@@ -49,7 +50,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 	publicationID string,
 	script scriptrecord.Record,
 	service servicerecord.ServiceRecord,
-	member ReleaseTaskRenderMember,
+	member releaserender.ReleaseTaskRenderMember,
 	tenant etcdstore.Versioned[hierarchyrecord.TenantRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
@@ -127,7 +128,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 	if err != nil {
 		return ScriptExecutionSources{}, err
 	}
-	render, err := decodeReleaseRenderInput(raw)
+	render, err := releaserender.DecodeReleaseRenderInput(raw)
 	if err != nil || render.ReleaseID != member.Render.ReleaseID ||
 		render.ServiceID != member.Render.ServiceID ||
 		render.Projection.RevisionID != projection.RevisionID {
@@ -176,7 +177,7 @@ func (repository *ScriptRepository) LoadBlueprintReleaseHookExecutionSources(
 			IntentRevision: read.Values[2].ModRevision,
 			Revision:       revision,
 		},
-		RenderInput: etcdstore.Versioned[ReleaseRenderInput]{
+		RenderInput: etcdstore.Versioned[releaserender.ReleaseRenderInput]{
 			Record:       render,
 			Revision:     read.Values[3].ModRevision,
 			ReadRevision: revision,
@@ -333,7 +334,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 		return ScriptExecutionSources{}, err
 	}
 	if releaseID != "" {
-		value, encodeErr := EncodeReleaseRenderInput(renderInput.Record)
+		value, encodeErr := releaserender.EncodeReleaseRenderInput(renderInput.Record)
 		digest, digestErr := domain.Digest(json.RawMessage(value))
 		clear(value)
 		if encodeErr != nil || digestErr != nil || digest != release.Intent.RenderInputDigest {

@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,7 +23,7 @@ import (
 type preparedHooks struct {
 	preStepIDs  [][]string
 	task        etcd.TaskRecord
-	members     []etcd.ReleaseTaskRenderMember
+	members     []releaserender.ReleaseTaskRenderMember
 	postStepIDs [][]string
 	sources     map[string]etcd.ScriptExecutionSources
 	executions  int
@@ -33,7 +34,7 @@ func (service *Service) prepareDeployHooks(
 	input PrepareInput,
 	manifest etcd.VersionedReleaseManifest,
 	task etcd.TaskRecord,
-	members []etcd.ReleaseTaskRenderMember,
+	members []releaserender.ReleaseTaskRenderMember,
 ) (preparedHooks, error) {
 	result := preparedHooks{
 		task: task, members: members, preStepIDs: make([][]string, len(members)), postStepIDs: make([][]string, len(members)),
@@ -133,8 +134,8 @@ func (service *Service) prepareDeployHooks(
 				result.postStepIDs[memberIndex] = append(result.postStepIDs[memberIndex], stepID)
 			}
 			result.sources[executionID] = sources
-			result.task.Params[etcd.ReleaseHookStepMemberParam(stepID)] = strconv.Itoa(memberIndex + 1)
-			result.task.Params[etcd.ReleaseHookStepExecutionParam(stepID)] = executionID
+			result.task.Params[releaserender.ReleaseHookStepMemberParam(stepID)] = strconv.Itoa(memberIndex + 1)
+			result.task.Params[releaserender.ReleaseHookStepExecutionParam(stepID)] = executionID
 			result.executions++
 			bodyBytes += uint64(hook.BodySize)
 			if err := validateDeployHookBounds(result.executions, bodyBytes); err != nil {

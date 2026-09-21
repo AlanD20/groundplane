@@ -5,6 +5,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -109,7 +110,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		}
 		var recoveryAcknowledgement releaseRecoveryAcknowledgement
 		var terminalScriptSourceRelease scriptTerminalSourceRelease
-		if executor == taskjournal.TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" &&
+		if executor == taskjournal.TaskExecutorAgent && result != nil && task.Params[releaserender.TaskReleasePublicationParam] != "" &&
 			assignment.ExecutionMode == taskassignments.TaskExecutionModeRecoveryOnly {
 			recoveryAcknowledgement, err = repository.releaseRecoveryAcknowledgementAtRevision(
 				ctx, task, assignment, terminalStatus, *result, primaryAndAssignment.ReadRevision,
@@ -144,7 +145,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			}
 			defer terminalScriptSourceRelease.clear()
 		}
-		if executor == taskjournal.TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" &&
+		if executor == taskjournal.TaskExecutorAgent && result != nil && task.Params[releaserender.TaskReleasePublicationParam] != "" &&
 			result.ReconciliationRequired {
 			transitioned, processed, transitionErr := repository.transitionReleaseAcknowledgementToRecovery(
 				ctx, task, taskValue, assignment, assignmentValue, assignmentIndexValue,
@@ -158,7 +159,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			}
 			continue
 		}
-		if executor == taskjournal.TaskExecutorAgent && task.Params[TaskReleasePublicationParam] != "" &&
+		if executor == taskjournal.TaskExecutorAgent && task.Params[releaserender.TaskReleasePublicationParam] != "" &&
 			task.Type != taskjournal.TaskUpdate {
 			processed, err := repository.finalizeReleaseTaskBatch(
 				ctx, task, assignment, terminalStatus, *result, agentID, terminalAt,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -80,8 +81,8 @@ func (service *Service) publish(
 		Owner: owner, Actor: taskjournal.TaskActorOperator, Executor: taskjournal.TaskExecutorAgent,
 		PlanID: planID, Type: taskType, Target: desiredID,
 		Params: map[string]string{
-			etcd.TaskReleasePublicationParam:     publicationID,
-			taskjournal.TaskComposeArtifactParam: artifactID,
+			releaserender.TaskReleasePublicationParam: publicationID,
+			taskjournal.TaskComposeArtifactParam:      artifactID,
 		},
 		Steps: make([]taskjournal.TaskStepRecord, len(candidates)*5), TimeoutSeconds: configured,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
@@ -94,7 +95,7 @@ func (service *Service) publish(
 		Members: make([]releases.ReleaseStageMember, len(candidates)), CreatedAt: now,
 	}
 	groupMembers := make([]domain.GroupMember, len(candidates))
-	renderMembers := make([]etcd.ReleaseTaskRenderMember, len(candidates))
+	renderMembers := make([]releaserender.ReleaseTaskRenderMember, len(candidates))
 	fenceMembers := make([]releases.ReleaseFenceMember, len(candidates))
 	for index, candidate := range candidates {
 		releaseID := ids.New(ids.KindDeployment)
@@ -114,7 +115,7 @@ func (service *Service) publish(
 		if releaseNeedsPriorArtifact(candidate) {
 			priorArtifactID = ids.New(ids.KindConfig)
 		}
-		render := etcd.ReleaseRenderInput{
+		render := releaserender.ReleaseRenderInput{
 			ReleaseID: releaseID, PlanID: planID, ArtifactID: artifactID, PriorArtifactID: priorArtifactID,
 			ServiceID:         candidate.planning.Service.Record.Desired.ID,
 			ServiceName:       candidate.planning.Service.Record.Desired.Name,
@@ -127,7 +128,7 @@ func (service *Service) publish(
 			EnvironmentID: scope.Environment.Record.ID, EnvironmentName: scope.Environment.Record.Name,
 			AuthorizedVolumeDir: scope.Environment.Record.VolumeDir, Projection: projection,
 		}
-		var priorRender *etcd.ReleaseRenderInput
+		var priorRender *releaserender.ReleaseRenderInput
 		if candidate.priorReleaseID != "" {
 			prior, err := service.ledger.GetReleaseRenderInputAt(ctx, candidate.priorReleaseID, scope.ReadRevision)
 			if err != nil {
@@ -151,7 +152,7 @@ func (service *Service) publish(
 		if err := service.captureServingRuntime(ctx, scope, &render, candidate.priorReleaseID); err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
-		raw, err := etcd.EncodeReleaseRenderInput(render)
+		raw, err := releaserender.EncodeReleaseRenderInput(render)
 		if err != nil {
 			return idempotencyrecord.IdempotencyResponse{}, err
 		}
@@ -181,7 +182,7 @@ func (service *Service) publish(
 			ServiceID: render.ServiceID,
 			ReleaseID: releaseID,
 		}
-		renderMembers[index] = etcd.ReleaseTaskRenderMember{Intent: intent, Render: render}
+		renderMembers[index] = releaserender.ReleaseTaskRenderMember{Intent: intent, Render: render}
 		fenceMembers[index] = releases.ReleaseFenceMember{
 			ServiceID: render.ServiceID, CandidateReleaseID: releaseID, RenderInputDigest: digest,
 		}

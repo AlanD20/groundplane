@@ -4,6 +4,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -29,7 +30,7 @@ func (repository *TaskRepository) prepareReleaseHookExecutionRetryTransfer(
 	}
 	for index, step := range source.Steps {
 		if retry.Steps[index].ID != step.ID ||
-			retry.Params[ReleaseHookStepExecutionParam(step.ID)] != source.Params[ReleaseHookStepExecutionParam(step.ID)] {
+			retry.Params[releaserender.ReleaseHookStepExecutionParam(step.ID)] != source.Params[releaserender.ReleaseHookStepExecutionParam(step.ID)] {
 			return releaseHookExecutionRetryTransfer{}, scriptRetryUnsafe("Script retry barrier step lineage changed")
 		}
 	}
@@ -98,7 +99,7 @@ func releaseHookExecutionSteps(task TaskRecord) ([]releaseHookExecutionStep, err
 	steps := make([]releaseHookExecutionStep, 0)
 	seen := make(map[string]struct{})
 	for _, step := range task.Steps {
-		executionID := task.Params[ReleaseHookStepExecutionParam(step.ID)]
+		executionID := task.Params[releaserender.ReleaseHookStepExecutionParam(step.ID)]
 		if executionID == "" {
 			continue
 		}

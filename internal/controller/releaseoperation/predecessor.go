@@ -4,6 +4,7 @@ import (
 	"context"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 
 	"github.com/AlanD20/groundplane/internal/controller/servicelifecycle"
@@ -17,7 +18,7 @@ import (
 func (service *Service) captureServingRuntime(
 	ctx context.Context,
 	scope etcd.ReleasePlanningScope,
-	render *etcd.ReleaseRenderInput,
+	render *releaserender.ReleaseRenderInput,
 	priorReleaseID string,
 ) error {
 	return captureServingRuntime(ctx, service.ledger, scope, render, priorReleaseID)
@@ -27,7 +28,7 @@ func captureServingRuntime(
 	ctx context.Context,
 	reader servicelifecycle.AcknowledgedRuntimeReader,
 	scope etcd.ReleasePlanningScope,
-	render *etcd.ReleaseRenderInput,
+	render *releaserender.ReleaseRenderInput,
 	priorReleaseID string,
 ) error {
 	if priorReleaseID == "" {
@@ -43,7 +44,7 @@ func captureServingRuntime(
 }
 
 func bindServingRuntime(
-	render *etcd.ReleaseRenderInput,
+	render *releaserender.ReleaseRenderInput,
 	priorReleaseID string,
 	captured servicelifecycle.AcknowledgedRuntimeCapture,
 ) error {

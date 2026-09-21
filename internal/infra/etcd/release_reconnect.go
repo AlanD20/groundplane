@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
@@ -38,7 +39,7 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 		if assignment.ExecutionEpoch == math.MaxUint32 {
 			return TaskAssignment{}, errs.New(errs.KindStateConflict, "Agent reconnect assignment authority changed")
 		}
-		if task.Params[TaskReleasePublicationParam] == "" {
+		if task.Params[releaserender.TaskReleasePublicationParam] == "" {
 			return current, nil
 		}
 		_, procedure, err := repository.candidateReleaseDescriptorAtRevision(ctx, task, current.Task.ReadRevision)

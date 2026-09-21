@@ -11,6 +11,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"reflect"
@@ -347,7 +348,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 
 func componentTaskRetryIsBlueprint(source TaskRecord) (bool, error) {
 	procedure, present := source.Params[componentTaskBlueprintProcedureParam]
-	publicationPresent := source.Params[TaskReleasePublicationParam] != ""
+	publicationPresent := source.Params[releaserender.TaskReleasePublicationParam] != ""
 	if !present {
 		if publicationPresent {
 			return false, errs.New(errs.KindStateConflict, "Blueprint Component retry procedure is unavailable")

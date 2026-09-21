@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -20,7 +21,7 @@ func (repository *TaskRepository) acknowledgeTerminalTaskReplay(
 	if assignmentIndexValue != nil {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task assignment index is orphaned")
 	}
-	if executor == taskjournal.TaskExecutorAgent && result != nil && task.Params[TaskReleasePublicationParam] != "" {
+	if executor == taskjournal.TaskExecutorAgent && result != nil && task.Params[releaserender.TaskReleasePublicationParam] != "" {
 		normalizedStatus, normalizedResult, handled, normalizeErr := repository.normalizeReleaseRecoveryTerminalReplay(
 			ctx,
 			task,

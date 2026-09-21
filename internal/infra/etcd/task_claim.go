@@ -6,6 +6,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -222,7 +223,7 @@ func (repository *TaskRepository) claimNextTask(
 				mutations = append(mutations, epochMutation)
 			}
 		}
-		if !taskHasBlueprintCandidateAppliedAuthority(task) && task.Params[TaskReleasePublicationParam] != "" {
+		if !taskHasBlueprintCandidateAppliedAuthority(task) && task.Params[releaserender.TaskReleasePublicationParam] != "" {
 			authority, authorityDigest, authorityConditions, authorityErr := repository.prepareOrdinaryRestorationAuthority(
 				ctx,
 				task,

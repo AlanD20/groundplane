@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
@@ -73,13 +74,13 @@ func (repository *TaskRepository) validateTaskAcknowledgementReplay(
 	); err != nil {
 		return err
 	}
-	if task.Params[TaskReleasePublicationParam] != "" && task.Type == taskjournal.TaskUpdate {
+	if task.Params[releaserender.TaskReleasePublicationParam] != "" && task.Type == taskjournal.TaskUpdate {
 		if err := repository.validateBlueprintCandidateTerminalReplay(
 			ctx, task, terminalStatus, readRevision,
 		); err != nil {
 			return err
 		}
-	} else if task.Params[TaskReleasePublicationParam] != "" {
+	} else if task.Params[releaserender.TaskReleasePublicationParam] != "" {
 		headRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
 				releases.ReleaseOperationKey(task.OperationID),

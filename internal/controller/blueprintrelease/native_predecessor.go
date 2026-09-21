@@ -2,6 +2,7 @@ package blueprintrelease
 
 import (
 	"context"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -82,7 +83,7 @@ func bindNativePredecessor(
 	return captured, nil
 }
 
-func nativePredecessors(input PrepareInput, members []etcd.ReleaseTaskRenderMember) []etcd.BlueprintNativePredecessor {
+func nativePredecessors(input PrepareInput, members []releaserender.ReleaseTaskRenderMember) []etcd.BlueprintNativePredecessor {
 	captures := nativePredecessorCaptures(input, members)
 	result := make([]etcd.BlueprintNativePredecessor, len(captures))
 	for index, capture := range captures {
@@ -93,7 +94,7 @@ func nativePredecessors(input PrepareInput, members []etcd.ReleaseTaskRenderMemb
 
 func nativePredecessorCaptures(
 	input PrepareInput,
-	members []etcd.ReleaseTaskRenderMember,
+	members []releaserender.ReleaseTaskRenderMember,
 ) []etcd.BlueprintNativePredecessorCapture {
 	result := make([]etcd.BlueprintNativePredecessorCapture, 0, len(members))
 	for _, member := range members {

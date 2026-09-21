@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -20,7 +21,7 @@ import (
 func renderBlueprintCandidateArtifact(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	input etcd.ReleaseRenderInput,
+	input releaserender.ReleaseRenderInput,
 	images map[string]domain.WorkloadSeal,
 	releases map[string]composerender.ComposeReleaseIdentity,
 ) (*agentpb.ComposeArtifact, error) {

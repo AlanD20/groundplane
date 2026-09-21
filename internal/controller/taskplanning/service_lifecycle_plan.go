@@ -9,6 +9,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskconfiguration "github.com/AlanD20/groundplane/internal/infra/etcd/taskconfiguration"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -221,7 +222,7 @@ func (resolver *TaskPlanResolver) buildServiceLifecyclePlanWithHookInputs(
 		}()
 	}
 	sources := make([]*agentpb.ServiceLifecycleSource, len(artifacts))
-	renders := []etcd.ReleaseRenderInput{input.Release.Current}
+	renders := []releaserender.ReleaseRenderInput{input.Release.Current}
 	if input.Release.RetainedPrior != nil {
 		renders = append(renders, *input.Release.RetainedPrior)
 	}
@@ -284,7 +285,7 @@ func (resolver *TaskPlanResolver) renderServiceLifecycleArtifacts(
 
 func (resolver *TaskPlanResolver) renderServiceLifecycleArtifact(
 	ctx context.Context,
-	source etcd.ReleaseRenderInput,
+	source releaserender.ReleaseRenderInput,
 	phase core.ServiceLifecyclePhase,
 	includeProxy bool,
 ) (*agentpb.ComposeArtifact, error) {

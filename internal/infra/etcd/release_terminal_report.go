@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -17,10 +18,10 @@ func (repository *TaskRepository) prepareReleaseTerminalReport(
 ) ([]etcdstore.Condition, error) {
 	task, assignment := current.Task.Record, current.Assignment.Record
 	if task.Executor != taskjournal.TaskExecutorAgent || result == nil ||
-		(task.Type != taskjournal.TaskScript && task.Params[TaskReleasePublicationParam] == "") {
+		(task.Type != taskjournal.TaskScript && task.Params[releaserender.TaskReleasePublicationParam] == "") {
 		return nil, nil
 	}
-	if task.Params[TaskReleasePublicationParam] != "" && assignment.ExecutionMode == taskassignments.TaskExecutionModeForward &&
+	if task.Params[releaserender.TaskReleasePublicationParam] != "" && assignment.ExecutionMode == taskassignments.TaskExecutionModeForward &&
 		(result.ExecutionEpoch != assignment.ExecutionEpoch || result.ReleaseRecoveryRecordSHA256 != "") {
 		return nil, errs.New(errs.KindStateConflict, "release terminal execution epoch changed")
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
@@ -17,7 +18,7 @@ import (
 
 type BlueprintReleasePlanInput struct {
 	NativePredecessors        []etcd.BlueprintNativePredecessor
-	Members                   []etcd.ReleaseTaskRenderMember
+	Members                   []releaserender.ReleaseTaskRenderMember
 	PrefixSteps               []*agentpb.ExecutionStep
 	ComponentSteps            []*agentpb.ExecutionStep
 	ApplyStepIDs              []string
@@ -41,7 +42,7 @@ func (resolver *TaskPlanResolver) PrepareBlueprintReleaseTask(
 	input BlueprintReleasePlanInput,
 ) (etcd.TaskRecord, *agentpb.ExecutionPlan, error) {
 	if resolver == nil || ctx == nil || len(input.Members) == 0 || task.Type != taskjournal.TaskUpdate ||
-		task.Params[etcd.TaskReleasePublicationParam] == "" || len(input.ApplyStepIDs) != len(input.Members) ||
+		task.Params[releaserender.TaskReleasePublicationParam] == "" || len(input.ApplyStepIDs) != len(input.Members) ||
 		len(input.HealthStepIDs) != len(input.Members) || len(input.RecoveryProbeStepIDs) != len(input.Members) ||
 		len(input.RecoveryCompensateStepIDs) != len(input.Members) || len(input.PostStepIDs) != len(input.Members) ||
 		len(input.PreStepIDs) != 0 && len(input.PreStepIDs) != len(input.Members) {
@@ -342,13 +343,13 @@ func validBlueprintReleaseForwardPayload(step *agentpb.ExecutionStep, stage blue
 
 func bindBlueprintCandidateServiceImages(
 	artifact *agentpb.ComposeArtifact,
-	members []etcd.ReleaseTaskRenderMember,
+	members []releaserender.ReleaseTaskRenderMember,
 ) error {
 	const op = "bind blueprint candidate service images"
 	if artifact == nil {
 		return errs.New(errs.KindInternal, op+": compose artifact is required")
 	}
-	byService := make(map[string]etcd.ReleaseTaskRenderMember, len(members))
+	byService := make(map[string]releaserender.ReleaseTaskRenderMember, len(members))
 	candidateRoles := make(map[string]agentpb.ComposeServiceRole, len(members))
 	for _, member := range members {
 		if member.Render.ServiceID == "" || member.Intent.ID == "" ||

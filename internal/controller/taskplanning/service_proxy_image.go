@@ -3,7 +3,8 @@ package taskplanning
 import (
 	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
 	releasedomain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"runtime"
 )
@@ -25,8 +26,8 @@ func (resolver *TaskPlanResolver) EnableServiceProxyImage(image componentsdk.OCI
 // PrepareReleaseProxyImage freezes image selection before ledger staging.
 // Existing proxies retain their exact historical image, never today's catalog.
 func (resolver *TaskPlanResolver) PrepareReleaseProxyImage(
-	render *etcd.ReleaseRenderInput,
-	prior *etcd.ReleaseRenderInput,
+	render *releaserender.ReleaseRenderInput,
+	prior *releaserender.ReleaseRenderInput,
 ) error {
 	if render == nil || resolver == nil {
 		return errs.New(errs.KindInternal, "release proxy preparation requires render inputs")

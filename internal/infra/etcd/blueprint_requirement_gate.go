@@ -12,6 +12,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
@@ -429,7 +430,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 		candidate.Owner.EnvironmentID != fence.environmentID || candidate.Target != fence.environmentID ||
 		candidate.Params[blueprints.EnvironmentDesiredRevisionParam] != candidateTaskID ||
 		!taskHasBlueprintCandidateAppliedAuthority(candidate) ||
-		releases.ValidatePublicationID(candidate.Params[TaskReleasePublicationParam]) != nil {
+		releases.ValidatePublicationID(candidate.Params[releaserender.TaskReleasePublicationParam]) != nil {
 		return nil, nil, nil
 	}
 	gate, err := decodeBlueprintRequirementGate(candidateRead.Values[1].Value)

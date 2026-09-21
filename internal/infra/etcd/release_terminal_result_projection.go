@@ -2,6 +2,7 @@ package etcd
 
 import (
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -27,14 +28,14 @@ func releaseFailedMemberOrdinal(task TaskRecord, terminalStatus taskjournal.Task
 func releaseFailedOrdinalFromResult(task TaskRecord, result taskjournal.TaskResultRecord) uint32 {
 	for index, step := range task.Steps {
 		if step.ID == result.FailedStepID {
-			if value := task.Params[ReleaseHookStepMemberParam(step.ID)]; value != "" {
+			if value := task.Params[releaserender.ReleaseHookStepMemberParam(step.ID)]; value != "" {
 				ordinal, err := strconv.ParseUint(value, 10, 32)
 				if err != nil || ordinal == 0 {
 					return 0
 				}
 				return uint32(ordinal)
 			}
-			if task.Params[ReleaseHookStepExecutionParam(step.ID)] != "" {
+			if task.Params[releaserender.ReleaseHookStepExecutionParam(step.ID)] != "" {
 				return 0
 			}
 			return uint32(index/5 + 1)

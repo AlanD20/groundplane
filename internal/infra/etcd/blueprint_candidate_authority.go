@@ -9,6 +9,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
@@ -49,7 +50,7 @@ func validateBlueprintCandidateManifest(
 	marker releases.ReleasePublicationMarker,
 	manifest releases.ReleaseStagedManifest,
 ) error {
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	if releases.ValidatePublicationID(publicationID) != nil || marker.PublicationID != publicationID ||
 		marker.OperationID != task.OperationID || manifest.PublicationID != publicationID ||
 		manifest.OperationID != task.OperationID || marker.ManifestDigest != manifest.Digest ||
@@ -95,7 +96,7 @@ func blueprintCandidateCompensationResult(task TaskRecord, result taskjournal.Ta
 
 func validateBlueprintCandidateCompensation(
 	intent domain.Intent,
-	render ReleaseRenderInput,
+	render releaserender.ReleaseRenderInput,
 	result taskjournal.TaskResultRecord,
 ) error {
 	proxy, hasProxy := releaseProxyEvidence(result, intent.ServiceID)
@@ -155,7 +156,7 @@ func validateBlueprintCandidateAttemptAuthorityRecord(
 ) error {
 	if record.Schema != 2 || record.TaskID != task.ID || record.RetryOf != task.RetryOf ||
 		record.OperationID != task.OperationID ||
-		record.PublicationID != task.Params[TaskReleasePublicationParam] ||
+		record.PublicationID != task.Params[releaserender.TaskReleasePublicationParam] ||
 		record.EnvironmentID != task.Owner.EnvironmentID ||
 		len(record.Attempts) == 0 || len(record.Attempts) > 33 ||
 		(task.RetryOf == "" && len(record.Attempts) != 1) ||
@@ -251,7 +252,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAuthority(
 		}
 		authority = blueprintCandidateAttemptAuthorityRecord{
 			Schema: 2, TaskID: task.ID, OperationID: task.OperationID,
-			PublicationID: task.Params[TaskReleasePublicationParam], EnvironmentID: task.Owner.EnvironmentID,
+			PublicationID: task.Params[releaserender.TaskReleasePublicationParam], EnvironmentID: task.Owner.EnvironmentID,
 			AppliedPredecessor: *writer.BlueprintAppliedPredecessor,
 			Attempts:           []domain.Attempt{{ID: task.ID, TaskID: task.ID, StartedAt: startedAt}},
 		}
@@ -281,7 +282,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateClaimEpoch(
 	revision int64,
 	readyGateRevision int64,
 ) (etcdstore.Condition, etcdstore.Mutation, error) {
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	if !taskHasBlueprintCandidateAppliedAuthority(task) || releases.ValidatePublicationID(publicationID) != nil {
 		return etcdstore.Condition{}, etcdstore.Mutation{}, releases.CorruptReleaseRecord()
 	}

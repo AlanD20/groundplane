@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -57,12 +58,12 @@ func (repository *ScriptRepository) GetReleaseScriptExecutionPlan(
 ) (*agentpb.ExecutionPlan, bool, error) {
 	if ctx == nil || repository == nil || repository.store == nil ||
 		(task.Type != taskjournal.TaskDeploy && task.Type != taskjournal.TaskRollback &&
-			(task.Type != taskjournal.TaskUpdate || task.Params[TaskReleasePublicationParam] == "")) {
+			(task.Type != taskjournal.TaskUpdate || task.Params[releaserender.TaskReleasePublicationParam] == "")) {
 		return nil, false, errs.New(errs.KindValidationFailed, "release Script execution plan request is invalid")
 	}
 	executionIDs := make(map[string]string)
 	for _, step := range task.Steps {
-		if executionID := task.Params[ReleaseHookStepExecutionParam(step.ID)]; executionID != "" {
+		if executionID := task.Params[releaserender.ReleaseHookStepExecutionParam(step.ID)]; executionID != "" {
 			if !scriptexecutions.ValidRawScriptExecutionID(executionID) {
 				return nil, false, errs.New(errs.KindInternal, "release Script execution identity is corrupt")
 			}
@@ -122,7 +123,7 @@ func scriptAssignmentTaskOwnsPlan(task TaskRecord, plan *agentpb.ExecutionPlan) 
 	if task.Type == taskjournal.TaskScript || task.Type == taskjournal.TaskDeploy || task.Type == taskjournal.TaskRollback {
 		return true
 	}
-	return task.Type == taskjournal.TaskUpdate && task.Params[TaskReleasePublicationParam] != "" &&
+	return task.Type == taskjournal.TaskUpdate && task.Params[releaserender.TaskReleasePublicationParam] != "" &&
 		plan.Operation == agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY && plan.TargetId == task.Target
 }
 

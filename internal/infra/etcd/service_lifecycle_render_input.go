@@ -5,6 +5,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 
 	"github.com/AlanD20/groundplane/internal/common/backinghook"
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -41,14 +42,14 @@ type ServiceLifecycleRenderInput struct {
 // ServiceLifecycleRelease freezes the exact serving runtime sources used by a
 // lifecycle Task. Rebuild and retry never consult a later release projection.
 type ServiceLifecycleRelease struct {
-	ServingReleaseID            string              `json:"serving_release_id"`
-	PriorServingReleaseID       string              `json:"prior_serving_release_id,omitempty"`
-	ProjectionRevision          int64               `json:"projection_revision"`
-	IntentRevision              int64               `json:"intent_revision"`
-	RenderRevision              int64               `json:"render_revision"`
-	Current                     ReleaseRenderInput  `json:"current"`
-	RetainedPrior               *ReleaseRenderInput `json:"retained_prior,omitempty"`
-	RetainedPriorRenderRevision int64               `json:"retained_prior_render_revision,omitempty"`
+	ServingReleaseID            string                            `json:"serving_release_id"`
+	PriorServingReleaseID       string                            `json:"prior_serving_release_id,omitempty"`
+	ProjectionRevision          int64                             `json:"projection_revision"`
+	IntentRevision              int64                             `json:"intent_revision"`
+	RenderRevision              int64                             `json:"render_revision"`
+	Current                     releaserender.ReleaseRenderInput  `json:"current"`
+	RetainedPrior               *releaserender.ReleaseRenderInput `json:"retained_prior,omitempty"`
+	RetainedPriorRenderRevision int64                             `json:"retained_prior_render_revision,omitempty"`
 }
 
 func serviceLifecycleRenderInputKey(taskID string) string {
@@ -154,7 +155,7 @@ func validateServiceLifecycleRenderInput(input ServiceLifecycleRenderInput) erro
 func validateServiceLifecycleRelease(authority ServiceLifecycleRelease, input ServiceLifecycleRenderInput) error {
 	if ids.Validate(ids.KindDeployment, authority.ServingReleaseID) != nil ||
 		authority.ProjectionRevision <= 0 || authority.IntentRevision <= 0 || authority.RenderRevision <= 0 ||
-		validateReleaseRenderInput(authority.Current) != nil ||
+		releaserender.ValidateReleaseRenderInput(authority.Current) != nil ||
 		authority.Current.ReleaseID != authority.ServingReleaseID || authority.Current.ServiceID != input.ServiceID ||
 		authority.Current.EnvironmentID != input.EnvironmentID {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle serving Release authority is invalid")
@@ -168,7 +169,7 @@ func validateServiceLifecycleRelease(authority ServiceLifecycleRelease, input Se
 	}
 	prior := authority.RetainedPrior
 	if ids.Validate(ids.KindDeployment, authority.PriorServingReleaseID) != nil ||
-		validateReleaseRenderInput(*prior) != nil || prior.ReleaseID != authority.PriorServingReleaseID ||
+		releaserender.ValidateReleaseRenderInput(*prior) != nil || prior.ReleaseID != authority.PriorServingReleaseID ||
 		prior.ServiceID != input.ServiceID || prior.EnvironmentID != input.EnvironmentID ||
 		authority.Current.Strategy != domain.StrategyBlueGreen ||
 		authority.Current.PriorStrategy != domain.StrategyBlueGreen ||
@@ -182,9 +183,9 @@ func cloneServiceLifecycleRenderInput(source ServiceLifecycleRenderInput) Servic
 	clone := source
 	clone.HookConfiguration = backinghook.CloneConfiguration(source.HookConfiguration)
 	clone.Projection = projectionrecord.CloneEnvironmentComposeProjection(source.Projection)
-	clone.Release.Current = cloneReleaseRenderInput(source.Release.Current)
+	clone.Release.Current = releaserender.CloneReleaseRenderInput(source.Release.Current)
 	if source.Release.RetainedPrior != nil {
-		prior := cloneReleaseRenderInput(*source.Release.RetainedPrior)
+		prior := releaserender.CloneReleaseRenderInput(*source.Release.RetainedPrior)
 		clone.Release.RetainedPrior = &prior
 	}
 	return clone

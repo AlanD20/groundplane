@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"net/http"
 	"time"
@@ -78,7 +79,7 @@ func (service *taskAbortService) AbortTask(
 		}
 		switch current.Record.Status {
 		case taskjournal.TaskStatusAborted:
-			if current.Record.StartedAt == nil && current.Record.Params[etcd.TaskReleasePublicationParam] != "" &&
+			if current.Record.StartedAt == nil && current.Record.Params[releaserender.TaskReleasePublicationParam] != "" &&
 				(current.Record.Type == taskjournal.TaskDeploy || current.Record.Type == taskjournal.TaskRollback) {
 				if _, err := service.repository.AbortPendingTask(ctx, taskID, service.now().UTC()); err != nil {
 					return idempotencyrecord.IdempotencyResponse{}, err

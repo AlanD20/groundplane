@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -90,12 +91,12 @@ func validateBlueprintNativePredecessorReferences(
 
 func resolveBlueprintNativePredecessors(
 	references []releases.BlueprintNativePredecessorReference,
-	members []ReleaseTaskRenderMember,
+	members []releaserender.ReleaseTaskRenderMember,
 ) ([]BlueprintNativePredecessor, error) {
 	result := make([]BlueprintNativePredecessor, len(references))
 	matched := make(map[string]bool, len(references))
 	for index, reference := range references {
-		memberIndex := slices.IndexFunc(members, func(member ReleaseTaskRenderMember) bool {
+		memberIndex := slices.IndexFunc(members, func(member releaserender.ReleaseTaskRenderMember) bool {
 			return member.Intent.ServiceID == reference.ServiceID
 		})
 		if memberIndex < 0 {
@@ -159,7 +160,7 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 		return nil, nil, releases.CorruptReleaseRecord()
 	}
 	defer etcdstore.ClearValues(read.Values)
-	members := make([]ReleaseTaskRenderMember, len(manifest.Members))
+	members := make([]releaserender.ReleaseTaskRenderMember, len(manifest.Members))
 	conditions := make([]etcdstore.Condition, len(keys))
 	for index, reference := range manifest.Members {
 		intentValue, renderValue := read.Values[index*2], read.Values[index*2+1]
@@ -168,7 +169,7 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 		}
 		intent, intentErr := releases.DecodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
 		raw, rawErr := releases.DecodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
-		render, renderErr := decodeReleaseRenderInput(raw)
+		render, renderErr := releaserender.DecodeReleaseRenderInput(raw)
 		intentDigest, digestErr := domain.Digest(intent)
 		renderDigest, renderDigestErr := domain.Digest(raw)
 		if intentErr != nil || rawErr != nil || renderErr != nil || digestErr != nil || renderDigestErr != nil ||
@@ -181,7 +182,7 @@ func (repository *TaskRepository) blueprintNativePredecessorsAtRevision(
 			render.EnvironmentID != task.Owner.EnvironmentID || render.ArtifactID != task.Params[taskjournal.TaskComposeArtifactParam] {
 			return nil, nil, releases.CorruptReleaseRecord()
 		}
-		members[index] = ReleaseTaskRenderMember{Intent: intent, Render: render}
+		members[index] = releaserender.ReleaseTaskRenderMember{Intent: intent, Render: render}
 		conditions[index*2] = etcdstore.Condition{Key: keys[index*2], ModRevision: intentValue.ModRevision}
 		conditions[index*2+1] = etcdstore.Condition{Key: keys[index*2+1], ModRevision: renderValue.ModRevision}
 	}

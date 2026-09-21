@@ -1,14 +1,15 @@
 package taskplanning
 
 import (
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
+
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
 
 // A retained inactive slot requires the shared restoration executor, which
 // restores and observes both captured native artifacts. A traffic-only proxy
 // compensation cannot prove the inactive workload's pre-attempt configuration.
-func bindRetainedOrdinaryRecovery(members []etcd.ReleaseTaskRenderMember, steps []*agentpb.ExecutionStep) {
+func bindRetainedOrdinaryRecovery(members []releaserender.ReleaseTaskRenderMember, steps []*agentpb.ExecutionStep) {
 	for index, member := range members {
 		if member.Render.PriorRuntime == nil || len(member.Render.PriorRuntime.RetainedPriorArtifact) == 0 {
 			continue

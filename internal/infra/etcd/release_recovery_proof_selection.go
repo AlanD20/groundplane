@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -175,7 +176,7 @@ const (
 func (repository *TaskRepository) recoveryProofSelectionAtRevision(
 	ctx context.Context, task TaskRecord, assignment taskassignments.TaskAssignmentRecord, revision int64,
 ) (*agentpb.CandidateReleaseProcedure, []releaseRecoveryProofExpectation, []etcdstore.Condition, error) {
-	publication := task.Params[TaskReleasePublicationParam]
+	publication := task.Params[releaserender.TaskReleasePublicationParam]
 	keys := []string{releases.ReleasePublicationKey(publication), releases.ReleaseManifestStagingKey(publication)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -250,7 +251,7 @@ func (repository *TaskRepository) ordinaryRecoveryProofKindAtRevision(
 	member releases.ReleaseStagedMemberRef,
 	revision int64,
 ) (releaseRecoveryProofExpectation, []etcdstore.Condition, error) {
-	publication := task.Params[TaskReleasePublicationParam]
+	publication := task.Params[releaserender.TaskReleasePublicationParam]
 	keys := []string{releases.ReleaseIntentStagingKey(publication, member.ReleaseID),
 		releases.ReleaseRenderInputStagingKey(publication, member.ReleaseID), releases.ReleaseOperationKey(task.OperationID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -265,7 +266,7 @@ func (repository *TaskRepository) ordinaryRecoveryProofKindAtRevision(
 	intent, intentErr := releases.DecodeReleaseRecord[domain.Intent](read.Values[0].Value, "release-intent")
 	head, headErr := releases.DecodeReleaseRecord[releases.ReleaseOperationHead](read.Values[2].Value, "release-operation")
 	raw, rawErr := releases.DecodeReleaseRecord[json.RawMessage](read.Values[1].Value, "release-render-input")
-	render, renderErr := decodeReleaseRenderInput(raw)
+	render, renderErr := releaserender.DecodeReleaseRenderInput(raw)
 	intentDigest, intentDigestErr := domain.Digest(intent)
 	renderDigest, renderDigestErr := domain.Digest(raw)
 	if intentErr != nil || headErr != nil || rawErr != nil || renderErr != nil || intentDigestErr != nil ||
@@ -312,7 +313,7 @@ func (repository *TaskRepository) ordinaryRecoveryProofKindAtRevision(
 }
 
 func ordinaryRecoveryIntentMatchesAttempt(task TaskRecord, intent domain.Intent, head releases.ReleaseOperationHead) bool {
-	if head.OperationID != task.OperationID || head.PublicationID != task.Params[TaskReleasePublicationParam] ||
+	if head.OperationID != task.OperationID || head.PublicationID != task.Params[releaserender.TaskReleasePublicationParam] ||
 		head.EnvironmentID != task.Owner.EnvironmentID || head.LatestTaskID != task.ID || len(head.Attempts) == 0 ||
 		intent.OriginatingTaskID != head.Attempts[0].TaskID {
 		return false
@@ -343,7 +344,7 @@ func ordinaryRecoveryIntentMatchesAttempt(task TaskRecord, intent domain.Intent,
 }
 
 func recoveryRenderMatchesPredecessor(
-	render ReleaseRenderInput, intent domain.Intent, authority *taskassignments.ReleaseRestorationAuthority,
+	render releaserender.ReleaseRenderInput, intent domain.Intent, authority *taskassignments.ReleaseRestorationAuthority,
 ) bool {
 	if authority == nil || render.PriorRuntime == nil || render.PriorArtifactID == "" ||
 		render.PriorWorkload == nil || intent.PriorServingReleaseID == "" {

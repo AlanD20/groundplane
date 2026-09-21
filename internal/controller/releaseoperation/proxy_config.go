@@ -2,17 +2,18 @@ package releaseoperation
 
 import (
 	"encoding/hex"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"math"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
 func configureReleaseProxy(
-	render *etcd.ReleaseRenderInput,
+	render *releaserender.ReleaseRenderInput,
 	expose []string,
-	prior *etcd.ReleaseRenderInput,
+	prior *releaserender.ReleaseRenderInput,
 	revision uint64,
 ) error {
 	ports, err := domain.ProxyPorts(expose)

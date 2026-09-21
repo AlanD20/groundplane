@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
@@ -33,7 +34,7 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 	source, retry TaskRecord,
 	revision int64,
 ) (releaseTaskRetryChange, error) {
-	publicationID := source.Params[TaskReleasePublicationParam]
+	publicationID := source.Params[releaserender.TaskReleasePublicationParam]
 	if publicationID == "" {
 		return releaseTaskRetryChange{}, nil
 	}
@@ -42,7 +43,7 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 	}
 	if releases.ValidatePublicationID(publicationID) != nil || source.Executor != taskjournal.TaskExecutorAgent ||
 		(source.Type != taskjournal.TaskDeploy && source.Type != taskjournal.TaskRollback) || retry.Type != source.Type ||
-		retry.OperationID != source.OperationID || retry.Params[TaskReleasePublicationParam] != publicationID ||
+		retry.OperationID != source.OperationID || retry.Params[releaserender.TaskReleasePublicationParam] != publicationID ||
 		source.Result == nil || !source.Result.ReconciliationRequired {
 		return releaseTaskRetryChange{}, errs.New(
 			errs.KindTaskNotRetryable,
@@ -130,7 +131,7 @@ func (repository *TaskRepository) prepareReleaseTaskRetry(
 		if err != nil {
 			return releaseTaskRetryChange{}, err
 		}
-		render, err := decodeReleaseRenderInput(raw)
+		render, err := releaserender.DecodeReleaseRenderInput(raw)
 		digest, digestErr := domain.Digest(raw)
 		if err != nil || digestErr != nil || render.ReleaseID != intent.ID || render.ServiceID != intent.ServiceID ||
 			render.PlanID != source.PlanID || digest != intent.RenderInputDigest || digest != reference.RenderDigest {

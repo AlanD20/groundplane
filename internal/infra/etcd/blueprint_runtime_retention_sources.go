@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 
 	domain "github.com/AlanD20/groundplane/internal/core/release"
@@ -65,11 +66,11 @@ func (ledger *ReleaseLedger) blueprintRuntimeSourceConditions(
 		if err != nil {
 			return nil, err
 		}
-		value, err := EncodeReleaseRenderInput(current.Record)
+		value, err := releaserender.EncodeReleaseRenderInput(current.Record)
 		if err != nil {
 			return nil, err
 		}
-		wanted, err := EncodeReleaseRenderInput(authority.Current)
+		wanted, err := releaserender.EncodeReleaseRenderInput(authority.Current)
 		if err != nil {
 			return nil, err
 		}
@@ -112,11 +113,11 @@ func (ledger *ReleaseLedger) blueprintRuntimeSourceConditions(
 		if err != nil {
 			return nil, err
 		}
-		value, err = EncodeReleaseRenderInput(prior.Record)
+		value, err = releaserender.EncodeReleaseRenderInput(prior.Record)
 		if err != nil {
 			return nil, err
 		}
-		wanted, err = EncodeReleaseRenderInput(*authority.RetainedPrior)
+		wanted, err = releaserender.EncodeReleaseRenderInput(*authority.RetainedPrior)
 		if err != nil {
 			return nil, err
 		}

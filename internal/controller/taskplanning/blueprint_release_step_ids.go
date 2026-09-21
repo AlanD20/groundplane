@@ -1,6 +1,7 @@
 package taskplanning
 
 import (
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 
@@ -10,7 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func blueprintReleaseHookCount(members []etcd.ReleaseTaskRenderMember) (int, error) {
+func blueprintReleaseHookCount(members []releaserender.ReleaseTaskRenderMember) (int, error) {
 	total := 0
 	for _, member := range members {
 		for _, hook := range member.Render.Hooks {
@@ -26,7 +27,7 @@ func blueprintReleaseHookCount(members []etcd.ReleaseTaskRenderMember) (int, err
 	return total, nil
 }
 
-func blueprintReleaseProcedureCounts(members []etcd.ReleaseTaskRenderMember, enabled bool) (int, int, error) {
+func blueprintReleaseProcedureCounts(members []releaserender.ReleaseTaskRenderMember, enabled bool) (int, int, error) {
 	if !enabled {
 		return 0, 0, nil
 	}
@@ -92,8 +93,8 @@ func blueprintReleaseProcedureStepIDs(
 					continue
 				}
 				stepID := task.Steps[cursor].ID
-				if task.Params[etcd.ReleaseHookStepMemberParam(stepID)] != strconv.Itoa(memberIndex+1) ||
-					task.Params[etcd.ReleaseHookStepExecutionParam(stepID)] != hook.ScriptExecutionID {
+				if task.Params[releaserender.ReleaseHookStepMemberParam(stepID)] != strconv.Itoa(memberIndex+1) ||
+					task.Params[releaserender.ReleaseHookStepExecutionParam(stepID)] != hook.ScriptExecutionID {
 					return errs.New(errs.KindInternal, "durable Blueprint Release hook step authority is invalid")
 				}
 				target[memberIndex] = append(target[memberIndex], stepID)

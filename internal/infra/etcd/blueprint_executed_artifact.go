@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -44,7 +45,7 @@ func (repository *TaskRepository) blueprintAcknowledgedArtifact(
 	task TaskRecord,
 	revision int64,
 ) ([]byte, etcdstore.Condition, error) {
-	key := releases.ReleasePublicationKey(task.Params[TaskReleasePublicationParam])
+	key := releases.ReleasePublicationKey(task.Params[releaserender.TaskReleasePublicationParam])
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return nil, etcdstore.Condition{}, err
@@ -54,7 +55,7 @@ func (repository *TaskRepository) blueprintAcknowledgedArtifact(
 	}
 	marker, err := releases.DecodeReleaseRecord[releases.ReleasePublicationMarker](read.Values[0].Value, "release-publication")
 	if err != nil || marker.OperationID != task.OperationID ||
-		marker.PublicationID != task.Params[TaskReleasePublicationParam] ||
+		marker.PublicationID != task.Params[releaserender.TaskReleasePublicationParam] ||
 		marker.CandidateReleaseDescriptor.PlanID != task.PlanID ||
 		hex.EncodeToString(marker.CandidateReleaseDescriptor.PlanHash) != task.PlanHash {
 		return nil, etcdstore.Condition{}, releases.CorruptReleaseRecord()

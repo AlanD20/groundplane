@@ -5,32 +5,15 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 
-	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 )
-
-func validateOrdinaryPriorRuntime(render ReleaseRenderInput) error {
-	witness := render.PriorRuntime
-	if witness == nil {
-		return nil
-	}
-	if witness.ServiceID != render.ServiceID || render.PriorWorkload == nil ||
-		executionplan.ValidateNativePredecessorWitness(render.EnvironmentID, render.ServiceID,
-			witness.CurrentArtifact, witness.RetainedPriorArtifact) != nil {
-		return releases.CorruptReleaseRecord()
-	}
-	artifact, err := taskassignments.OpenRestorationWitness(render.EnvironmentID, witness.CurrentArtifact)
-	if err != nil || artifact.ArtifactId != render.PriorArtifactID || artifact.ArtifactId == render.ArtifactID {
-		return releases.CorruptReleaseRecord()
-	}
-	return nil
-}
 
 func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 	ctx context.Context,
@@ -77,7 +60,7 @@ func (repository *TaskRepository) ordinaryRestorationMembersAtRevision(
 		}
 		intent, intentErr := releases.DecodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
 		raw, rawErr := releases.DecodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")
-		render, renderErr := decodeReleaseRenderInput(raw)
+		render, renderErr := releaserender.DecodeReleaseRenderInput(raw)
 		intentDigest, intentDigestErr := domain.Digest(intent)
 		renderDigest, renderDigestErr := domain.Digest(raw)
 		if intentErr != nil || rawErr != nil || renderErr != nil || intentDigestErr != nil || renderDigestErr != nil ||

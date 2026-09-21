@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -31,7 +32,7 @@ func validateReleaseCandidateDescriptor(
 	planHash, err := hex.DecodeString(task.PlanHash)
 	if err != nil || descriptor.PlanID != task.PlanID || !bytes.Equal(descriptor.PlanHash, planHash) ||
 		descriptor.Operation != candidateReleaseTaskOperation(task) ||
-		manifest.PublicationID != task.Params[TaskReleasePublicationParam] || manifest.OperationID != task.OperationID ||
+		manifest.PublicationID != task.Params[releaserender.TaskReleasePublicationParam] || manifest.OperationID != task.OperationID ||
 		len(procedure.GetMembers()) != len(manifest.Members) {
 		return nil, releases.CorruptReleaseRecord()
 	}
@@ -81,10 +82,10 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 	task TaskRecord,
 	revision int64,
 ) (taskassignments.ReleaseRestorationAuthority, string, []etcdstore.Condition, error) {
-	if task.Type == taskjournal.TaskUpdate || task.Params[TaskReleasePublicationParam] == "" {
+	if task.Type == taskjournal.TaskUpdate || task.Params[releaserender.TaskReleasePublicationParam] == "" {
 		return taskassignments.ReleaseRestorationAuthority{}, "", nil, taskassignments.CorruptTaskAssignment()
 	}
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	keys := []string{
 		releases.ReleasePublicationKey(publicationID), releases.ReleaseManifestStagingKey(publicationID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(task.Owner.EnvironmentID),
@@ -187,7 +188,7 @@ func candidateReleaseTaskOperation(task TaskRecord) agentpb.PlanOperation {
 	case taskjournal.TaskRollback:
 		return agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
 	case taskjournal.TaskUpdate:
-		if task.Params[TaskReleasePublicationParam] != "" {
+		if task.Params[releaserender.TaskReleasePublicationParam] != "" {
 			return agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
 		}
 	}
@@ -200,7 +201,7 @@ func (repository *TaskRepository) prepareBlueprintRestorationAuthority(
 	writer taskMaterializationWriterRecord,
 	revision int64,
 ) (taskassignments.ReleaseRestorationAuthority, string, []etcdstore.Condition, error) {
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	keys := []string{
 		releases.ReleasePublicationKey(publicationID),
 		releases.ReleaseManifestStagingKey(publicationID),
@@ -303,7 +304,7 @@ func validateReleaseCandidateMarker(
 	marker releases.ReleasePublicationMarker,
 	manifest releases.ReleaseStagedManifest,
 ) (*agentpb.CandidateReleaseProcedure, error) {
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	if releases.ValidatePublicationID(publicationID) != nil || marker.PublicationID != publicationID ||
 		marker.OperationID != task.OperationID || marker.ManifestDigest != manifest.Digest ||
 		manifest.PublicationID != publicationID || manifest.OperationID != task.OperationID ||
@@ -334,7 +335,7 @@ func (repository *TaskRepository) candidateReleaseDescriptorAtRevision(
 	task TaskRecord,
 	revision int64,
 ) (executionplan.CandidateReleaseDescriptor, *agentpb.CandidateReleaseProcedure, error) {
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		releases.ReleasePublicationKey(publicationID), releases.ReleaseManifestStagingKey(publicationID),
 	}, Revision: revision})

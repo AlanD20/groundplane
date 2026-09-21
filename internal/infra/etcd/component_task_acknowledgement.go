@@ -8,6 +8,7 @@ import (
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	networkreservations "github.com/AlanD20/groundplane/internal/infra/etcd/networkreservations"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -228,7 +229,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		}
 		change.mutations = append(change.mutations, componentrecord.WriteFenceMutation(task.ID))
 	}
-	if terminalStatus == taskjournal.TaskStatusCompleted || task.Params[TaskReleasePublicationParam] == "" {
+	if terminalStatus == taskjournal.TaskStatusCompleted || task.Params[releaserender.TaskReleasePublicationParam] == "" {
 		routeObservationChange, routeErr := repository.prepareComponentTaskRouteObservationAcknowledgement(
 			ctx, intent, terminalStatus, revision,
 		)

@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	"sort"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/internal/core"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
 	"github.com/oklog/ulid/v2"
@@ -21,10 +22,10 @@ import (
 func BuildReleaseHookRenderInput(
 	ctx context.Context,
 	input ManualScriptPlanInput,
-) (etcd.ReleaseHookRenderInput, error) {
+) (releaserender.ReleaseHookRenderInput, error) {
 	plan, err := buildScriptRunnerPlan(ctx, input)
 	if err != nil {
-		return etcd.ReleaseHookRenderInput{}, err
+		return releaserender.ReleaseHookRenderInput{}, err
 	}
 	snapshot := plan.ScriptRunnerSnapshots[0]
 	projection := plan.ScriptRunnerProjections[0]
@@ -32,14 +33,14 @@ func BuildReleaseHookRenderInput(
 	run := plan.Steps[0].GetRunScript()
 	snapshotBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(snapshot)
 	if err != nil {
-		return etcd.ReleaseHookRenderInput{}, errs.Wrap(errs.KindInternal, err)
+		return releaserender.ReleaseHookRenderInput{}, errs.Wrap(errs.KindInternal, err)
 	}
 	projectionBytes, err := (proto.MarshalOptions{Deterministic: true}).Marshal(projection)
 	if err != nil {
 		clear(snapshotBytes)
-		return etcd.ReleaseHookRenderInput{}, errs.Wrap(errs.KindInternal, err)
+		return releaserender.ReleaseHookRenderInput{}, errs.Wrap(errs.KindInternal, err)
 	}
-	return etcd.ReleaseHookRenderInput{
+	return releaserender.ReleaseHookRenderInput{
 		ScriptID:          input.Sources.Script.Record.Desired.ID,
 		ScriptSlug:        input.Sources.Script.Record.Desired.Slug,
 		ServiceID:         input.Sources.Service.Record.Desired.ID,
@@ -64,7 +65,7 @@ type ReleaseHookPlanInput struct {
 	PreStepIDs           []string
 	PostStepIDs          []string
 	FailureStepIDs       []string
-	Hooks                []etcd.ReleaseHookRenderInput
+	Hooks                []releaserender.ReleaseHookRenderInput
 }
 
 // ReleaseHookPlan is typed plan material for BuildPlan.
@@ -86,7 +87,7 @@ func BuildReleaseHookPlan(input ReleaseHookPlanInput) (ReleaseHookPlan, error) {
 	if input.Operation == domain.OperationRollback {
 		preWhen, postWhen = core.ScriptPreRollback, core.ScriptPostRollback
 	}
-	var pre, post, failure []etcd.ReleaseHookRenderInput
+	var pre, post, failure []releaserender.ReleaseHookRenderInput
 	for _, hook := range input.Hooks {
 		switch hook.When {
 		case preWhen:
@@ -105,7 +106,7 @@ func BuildReleaseHookPlan(input ReleaseHookPlanInput) (ReleaseHookPlan, error) {
 		return output, errs.New(errs.KindValidationFailed, "release hook step IDs do not match selected hooks")
 	}
 	appendPhase := func(
-		hooks []etcd.ReleaseHookRenderInput,
+		hooks []releaserender.ReleaseHookRenderInput,
 		stepIDs []string,
 		firstPrerequisite string,
 		releaseID string,
@@ -143,7 +144,7 @@ func BuildReleaseHookPlan(input ReleaseHookPlanInput) (ReleaseHookPlan, error) {
 	return output, nil
 }
 
-func releaseHookBefore(left, right etcd.ReleaseHookRenderInput) bool {
+func releaseHookBefore(left, right releaserender.ReleaseHookRenderInput) bool {
 	return core.ScriptBefore(
 		core.Script{Order: left.Order, Slug: left.ScriptSlug},
 		core.Script{Order: right.Order, Slug: right.ScriptSlug},
@@ -151,7 +152,7 @@ func releaseHookBefore(left, right etcd.ReleaseHookRenderInput) bool {
 }
 
 func buildReleaseHookStep(
-	hook etcd.ReleaseHookRenderInput,
+	hook releaserender.ReleaseHookRenderInput,
 	stepID, prerequisite, releaseID string,
 ) (*agentpb.ExecutionStep, *agentpb.ResolvedRunnerSnapshot, *agentpb.ScriptRunnerProjection, *agentpb.ScriptBodyArtifactMetadata, error) {
 	if _, err := ulid.ParseStrict(hook.ScriptExecutionID); err != nil {

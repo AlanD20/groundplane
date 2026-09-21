@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -139,7 +140,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 			}
 		}
 		var recovery *taskassignments.ReleaseRecoveryDirective
-		if task.Params[TaskReleasePublicationParam] != "" {
+		if task.Params[releaserender.TaskReleasePublicationParam] != "" {
 			_, procedure, descriptorErr := repository.candidateReleaseDescriptorAtRevision(
 				ctx, task, assignments.ReadRevision,
 			)

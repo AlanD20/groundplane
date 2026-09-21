@@ -5,6 +5,7 @@ import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -30,7 +31,7 @@ func (repository *TaskRepository) transitionReleaseAcknowledgementToRecovery(
 	revision int64,
 	evidenceConditions ...etcdstore.Condition,
 ) (etcdstore.Versioned[TaskRecord], bool, error) {
-	if task.Params[TaskReleasePublicationParam] == "" || !result.ReconciliationRequired {
+	if task.Params[releaserender.TaskReleasePublicationParam] == "" || !result.ReconciliationRequired {
 		return etcdstore.Versioned[TaskRecord]{}, false, nil
 	}
 	if assignment.ExecutionMode != taskassignments.TaskExecutionModeForward || result.ExecutionEpoch != assignment.ExecutionEpoch ||
@@ -353,7 +354,7 @@ func (repository *TaskRepository) candidateReleaseTimeoutResult(
 	assignment TaskAssignment,
 ) (taskjournal.TaskResultRecord, bool, error) {
 	record := assignment.Assignment.Record
-	if assignment.Task.Record.Params[TaskReleasePublicationParam] == "" ||
+	if assignment.Task.Record.Params[releaserender.TaskReleasePublicationParam] == "" ||
 		record.ExecutionMode != taskassignments.TaskExecutionModeForward {
 		return taskjournal.TaskResultRecord{}, false, nil
 	}

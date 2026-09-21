@@ -19,6 +19,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
@@ -181,11 +182,11 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 	if len(publicationID) != 26 {
 		return Prepared{}, errs.New(errs.KindInternal, "Blueprint Release publication allocator is invalid")
 	}
-	task.Params[etcd.TaskReleasePublicationParam] = publicationID
+	task.Params[releaserender.TaskReleasePublicationParam] = publicationID
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
 	stage := releases.ReleaseStage{PublicationID: publicationID, OperationID: task.OperationID, CreatedAt: input.CreatedAt,
 		Members: make([]releases.ReleaseStageMember, len(candidates))}
-	members := make([]etcd.ReleaseTaskRenderMember, len(candidates))
+	members := make([]releaserender.ReleaseTaskRenderMember, len(candidates))
 	for index, candidate := range candidates {
 		releaseID := input.AllocateNamed(ids.KindDeployment, "blueprint-release/"+candidate.Record.Desired.ID)
 		_, tag, _, imageErr := releaseImage(candidate.Record.Desired.Image)
@@ -196,7 +197,7 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		if sealErr != nil {
 			return Prepared{}, sealErr
 		}
-		render := etcd.ReleaseRenderInput{
+		render := releaserender.ReleaseRenderInput{
 			ReleaseID: releaseID, PlanID: task.PlanID, ArtifactID: artifactID,
 			ServiceID: candidate.Record.Desired.ID, ServiceName: candidate.Record.Desired.Name,
 			CandidateWorkload: workload, Strategy: domain.StrategyRecreate,
@@ -226,14 +227,14 @@ func (service *Service) Prepare(ctx context.Context, input PrepareInput) (Prepar
 		if err := service.plans.PrepareReleaseProxyImage(&render, nil); err != nil {
 			return Prepared{}, err
 		}
-		raw, encodeErr := etcd.EncodeReleaseRenderInput(render)
+		raw, encodeErr := releaserender.EncodeReleaseRenderInput(render)
 		if encodeErr != nil {
 			return Prepared{}, encodeErr
 		}
 		intent.RenderInputDigest, _ = domain.Digest(json.RawMessage(raw))
 		checkpoint := domain.Checkpoint{ReleaseID: releaseID, State: domain.StatePending, UpdatedAt: input.CreatedAt}
 		stage.Members[index] = releases.ReleaseStageMember{Intent: intent, RenderInput: raw, Checkpoint: checkpoint}
-		members[index] = etcd.ReleaseTaskRenderMember{Intent: intent, Render: render}
+		members[index] = releaserender.ReleaseTaskRenderMember{Intent: intent, Render: render}
 	}
 	manifest, err := service.ledger.Stage(ctx, stage)
 	if err != nil {

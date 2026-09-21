@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	"strconv"
 
@@ -28,7 +29,7 @@ type Services interface {
 // Releases exposes only the immutable serving-source and runtime-receipt reads.
 type Releases interface {
 	ResolveServing(context.Context, string, string, int64) (etcd.ServingRelease, error)
-	GetReleaseRenderInputAt(context.Context, string, int64) (etcdstore.Versioned[etcd.ReleaseRenderInput], error)
+	GetReleaseRenderInputAt(context.Context, string, int64) (etcdstore.Versioned[releaserender.ReleaseRenderInput], error)
 	LoadAcknowledgedServiceRuntimesAtRevision(
 		context.Context,
 		string,
@@ -116,7 +117,7 @@ func captureProxy(
 	environmentID, serviceID string,
 	revision int64,
 	intent domain.Intent,
-	input etcd.ReleaseRenderInput,
+	input releaserender.ReleaseRenderInput,
 ) (proxySource, int64, bool) {
 	if len(input.ProxyPorts) == 0 {
 		return proxySource{}, 0, true

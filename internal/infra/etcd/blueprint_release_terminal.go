@@ -5,6 +5,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -25,7 +26,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	terminalAt time.Time,
 	readRevision int64,
 ) (bool, error) {
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	baseKeys := []string{
 		releases.ReleasePublicationKey(publicationID), releases.ReleaseManifestStagingKey(publicationID),
 		hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),

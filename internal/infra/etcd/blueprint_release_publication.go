@@ -10,6 +10,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	scriptexecutions "github.com/AlanD20/groundplane/internal/infra/etcd/scriptexecutions"
 	scriptsourceevidence "github.com/AlanD20/groundplane/internal/infra/etcd/scriptsourceevidence"
@@ -30,7 +31,7 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 	ctx context.Context,
 	task TaskRecord,
 ) (ReleaseTaskRenderInput, error) {
-	publicationID := task.Params[TaskReleasePublicationParam]
+	publicationID := task.Params[releaserender.TaskReleasePublicationParam]
 	if ctx == nil || ledger == nil || releases.ValidatePublicationID(publicationID) != nil ||
 		task.Type != taskjournal.TaskUpdate || ids.Validate(ids.KindPlan, task.PlanID) != nil {
 		return ReleaseTaskRenderInput{}, errs.New(
@@ -72,7 +73,7 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 	}
 	result := ReleaseTaskRenderInput{
 		PublicationID: publicationID,
-		Members:       make([]ReleaseTaskRenderMember, len(manifest.Members)),
+		Members:       make([]releaserender.ReleaseTaskRenderMember, len(manifest.Members)),
 	}
 	for index, reference := range manifest.Members {
 		intentValue, renderValue := loadedMembers.Values[index*2], loadedMembers.Values[index*2+1]
@@ -89,7 +90,7 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 		if decodeErr != nil {
 			return ReleaseTaskRenderInput{}, decodeErr
 		}
-		render, decodeErr := decodeReleaseRenderInput(raw)
+		render, decodeErr := releaserender.DecodeReleaseRenderInput(raw)
 		if decodeErr != nil || render.ReleaseID != intent.ID || render.PlanID != task.PlanID ||
 			render.ArtifactID != intent.RenderInputID || render.ServiceID != intent.ServiceID ||
 			render.CandidateWorkload != intent.CandidateWorkload || render.Strategy != intent.Strategy {
@@ -99,7 +100,7 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 		if digest != intent.RenderInputDigest || digest != reference.RenderDigest {
 			return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 		}
-		result.Members[index] = ReleaseTaskRenderMember{Intent: intent, Render: render}
+		result.Members[index] = releaserender.ReleaseTaskRenderMember{Intent: intent, Render: render}
 	}
 	result.NativePredecessors, err = resolveBlueprintNativePredecessors(marker.NativePredecessors, result.Members)
 	if err != nil {
@@ -172,7 +173,7 @@ func (publication BlueprintReleasePublication) validate(environmentID string, ta
 				return errs.New(errs.KindValidationFailed, "Blueprint retained runtime source comparison is absent")
 			}
 		}
-		if task.Params[TaskReleasePublicationParam] == "" {
+		if task.Params[releaserender.TaskReleasePublicationParam] == "" {
 			if len(publication.mutations) != 0 ||
 				!slices.Equal(publication.conditions, publication.retained.conditions) ||
 				publication.authority != nil ||
@@ -188,13 +189,13 @@ func (publication BlueprintReleasePublication) validate(environmentID string, ta
 		}
 	}
 	if publication.IsZero() {
-		if task.Params[TaskReleasePublicationParam] != "" {
+		if task.Params[releaserender.TaskReleasePublicationParam] != "" {
 			return errs.New(errs.KindValidationFailed, "Blueprint Task has no candidate Release publication")
 		}
 		return nil
 	}
 	if publication.environmentID != environmentID || publication.operationID != task.OperationID ||
-		releases.ValidatePublicationID(task.Params[TaskReleasePublicationParam]) != nil ||
+		releases.ValidatePublicationID(task.Params[releaserender.TaskReleasePublicationParam]) != nil ||
 		len(publication.conditions) == 0 || len(publication.mutations) == 0 {
 		return errs.New(errs.KindValidationFailed, "Blueprint Release publication does not match its Task")
 	}
@@ -446,7 +447,7 @@ func prepareBlueprintReleaseHookPublicationFragment(
 		if validateStoredScriptContext(hook.Sources, execution) != nil ||
 			scriptexecutions.ValidateScriptExecutionRecord(execution) != nil || execution.State != scriptexecutions.ScriptExecutionNotStarted ||
 			!execution.ActiveReference || execution.CurrentTaskID != task.ID || execution.OperationID != task.OperationID ||
-			execution.PlanHash != task.PlanHash || task.Params[ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID {
+			execution.PlanHash != task.PlanHash || task.Params[releaserender.ReleaseHookStepExecutionParam(execution.StepID)] != execution.ID {
 			clearReleaseHookPublicationFragment(fragment)
 			return releaseHookPublicationFragment{}, errs.New(
 				errs.KindValidationFailed,

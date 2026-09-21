@@ -2,6 +2,7 @@ package releaseoperation
 
 import (
 	"context"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 
@@ -15,7 +16,7 @@ import (
 
 type preparedReleaseHooks struct {
 	task       etcd.TaskRecord
-	members    []etcd.ReleaseTaskRenderMember
+	members    []releaserender.ReleaseTaskRenderMember
 	sources    map[string]etcd.ScriptExecutionSources
 	executions int
 }
@@ -26,7 +27,7 @@ func (service *Service) prepareReleaseHooks(
 	revision int64,
 	operation domain.OperationKind,
 	task etcd.TaskRecord,
-	members []etcd.ReleaseTaskRenderMember,
+	members []releaserender.ReleaseTaskRenderMember,
 ) (preparedReleaseHooks, error) {
 	if service.scripts == nil || service.preparation == nil || revision <= 0 {
 		return preparedReleaseHooks{}, errs.New(errs.KindInternal, "release hook dependencies are not configured")
@@ -78,8 +79,8 @@ func (service *Service) prepareReleaseHooks(
 			member.Render.Hooks = append(member.Render.Hooks, hook)
 			sourcesByExecution[executionID] = sources
 			bodyBytes += uint64(hook.BodySize)
-			task.Params[etcd.ReleaseHookStepMemberParam(stepID)] = strconv.Itoa(memberIndex + 1)
-			task.Params[etcd.ReleaseHookStepExecutionParam(stepID)] = executionID
+			task.Params[releaserender.ReleaseHookStepMemberParam(stepID)] = strconv.Itoa(memberIndex + 1)
+			task.Params[releaserender.ReleaseHookStepExecutionParam(stepID)] = executionID
 			step := taskjournal.TaskStepRecord{Kind: taskjournal.TaskStepOperation, ID: stepID}
 			switch hook.When {
 			case core.ScriptPreDeploy, core.ScriptPreRollback:

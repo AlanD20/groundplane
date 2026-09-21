@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	releaserender "github.com/AlanD20/groundplane/internal/infra/etcd/releaserender"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"time"
@@ -21,7 +22,7 @@ func (ledger *ReleaseLedger) PrepareBlueprintReleasePublication(
 ) (BlueprintReleasePublication, error) {
 	if ctx == nil || ledger == nil || ledger.store == nil || evidence.Manifest.Revision <= 0 ||
 		evidence.Manifest.Record.OperationID != evidence.Task.OperationID ||
-		evidence.Manifest.Record.PublicationID != evidence.Task.Params[TaskReleasePublicationParam] ||
+		evidence.Manifest.Record.PublicationID != evidence.Task.Params[releaserender.TaskReleasePublicationParam] ||
 		evidence.Task.Owner.EnvironmentID != evidence.EnvironmentID || evidence.Task.Type != taskjournal.TaskUpdate ||
 		evidence.PublishedAt.IsZero() || evidence.PublishedAt.Location() != time.UTC {
 		return BlueprintReleasePublication{}, errs.New(
