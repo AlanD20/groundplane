@@ -75,11 +75,11 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 		return backupruntime.CorruptBackupRuntimeRecord()
 	}
 	switch task.Status {
-	case TaskStatusPending:
+	case taskjournal.TaskStatusPending:
 		return repository.validateQueuedBackupRunPublication(
 			ctx, run, task, read.Values, readRevision, commitRevision,
 		)
-	case TaskStatusRunning:
+	case taskjournal.TaskStatusRunning:
 		return repository.validateRunningBackupRunPublication(
 			ctx, run, task, read.Values, readRevision, commitRevision,
 		)

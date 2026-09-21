@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"encoding/hex"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -22,9 +23,9 @@ func releasePreparedArtifact(evidence ReleasePublicationEvidence) ([]byte, error
 	}
 	operation := agentpb.PlanOperation_PLAN_OPERATION_UNSPECIFIED
 	switch evidence.Task.Type {
-	case TaskDeploy:
+	case taskjournal.TaskDeploy:
 		operation = agentpb.PlanOperation_PLAN_OPERATION_DEPLOY
-	case TaskRollback:
+	case taskjournal.TaskRollback:
 		operation = agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
 	}
 	if evidence.Task.PlanID != plan.GetPlanId() ||

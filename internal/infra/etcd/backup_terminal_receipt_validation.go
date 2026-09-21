@@ -21,7 +21,7 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 		return errs.New(errs.KindValidationFailed, "backup terminal receipt Environment epoch is invalid")
 	}
 	switch record.Task.TaskType {
-	case TaskBackup:
+	case taskjournal.TaskBackup:
 		if len(record.Sources) == 0 || len(record.Sources) > backuppolicy.MaximumBackupPolicySources ||
 			len(record.Points) != 0 {
 			return errs.New(errs.KindValidationFailed, "backup terminal receipt sources are invalid")
@@ -46,7 +46,7 @@ func validateBackupTerminalReceiptRecord(record BackupTerminalReceiptRecord) err
 				return errs.New(errs.KindValidationFailed, "backup terminal receipt source kind is invalid")
 			}
 		}
-	case TaskBackupPrune:
+	case taskjournal.TaskBackupPrune:
 		if len(record.Sources) != 0 || len(record.Points) == 0 ||
 			len(record.Points) > backupruntime.MaximumBackupPruneDispatchPoints {
 			return errs.New(errs.KindValidationFailed, "backup terminal receipt points are invalid")

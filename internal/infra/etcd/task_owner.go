@@ -43,7 +43,7 @@ func taskOwnerRetryScope(owner taskjournal.TaskOwner) (TaskRetryScope, error) {
 		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopeEnvironment, ID: owner.EnvironmentID}, nil
 	case owner.ProjectID != "":
 		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopeProject, ID: owner.ProjectID}, nil
-	case owner.WorkspaceType == TaskWorkspaceTenant:
+	case owner.WorkspaceType == taskjournal.TaskWorkspaceTenant:
 		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopeTenant, ID: owner.TenantID}, nil
 	default:
 		return TaskRetryScope{Kind: idempotencyrecord.IdempotencyScopePlatform, ID: "-"}, nil

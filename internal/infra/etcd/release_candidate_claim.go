@@ -180,11 +180,11 @@ func (repository *TaskRepository) prepareOrdinaryRestorationAuthority(
 
 func candidateReleaseTaskOperation(task TaskRecord) agentpb.PlanOperation {
 	switch task.Type {
-	case TaskDeploy:
+	case taskjournal.TaskDeploy:
 		return agentpb.PlanOperation_PLAN_OPERATION_DEPLOY
-	case TaskRollback:
+	case taskjournal.TaskRollback:
 		return agentpb.PlanOperation_PLAN_OPERATION_ROLLBACK
-	case TaskUpdate:
+	case taskjournal.TaskUpdate:
 		if task.Params[TaskReleasePublicationParam] != "" {
 			return agentpb.PlanOperation_PLAN_OPERATION_BLUEPRINT_APPLY
 		}

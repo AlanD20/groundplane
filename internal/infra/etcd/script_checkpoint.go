@@ -283,11 +283,11 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 
 func taskOwnsScriptExecution(task TaskRecord, execution ScriptExecutionRecord) bool {
 	switch task.Type {
-	case TaskScript:
+	case taskjournal.TaskScript:
 		return task.Target == execution.ScriptID && len(task.Steps) == 1 &&
 			task.Steps[0].ID == execution.StepID &&
 			task.Params[ScriptExecutionIDParam] == execution.ID
-	case taskjournal.TaskDeploy, TaskRollback:
+	case taskjournal.TaskDeploy, taskjournal.TaskRollback:
 		if task.Owner.EnvironmentID != execution.EnvironmentID ||
 			task.Params[TaskReleasePublicationParam] == "" {
 			return false
@@ -297,7 +297,7 @@ func taskOwnsScriptExecution(task TaskRecord, execution ScriptExecutionRecord) b
 				return true
 			}
 		}
-	case TaskUpdate:
+	case taskjournal.TaskUpdate:
 		return blueprintScriptTaskShape(task) &&
 			task.Owner.EnvironmentID == execution.EnvironmentID &&
 			task.Params[ReleaseHookStepExecutionParam(execution.StepID)] == execution.ID

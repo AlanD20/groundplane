@@ -48,7 +48,7 @@ func (repository *TaskRepository) abortPendingBackupTask(
 		var mutations []etcdstore.Mutation
 		var terminal TaskRecord
 		switch current.Record.Type {
-		case TaskBackup:
+		case taskjournal.TaskBackup:
 			run, getErr := runtime.GetBackupRun(ctx, taskID)
 			if getErr != nil {
 				return etcdstore.Versioned[TaskRecord]{}, getErr
@@ -89,7 +89,7 @@ func (repository *TaskRepository) abortPendingBackupTask(
 			taskPlan.clear()
 			runPlan.clear()
 			receiptPlan.clear()
-		case TaskBackupPrune:
+		case taskjournal.TaskBackupPrune:
 			dispatch, prunes, loadErr := repository.loadBackupPruneTerminalAuthority(
 				ctx, current.Record,
 			)

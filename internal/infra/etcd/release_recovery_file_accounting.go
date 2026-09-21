@@ -153,11 +153,11 @@ func (repository *TaskRepository) releaseCandidateMutationEvidenceAtRevision(
 		evidence := evidenceByStep[event.Identity.StepID]
 		_, configurationFile := fileSteps[event.Identity.StepID]
 		switch event.State {
-		case TaskEventStateRunning:
+		case taskjournal.TaskEventStateRunning:
 			evidence.StepID, evidence.Running = event.Identity.StepID, true
-		case TaskEventStateCompleted:
+		case taskjournal.TaskEventStateCompleted:
 			evidence.StepID, evidence.Running, evidence.Completed = event.Identity.StepID, true, true
-		case taskjournal.TaskEventStateFailed, taskjournal.TaskEventStateAborted, TaskEventStateTimedOut:
+		case taskjournal.TaskEventStateFailed, taskjournal.TaskEventStateAborted, taskjournal.TaskEventStateTimedOut:
 			// A file write is applicable only after its durable Running event.
 			// Native forward evidence keeps its existing non-pending semantics.
 			if !configurationFile {

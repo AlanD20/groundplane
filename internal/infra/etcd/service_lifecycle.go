@@ -322,11 +322,11 @@ func validateServiceLifecycleReplacement(current servicerecord.ServiceRecord, re
 	}
 	want := core.ServiceRuntimeIntent("")
 	switch task.Type {
-	case TaskStart:
+	case taskjournal.TaskStart:
 		want = core.ServiceRuntimeIntentRunning
-	case TaskStop:
+	case taskjournal.TaskStop:
 		want = core.ServiceRuntimeIntentStopped
-	case TaskDestroy:
+	case taskjournal.TaskDestroy:
 		want = core.ServiceRuntimeIntentAbsent
 	default:
 		return errs.New(errs.KindValidationFailed, "Service lifecycle Task type is invalid")

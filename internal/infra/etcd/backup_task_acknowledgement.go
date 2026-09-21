@@ -56,7 +56,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 		var mutations []etcdstore.Mutation
 		var terminal TaskRecord
 		switch current.Task.Record.Type {
-		case TaskBackup:
+		case taskjournal.TaskBackup:
 			run, getErr := runtime.GetBackupRun(ctx, taskID)
 			if getErr != nil {
 				return etcdstore.Versioned[TaskRecord]{}, getErr
@@ -95,7 +95,7 @@ func (repository *TaskRepository) acknowledgeBackupTask(
 			taskPlan.clear()
 			runPlan.clear()
 			receiptPlan.clear()
-		case TaskBackupPrune:
+		case taskjournal.TaskBackupPrune:
 			dispatch, prunes, loadErr := repository.loadBackupPruneTerminalAuthority(
 				ctx, current.Task.Record,
 			)
@@ -302,14 +302,14 @@ func backupRunForTaskTerminal(
 	next.Sources = append([]backupruntime.BackupRunSourceAttemptRecord(nil), current.Sources...)
 	next.UpdatedAt = terminalAt
 	switch terminalStatus {
-	case TaskStatusCompleted:
+	case taskjournal.TaskStatusCompleted:
 		next.State = backupruntime.BackupRunCompleted
 		return next, nil
-	case TaskStatusFailed:
+	case taskjournal.TaskStatusFailed:
 		next.State = backupruntime.BackupRunFailed
-	case TaskStatusAborted:
+	case taskjournal.TaskStatusAborted:
 		next.State = backupruntime.BackupRunAborted
-	case TaskStatusTimedOut:
+	case taskjournal.TaskStatusTimedOut:
 		next.State = backupruntime.BackupRunTimedOut
 	default:
 		return backupruntime.BackupRunRecord{}, errs.New(
@@ -340,9 +340,9 @@ func backupRunForTaskTerminal(
 		source.State = backupruntime.BackupSourceAttemptFailed
 	}
 	switch terminalStatus {
-	case TaskStatusAborted:
+	case taskjournal.TaskStatusAborted:
 		source.FailureCode = backupruntime.BackupFailureAborted
-	case TaskStatusTimedOut:
+	case taskjournal.TaskStatusTimedOut:
 		source.FailureCode = backupruntime.BackupFailureTimedOut
 	default:
 		failureCode, err := backupFailureCodeForPhase(source.Phase)
@@ -436,13 +436,13 @@ func (repository *TaskRepository) validateBackupTaskTerminalReplay(
 
 func backupRunStateForTaskStatus(status taskjournal.TaskStatus) (backupruntime.BackupRunState, error) {
 	switch status {
-	case TaskStatusCompleted:
+	case taskjournal.TaskStatusCompleted:
 		return backupruntime.BackupRunCompleted, nil
-	case TaskStatusFailed:
+	case taskjournal.TaskStatusFailed:
 		return backupruntime.BackupRunFailed, nil
-	case TaskStatusAborted:
+	case taskjournal.TaskStatusAborted:
 		return backupruntime.BackupRunAborted, nil
-	case TaskStatusTimedOut:
+	case taskjournal.TaskStatusTimedOut:
 		return backupruntime.BackupRunTimedOut, nil
 	default:
 		return "", errs.New(errs.KindValidationFailed, "backup Task terminal status is invalid")

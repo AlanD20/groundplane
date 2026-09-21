@@ -17,7 +17,7 @@ func validateTaskResult(result TaskResultRecord, steps []taskjournal.TaskStepRec
 	}
 	switch result.Diagnostic {
 	case taskjournal.TaskResultDiagnosticNone, taskjournal.TaskResultDiagnosticConfigRejected, taskjournal.TaskResultDiagnosticComposeFailed,
-		TaskResultDiagnosticTimeoutBeforeEffect:
+		taskjournal.TaskResultDiagnosticTimeoutBeforeEffect:
 	default:
 		return errs.New(errs.KindValidationFailed, "task result diagnostic is invalid")
 	}

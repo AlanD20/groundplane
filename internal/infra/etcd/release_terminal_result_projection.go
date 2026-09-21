@@ -69,9 +69,9 @@ func releaseMemberTerminalState(
 		return domain.StateRecoveryRequired, false, true
 	}
 	switch terminalStatus {
-	case TaskStatusTimedOut:
+	case taskjournal.TaskStatusTimedOut:
 		return domain.StateTimedOut, false, false
-	case TaskStatusAborted:
+	case taskjournal.TaskStatusAborted:
 		return domain.StateAborted, false, false
 	default:
 		return domain.StateFailed, false, false
@@ -98,11 +98,11 @@ func releaseRecreateEvidence(result TaskResultRecord, serviceID string) (TaskRec
 
 func releaseOperationTerminalState(status taskjournal.TaskStatus) domain.State {
 	switch status {
-	case TaskStatusCompleted:
+	case taskjournal.TaskStatusCompleted:
 		return domain.StateCompleted
-	case TaskStatusTimedOut:
+	case taskjournal.TaskStatusTimedOut:
 		return domain.StateTimedOut
-	case TaskStatusAborted:
+	case taskjournal.TaskStatusAborted:
 		return domain.StateAborted
 	default:
 		return domain.StateFailed

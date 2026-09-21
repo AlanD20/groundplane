@@ -178,9 +178,9 @@ func taskOwnsRunner(task TaskRecord) (bool, error) {
 		return false, nil
 	}
 	switch task.Type {
-	case TaskCreate:
+	case taskjournal.TaskCreate:
 		return taskOwnsRunnerCreation(task)
-	case TaskRemove:
+	case taskjournal.TaskRemove:
 		_, err := decodeRunnerRemovalTaskEvidence(task)
 		return err == nil, err
 	default:

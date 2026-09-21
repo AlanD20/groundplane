@@ -59,7 +59,7 @@ func platformResolverFinalLiveLineage(
 	}
 	result := predecessor.Result
 	switch predecessor.Status {
-	case TaskStatusCompleted:
+	case taskjournal.TaskStatusCompleted:
 		evidence := result.DNSResolverCandidateObservation
 		if input.DisableService || evidence == nil || result.DNSResolverRollbackObservation != nil ||
 			evidence.ComponentID != input.ComponentID || evidence.ServiceID != input.GeneratedServiceID ||
@@ -74,7 +74,7 @@ func platformResolverFinalLiveLineage(
 			expectedPreviousArtifactID:     evidence.ArtifactID,
 			expectedPreviousGeneration:     evidence.RenderGeneration,
 		}, true
-	case taskjournal.TaskStatusFailed, taskjournal.TaskStatusTimedOut, TaskStatusAborted:
+	case taskjournal.TaskStatusFailed, taskjournal.TaskStatusTimedOut, taskjournal.TaskStatusAborted:
 		evidence := result.DNSResolverRollbackObservation
 		if input.ExpectedPreviousArtifactSHA256 == "" {
 			if evidence != nil {

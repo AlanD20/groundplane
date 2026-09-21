@@ -218,7 +218,7 @@ func validateTaskEventDedupRecord(record TaskEventDedupRecord) error {
 func validTaskEventState(state taskjournal.TaskEventState) bool {
 	switch state {
 	case taskjournal.TaskEventStatePending, taskjournal.TaskEventStateRunning, taskjournal.TaskEventStateCompleted,
-		taskjournal.TaskEventStateFailed, taskjournal.TaskEventStateAborted, TaskEventStateTimedOut:
+		taskjournal.TaskEventStateFailed, taskjournal.TaskEventStateAborted, taskjournal.TaskEventStateTimedOut:
 		return true
 	default:
 		return false

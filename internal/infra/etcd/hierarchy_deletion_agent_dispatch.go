@@ -378,13 +378,13 @@ func hierarchyDeletionTaskResultDigest(result *TaskResultRecord, terminal taskjo
 
 func hierarchyDeletionAgentTerminalFromTask(status taskjournal.TaskStatus) (hierarchydeletion.HierarchyDeletionAgentTerminal, error) {
 	switch status {
-	case TaskStatusCompleted:
+	case taskjournal.TaskStatusCompleted:
 		return hierarchydeletion.HierarchyDeletionAgentCompleted, nil
-	case TaskStatusFailed:
+	case taskjournal.TaskStatusFailed:
 		return hierarchydeletion.HierarchyDeletionAgentFailed, nil
-	case TaskStatusAborted:
+	case taskjournal.TaskStatusAborted:
 		return hierarchydeletion.HierarchyDeletionAgentAborted, nil
-	case TaskStatusTimedOut:
+	case taskjournal.TaskStatusTimedOut:
 		return hierarchydeletion.HierarchyDeletionAgentTimedOut, nil
 	default:
 		return "", errs.Newf(errs.KindStateConflict, "hierarchy deletion child Task is %s", status)

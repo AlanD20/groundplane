@@ -308,9 +308,9 @@ func advanceReleaseRecoveryRecord(
 		)
 	}
 	switch input.State {
-	case taskjournal.TaskEventStateRunning, taskjournal.TaskEventStateFailed, taskjournal.TaskEventStateAborted, TaskEventStateTimedOut:
+	case taskjournal.TaskEventStateRunning, taskjournal.TaskEventStateFailed, taskjournal.TaskEventStateAborted, taskjournal.TaskEventStateTimedOut:
 		return record, false, nil
-	case TaskEventStateCompleted:
+	case taskjournal.TaskEventStateCompleted:
 		next := record
 		next.Cursor++
 		next.EvidenceRevision = revision
@@ -387,7 +387,7 @@ func (repository *TaskRepository) releaseRecoveryDirectiveAtRevision(
 
 func validTerminalTaskStatus(status taskjournal.TaskStatus) bool {
 	switch status {
-	case taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, TaskStatusTimedOut:
+	case taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, taskjournal.TaskStatusTimedOut:
 		return true
 	default:
 		return false

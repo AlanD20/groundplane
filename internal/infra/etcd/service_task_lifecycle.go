@@ -180,7 +180,7 @@ func isServiceLifecycleTask(task TaskRecord) bool {
 		return false
 	}
 	switch task.Type {
-	case taskjournal.TaskStart, taskjournal.TaskStop, TaskDestroy:
+	case taskjournal.TaskStart, taskjournal.TaskStop, taskjournal.TaskDestroy:
 		return true
 	default:
 		return false
@@ -189,11 +189,11 @@ func isServiceLifecycleTask(task TaskRecord) bool {
 
 func serviceLifecycleIntent(taskType taskjournal.TaskType) core.ServiceRuntimeIntent {
 	switch taskType {
-	case TaskStart:
+	case taskjournal.TaskStart:
 		return core.ServiceRuntimeIntentRunning
-	case TaskStop:
+	case taskjournal.TaskStop:
 		return core.ServiceRuntimeIntentStopped
-	case TaskDestroy:
+	case taskjournal.TaskDestroy:
 		return core.ServiceRuntimeIntentAbsent
 	default:
 		return ""

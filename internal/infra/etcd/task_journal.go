@@ -197,9 +197,9 @@ func transitionTaskStatus(
 
 func validTaskTransition(current taskjournal.TaskStatus, next taskjournal.TaskStatus) bool {
 	switch current {
-	case TaskStatusPending:
+	case taskjournal.TaskStatusPending:
 		return next == taskjournal.TaskStatusRunning || next == taskjournal.TaskStatusAborted
-	case TaskStatusRunning:
+	case taskjournal.TaskStatusRunning:
 		return isTerminalTaskStatus(next)
 	default:
 		return false
@@ -208,7 +208,7 @@ func validTaskTransition(current taskjournal.TaskStatus, next taskjournal.TaskSt
 
 func isTerminalTaskStatus(status taskjournal.TaskStatus) bool {
 	switch status {
-	case taskjournal.TaskStatusCompleted, taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, TaskStatusTimedOut:
+	case taskjournal.TaskStatusCompleted, taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, taskjournal.TaskStatusTimedOut:
 		return true
 	default:
 		return false
@@ -219,7 +219,7 @@ func validTaskType(taskType taskjournal.TaskType) bool {
 	switch taskType {
 	case taskjournal.TaskDeploy, taskjournal.TaskRollback, taskjournal.TaskBackup, taskjournal.TaskBackupPrune, taskjournal.TaskRestore, taskjournal.TaskAttach, taskjournal.TaskDetach,
 		taskjournal.TaskRun, taskjournal.TaskScript, taskjournal.TaskProvision, taskjournal.TaskCreate, taskjournal.TaskUpdate, taskjournal.TaskRemove,
-		taskjournal.TaskStart, taskjournal.TaskStop, taskjournal.TaskDestroy, TaskRotate:
+		taskjournal.TaskStart, taskjournal.TaskStop, taskjournal.TaskDestroy, taskjournal.TaskRotate:
 		return true
 	default:
 		return false
@@ -229,7 +229,7 @@ func validTaskType(taskType taskjournal.TaskType) bool {
 func validTaskStatus(status taskjournal.TaskStatus) bool {
 	switch status {
 	case taskjournal.TaskStatusPending, taskjournal.TaskStatusRunning, taskjournal.TaskStatusCompleted,
-		taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, TaskStatusTimedOut:
+		taskjournal.TaskStatusFailed, taskjournal.TaskStatusAborted, taskjournal.TaskStatusTimedOut:
 		return true
 	default:
 		return false

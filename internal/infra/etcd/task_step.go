@@ -24,12 +24,12 @@ func validateTaskSteps(steps []taskjournal.TaskStepRecord) error {
 		hasScriptID := step.ScriptID != ""
 		hasScriptSlug := step.ScriptSlug != ""
 		switch step.Kind {
-		case TaskStepOperation:
+		case taskjournal.TaskStepOperation:
 			if hasScriptID || hasScriptSlug {
 				return errs.New(errs.KindValidationFailed, "task operation step cannot carry Script identity")
 			}
 			continue
-		case TaskStepScript:
+		case taskjournal.TaskStepScript:
 			if !hasScriptID || !hasScriptSlug {
 				return errs.New(errs.KindValidationFailed, "task Script step identity must include both id and slug")
 			}
