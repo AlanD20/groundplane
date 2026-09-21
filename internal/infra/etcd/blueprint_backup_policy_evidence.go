@@ -21,7 +21,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 	environmentID string,
 	revision int64,
 	createdAt time.Time,
-) (*etcdstore.Versioned[backuppolicy.BackupPolicyRecord], etcdstore.Versioned[EnvironmentCoordinationRecord], *VersionedBackupKey, error) {
+) (*etcdstore.Versioned[backuppolicy.BackupPolicyRecord], etcdstore.Versioned[EnvironmentCoordinationRecord], *backuppolicy.VersionedBackupKey, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		backuppolicy.BackupPolicyKey(environmentID), environmentCoordinationKey(environmentID),
 		backuppolicy.BackupKeyKey(environmentID), backuppolicy.BackupKeyValueKey(environmentID),
@@ -75,7 +75,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 	if (result.Values[2] == nil) != (result.Values[3] == nil) {
 		return nil, coordination, nil, recordcodec.CorruptRecord()
 	}
-	var key *VersionedBackupKey
+	var key *backuppolicy.VersionedBackupKey
 	if result.Values[2] != nil {
 		record, recordErr := backuppolicy.DecodeBackupKeyRecord(result.Values[2].Value)
 		encrypted, encryptedErr := backuppolicy.DecodeBackupKeyEncryptedValue(result.Values[3].Value)
@@ -84,7 +84,7 @@ func (repository *BackupPolicyRepository) loadBlueprintBackupBase(
 			clear(encrypted.Ciphertext)
 			return nil, coordination, nil, recordcodec.CorruptRecord()
 		}
-		key = &VersionedBackupKey{
+		key = &backuppolicy.VersionedBackupKey{
 			Record: record, Encrypted: encrypted, RecordRevision: result.Values[2].ModRevision,
 			EncryptedRevision: result.Values[3].ModRevision, ReadRevision: revision,
 		}

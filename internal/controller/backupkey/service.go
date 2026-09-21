@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"net/http"
 	"time"
@@ -38,8 +39,11 @@ type Repository interface {
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
-	GetBackupKey(context.Context, string) (etcd.VersionedBackupKey, bool, error)
 	ApplyBackupKeyRotation(context.Context, string) error
+}
+
+type KeyReader interface {
+	GetBackupKey(context.Context, string) (backuppolicy.VersionedBackupKey, bool, error)
 }
 
 type backupKeyRotationIdempotency interface {
@@ -148,6 +152,7 @@ type KeyFactory interface {
 
 type Service struct {
 	repository  Repository
+	keyReader   KeyReader
 	keys        KeyFactory
 	idempotency backupKeyRotationIdempotency
 	protector   *secretvalue.Protector
@@ -156,6 +161,7 @@ type Service struct {
 
 func NewService(
 	repository Repository,
+	keyReader KeyReader,
 	keys KeyFactory,
 	coordinator *requestidempotency.Coordinator,
 	markers *etcd.IdempotencyRepository,
@@ -165,20 +171,21 @@ func NewService(
 	if err != nil {
 		return nil, err
 	}
-	return newService(repository, keys, idempotency, protector)
+	return newService(repository, keyReader, keys, idempotency, protector)
 }
 
 func newService(
 	repository Repository,
+	keyReader KeyReader,
 	keys KeyFactory,
 	idempotency backupKeyRotationIdempotency,
 	protector *secretvalue.Protector,
 ) (*Service, error) {
-	if repository == nil || keys == nil || idempotency == nil || protector == nil {
+	if repository == nil || keyReader == nil || keys == nil || idempotency == nil || protector == nil {
 		return nil, errs.New(errs.KindInternal, "backup key service dependencies are required")
 	}
 	return &Service{
-		repository: repository, keys: keys, idempotency: idempotency,
+		repository: repository, keyReader: keyReader, keys: keys, idempotency: idempotency,
 		protector: protector, now: func() time.Time { return time.Now().UTC() },
 	}, nil
 }
@@ -273,7 +280,7 @@ func (service *Service) Execute(ctx context.Context, task etcd.TaskRecord) error
 }
 
 func (service *Service) ExportBackupKey(ctx context.Context, environmentID string) (Export, error) {
-	key, found, err := service.repository.GetBackupKey(ctx, environmentID)
+	key, found, err := service.keyReader.GetBackupKey(ctx, environmentID)
 	if err != nil {
 		return Export{}, err
 	}

@@ -169,7 +169,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyReplacementBase(
 			clear(encrypted.Ciphertext)
 			return backupPolicyReplacementCandidate{}, false, corruptBackupKey()
 		}
-		candidate.ExistingKey = &VersionedBackupKey{
+		candidate.ExistingKey = &backuppolicy.VersionedBackupKey{
 			Record: record, Encrypted: encrypted,
 			RecordRevision: result.Values[5].ModRevision, EncryptedRevision: result.Values[6].ModRevision,
 			ReadRevision: result.ReadRevision,

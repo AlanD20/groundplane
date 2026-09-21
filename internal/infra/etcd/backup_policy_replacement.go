@@ -54,7 +54,7 @@ type backupPolicyReplacementCandidate struct {
 	Connector           *etcdstore.Versioned[connectorrecord.Record]
 	ConnectorOwnerIndex *etcdstore.KeyValue
 	ConnectorReferences []backupPolicyConnectorReferenceEvidence
-	ExistingKey         *VersionedBackupKey
+	ExistingKey         *backuppolicy.VersionedBackupKey
 	InitialKey          *backupPolicyInitialKey
 }
 

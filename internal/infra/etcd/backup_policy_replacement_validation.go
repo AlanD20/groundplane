@@ -234,7 +234,7 @@ func validBackupPolicyIndex(entry *etcdstore.KeyValue, key string, value string)
 
 func validateBackupPolicyKeyEvidence(candidate backupPolicyReplacementCandidate) error {
 	if candidate.ExistingKey != nil {
-		if err := validateVersionedBackupKey(*candidate.ExistingKey); err != nil {
+		if err := backuppolicy.ValidateVersionedBackupKey(*candidate.ExistingKey); err != nil {
 			return err
 		}
 		if candidate.ExistingKey.Record.EnvironmentID != candidate.Replacement.EnvironmentID {

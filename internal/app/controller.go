@@ -12,6 +12,7 @@ import (
 	agentruntime "github.com/AlanD20/groundplane/internal/controller/localagent/runtime"
 	"github.com/AlanD20/groundplane/internal/controller/scheduler"
 	taskcheckpoint "github.com/AlanD20/groundplane/internal/controller/taskcheckpoint"
+	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	resolutionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hostresolution"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/resolverbaseline"
@@ -421,6 +422,11 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 			wrapControllerRunError("close etcd", closeErr),
 		))
 	}
+	backupKeyRecords, err := backuppolicy.NewKeyRepository(store)
+	if err != nil {
+		_ = store.Close()
+		return nil, fmt.Errorf("controller: initialize backup key repository: %w", err)
+	}
 	backupRuntimeRecords, err := etcd.NewBackupRuntimeRepository(store)
 	if err != nil {
 		_ = store.Close()
@@ -664,6 +670,7 @@ func NewController(ctx context.Context, configPath string) (*Controller, error) 
 	}
 	backupKeys, err := backupkey.NewService(
 		backupPolicyRecords,
+		backupKeyRecords,
 		backupPolicyKeys,
 		intentCoordinator,
 		idempotency,
