@@ -2,6 +2,7 @@ package etcd
 
 import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	backupqueries "github.com/AlanD20/groundplane/internal/infra/etcd/backupqueries"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -12,11 +13,11 @@ func newbackupPolicyInitialKey(
 	environmentID string,
 	now time.Time,
 	material *BackupPolicyInitialKeyMaterial,
-) (*backupPolicyInitialKey, error) {
+) (*backuppolicymutations.InitialKey, error) {
 	if material == nil {
 		return nil, errs.New(errs.KindValidationFailed, "initial age key material is required")
 	}
-	initial := &backupPolicyInitialKey{
+	initial := &backuppolicymutations.InitialKey{
 		Record: backuppolicy.BackupKeyRecord{
 			EnvironmentID: environmentID,
 			Recipient:     material.Recipient,
@@ -41,7 +42,7 @@ func newbackupPolicyInitialKey(
 	return initial, nil
 }
 
-func backupPolicyProjectionFromCandidate(candidate backupPolicyReplacementCandidate) backupqueries.BackupPolicyProjection {
+func backupPolicyProjectionFromCandidate(candidate backuppolicymutations.ReplacementCandidate) backupqueries.BackupPolicyProjection {
 	projection := backupqueries.BackupPolicyProjection{
 		EnvironmentID: candidate.Replacement.EnvironmentID,
 		Enabled:       candidate.Replacement.Enabled,
@@ -50,7 +51,7 @@ func backupPolicyProjectionFromCandidate(candidate backupPolicyReplacementCandid
 		Encryption:    candidate.Replacement.Encryption,
 		ConnectorID:   candidate.Replacement.ConnectorID,
 		Sources:       make([]backupqueries.BackupPolicySourceProjection, len(candidate.Sources)),
-		NextRunAt:     backupPolicyNextRunAt(candidate.NextRunAt),
+		NextRunAt:     backuppolicymutations.BackupPolicyNextRunAt(candidate.NextRunAt),
 	}
 	for index, source := range candidate.Sources {
 		projection.Sources[index] = backupqueries.BackupPolicySourceProjection{

@@ -1,4 +1,4 @@
-package etcd
+package backuppolicymutations
 
 import (
 	"context"
@@ -16,19 +16,19 @@ import (
 	"net/http"
 )
 
-func validateBackupPolicyReplacement(
+func ValidateBackupPolicyReplacement(
 	ctx context.Context,
-	candidate backupPolicyReplacementCandidate,
+	candidate ReplacementCandidate,
 	marker idempotencyrecord.IdempotencyMarker,
 ) error {
-	if err := validatebackupPolicyReplacementCandidate(ctx, candidate); err != nil {
+	if err := ValidateReplacementCandidate(ctx, candidate); err != nil {
 		return err
 	}
 	return validateBackupPolicyReplacementMarker(candidate, marker)
 }
 
 func validateBackupPolicyReplacementMarker(
-	candidate backupPolicyReplacementCandidate,
+	candidate ReplacementCandidate,
 	marker idempotencyrecord.IdempotencyMarker,
 ) error {
 	if marker.Kind != idempotencyrecord.IdempotencyMarkerDirect || marker.State != idempotencyrecord.IdempotencyMarkerCompleted ||
@@ -47,9 +47,9 @@ func validateBackupPolicyReplacementMarker(
 	return idempotencyrecord.ValidateIdempotencyMarker(marker)
 }
 
-func validatebackupPolicyReplacementCandidate(
+func ValidateReplacementCandidate(
 	ctx context.Context,
-	candidate backupPolicyReplacementCandidate,
+	candidate ReplacementCandidate,
 ) error {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
@@ -126,7 +126,7 @@ func validatebackupPolicyReplacementCandidate(
 		identities[identity] = struct{}{}
 	}
 	for index := range candidate.Sources {
-		if err := validatebackupPolicySourceEvidence(
+		if err := ValidateSourceEvidence(
 			candidate.Replacement.EnvironmentID,
 			candidate.Replacement.SourceIDs[index],
 			candidate.Sources[index],
@@ -169,10 +169,10 @@ func validReplacementRevision(revision int64, readRevision int64) bool {
 	return revision > 0 && readRevision >= revision
 }
 
-func validatebackupPolicySourceEvidence(
+func ValidateSourceEvidence(
 	environmentID string,
 	wantSourceID string,
-	evidence backupPolicySourceEvidence,
+	evidence SourceEvidence,
 ) error {
 	if err := backuppolicy.ValidateBackupSourceRecord(evidence.Source.Record); err != nil {
 		return err
@@ -233,7 +233,7 @@ func validBackupPolicyIndex(entry *etcdstore.KeyValue, key string, value string)
 	return entry != nil && entry.Key == key && entry.ModRevision > 0 && string(entry.Value) == value
 }
 
-func validateBackupPolicyKeyEvidence(candidate backupPolicyReplacementCandidate) error {
+func validateBackupPolicyKeyEvidence(candidate ReplacementCandidate) error {
 	if candidate.ExistingKey != nil {
 		if err := backuppolicy.ValidateVersionedBackupKey(*candidate.ExistingKey); err != nil {
 			return err
@@ -265,7 +265,7 @@ func validateBackupPolicyKeyEvidence(candidate backupPolicyReplacementCandidate)
 	return nil
 }
 
-func validateBackupPolicyConnectorReferences(candidate backupPolicyReplacementCandidate) error {
+func validateBackupPolicyConnectorReferences(candidate ReplacementCandidate) error {
 	environmentID := candidate.Replacement.EnvironmentID
 	oldConnectorID := ""
 	if candidate.Current != nil && candidate.Current.Record.Enabled {

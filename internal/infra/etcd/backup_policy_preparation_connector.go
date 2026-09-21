@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -44,9 +45,9 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorEvidence(
 
 func (repository *BackupPolicyRepository) loadBackupPolicyConnectorReferences(
 	ctx context.Context,
-	candidate backupPolicyReplacementCandidate,
+	candidate backuppolicymutations.ReplacementCandidate,
 	revision int64,
-) ([]backupPolicyConnectorReferenceEvidence, error) {
+) ([]backuppolicymutations.ConnectorReferenceEvidence, error) {
 	oldConnectorID := ""
 	if candidate.Current != nil && candidate.Current.Record.Enabled {
 		oldConnectorID = candidate.Current.Record.ConnectorID
@@ -62,7 +63,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorReferences(
 	if newConnectorID != "" && newConnectorID != oldConnectorID {
 		connectorIDs = append(connectorIDs, newConnectorID)
 	}
-	evidence := make([]backupPolicyConnectorReferenceEvidence, len(connectorIDs))
+	evidence := make([]backuppolicymutations.ConnectorReferenceEvidence, len(connectorIDs))
 	for index, connectorID := range connectorIDs {
 		result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
@@ -76,7 +77,7 @@ func (repository *BackupPolicyRepository) loadBackupPolicyConnectorReferences(
 		if result == nil || result.ReadRevision != revision || len(result.Values) != 1 {
 			return nil, errs.New(errs.KindInternal, "backup policy connector reference read is empty")
 		}
-		evidence[index] = backupPolicyConnectorReferenceEvidence{
+		evidence[index] = backuppolicymutations.ConnectorReferenceEvidence{
 			ConnectorID: connectorID,
 			Entry:       cloneBackupPolicyEvidenceKeyValue(result.Values[0]),
 		}

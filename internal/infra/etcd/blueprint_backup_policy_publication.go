@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
@@ -15,7 +16,7 @@ import (
 type preparedBlueprintBackupPolicyPublication struct {
 	conditions []etcdstore.Condition
 	mutations  []etcdstore.Mutation
-	evidence   []backupPolicyReplacementCompare
+	evidence   []backuppolicymutations.BackupPolicyReplacementCompare
 }
 
 func prepareBlueprintBackupPolicyPublication(
@@ -60,9 +61,9 @@ func prepareBlueprintBackupPolicyPublication(
 			etcdstore.Mutation{Type: etcdstore.MutationPut, Key: coordinationrecord.Key(state.environmentID), Value: coordinationValue},
 		)
 	}
-	compare := func(kind backupPolicyReplacementCompareKind, id, key string, revision int64) {
+	compare := func(kind backuppolicymutations.BackupPolicyReplacementCompareKind, id, key string, revision int64) {
 		publication.conditions = append(publication.conditions, etcdstore.Condition{Key: key, ModRevision: revision})
-		publication.evidence = append(publication.evidence, backupPolicyReplacementCompare{
+		publication.evidence = append(publication.evidence, backuppolicymutations.BackupPolicyReplacementCompare{
 			Kind: kind, ID: id, ExpectedRevision: revision,
 		})
 	}
@@ -70,9 +71,9 @@ func prepareBlueprintBackupPolicyPublication(
 	if state.candidate.Current != nil {
 		policyRevision = state.candidate.Current.Revision
 	}
-	compare(backupPolicyComparePolicy, state.environmentID, backuppolicy.BackupPolicyKey(state.environmentID), policyRevision)
+	compare(backuppolicymutations.BackupPolicyComparePolicy, state.environmentID, backuppolicy.BackupPolicyKey(state.environmentID), policyRevision)
 	compare(
-		backupPolicyCompareCoordination,
+		backuppolicymutations.BackupPolicyCompareCoordination,
 		state.environmentID,
 		coordinationrecord.Key(state.environmentID),
 		state.candidate.Coordination.Revision,
@@ -84,15 +85,15 @@ func prepareBlueprintBackupPolicyPublication(
 			environmentRevision = source.environmentIndex.ModRevision
 			identityRevision = source.identityIndex.ModRevision
 		}
-		compare(backupPolicyCompareSource, source.record.ID, backuppolicy.BackupSourceKey(source.record.ID), primaryRevision)
+		compare(backuppolicymutations.BackupPolicyCompareSource, source.record.ID, backuppolicy.BackupSourceKey(source.record.ID), primaryRevision)
 		compare(
-			backupPolicyCompareSourceEnvironmentIndex,
+			backuppolicymutations.BackupPolicyCompareSourceEnvironmentIndex,
 			source.record.ID,
 			backuppolicy.BackupSourceEnvironmentKey(state.environmentID, source.record.ID),
 			environmentRevision,
 		)
 		compare(
-			backupPolicyCompareSourceIdentityIndex,
+			backuppolicymutations.BackupPolicyCompareSourceIdentityIndex,
 			source.record.ID,
 			backuppolicy.BackupSourceIdentityKey(state.environmentID, source.record.Kind, source.record.TargetID),
 			identityRevision,
@@ -129,9 +130,9 @@ func prepareBlueprintBackupPolicyPublication(
 					)
 				}
 			} else {
-				compare(backupPolicyCompareAttach, source.record.TargetID, attachrecord.AttachKey(source.record.TargetID), source.attach.Revision)
-				compare(backupPolicyCompareTargetOwnerIndex, source.record.TargetID, attachrecord.AttachOwnerKey(state.environmentID, source.record.TargetID), source.attachOwner.ModRevision)
-				compare(backupPolicyCompareTargetTombstone, source.record.TargetID, deletionrecord.TombstoneKey("attach", source.record.TargetID), 0)
+				compare(backuppolicymutations.BackupPolicyCompareAttach, source.record.TargetID, attachrecord.AttachKey(source.record.TargetID), source.attach.Revision)
+				compare(backuppolicymutations.BackupPolicyCompareTargetOwnerIndex, source.record.TargetID, attachrecord.AttachOwnerKey(state.environmentID, source.record.TargetID), source.attachOwner.ModRevision)
+				compare(backuppolicymutations.BackupPolicyCompareTargetTombstone, source.record.TargetID, deletionrecord.TombstoneKey("attach", source.record.TargetID), 0)
 			}
 		}
 	}
@@ -141,7 +142,7 @@ func prepareBlueprintBackupPolicyPublication(
 			connectorRevision = state.candidate.Connector.Revision
 			ownerRevision = state.candidate.ConnectorOwnerIndex.ModRevision
 			compare(
-				backupPolicyCompareConnector,
+				backuppolicymutations.BackupPolicyCompareConnector,
 				state.retainedConnectorID,
 				state.connectorNameIndex.Key,
 				state.connectorNameIndex.ModRevision,
@@ -151,29 +152,29 @@ func prepareBlueprintBackupPolicyPublication(
 			tombstoneRevision = state.connectorTombstone.ModRevision
 		}
 		compare(
-			backupPolicyCompareConnector,
+			backuppolicymutations.BackupPolicyCompareConnector,
 			state.retainedConnectorID,
 			connectorrecord.RecordKey(state.retainedConnectorID),
 			connectorRevision,
 		)
 		compare(
-			backupPolicyCompareConnectorOwnerIndex,
+			backuppolicymutations.BackupPolicyCompareConnectorOwnerIndex,
 			state.retainedConnectorID,
 			connectorrecord.ConnectorEnvironmentKey(state.environmentID, state.retainedConnectorID),
 			ownerRevision,
 		)
 		compare(
-			backupPolicyCompareConnectorTombstone,
+			backuppolicymutations.BackupPolicyCompareConnectorTombstone,
 			state.retainedConnectorID,
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), state.retainedConnectorID),
 			tombstoneRevision,
 		)
 	} else if state.candidate.Connector != nil {
 		connectorID := state.candidate.Connector.Record.Connector.ID
-		compare(backupPolicyCompareConnector, connectorID, state.connectorNameIndex.Key, state.connectorNameIndex.ModRevision)
-		compare(backupPolicyCompareConnector, connectorID, connectorrecord.RecordKey(connectorID), state.candidate.Connector.Revision)
-		compare(backupPolicyCompareConnectorOwnerIndex, connectorID, state.candidate.ConnectorOwnerIndex.Key, state.candidate.ConnectorOwnerIndex.ModRevision)
-		compare(backupPolicyCompareConnectorTombstone, connectorID, deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID), 0)
+		compare(backuppolicymutations.BackupPolicyCompareConnector, connectorID, state.connectorNameIndex.Key, state.connectorNameIndex.ModRevision)
+		compare(backuppolicymutations.BackupPolicyCompareConnector, connectorID, connectorrecord.RecordKey(connectorID), state.candidate.Connector.Revision)
+		compare(backuppolicymutations.BackupPolicyCompareConnectorOwnerIndex, connectorID, state.candidate.ConnectorOwnerIndex.Key, state.candidate.ConnectorOwnerIndex.ModRevision)
+		compare(backuppolicymutations.BackupPolicyCompareConnectorTombstone, connectorID, deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID), 0)
 	}
 	for _, reference := range state.candidate.ConnectorReferences {
 		revision := int64(0)
@@ -181,7 +182,7 @@ func prepareBlueprintBackupPolicyPublication(
 			revision = reference.Entry.ModRevision
 		}
 		compare(
-			backupPolicyCompareConnectorReference,
+			backuppolicymutations.BackupPolicyCompareConnectorReference,
 			reference.ConnectorID,
 			backuppolicy.BackupPolicyConnectorReferenceKey(reference.ConnectorID, state.environmentID),
 			revision,
@@ -221,8 +222,8 @@ func prepareBlueprintBackupPolicyPublication(
 		recordRevision = state.candidate.ExistingKey.RecordRevision
 		encryptedRevision = state.candidate.ExistingKey.EncryptedRevision
 	}
-	compare(backupPolicyCompareKey, state.environmentID, backuppolicy.BackupKeyKey(state.environmentID), recordRevision)
-	compare(backupPolicyCompareKey, state.environmentID, backuppolicy.BackupKeyValueKey(state.environmentID), encryptedRevision)
+	compare(backuppolicymutations.BackupPolicyCompareKey, state.environmentID, backuppolicy.BackupKeyKey(state.environmentID), recordRevision)
+	compare(backuppolicymutations.BackupPolicyCompareKey, state.environmentID, backuppolicy.BackupKeyValueKey(state.environmentID), encryptedRevision)
 	if state.candidate.InitialKey != nil {
 		recordValue, encodeErr := backuppolicy.EncodeBackupKeyRecord(state.candidate.InitialKey.Record)
 		if encodeErr != nil {
@@ -276,6 +277,6 @@ func classifyEnvironmentBlueprintBackupPolicyPublication(
 		if err := base(revision, values[:baseCount]); err != nil {
 			return err
 		}
-		return classifyBackupPolicyReplacementConflict(values[baseCount:], publication.evidence)
+		return backuppolicymutations.ClassifyBackupPolicyReplacementConflict(values[baseCount:], publication.evidence)
 	}
 }

@@ -1,4 +1,4 @@
-package etcd
+package backuppolicymutations
 
 import (
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-func sealBackupPolicyCandidateSchedule(
-	candidate *backupPolicyReplacementCandidate,
+func SealBackupPolicyCandidateSchedule(
+	candidate *ReplacementCandidate,
 	now time.Time,
 ) error {
 	if candidate == nil || !coordinationrecord.ValidInstant(now.UTC()) {
@@ -26,7 +26,7 @@ func sealBackupPolicyCandidateSchedule(
 	return nil
 }
 
-func backupPolicyNextRunAt(value time.Time) *time.Time {
+func BackupPolicyNextRunAt(value time.Time) *time.Time {
 	if value.IsZero() {
 		return nil
 	}

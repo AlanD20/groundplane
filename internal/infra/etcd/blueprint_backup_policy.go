@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -32,7 +33,7 @@ type blueprintBackupPolicyPreparationState struct {
 	taskID              string
 	createdAt           time.Time
 	desired             *projectionrecord.EnvironmentBlueprintBackupPolicy
-	candidate           backupPolicyReplacementCandidate
+	candidate           backuppolicymutations.ReplacementCandidate
 	sources             []blueprintBackupPolicySourceEvidence
 	connectorNameIndex  *etcdstore.KeyValue
 	connectorTombstone  *etcdstore.KeyValue
@@ -139,7 +140,7 @@ func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolic
 	}
 	state := &blueprintBackupPolicyPreparationState{
 		environmentID: input.EnvironmentID, taskID: input.TaskID, createdAt: input.CreatedAt,
-		candidate: backupPolicyReplacementCandidate{
+		candidate: backuppolicymutations.ReplacementCandidate{
 			Current: current, Coordination: coordination, ExistingKey: key,
 		},
 	}
@@ -198,7 +199,7 @@ func (repository *BackupPolicyRepository) PrepareEnvironmentBlueprintBackupPolic
 		clearBlueprintBackupPolicyPreparationState(state)
 		return BlueprintBackupPolicyPreparation{}, err
 	}
-	if err := sealBackupPolicyCandidateSchedule(&state.candidate, input.CreatedAt); err != nil {
+	if err := backuppolicymutations.SealBackupPolicyCandidateSchedule(&state.candidate, input.CreatedAt); err != nil {
 		clearBlueprintBackupPolicyPreparationState(state)
 		return BlueprintBackupPolicyPreparation{}, err
 	}

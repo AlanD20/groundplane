@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	backuppolicymutations "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicymutations"
 	backupqueries "github.com/AlanD20/groundplane/internal/infra/etcd/backupqueries"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupsources"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -23,7 +24,7 @@ type BackupPolicyInitialKeyMaterial struct {
 // exposing the exact typed projection the application serializes into the
 // protected 200 response.
 type PreparedBackupPolicyReplacement struct {
-	candidate          backupPolicyReplacementCandidate
+	candidate          backuppolicymutations.ReplacementCandidate
 	projection         backupqueries.BackupPolicyProjection
 	requiresInitialKey bool
 }
@@ -49,10 +50,10 @@ func (prepared PreparedBackupPolicyReplacement) FinalizeSchedule(
 			errs.KindValidationFailed, "backup policy initial key is not prepared",
 		)
 	}
-	if err := sealBackupPolicyCandidateSchedule(&prepared.candidate, now); err != nil {
+	if err := backuppolicymutations.SealBackupPolicyCandidateSchedule(&prepared.candidate, now); err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
-	if err := validatebackupPolicyReplacementCandidate(context.Background(), prepared.candidate); err != nil {
+	if err := backuppolicymutations.ValidateReplacementCandidate(context.Background(), prepared.candidate); err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
 	prepared.projection = backupPolicyProjectionFromCandidate(prepared.candidate)
@@ -175,13 +176,13 @@ func (repository *BackupPolicyRepository) PrepareBackupPolicyReplacement(
 	if err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
-	if err := sealBackupPolicyCandidateSchedule(&candidate, now); err != nil {
+	if err := backuppolicymutations.SealBackupPolicyCandidateSchedule(&candidate, now); err != nil {
 		return PreparedBackupPolicyReplacement{}, err
 	}
 	requiresInitialKey := input.Enabled && input.Encryption == "age" && !keyFound
 	projection := backupqueries.BackupPolicyProjection{}
 	if !requiresInitialKey {
-		if err := validatebackupPolicyReplacementCandidate(ctx, candidate); err != nil {
+		if err := backuppolicymutations.ValidateReplacementCandidate(ctx, candidate); err != nil {
 			return PreparedBackupPolicyReplacement{}, err
 		}
 		projection = backupPolicyProjectionFromCandidate(candidate)
@@ -214,7 +215,7 @@ func (repository *BackupPolicyRepository) SupplyBackupPolicyInitialKey(
 		return PreparedBackupPolicyReplacement{}, err
 	}
 	prepared.candidate.InitialKey = initial
-	if err := validatebackupPolicyReplacementCandidate(ctx, prepared.candidate); err != nil {
+	if err := backuppolicymutations.ValidateReplacementCandidate(ctx, prepared.candidate); err != nil {
 		clear(initial.Encrypted.Ciphertext)
 		return PreparedBackupPolicyReplacement{}, err
 	}

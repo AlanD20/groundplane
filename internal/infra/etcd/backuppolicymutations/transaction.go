@@ -1,4 +1,4 @@
-package etcd
+package backuppolicymutations
 
 import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
@@ -13,7 +13,7 @@ import (
 )
 
 func mustBackupPolicyScheduleTransition(
-	candidate backupPolicyReplacementCandidate,
+	candidate ReplacementCandidate,
 ) coordinationrecord.EnvironmentCoordinationRecord {
 	next, _, err := coordinationrecord.ReplaceSchedule(
 		candidate.Coordination.Record, candidate.Replacement, candidate.Replacement.UpdatedAt,
@@ -24,8 +24,8 @@ func mustBackupPolicyScheduleTransition(
 	return next
 }
 
-func prepareBackupPolicyReplacement(
-	candidate backupPolicyReplacementCandidate,
+func PrepareBackupPolicyReplacement(
+	candidate ReplacementCandidate,
 ) (backupPolicyReplacementPlan, error) {
 	policyValue, err := backuppolicy.EncodeBackupPolicyRecord(candidate.Replacement)
 	if err != nil {
@@ -47,14 +47,14 @@ func prepareBackupPolicyReplacement(
 				Value: coordinationValue,
 			},
 		},
-		evidence: make([]backupPolicyReplacementCompare, 0, 18+len(candidate.Sources)*3),
+		evidence: make([]BackupPolicyReplacementCompare, 0, 18+len(candidate.Sources)*3),
 	}
 	policyRevision := int64(0)
 	if candidate.Current != nil {
 		policyRevision = candidate.Current.Revision
 	}
 	plan.compare(
-		backupPolicyComparePolicy,
+		BackupPolicyComparePolicy,
 		candidate.Replacement.EnvironmentID,
 		backuppolicy.BackupPolicyKey(candidate.Replacement.EnvironmentID),
 		policyRevision,
@@ -72,7 +72,7 @@ func prepareBackupPolicyReplacement(
 		candidate.Project.Revision,
 	)
 	plan.compare(
-		backupPolicyCompareCoordination,
+		BackupPolicyCompareCoordination,
 		candidate.Replacement.EnvironmentID,
 		coordinationrecord.Key(candidate.Replacement.EnvironmentID),
 		candidate.Coordination.Revision,
@@ -100,19 +100,19 @@ func prepareBackupPolicyReplacement(
 	}
 	for _, source := range candidate.Sources {
 		plan.compare(
-			backupPolicyCompareSource,
+			BackupPolicyCompareSource,
 			source.Source.Record.ID,
 			backuppolicy.BackupSourceKey(source.Source.Record.ID),
 			source.Source.Revision,
 		)
 		plan.compare(
-			backupPolicyCompareSourceEnvironmentIndex,
+			BackupPolicyCompareSourceEnvironmentIndex,
 			source.Source.Record.ID,
 			source.EnvironmentIndex.Key,
 			source.EnvironmentIndex.ModRevision,
 		)
 		plan.compare(
-			backupPolicyCompareSourceIdentityIndex,
+			BackupPolicyCompareSourceIdentityIndex,
 			source.Source.Record.ID,
 			source.IdentityIndex.Key,
 			source.IdentityIndex.ModRevision,
@@ -120,19 +120,19 @@ func prepareBackupPolicyReplacement(
 		switch string(source.Source.Record.Kind) {
 		case "attach":
 			plan.compare(
-				backupPolicyCompareAttach,
+				BackupPolicyCompareAttach,
 				source.Attach.Record.ID,
 				attachrecord.AttachKey(source.Attach.Record.ID),
 				source.Attach.Revision,
 			)
 			plan.compare(
-				backupPolicyCompareTargetOwnerIndex,
+				BackupPolicyCompareTargetOwnerIndex,
 				source.Attach.Record.ID,
 				source.TargetOwnerIndex.Key,
 				source.TargetOwnerIndex.ModRevision,
 			)
 			plan.compare(
-				backupPolicyCompareTargetTombstone,
+				BackupPolicyCompareTargetTombstone,
 				source.Attach.Record.ID,
 				deletionrecord.TombstoneKey("attach", source.Attach.Record.ID),
 				0,
@@ -158,19 +158,19 @@ func prepareBackupPolicyReplacement(
 	if candidate.Connector != nil {
 		connectorID := candidate.Connector.Record.Connector.ID
 		plan.compare(
-			backupPolicyCompareConnector,
+			BackupPolicyCompareConnector,
 			connectorID,
 			connectorrecord.RecordKey(connectorID),
 			candidate.Connector.Revision,
 		)
 		plan.compare(
-			backupPolicyCompareConnectorOwnerIndex,
+			BackupPolicyCompareConnectorOwnerIndex,
 			connectorID,
 			candidate.ConnectorOwnerIndex.Key,
 			candidate.ConnectorOwnerIndex.ModRevision,
 		)
 		plan.compare(
-			backupPolicyCompareConnectorTombstone,
+			BackupPolicyCompareConnectorTombstone,
 			connectorID,
 			deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetConnector), connectorID),
 			0,
@@ -182,7 +182,7 @@ func prepareBackupPolicyReplacement(
 			revision = reference.Entry.ModRevision
 		}
 		plan.compare(
-			backupPolicyCompareConnectorReference,
+			BackupPolicyCompareConnectorReference,
 			reference.ConnectorID,
 			backuppolicy.BackupPolicyConnectorReferenceKey(reference.ConnectorID, candidate.Replacement.EnvironmentID),
 			revision,
@@ -216,19 +216,19 @@ func prepareBackupPolicyReplacement(
 		keyValueRevision = candidate.ExistingKey.EncryptedRevision
 	}
 	plan.compare(
-		backupPolicyCompareKey,
+		BackupPolicyCompareKey,
 		candidate.Replacement.EnvironmentID,
 		backuppolicy.BackupKeyKey(candidate.Replacement.EnvironmentID),
 		keyRecordRevision,
 	)
 	plan.compare(
-		backupPolicyCompareKey,
+		BackupPolicyCompareKey,
 		candidate.Replacement.EnvironmentID,
 		backuppolicy.BackupKeyValueKey(candidate.Replacement.EnvironmentID),
 		keyValueRevision,
 	)
 	if candidate.InitialKey != nil {
-		initial := backupPolicyInitialKey{
+		initial := InitialKey{
 			Record:    candidate.InitialKey.Record,
 			Encrypted: candidate.InitialKey.Encrypted,
 		}
