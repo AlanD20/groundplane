@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -40,12 +41,12 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 		return errs.New(errs.KindStateConflict, "Agent reconnect lifecycle authority changed")
 	}
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(record.TaskID), ModRevision: current.Task.Revision},
+		{Key: taskjournal.TaskStorageKey(record.TaskID), ModRevision: current.Task.Revision},
 		{
-			Key:         taskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID),
+			Key:         taskjournal.TaskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID),
 			ModRevision: current.Assignment.Revision,
 		},
-		{Key: taskAssignmentIndexKey(record.TaskID), ModRevision: current.Assignment.Revision},
+		{Key: taskjournal.TaskAssignmentIndexKey(record.TaskID), ModRevision: current.Assignment.Revision},
 		{Key: lifecycleKey, ModRevision: lifecycleValue.ModRevision},
 	}
 	conditions = append(conditions, evidenceConditions...)
@@ -66,9 +67,9 @@ func (repository *TaskRepository) incrementAssignmentEpoch(
 		conditions = append(conditions, etcdstore.Condition{Key: releaseRecoveryKey(record.TaskID)})
 	}
 	transaction, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(record.TaskID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID), Value: encoded},
-		{Type: etcdstore.MutationPut, Key: taskAssignmentIndexKey(record.TaskID), Value: encoded},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(record.TaskID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskExecutionClaimKey(record.Executor, record.AgentID, record.TaskID), Value: encoded},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskAssignmentIndexKey(record.TaskID), Value: encoded},
 		{Type: etcdstore.MutationPut, Key: lifecycleKey, Value: encoded},
 	})
 	if err != nil {

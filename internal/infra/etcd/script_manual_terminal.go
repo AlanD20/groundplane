@@ -35,7 +35,7 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			scriptSourceRootKey(task.OperationID),
-			taskActiveOperationKey(task.OperationID),
+			taskjournal.TaskActiveOperationKey(task.OperationID),
 		}, Revision: revision,
 	})
 	if err != nil {
@@ -96,14 +96,14 @@ func (repository *TaskRepository) prepareManualScriptTerminalRelease(
 	*terminalAt = report.ObservedAt
 	executionCondition := etcdstore.Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision}
 	guards := []etcdstore.Condition{
-		{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
+		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
 		{
-			Key:         taskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
+			Key:         taskjournal.TaskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
 			ModRevision: assignmentValue.ModRevision,
 		},
-		{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
+		{Key: taskjournal.TaskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
 		{Key: lifecycleKey, ModRevision: lifecycleValue.ModRevision},
-		{Key: taskActiveOperationKey(task.OperationID), ModRevision: read.Values[1].ModRevision},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID), ModRevision: read.Values[1].ModRevision},
 		executionCondition, reportCondition,
 	}
 	authority, err := newScriptSourceReferenceAuthority(repository.store)

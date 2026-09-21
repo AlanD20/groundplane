@@ -44,7 +44,7 @@ func (repository *RunnerRepository) RecordRunnerReadinessProof(
 		)
 	}
 	keys := []string{
-		taskKey(taskID),
+		taskjournal.TaskStorageKey(taskID),
 		runnerReadinessProofKey(taskID),
 	}
 	initial, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})

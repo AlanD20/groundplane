@@ -79,7 +79,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 	if tombstone.Terminal.Status != string(taskjournal.TaskStatusCompleted) || tombstone.Phase != hierarchydeletion.HierarchyDeletionRetained {
 		transaction, transactErr := repository.store.Transact(ctx,
 			[]etcdstore.Condition{
-				{Key: taskKey(task.ID), ModRevision: taskRevision},
+				{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
 				{Key: retention.Key, ModRevision: retention.ModRevision},
 				{Key: tombstoneKey, ModRevision: tombstoneRead.Values[0].ModRevision},
 				{Key: markerKey},
@@ -113,7 +113,7 @@ func (repository *TaskRepository) prepareHierarchyDeletionTaskPrune(
 		transaction, transactErr := repository.store.Transact(ctx,
 			[]etcdstore.Condition{
 				{Key: pruneKey}, {Key: tombstoneKey, ModRevision: tombstoneRead.Values[0].ModRevision},
-				{Key: taskKey(task.ID), ModRevision: taskRevision}, {Key: markerKey},
+				{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision}, {Key: markerKey},
 			},
 			[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: pruneKey, Value: value}},
 		)

@@ -15,7 +15,7 @@ import (
 func (repository *TaskRepository) nextTaskRetentionPruneCandidate(
 	ctx context.Context, now time.Time,
 ) (*etcdstore.RangeResult, error) {
-	request := etcdstore.RangeRequest{Prefix: taskRetentionIndexPrefix, Limit: 1}
+	request := etcdstore.RangeRequest{Prefix: taskjournal.TaskRetentionIndexPrefix, Limit: 1}
 	for {
 		page, err := repository.store.Range(ctx, request)
 		if err != nil {
@@ -28,7 +28,7 @@ func (repository *TaskRepository) nextTaskRetentionPruneCandidate(
 			return page, nil
 		}
 		entry := page.Values[0]
-		taskID, deadline, err := parseTaskRetentionIndexKey(entry.Key)
+		taskID, deadline, err := taskjournal.ParseTaskRetentionIndexKey(entry.Key)
 		if err != nil {
 			clear(entry.Value)
 			return nil, err
@@ -52,7 +52,7 @@ func (repository *TaskRepository) nextTaskRetentionPruneCandidate(
 func (repository *TaskRepository) manualScriptRetentionCandidateBlocked(
 	ctx context.Context, taskID string, deadline time.Time, revision int64,
 ) (bool, error) {
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{taskKey(taskID)}, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(taskID)}, Revision: revision})
 	if err != nil {
 		return false, err
 	}

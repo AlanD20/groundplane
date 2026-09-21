@@ -79,16 +79,16 @@ func (repository *TaskRepository) prepareBackupTaskTerminal(
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
-	claimKey := taskAssignmentKey(assignment.AgentID, task.ID)
+	claimKey := taskjournal.TaskAssignmentKey(assignment.AgentID, task.ID)
 	taskRetentionKey, taskRetentionValue, err := prepareTaskRetentionIndex(terminal)
 	if err != nil {
 		return backupTaskTerminalPlan{}, err
 	}
 	defer clear(taskRetentionValue)
 	keys := []string{
-		taskKey(task.ID), claimKey, taskAssignmentIndexKey(task.ID),
-		taskActiveOperationKey(task.OperationID), markerKey, taskQueueKey(task.Executor, task.ID),
-		retentionKey, taskRetentionKey, taskTimeoutIndexKey(task.ID, assignment.Deadline),
+		taskjournal.TaskStorageKey(task.ID), claimKey, taskjournal.TaskAssignmentIndexKey(task.ID),
+		taskjournal.TaskActiveOperationKey(task.OperationID), markerKey, taskjournal.TaskQueueKey(task.Executor, task.ID),
+		retentionKey, taskRetentionKey, taskjournal.TaskTimeoutIndexKey(task.ID, assignment.Deadline),
 	}
 	anchor, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {

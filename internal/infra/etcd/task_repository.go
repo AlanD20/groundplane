@@ -153,7 +153,7 @@ func (repository *TaskRepository) GetTask(
 	if err := recordcodec.ValidateID(ids.KindTask, taskID); err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-	result, err := repository.store.Get(ctx, taskKey(taskID))
+	result, err := repository.store.Get(ctx, taskjournal.TaskStorageKey(taskID))
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
@@ -164,7 +164,7 @@ func (repository *TaskRepository) GetTask(
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
-	if record.ID != taskID || result.Entry.Key != taskKey(taskID) {
+	if record.ID != taskID || result.Entry.Key != taskjournal.TaskStorageKey(taskID) {
 		return etcdstore.Versioned[TaskRecord]{}, errs.New(errs.KindInternal, "task primary does not match its key")
 	}
 	indexKeys, err := taskJournalIndexKeys(record)
@@ -197,7 +197,7 @@ func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) e
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return err
 	}
-	primary, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskPrefix, Limit: 1})
+	primary, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskjournal.TaskPrefix, Limit: 1})
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) e
 		return errs.New(errs.KindInternal, "task journal schema primary read is missing")
 	}
 	marker, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskJournalSchemaKey}, Revision: primary.ReadRevision,
+		Keys: []string{taskjournal.TaskJournalSchemaKey}, Revision: primary.ReadRevision,
 	})
 	if err != nil {
 		return err
@@ -214,7 +214,7 @@ func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) e
 		return errs.New(errs.KindInternal, "task journal schema marker read is incomplete")
 	}
 	if marker.Values[0] != nil {
-		if marker.Values[0].Key != taskJournalSchemaKey || string(marker.Values[0].Value) != taskJournalSchemaValue {
+		if marker.Values[0].Key != taskjournal.TaskJournalSchemaKey || string(marker.Values[0].Value) != taskjournal.TaskJournalSchemaValue {
 			return errs.New(errs.KindInternal, "task journal schema marker is incompatible")
 		}
 		return nil
@@ -224,8 +224,8 @@ func (repository *TaskRepository) EnsureTaskJournalSchema(ctx context.Context) e
 	}
 	initialized, err := repository.store.Transact(
 		ctx,
-		[]etcdstore.Condition{{Key: taskJournalSchemaKey}, {Key: taskPrefix, Prefix: true}},
-		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: taskJournalSchemaKey, Value: []byte(taskJournalSchemaValue)}},
+		[]etcdstore.Condition{{Key: taskjournal.TaskJournalSchemaKey}, {Key: taskjournal.TaskPrefix, Prefix: true}},
+		[]etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: taskjournal.TaskJournalSchemaKey, Value: []byte(taskjournal.TaskJournalSchemaValue)}},
 	)
 	if err != nil {
 		return err
@@ -294,7 +294,7 @@ func (repository *TaskRepository) ListTasksByScope(
 			return etcdstore.Page[TaskRecord]{}, errs.New(errs.KindValidationFailed, "global task scope cannot contain an id")
 		}
 		page, err := listPrimaryPage(
-			ctx, repository.store, "tasks", "global", "-", taskPrefix, ids.KindTask,
+			ctx, repository.store, "tasks", "global", "-", taskjournal.TaskPrefix, ids.KindTask,
 			request, decodeTaskRecord, identity, func(TaskRecord) bool { return true },
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
@@ -306,8 +306,8 @@ func (repository *TaskRepository) ListTasksByScope(
 			)
 		}
 		page, err := listIndexPage(
-			ctx, repository.store, "tasks", "workspace", "platform", taskWorkspacePlatformPrefix,
-			taskKey, ids.KindTask, request, decodeTaskRecord, identity,
+			ctx, repository.store, "tasks", "workspace", "platform", taskjournal.TaskWorkspacePlatformPrefix,
+			taskjournal.TaskStorageKey, ids.KindTask, request, decodeTaskRecord, identity,
 			func(record TaskRecord) bool { return record.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform },
 		)
 		return repository.verifyTaskOwnerPage(ctx, page, err)
@@ -317,7 +317,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		}
 		page, err := listIndexPage(
 			ctx, repository.store, "tasks", "workspace", scope.ID,
-			taskWorkspaceTenantPrefix+scope.ID+"/", taskKey, ids.KindTask, request,
+			taskjournal.TaskWorkspaceTenantPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask, request,
 			decodeTaskRecord, identity,
 			func(record TaskRecord) bool {
 				return record.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant && record.Owner.TenantID == scope.ID
@@ -334,7 +334,7 @@ func (repository *TaskRepository) ListTasksByScope(
 			"tasks",
 			"project",
 			scope.ID,
-			taskPrefix,
+			taskjournal.TaskPrefix,
 			ids.KindTask,
 			request,
 			decodeTaskRecord,
@@ -348,7 +348,7 @@ func (repository *TaskRepository) ListTasksByScope(
 		}
 		page, err := listIndexPage(
 			ctx, repository.store, "tasks", "environment", scope.ID,
-			taskEnvironmentIndexPrefix+scope.ID+"/", taskKey, ids.KindTask, request,
+			taskjournal.TaskEnvironmentIndexPrefix+scope.ID+"/", taskjournal.TaskStorageKey, ids.KindTask, request,
 			decodeTaskRecord, identity,
 			func(record TaskRecord) bool { return record.Owner.EnvironmentID == scope.ID },
 		)
@@ -479,7 +479,7 @@ func (repository *TaskRepository) ListTaskEvents(
 		return TaskEventSnapshot{}, errs.New(errs.KindValidationFailed, "task event revision must not be negative")
 	}
 	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskKey(taskID)}, Revision: revision,
+		Keys: []string{taskjournal.TaskStorageKey(taskID)}, Revision: revision,
 	})
 	if err != nil {
 		return TaskEventSnapshot{}, err
@@ -498,7 +498,7 @@ func (repository *TaskRepository) ListTaskEvents(
 		return TaskEventSnapshot{}, errs.New(errs.KindInternal, "task event snapshot has a mismatched task")
 	}
 	eventsResult, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix:   taskEventScopePrefix(taskID),
+		Prefix:   taskjournal.TaskEventScopePrefix(taskID),
 		Limit:    int64(taskjournal.MaximumTaskEvents) + 1,
 		Revision: taskResult.ReadRevision,
 	})
@@ -511,7 +511,7 @@ func (repository *TaskRepository) ListTaskEvents(
 	}
 	events := make([]taskjournal.TaskEventRecord, len(eventsResult.Values))
 	for index, value := range eventsResult.Values {
-		sequence, err := taskEventSequenceFromKey(taskID, value.Key)
+		sequence, err := taskjournal.TaskEventSequenceFromKey(taskID, value.Key)
 		if err != nil {
 			return TaskEventSnapshot{}, err
 		}
@@ -552,7 +552,7 @@ func (repository *TaskRepository) verifyDuplicateEvent(
 		return errs.New(errs.KindInternal, "task event dedupe sequence is outside its task summary")
 	}
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskEventKey(task.ID, dedup.Sequence)}, Revision: revision,
+		Keys: []string{taskjournal.TaskEventKey(task.ID, dedup.Sequence)}, Revision: revision,
 	})
 	if err != nil {
 		return err

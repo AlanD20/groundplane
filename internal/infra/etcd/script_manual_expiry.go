@@ -20,9 +20,9 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 ) (bool, error) {
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		scriptSourceRootKey(task.OperationID), scriptExecutionKey(task.Params[ScriptExecutionIDParam]),
-		taskActiveOperationKey(
+		taskjournal.TaskActiveOperationKey(
 			task.OperationID,
-		), taskAssignmentIndexKey(task.ID), manualScriptClosingReportKey(task.ID),
+		), taskjournal.TaskAssignmentIndexKey(task.ID), manualScriptClosingReportKey(task.ID),
 	}, Revision: revision})
 	if err != nil {
 		return false, err
@@ -56,9 +56,9 @@ func (repository *TaskRepository) prepareManualScriptExpiry(
 		return false, corruptTaskPruneIntent()
 	}
 	guards := []etcdstore.Condition{
-		{Key: taskKey(task.ID), ModRevision: taskRevision},
+		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
 		{Key: retention.Key, ModRevision: retention.ModRevision},
-		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskAssignmentIndexKey(task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}, {Key: taskjournal.TaskAssignmentIndexKey(task.ID)},
 		{Key: manualScriptClosingReportKey(task.ID)},
 		{Key: read.Values[1].Key, ModRevision: read.Values[1].ModRevision},
 	}

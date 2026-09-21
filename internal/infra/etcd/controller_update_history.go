@@ -59,14 +59,14 @@ func (repository *TaskRepository) LatestControllerUpdate(ctx context.Context) (e
 	}
 	primary, err := repository.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{taskKey(id)}, Revision: index.ReadRevision},
+		etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(id)}, Revision: index.ReadRevision},
 	)
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, false, err
 	}
 	if primary == nil || primary.ReadRevision != index.ReadRevision || len(primary.Values) != 1 ||
 		primary.Values[0] == nil ||
-		primary.Values[0].Key != taskKey(id) {
+		primary.Values[0].Key != taskjournal.TaskStorageKey(id) {
 		return etcdstore.Versioned[TaskRecord]{}, false, corruptControllerUpdateHistory()
 	}
 	task, err := decodeTaskRecord(primary.Values[0].Value)

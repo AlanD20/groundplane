@@ -130,20 +130,20 @@ func (repository *TaskRepository) ReplacePlatformComponentDesiredWithTask(
 		{Key: platformComponentOwnerKey(current.Record.Desired.ID), ModRevision: indexes.Values[0].ModRevision},
 		{Key: platformComponentKindKey(current.Record.Desired.Kind), ModRevision: indexes.Values[1].ModRevision},
 		{Key: platformComponentTaskRenderInputKey(task.PlanID)},
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: platformComponentTaskActiveKey(replacement.Desired.ID)},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: componentrecord.RecordKey(replacement.Desired.ID), Value: componentValue},
 		componentrecord.WriteFenceMutation(replacement.Desired.ID),
 		{Type: etcdstore.MutationPut, Key: platformComponentTaskRenderInputKey(task.PlanID), Value: renderInputValue},
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: platformComponentTaskActiveKey(replacement.Desired.ID), Value: []byte(task.ID)},
 	}
 	plan, err := newTaskIdempotencyMutationPlan(

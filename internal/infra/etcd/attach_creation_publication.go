@@ -137,10 +137,10 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	}
 
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: attachrecord.AttachKey(record.ID)},
 		{Key: attachrecord.AttachNameKey(record.EnvironmentID, record.Name)},
 		{Key: attachrecord.AttachOwnerKey(record.EnvironmentID, record.ID)},
@@ -168,10 +168,10 @@ func (repository *AttachRepository) CreateAttachWithTaskHookInputs(
 	}
 	conditions = append(conditions, desiredHeadConditions...)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(record.ID), Value: recordValue},
 		{Type: etcdstore.MutationPut, Key: attachrecord.AttachNameKey(record.EnvironmentID, record.Name), Value: []byte(record.ID)},
 		{Type: etcdstore.MutationPut, Key: attachrecord.AttachOwnerKey(record.EnvironmentID, record.ID), Value: []byte(record.ID)},

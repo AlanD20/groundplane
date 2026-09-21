@@ -81,12 +81,12 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 	keys := []string{
 		rootKey,
 		hierarchyrecord.EnvironmentMutationEpochKey(environmentID),
-		taskActiveOperationKey(task.OperationID),
+		taskjournal.TaskActiveOperationKey(task.OperationID),
 	}
 	writerIndex := -1
 	if materializes {
 		writerIndex = len(keys)
-		keys = append(keys, taskMaterializationWriterKey(environmentID))
+		keys = append(keys, taskjournal.TaskMaterializationWriterKey(environmentID))
 	}
 	executionOffset := len(keys)
 	for _, step := range steps {
@@ -137,22 +137,22 @@ func (repository *TaskRepository) prepareTerminalScriptSourceRelease(
 		}
 	}
 	guards := []etcdstore.Condition{
-		{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
+		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
 		{
-			Key:         taskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
+			Key:         taskjournal.TaskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
 			ModRevision: assignmentValue.ModRevision,
 		},
-		{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
+		{Key: taskjournal.TaskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
 		{Key: lifecycleKey, ModRevision: lifecycleValue.ModRevision},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(environmentID), ModRevision: read.Values[1].ModRevision},
-		{Key: taskActiveOperationKey(task.OperationID), ModRevision: read.Values[2].ModRevision},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID), ModRevision: read.Values[2].ModRevision},
 	}
 	if recovery.final {
 		guards = append(guards, recovery.conditions...)
 	}
 	if materializes {
 		guards = append(guards, etcdstore.Condition{
-			Key: taskMaterializationWriterKey(environmentID), ModRevision: read.Values[writerIndex].ModRevision,
+			Key: taskjournal.TaskMaterializationWriterKey(environmentID), ModRevision: read.Values[writerIndex].ModRevision,
 		})
 	}
 	executionGuards := make([]etcdstore.Condition, 0, len(steps))

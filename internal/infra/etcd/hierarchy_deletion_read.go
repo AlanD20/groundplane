@@ -6,6 +6,7 @@ import (
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -94,7 +95,7 @@ func (repository *HierarchyDeletionRepository) OperationByTaskAtRevision(
 	}
 	taskResult, err := repository.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{taskKey(taskID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(taskID)}, Revision: revision},
 	)
 	if err != nil {
 		return HierarchyDeletionOperation{}, err

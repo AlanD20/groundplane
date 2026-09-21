@@ -96,9 +96,9 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		return IdempotencyTransactionResult{}, volumeRemovalTerminalConflict()
 	}
 	defer clearKeyValues(read.Values)
-	conditions := []etcdstore.Condition{{Key: taskKey(source.Record.ID), ModRevision: source.Revision},
-		{Key: taskKey(retry.ID)}, {Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
-		{Key: taskActiveOperationKey(retry.OperationID)}, {Key: taskQueueKey(retry.Executor, retry.ID)},
+	conditions := []etcdstore.Condition{{Key: taskjournal.TaskStorageKey(source.Record.ID), ModRevision: source.Revision},
+		{Key: taskjournal.TaskStorageKey(retry.ID)}, {Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(retry.OperationID)}, {Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID)},
 		{Key: runtimeKey, ModRevision: runtimeRead.Values[0].ModRevision}}
 	for index, value := range read.Values {
 		absent := index >= 8
@@ -124,7 +124,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		}
 		origin := source.Record
 		if pending.TaskID != source.Record.ID {
-			key := taskKey(pending.TaskID)
+			key := taskjournal.TaskStorageKey(pending.TaskID)
 			prior, err := repository.store.GetMany(
 				ctx,
 				etcdstore.GetManyRequest{Keys: []string{key}, Revision: source.ReadRevision},
@@ -208,10 +208,10 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 	}
 	defer clear(attemptValue)
 	conditions = append(conditions, etcdstore.Condition{Key: removalrecord.AttemptKey(runtime.OperationID, attempt.Ordinal)})
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: taskKey(retry.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(retry.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(retry.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: runtimeKey, Value: runtimeValue},
 		{Type: etcdstore.MutationPut, Key: removalrecord.AttemptKey(runtime.OperationID, attempt.Ordinal), Value: attemptValue}}
 	ancestry, err := bindHierarchyMutation(

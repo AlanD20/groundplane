@@ -29,7 +29,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	retentionEntry := page.Values[0]
 	defer clear(retentionEntry.Value)
-	taskID, retainUntil, err := parseTaskRetentionIndexKey(retentionEntry.Key)
+	taskID, retainUntil, err := taskjournal.ParseTaskRetentionIndexKey(retentionEntry.Key)
 	if err != nil || retentionEntry.ModRevision <= 0 {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
@@ -41,7 +41,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskKey(taskID)}, Revision: page.ReadRevision,
+		Keys: []string{taskjournal.TaskStorageKey(taskID)}, Revision: page.ReadRevision,
 	})
 	if err != nil {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, err
@@ -74,9 +74,9 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	companionKeys := []string{
 		markerKey,
-		taskActiveOperationKey(task.OperationID),
-		taskOperationIndexKey(task.OperationID, task.ID),
-		taskPruneIntentKey(task.ID),
+		taskjournal.TaskActiveOperationKey(task.OperationID),
+		taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+		taskjournal.TaskPruneIntentKey(task.ID),
 		componentTaskIntentKey(task.ID),
 		routeRemovalIntentKey(task.ID),
 		routeMutationIntentKey(task.ID),
@@ -142,7 +142,7 @@ func (repository *TaskRepository) beginTaskPrune(
 			return etcdstore.Versioned[taskPruneIntent]{}, false, err
 		}
 	}
-	activeOperationCondition := etcdstore.Condition{Key: taskActiveOperationKey(task.OperationID)}
+	activeOperationCondition := etcdstore.Condition{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}
 	if companions.Values[1] != nil {
 		activeTaskID, decodeErr := idempotencyrecord.DecodeTaskReference(companions.Values[1].Value)
 		if decodeErr != nil {
@@ -218,7 +218,7 @@ func (repository *TaskRepository) beginTaskPrune(
 	if environmentDeletionFenceStart >= 0 {
 		if environmentDeletionBlocked {
 			conditions := []etcdstore.Condition{
-				{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
+				{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
 				{Key: retentionEntry.Key, ModRevision: retentionEntry.ModRevision},
 			}
 			for index, key := range environmentDeletionFenceKeys {
@@ -277,12 +277,12 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	defer clear(intentValue)
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
+		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
 		{Key: retentionEntry.Key, ModRevision: retentionEntry.ModRevision},
 		{Key: markerKey},
 		activeOperationCondition,
-		{Key: taskOperationIndexKey(task.OperationID, task.ID), ModRevision: companions.Values[2].ModRevision},
-		{Key: taskPruneIntentKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), ModRevision: companions.Values[2].ModRevision},
+		{Key: taskjournal.TaskPruneIntentKey(task.ID)},
 	}
 	conditions = append(conditions, taskSourcePruneConditions(task)...)
 	for index, key := range environmentDeletionFenceKeys {
@@ -298,11 +298,11 @@ func (repository *TaskRepository) beginTaskPrune(
 	}
 	conditions = backupReceiptCompanion.appendStartCondition(conditions)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskPruneIntentKey(task.ID), Value: intentValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskPruneIntentKey(task.ID), Value: intentValue},
 		{Type: etcdstore.MutationDelete, Key: serviceLifecycleRenderInputKey(task.ID)},
 		{Type: etcdstore.MutationDelete, Key: backingHookCheckpointTaskPrefix(task.ID), Prefix: true},
 		{Type: etcdstore.MutationDelete, Key: retentionEntry.Key},
-		{Type: etcdstore.MutationDelete, Key: taskOperationIndexKey(task.OperationID, task.ID)},
+		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 	}
 	for index, key := range ownerIndexKeys {
 		value := companions.Values[ownerIndexStart+index]

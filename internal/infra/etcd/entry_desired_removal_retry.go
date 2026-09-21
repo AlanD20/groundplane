@@ -6,6 +6,7 @@ import (
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -26,7 +27,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 			intent.EnvironmentID,
 			desired.RevisionID,
 		), blueprintEntryEnvironmentPrefix + intent.EntryID,
-		taskMaterializationWriterKey(intent.EnvironmentID)}
+		taskjournal.TaskMaterializationWriterKey(intent.EnvironmentID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
 		return routeTaskChange{}, err

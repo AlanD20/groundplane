@@ -163,7 +163,7 @@ func (repository *TaskRepository) preparePendingScriptAbort(
 		return pendingScriptAbortChange{}, err
 	}
 	guards := make([]etcdstore.Condition, 0, len(executions)+1)
-	guards = append(guards, etcdstore.Condition{Key: taskKey(task.Record.ID), ModRevision: task.Revision})
+	guards = append(guards, etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.Record.ID), ModRevision: task.Revision})
 	for index := range executions {
 		guards = append(guards, etcdstore.Condition{Key: read.Values[index+1].Key, ModRevision: read.Values[index+1].ModRevision})
 	}
@@ -222,7 +222,7 @@ func (repository *TaskRepository) beginPendingScriptAbort(
 	if len(release.conditions) == 0 || len(release.mutations) == 0 {
 		return pendingScriptAbortChange{applies: true, advanced: true, terminalAt: terminalAt}, nil
 	}
-	conditions := append([]etcdstore.Condition{{Key: taskKey(task.Record.ID), ModRevision: task.Revision}}, release.conditions...)
+	conditions := append([]etcdstore.Condition{{Key: taskjournal.TaskStorageKey(task.Record.ID), ModRevision: task.Revision}}, release.conditions...)
 	mutations := append([]etcdstore.Mutation(nil), release.mutations...)
 	defer clearMutationValues(mutations)
 	for index, execution := range executions {

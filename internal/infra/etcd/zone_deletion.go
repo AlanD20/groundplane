@@ -162,10 +162,10 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 
 	tombstoneKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID)
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: zonePoolRegistryKey(zone.Record.EnvironmentID), ModRevision: pool.Revision},
 		{Key: componentAddressRegistryKey(zone.Record.Desired.ID), ModRevision: addresses.Revision},
 		{Key: tombstoneKey},
@@ -190,10 +190,10 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		})
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
 		{Type: etcdstore.MutationPut, Key: zoneRemovalIntentKey(intent.OperationID), Value: intentValue},
 		{Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(task.ID)},
@@ -388,7 +388,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		)
 	}
 	parentResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		taskKey(parentTaskID), zoneRemovalIntentKey(intent.OperationID),
+		taskjournal.TaskStorageKey(parentTaskID), zoneRemovalIntentKey(intent.OperationID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		environmentBlueprintHeadKey(intent.EnvironmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 	}, Revision: tombstone.ReadRevision})
@@ -470,15 +470,15 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	}
 	defer clear(intentValue)
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{
 			Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID),
 			ModRevision: tombstone.Revision,
 		},
-		{Key: taskKey(parentTaskID), ModRevision: parentResult.Values[0].ModRevision},
+		{Key: taskjournal.TaskStorageKey(parentTaskID), ModRevision: parentResult.Values[0].ModRevision},
 		{Key: zonePoolRegistryKey(intent.EnvironmentID), ModRevision: pool.Revision},
 		{
 			Key:         componentAddressRegistryKey(zone.Record.Desired.ID),
@@ -498,10 +498,10 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
 			Type:  etcdstore.MutationPut,
 			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), zone.Record.Desired.ID),

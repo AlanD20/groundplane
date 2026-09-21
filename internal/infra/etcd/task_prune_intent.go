@@ -73,10 +73,10 @@ func (repository *TaskRepository) advanceTaskPruneIntent(
 	}
 	defer clear(intentValue)
 	conditions = append([]etcdstore.Condition{{
-		Key: taskPruneIntentKey(current.Record.TaskID), ModRevision: current.Revision,
+		Key: taskjournal.TaskPruneIntentKey(current.Record.TaskID), ModRevision: current.Revision,
 	}}, conditions...)
 	mutations = append(mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: taskPruneIntentKey(current.Record.TaskID), Value: intentValue,
+		Type: etcdstore.MutationPut, Key: taskjournal.TaskPruneIntentKey(current.Record.TaskID), Value: intentValue,
 	})
 	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return etcdstore.Versioned[taskPruneIntent]{}, errs.New(
@@ -105,9 +105,9 @@ func (repository *TaskRepository) finishTaskPruneIntent(
 	current etcdstore.Versioned[taskPruneIntent],
 ) error {
 	conditions := []etcdstore.Condition{{
-		Key: taskPruneIntentKey(current.Record.TaskID), ModRevision: current.Revision,
+		Key: taskjournal.TaskPruneIntentKey(current.Record.TaskID), ModRevision: current.Revision,
 	}}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: taskPruneIntentKey(current.Record.TaskID)}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: taskjournal.TaskPruneIntentKey(current.Record.TaskID)}}
 	if current.Record.AttachPlanID != "" {
 		references, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 			Prefix: attachTaskPlanReferenceScopePrefix(current.Record.AttachPlanID), Limit: 1,

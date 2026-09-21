@@ -174,9 +174,9 @@ func (repository *TaskRepository) loadBackupTaskAssignment(
 	taskID string,
 	assignmentID string,
 ) (TaskAssignment, bool, error) {
-	claimKey := taskAssignmentKey(agentID, taskID)
+	claimKey := taskjournal.TaskAssignmentKey(agentID, taskID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
+		taskjournal.TaskStorageKey(taskID), claimKey, taskjournal.TaskAssignmentIndexKey(taskID),
 	}})
 	if err != nil {
 		return TaskAssignment{}, false, err
@@ -421,7 +421,7 @@ func (repository *TaskRepository) validateBackupTaskTerminalReplay(
 ) error {
 	if task.Record.Status != terminalStatus ||
 		((result == nil) != (task.Record.Result == nil)) ||
-		(result != nil && !taskResultsEqual(*result, *task.Record.Result)) ||
+		(result != nil && !taskjournal.TaskResultsEqual(*result, *task.Record.Result)) ||
 		((assignment == nil) != (task.Record.TerminalAssignment == nil)) ||
 		(assignment != nil && *assignment != *task.Record.TerminalAssignment) {
 		return errs.New(errs.KindStateConflict, "backup Task terminal acknowledgement changed")

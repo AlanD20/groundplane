@@ -156,7 +156,7 @@ func (stream *TaskEventStream) consumeEvent(
 	emit func(taskjournal.TaskEventRecord) error,
 ) (uint64, error) {
 	if event.Type == etcdstore.EventDelete {
-		sequence, err := taskEventSequenceFromKey(stream.taskID, event.Key)
+		sequence, err := taskjournal.TaskEventSequenceFromKey(stream.taskID, event.Key)
 		if err != nil {
 			return last, err
 		}
@@ -168,7 +168,7 @@ func (stream *TaskEventStream) consumeEvent(
 	if event.Type != etcdstore.EventPut {
 		return last, errs.New(errs.KindInternal, "task event journal was deleted during streaming")
 	}
-	sequence, err := taskEventSequenceFromKey(stream.taskID, event.Key)
+	sequence, err := taskjournal.TaskEventSequenceFromKey(stream.taskID, event.Key)
 	if err != nil {
 		return last, err
 	}
@@ -195,7 +195,7 @@ func (stream *TaskEventStream) consumeTask(event etcdstore.Event) (int64, bool, 
 	if event.Type != etcdstore.EventPut {
 		return 0, false, errs.New(errs.KindTaskNotFound, "Task disappeared during event streaming")
 	}
-	if event.Key != taskKey(stream.taskID) {
+	if event.Key != taskjournal.TaskStorageKey(stream.taskID) {
 		return 0, false, errs.New(errs.KindInternal, "watched Task primary does not match its key")
 	}
 	record, err := decodeTaskRecord(event.Value)
@@ -314,12 +314,12 @@ func openTaskEventWatches(
 	revision int64,
 ) (*taskEventWatches, error) {
 	watchContext, cancel := context.WithCancel(ctx)
-	taskWatch, err := store.Watch(watchContext, taskKey(taskID), revision)
+	taskWatch, err := store.Watch(watchContext, taskjournal.TaskStorageKey(taskID), revision)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	eventWatch, err := store.Watch(watchContext, taskEventScopePrefix(taskID), revision)
+	eventWatch, err := store.Watch(watchContext, taskjournal.TaskEventScopePrefix(taskID), revision)
 	if err != nil {
 		cancel()
 		drainWatchStream(taskWatch)

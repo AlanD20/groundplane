@@ -340,7 +340,7 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 			}
 		case core.RequirementCompletedSuccessfully:
 			taskRead, taskErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-				Keys: []string{taskKey(attach.TaskID)}, Revision: revision,
+				Keys: []string{taskjournal.TaskStorageKey(attach.TaskID)}, Revision: revision,
 			})
 			if taskErr != nil {
 				return blueprintRequirementGateClaimEvidence{}, true, false, taskErr
@@ -360,7 +360,7 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 				return blueprintRequirementGateClaimEvidence{}, true, false, nil
 			}
 			evidence.conditions = append(evidence.conditions, etcdstore.Condition{
-				Key: taskKey(producer.ID), ModRevision: taskRead.Values[0].ModRevision,
+				Key: taskjournal.TaskStorageKey(producer.ID), ModRevision: taskRead.Values[0].ModRevision,
 			})
 		default:
 			return blueprintRequirementGateClaimEvidence{}, true, false, corruptBlueprintRequirementGate()
@@ -410,7 +410,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 	}
 	gateKey := blueprintRequirementGateKey(candidateTaskID)
 	candidateRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskKey(candidateTaskID), gateKey}, Revision: readRevision,
+		Keys: []string{taskjournal.TaskStorageKey(candidateTaskID), gateKey}, Revision: readRevision,
 	})
 	if err != nil {
 		return nil, nil, err

@@ -64,9 +64,9 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	terminalStatus taskjournal.TaskStatus,
 	terminalAt time.Time,
 ) (etcdstore.Versioned[TaskRecord], error) {
-	claimKey := taskExecutionClaimKey(taskjournal.TaskExecutorController, "", taskID)
+	claimKey := taskjournal.TaskExecutionClaimKey(taskjournal.TaskExecutorController, "", taskID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
+		taskjournal.TaskStorageKey(taskID), claimKey, taskjournal.TaskAssignmentIndexKey(taskID),
 	}})
 	if err != nil {
 		return etcdstore.Versioned[TaskRecord]{}, err
@@ -153,11 +153,11 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 		return etcdstore.Versioned[TaskRecord]{}, err
 	}
 	defer clear(taskRetentionValue)
-	activeKey := taskActiveOperationKey(task.OperationID)
-	timeoutKey := taskTimeoutIndexKey(task.ID, assignment.Deadline)
+	activeKey := taskjournal.TaskActiveOperationKey(task.OperationID)
+	timeoutKey := taskjournal.TaskTimeoutIndexKey(task.ID, assignment.Deadline)
 	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			activeKey, markerKey, taskQueueKey(task.Executor, task.ID), markerRetentionKey,
+			activeKey, markerKey, taskjournal.TaskQueueKey(task.Executor, task.ID), markerRetentionKey,
 			taskRetentionKey, timeoutKey,
 		},
 		Revision: read.ReadRevision,
@@ -206,19 +206,19 @@ func (repository *TaskRepository) acknowledgeHierarchyDeletionControllerTaskOnce
 	}
 	defer change.clear()
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
+		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
 		{Key: claimKey, ModRevision: assignmentValue.ModRevision},
-		{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
+		{Key: taskjournal.TaskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
 		{Key: activeKey, ModRevision: companions.Values[0].ModRevision},
 		{Key: markerKey, ModRevision: companions.Values[1].ModRevision},
-		{Key: taskQueueKey(task.Executor, task.ID)}, {Key: markerRetentionKey},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)}, {Key: markerRetentionKey},
 		{Key: taskRetentionKey}, {Key: timeoutKey, ModRevision: companions.Values[5].ModRevision},
 	}
 	conditions = append(conditions, change.conditions...)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: terminalValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: terminalValue},
 		{Type: etcdstore.MutationDelete, Key: claimKey},
-		{Type: etcdstore.MutationDelete, Key: taskAssignmentIndexKey(task.ID)},
+		{Type: etcdstore.MutationDelete, Key: taskjournal.TaskAssignmentIndexKey(task.ID)},
 		{Type: etcdstore.MutationDelete, Key: activeKey},
 		{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
 		{Type: etcdstore.MutationPut, Key: markerRetentionKey, Value: markerRetentionValue},

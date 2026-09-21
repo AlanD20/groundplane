@@ -117,7 +117,7 @@ func (plan backupPruneTransactionPlan) taskRetryIdempotencyPlan(
 	}
 	conditions := append([]etcdstore.Condition(nil), plan.conditions...)
 	conditions = append(conditions, etcdstore.Condition{
-		Key: taskKey(source.Record.ID), ModRevision: source.Revision,
+		Key: taskjournal.TaskStorageKey(source.Record.ID), ModRevision: source.Revision,
 	})
 	return prepareBackupTaskIdempotencyPlan(
 		authority,

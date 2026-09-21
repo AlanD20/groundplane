@@ -20,7 +20,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 	keys := []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID)}
 	if task.Executor == taskjournal.TaskExecutorController {
-		keys = append(keys, taskMaterializationWriterKey(intent.EnvironmentID))
+		keys = append(keys, taskjournal.TaskMaterializationWriterKey(intent.EnvironmentID))
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {

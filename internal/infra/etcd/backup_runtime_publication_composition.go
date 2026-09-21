@@ -147,20 +147,20 @@ func prepareBackupTaskIdempotencyPlan(
 	}
 	defer clear(reference)
 	taskConditions := []etcdstore.Condition{
-		{Key: taskKey(record.ID)},
-		{Key: taskOperationIndexKey(record.OperationID, record.ID)},
-		{Key: taskActiveOperationKey(record.OperationID)},
-		{Key: taskQueueKey(record.Executor, record.ID)},
+		{Key: taskjournal.TaskStorageKey(record.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(record.OperationID, record.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(record.OperationID)},
+		{Key: taskjournal.TaskQueueKey(record.Executor, record.ID)},
 	}
 	taskMutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(record.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(record.ID), Value: taskValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   taskOperationIndexKey(record.OperationID, record.ID),
+			Key:   taskjournal.TaskOperationIndexKey(record.OperationID, record.ID),
 			Value: reference,
 		},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(record.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(record.Executor, record.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(record.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(record.Executor, record.ID), Value: reference},
 	}
 	domain := backupRunPublicationPlan{conditions: domainConditions, mutations: domainMutations}
 	conditions, mutations, err := domain.composeTransaction(taskConditions, taskMutations)

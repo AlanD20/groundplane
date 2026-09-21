@@ -232,9 +232,9 @@ func (repository *TaskRepository) prepareEntryRuntimeAcknowledgement(
 	}
 	defer clearKeyValues(read.Values)
 	proof, err := json.Marshal(struct {
-		Updates []EntryRuntimeUpdate `json:"updates"`
-		Result  *taskResultData      `json:"result"`
-	}{terminal.EntryRuntime.Updates, taskResultToData(result)})
+		Updates []EntryRuntimeUpdate        `json:"updates"`
+		Result  *taskjournal.TaskResultData `json:"result"`
+	}{terminal.EntryRuntime.Updates, taskjournal.TaskResultToData(result)})
 	if err != nil {
 		return taskMaterializationProjectionChange{}, errs.Wrap(errs.KindInternal, err)
 	}

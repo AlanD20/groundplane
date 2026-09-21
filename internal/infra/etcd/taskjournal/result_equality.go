@@ -1,18 +1,17 @@
-package etcd
+package taskjournal
 
 import (
-	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 )
 
-func taskResultsEqual(left, right taskjournal.TaskResultRecord) bool {
+func TaskResultsEqual(left, right TaskResultRecord) bool {
 	if left.Kind != right.Kind || left.ExitCode != right.ExitCode || left.ExecutionEpoch != right.ExecutionEpoch ||
 		left.ReleaseRecoveryRecordSHA256 != right.ReleaseRecoveryRecordSHA256 ||
 		left.FailedStepID != right.FailedStepID || left.Diagnostic != right.Diagnostic ||
 		left.ReconciliationRequired != right.ReconciliationRequired || len(left.Projects) != len(right.Projects) ||
 		len(left.ProxyEvidence) != len(right.ProxyEvidence) ||
 		len(left.RecreateEvidence) != len(right.RecreateEvidence) ||
-		!taskCandidateAbsenceEvidenceEqual(left.CandidateAbsenceEvidence, right.CandidateAbsenceEvidence) {
+		!TaskCandidateAbsenceEvidenceEqual(left.CandidateAbsenceEvidence, right.CandidateAbsenceEvidence) {
 		return false
 	}
 	for index := range left.Projects {
@@ -30,11 +29,11 @@ func taskResultsEqual(left, right taskjournal.TaskResultRecord) bool {
 			return false
 		}
 	}
-	return taskjournal.TaskDNSResolverEvidenceEqual(left.DNSResolverCandidateObservation, right.DNSResolverCandidateObservation) &&
-		taskjournal.TaskDNSResolverEvidenceEqual(left.DNSResolverRollbackObservation, right.DNSResolverRollbackObservation)
+	return TaskDNSResolverEvidenceEqual(left.DNSResolverCandidateObservation, right.DNSResolverCandidateObservation) &&
+		TaskDNSResolverEvidenceEqual(left.DNSResolverRollbackObservation, right.DNSResolverRollbackObservation)
 }
 
-func taskCandidateAbsenceEvidenceEqual(left, right *taskjournal.TaskCandidateAbsenceEvidence) bool {
+func TaskCandidateAbsenceEvidenceEqual(left, right *TaskCandidateAbsenceEvidence) bool {
 	if (left == nil) != (right == nil) {
 		return false
 	}

@@ -367,10 +367,10 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	}
 
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{
 			Key:         environmentBlueprintRootKey(revision.EnvironmentID, revision.RevisionID),
 			ModRevision: publication.rootRevision,
@@ -381,10 +381,10 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		{Key: zonePoolRegistryKey(revision.EnvironmentID), ModRevision: zonePool.currentRevision},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
 		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},

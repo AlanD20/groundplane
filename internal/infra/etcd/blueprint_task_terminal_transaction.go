@@ -114,13 +114,13 @@ func compileBlueprintTaskTerminalTransaction(
 	defer clear(value)
 	matched := false
 	for _, mutation := range mutations {
-		if mutation.Key == taskKey(task.ID) && mutation.Type == etcdstore.MutationPut && !mutation.Prefix {
+		if mutation.Key == taskjournal.TaskStorageKey(task.ID) && mutation.Type == etcdstore.MutationPut && !mutation.Prefix {
 			matched = bytes.Equal(value, mutation.Value)
 		}
 	}
 	compared := false
 	for _, condition := range conditions {
-		if condition.Key == taskKey(task.ID) && !condition.Prefix && condition.ModRevision > 0 {
+		if condition.Key == taskjournal.TaskStorageKey(task.ID) && !condition.Prefix && condition.ModRevision > 0 {
 			compared = true
 		}
 	}

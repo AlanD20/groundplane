@@ -13,10 +13,10 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	events bool,
 ) (etcdstore.Versioned[taskPruneIntent], error) {
 	remaining := current.Record.RemainingDeduplications
-	prefix := taskEventDedupScopePrefix(current.Record.TaskID)
+	prefix := taskjournal.TaskEventDedupScopePrefix(current.Record.TaskID)
 	if events {
 		remaining = current.Record.RemainingEvents
-		prefix = taskEventScopePrefix(current.Record.TaskID)
+		prefix = taskjournal.TaskEventScopePrefix(current.Record.TaskID)
 	}
 	limit := int64(maximumTaskPruneBatchRecords + 1)
 	if remaining < maximumTaskPruneBatchRecords {
@@ -45,7 +45,7 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	}
 	conditions := make([]etcdstore.Condition, 1, count+1)
 	conditions[0] = etcdstore.Condition{
-		Key:         taskPruneIntentKey(current.Record.TaskID),
+		Key:         taskjournal.TaskPruneIntentKey(current.Record.TaskID),
 		ModRevision: current.Revision,
 	}
 	mutations := make([]etcdstore.Mutation, 0, count+1)
@@ -69,7 +69,7 @@ func (repository *TaskRepository) pruneTaskSubordinateBatch(
 	}
 	defer clear(intentValue)
 	mutations = append(mutations, etcdstore.Mutation{
-		Type: etcdstore.MutationPut, Key: taskPruneIntentKey(next.TaskID), Value: intentValue,
+		Type: etcdstore.MutationPut, Key: taskjournal.TaskPruneIntentKey(next.TaskID), Value: intentValue,
 	})
 	if len(conditions)+len(mutations) > etcdstore.MaximumOperations {
 		return etcdstore.Versioned[taskPruneIntent]{}, errs.New(
@@ -98,7 +98,7 @@ func validateTaskPruneSubordinate(taskID string, entry etcdstore.KeyValue, event
 		return corruptTaskPruneIntent()
 	}
 	if events {
-		sequence, err := taskEventSequenceFromKey(taskID, entry.Key)
+		sequence, err := taskjournal.TaskEventSequenceFromKey(taskID, entry.Key)
 		if err != nil {
 			return corruptTaskPruneIntent()
 		}
@@ -110,7 +110,7 @@ func validateTaskPruneSubordinate(taskID string, entry etcdstore.KeyValue, event
 	}
 	record, err := taskjournal.DecodeTaskEventDedupRecord(entry.Value)
 	if err != nil || record.Identity.TaskID != taskID ||
-		taskEventDedupKey(record.Identity) != entry.Key {
+		taskjournal.TaskEventDedupKey(record.Identity) != entry.Key {
 		return corruptTaskPruneIntent()
 	}
 	return nil
@@ -121,9 +121,9 @@ func (repository *TaskRepository) verifyTaskPrunePrefixEmpty(
 	taskID string,
 	events bool,
 ) error {
-	prefix := taskEventDedupScopePrefix(taskID)
+	prefix := taskjournal.TaskEventDedupScopePrefix(taskID)
 	if events {
-		prefix = taskEventScopePrefix(taskID)
+		prefix = taskjournal.TaskEventScopePrefix(taskID)
 	}
 	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: prefix, Limit: 1})
 	if err != nil {

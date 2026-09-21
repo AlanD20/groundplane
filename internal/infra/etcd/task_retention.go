@@ -16,8 +16,8 @@ func prepareTaskRetentionIndex(task TaskRecord) (string, []byte, error) {
 	if validateTaskRecord(task) != nil || !taskjournal.IsTerminalTaskStatus(task.Status) || task.RetainUntil == nil {
 		return "", nil, errs.New(errs.KindInternal, "terminal Task retention metadata is invalid")
 	}
-	key := taskRetentionIndexKey(task.ID, *task.RetainUntil)
-	taskID, retainUntil, err := parseTaskRetentionIndexKey(key)
+	key := taskjournal.TaskRetentionIndexKey(task.ID, *task.RetainUntil)
+	taskID, retainUntil, err := taskjournal.ParseTaskRetentionIndexKey(key)
 	if err != nil || taskID != task.ID || !retainUntil.Equal(*task.RetainUntil) {
 		return "", nil, errs.New(errs.KindInternal, "terminal Task retention key is invalid")
 	}
@@ -36,7 +36,7 @@ func (repository *TaskRepository) validateTaskRetentionReplay(
 	if task.RetainUntil == nil || ids.Validate(ids.KindTask, task.ID) != nil {
 		return errs.New(errs.KindInternal, "terminal Task retention replay is invalid")
 	}
-	key := taskRetentionIndexKey(task.ID, *task.RetainUntil)
+	key := taskjournal.TaskRetentionIndexKey(task.ID, *task.RetainUntil)
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return err

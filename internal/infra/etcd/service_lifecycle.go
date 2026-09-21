@@ -142,10 +142,10 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 	defer clear(reference)
 
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		servicerecord.ServiceDesiredCondition(current),
 		servicerecord.ServiceRuntimeCondition(current),
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
@@ -164,10 +164,10 @@ func (repository *ServiceRepository) BeginServiceLifecycleWithTaskHookInputs(
 		}, conditions[12:]...)...)
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: servicerecord.ServiceRuntimeKey(current.Record.Desired.ID), Value: serviceValue},
 		{Type: etcdstore.MutationPut, Key: serviceLifecycleActiveKey(current.Record.Desired.ID), Value: reference},
 	}

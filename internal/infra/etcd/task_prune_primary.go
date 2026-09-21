@@ -11,7 +11,7 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	current etcdstore.Versioned[taskPruneIntent],
 ) (etcdstore.Versioned[taskPruneIntent], error) {
 	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskKey(current.Record.TaskID)},
+		Keys: []string{taskjournal.TaskStorageKey(current.Record.TaskID)},
 	})
 	if err != nil {
 		return etcdstore.Versioned[taskPruneIntent]{}, err
@@ -48,11 +48,11 @@ func (repository *TaskRepository) deleteTaskPrunePrimary(
 	}
 	defer clearKeyValues(ownerResult.Values)
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(current.Record.TaskID), ModRevision: current.Record.TaskRevision},
+		{Key: taskjournal.TaskStorageKey(current.Record.TaskID), ModRevision: current.Record.TaskRevision},
 		{Key: backupCheckpointCursorTaskPrefix(current.Record.TaskID), Prefix: true},
 		{Key: backupCheckpointDedupTaskPrefix(current.Record.TaskID), Prefix: true},
 	}
-	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: taskKey(current.Record.TaskID)}}
+	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationDelete, Key: taskjournal.TaskStorageKey(current.Record.TaskID)}}
 	for index, key := range ownerKeys {
 		value := ownerResult.Values[index]
 		if value == nil || value.Key != key || value.ModRevision <= 0 || string(value.Value) != task.ID {

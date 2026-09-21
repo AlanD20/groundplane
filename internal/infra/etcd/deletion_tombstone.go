@@ -251,10 +251,10 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 
 	tombstoneKey := deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{
 			Key:         hierarchyrecord.EnvironmentNameKey(environment.Record.ProjectID, environment.Record.Name),
@@ -283,14 +283,14 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		{Key: hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID)},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   taskOperationIndexKey(task.OperationID, task.ID),
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
 			Value: reference,
 		},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
 		{
 			Type:  etcdstore.MutationPut,

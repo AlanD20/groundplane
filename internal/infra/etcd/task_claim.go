@@ -64,12 +64,12 @@ func (repository *TaskRepository) claimNextTask(
 		if err != nil {
 			return TaskAssignment{}, false, err
 		}
-		activeKey := taskActiveOperationKey(task.OperationID)
-		assignmentKey := taskExecutionClaimKey(executor, agentID, task.ID)
-		assignmentIndexKey := taskAssignmentIndexKey(task.ID)
+		activeKey := taskjournal.TaskActiveOperationKey(task.OperationID)
+		assignmentKey := taskjournal.TaskExecutionClaimKey(executor, agentID, task.ID)
+		assignmentIndexKey := taskjournal.TaskAssignmentIndexKey(task.ID)
 		deadline := claimAt.Add(time.Duration(task.TimeoutSeconds) * time.Second)
 		recoveryDeadline := deadline.Add(time.Duration(task.TimeoutSeconds) * time.Second)
-		timeoutIndexKey := taskTimeoutIndexKey(task.ID, deadline)
+		timeoutIndexKey := taskjournal.TaskTimeoutIndexKey(task.ID, deadline)
 		companionKeys := []string{activeKey, assignmentKey, assignmentIndexKey, timeoutIndexKey}
 		if candidate.writerKey != "" {
 			companionKeys = append(companionKeys, candidate.writerKey)
@@ -122,14 +122,14 @@ func (repository *TaskRepository) claimNextTask(
 		}
 		conditions := []etcdstore.Condition{
 			{Key: queued.Key, ModRevision: queued.ModRevision},
-			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
+			{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
 			{Key: activeKey, ModRevision: companions.Values[0].ModRevision},
 			{Key: assignmentKey},
 			{Key: assignmentIndexKey},
 			{Key: timeoutIndexKey},
 		}
 		mutations := []etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: runningValue},
+			{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: runningValue},
 			{Type: etcdstore.MutationDelete, Key: queued.Key},
 			{Type: etcdstore.MutationPut, Key: assignmentKey, Value: assignmentValue},
 			{Type: etcdstore.MutationPut, Key: assignmentIndexKey, Value: assignmentValue},
@@ -308,7 +308,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 	ctx context.Context,
 	executor taskjournal.TaskExecutor,
 ) (taskClaimCandidate, bool, error) {
-	prefix := taskQueueScopePrefix(executor)
+	prefix := taskjournal.TaskQueueScopePrefix(executor)
 	start := ""
 	var revision int64
 	for {
@@ -325,7 +325,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 			return taskClaimCandidate{}, false, errs.New(errs.KindInternal, "task queue scan changed MVCC revision")
 		}
 		for _, queued := range page.Values {
-			taskID, err := taskIDFromQueueKey(executor, queued.Key)
+			taskID, err := taskjournal.TaskIDFromQueueKey(executor, queued.Key)
 			if err != nil {
 				return taskClaimCandidate{}, false, err
 			}
@@ -337,7 +337,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 				)
 			}
 			taskRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-				Keys: []string{taskKey(taskID)}, Revision: revision,
+				Keys: []string{taskjournal.TaskStorageKey(taskID)}, Revision: revision,
 			})
 			if err != nil {
 				return taskClaimCandidate{}, false, err
@@ -360,7 +360,7 @@ func (repository *TaskRepository) nextTaskClaimCandidate(
 			}
 			writerKey := ""
 			if materializes {
-				writerKey = taskMaterializationWriterKey(environmentID)
+				writerKey = taskjournal.TaskMaterializationWriterKey(environmentID)
 				writerRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 					Keys: []string{writerKey}, Revision: revision,
 				})

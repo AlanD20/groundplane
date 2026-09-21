@@ -85,8 +85,8 @@ func (repository *TaskRepository) AbortPendingTask(
 		}
 		companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{
-				taskActiveOperationKey(current.Record.OperationID), markerKey,
-				taskQueueKey(current.Record.Executor, taskID), retentionKey,
+				taskjournal.TaskActiveOperationKey(current.Record.OperationID), markerKey,
+				taskjournal.TaskQueueKey(current.Record.Executor, taskID), retentionKey,
 			},
 			Revision: current.ReadRevision,
 		})
@@ -143,17 +143,17 @@ func (repository *TaskRepository) AbortPendingTask(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		conditions := []etcdstore.Condition{
-			{Key: taskKey(taskID), ModRevision: current.Revision},
-			{Key: taskActiveOperationKey(current.Record.OperationID), ModRevision: companions.Values[0].ModRevision},
+			{Key: taskjournal.TaskStorageKey(taskID), ModRevision: current.Revision},
+			{Key: taskjournal.TaskActiveOperationKey(current.Record.OperationID), ModRevision: companions.Values[0].ModRevision},
 			{Key: markerKey, ModRevision: companions.Values[1].ModRevision},
-			{Key: taskQueueKey(current.Record.Executor, taskID), ModRevision: companions.Values[2].ModRevision},
+			{Key: taskjournal.TaskQueueKey(current.Record.Executor, taskID), ModRevision: companions.Values[2].ModRevision},
 			{Key: retentionKey},
 			{Key: taskRetentionKey},
 		}
 		mutations := []etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: taskKey(taskID), Value: terminalValue},
-			{Type: etcdstore.MutationDelete, Key: taskActiveOperationKey(current.Record.OperationID)},
-			{Type: etcdstore.MutationDelete, Key: taskQueueKey(current.Record.Executor, taskID)},
+			{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(taskID), Value: terminalValue},
+			{Type: etcdstore.MutationDelete, Key: taskjournal.TaskActiveOperationKey(current.Record.OperationID)},
+			{Type: etcdstore.MutationDelete, Key: taskjournal.TaskQueueKey(current.Record.Executor, taskID)},
 			{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
 			{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
 			{Type: etcdstore.MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},

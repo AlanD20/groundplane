@@ -109,7 +109,7 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 	}
 
 	anchor, err := reader.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		taskKey(request.TaskID), taskAssignmentIndexKey(request.TaskID),
+		taskjournal.TaskStorageKey(request.TaskID), taskjournal.TaskAssignmentIndexKey(request.TaskID),
 	}})
 	if err != nil {
 		return BackupSecretResolutionEvidence{}, err
@@ -132,10 +132,10 @@ func (reader *BackupSecretResolutionReader) ResolveBackupSecretEvidence(
 	fixedRevision := anchor.ReadRevision
 
 	baseKeys := []string{
-		taskKey(request.TaskID),
-		taskAssignmentIndexKey(request.TaskID),
-		taskExecutionClaimKey(taskjournal.TaskExecutorAgent, request.AgentID, request.TaskID),
-		taskTimeoutIndexKey(request.TaskID, assignmentForKey.Deadline),
+		taskjournal.TaskStorageKey(request.TaskID),
+		taskjournal.TaskAssignmentIndexKey(request.TaskID),
+		taskjournal.TaskExecutionClaimKey(taskjournal.TaskExecutorAgent, request.AgentID, request.TaskID),
+		taskjournal.TaskTimeoutIndexKey(request.TaskID, assignmentForKey.Deadline),
 		backupruntime.BackupRunKey(request.TaskID),
 		backupruntime.BackupRecoveryPointPruneDispatchKey(request.TaskID),
 	}

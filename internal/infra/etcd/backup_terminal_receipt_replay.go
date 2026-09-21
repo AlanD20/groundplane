@@ -17,7 +17,7 @@ func (repository *TaskRepository) validateBackupTerminalReceiptReplay(
 		!taskjournal.IsTerminalTaskStatus(task.Record.Status) {
 		return errs.New(errs.KindInternal, "terminal backup Task is invalid")
 	}
-	keys := []string{taskKey(task.Record.ID), backupruntime.BackupTerminalReceiptKey(task.Record.ID)}
+	keys := []string{taskjournal.TaskStorageKey(task.Record.ID), backupruntime.BackupTerminalReceiptKey(task.Record.ID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return err

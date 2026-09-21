@@ -100,7 +100,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunRetrySource(
 	ctx context.Context,
 	taskID string,
 ) (backupRunRetrySource, error) {
-	keys := []string{taskKey(taskID), backupruntime.BackupRunKey(taskID), backupruntime.BackupTerminalReceiptKey(taskID)}
+	keys := []string{taskjournal.TaskStorageKey(taskID), backupruntime.BackupRunKey(taskID), backupruntime.BackupTerminalReceiptKey(taskID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
 	if err != nil {
 		return backupRunRetrySource{}, err

@@ -151,8 +151,8 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 		_, err := pins.ResumeRelease(ctx)
 		return true, err
 	}
-	keys := []string{taskActiveOperationKey(task.OperationID), taskAssignmentIndexKey(root.AttemptID()),
-		taskRecoveryProofRequiredKey(root.AttemptID()), releaseRecoveryKey(root.AttemptID()), taskKey(root.AttemptID())}
+	keys := []string{taskjournal.TaskActiveOperationKey(task.OperationID), taskjournal.TaskAssignmentIndexKey(root.AttemptID()),
+		taskjournal.TaskRecoveryProofRequiredKey(root.AttemptID()), releaseRecoveryKey(root.AttemptID()), taskjournal.TaskStorageKey(root.AttemptID())}
 	hookInputIndex := -1
 	if task.Configuration.BackingHookInputs != nil {
 		hookInputIndex = len(keys)
@@ -219,7 +219,7 @@ func (repository *TaskRepository) prepareRecoverySecretPinExpiry(
 	}
 	change := taskMaterializationProjectionChange{conditions: conditions, mutations: mutations}
 	defer clearTaskMaterializationProjectionChange(change)
-	change.conditions = append(change.conditions, etcdstore.Condition{Key: taskKey(task.ID), ModRevision: taskRevision},
+	change.conditions = append(change.conditions, etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
 		etcdstore.Condition{Key: retention.Key, ModRevision: retention.ModRevision})
 	for index, key := range keys {
 		change.conditions = append(
@@ -258,7 +258,7 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 		return true, errs.New(errs.KindStateConflict, "Backing hook retry authority has not expired")
 	}
 	keys := []string{
-		taskActiveOperationKey(task.OperationID), taskAssignmentIndexKey(task.ID),
+		taskjournal.TaskActiveOperationKey(task.OperationID), taskjournal.TaskAssignmentIndexKey(task.ID),
 		backingHookTaskInputKey(task.OperationID),
 	}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys})
@@ -285,7 +285,7 @@ func (repository *TaskRepository) prepareBackingHookInputExpiry(
 		return true, corruptTaskPruneIntent()
 	}
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID), ModRevision: taskRevision},
+		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
 		{Key: retention.Key, ModRevision: retention.ModRevision},
 		{Key: keys[0]}, {Key: keys[1]},
 		{Key: keys[2], ModRevision: read.Values[2].ModRevision},

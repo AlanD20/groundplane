@@ -11,6 +11,7 @@ import (
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	secretrecord "github.com/AlanD20/groundplane/internal/infra/etcd/secrets"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -21,10 +22,10 @@ func backingServiceCreationConditions(
 ) []etcdstore.Condition {
 	conditions := []etcdstore.Condition{
 		{Key: creationStageKey, ModRevision: creation.Stage.Revision},
-		{Key: taskKey(creation.Task.ID)},
-		{Key: taskOperationIndexKey(creation.Task.OperationID, creation.Task.ID)},
-		{Key: taskActiveOperationKey(creation.Task.OperationID)},
-		{Key: taskQueueKey(creation.Task.Executor, creation.Task.ID)},
+		{Key: taskjournal.TaskStorageKey(creation.Task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(creation.Task.OperationID, creation.Task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(creation.Task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(creation.Task.Executor, creation.Task.ID)},
 		{
 			Key:         environmentBlueprintRootKey(creation.Environment.ID, creation.Task.ID),
 			ModRevision: publication.rootRevision,

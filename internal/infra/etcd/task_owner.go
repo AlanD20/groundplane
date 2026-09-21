@@ -203,7 +203,7 @@ func newInheritedTaskInitiation(
 	return newTaskInitiation(
 		parent.Record.Owner,
 		actor,
-		etcdstore.Condition{Key: taskKey(parent.Record.ID), ModRevision: parent.Revision},
+		etcdstore.Condition{Key: taskjournal.TaskStorageKey(parent.Record.ID), ModRevision: parent.Revision},
 	)
 }
 
@@ -266,13 +266,13 @@ func taskOwnerIndexKeys(owner taskjournal.TaskOwner, taskID string) ([]string, e
 	if ids.Validate(ids.KindTask, taskID) != nil {
 		return nil, errs.New(errs.KindValidationFailed, "task owner index task id is invalid")
 	}
-	workspaceKey := taskWorkspacePlatformIndexKey(taskID)
+	workspaceKey := taskjournal.TaskWorkspacePlatformIndexKey(taskID)
 	if owner.WorkspaceType == taskjournal.TaskWorkspaceTenant {
-		workspaceKey = taskWorkspaceTenantIndexKey(owner.TenantID, taskID)
+		workspaceKey = taskjournal.TaskWorkspaceTenantIndexKey(owner.TenantID, taskID)
 	}
 	keys := []string{workspaceKey}
 	if owner.EnvironmentID != "" {
-		keys = append(keys, taskEnvironmentIndexKey(owner.EnvironmentID, taskID))
+		keys = append(keys, taskjournal.TaskEnvironmentIndexKey(owner.EnvironmentID, taskID))
 	}
 	return keys, nil
 }
@@ -291,7 +291,7 @@ func prepareTaskOwnerIndexPlan(
 	}
 	taskConditionIndex := -1
 	for index, condition := range conditions {
-		if condition.Key == taskKey(record.ID) {
+		if condition.Key == taskjournal.TaskStorageKey(record.ID) {
 			if taskConditionIndex >= 0 || condition.ModRevision != 0 {
 				return nil, nil, nil, errs.New(errs.KindInternal, "task publication compare is invalid")
 			}
@@ -308,7 +308,7 @@ func prepareTaskOwnerIndexPlan(
 	defer clear(encoded)
 	matchedMutation := false
 	for _, mutation := range mutations {
-		if mutation.Key != taskKey(record.ID) {
+		if mutation.Key != taskjournal.TaskStorageKey(record.ID) {
 			continue
 		}
 		if matchedMutation || mutation.Type != etcdstore.MutationPut || mutation.Prefix || !bytes.Equal(mutation.Value, encoded) {

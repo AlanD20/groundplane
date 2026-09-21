@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: a running Task has exactly one assignment replacing its queue
@@ -34,10 +35,10 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 	}
 	keys := []string{
 		membershipKey,
-		taskOperationIndexKey(task.OperationID, task.ID),
-		taskActiveOperationKey(task.OperationID),
-		taskQueueKey(task.Executor, task.ID),
-		taskAssignmentIndexKey(task.ID),
+		taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+		taskjournal.TaskActiveOperationKey(task.OperationID),
+		taskjournal.TaskQueueKey(task.Executor, task.ID),
+		taskjournal.TaskAssignmentIndexKey(task.ID),
 	}
 	for _, exclusion := range exclusions {
 		key, keyErr := backupruntime.BackupSourceTargetExclusionKey(exclusion.TargetKind, exclusion.TargetID)
@@ -124,8 +125,8 @@ func (repository *BackupRuntimeRepository) exactRunningBackupRunSubordinates(
 		return false
 	}
 	claimKeys := []string{
-		taskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
-		taskTimeoutIndexKey(task.ID, assignment.Deadline),
+		taskjournal.TaskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
+		taskjournal.TaskTimeoutIndexKey(task.ID, assignment.Deadline),
 	}
 	claim, err := repository.readFixedKeys(ctx, claimKeys, readRevision)
 	if err != nil {

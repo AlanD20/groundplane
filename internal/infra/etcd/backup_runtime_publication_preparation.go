@@ -11,6 +11,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -181,7 +182,7 @@ func (repository *BackupRuntimeRepository) prepareBackupRunPublicationWithRetry(
 	if retrySource != nil {
 		conditions = append(
 			conditions,
-			etcdstore.Condition{Key: taskKey(retrySource.task.Record.ID), ModRevision: retrySource.task.Revision},
+			etcdstore.Condition{Key: taskjournal.TaskStorageKey(retrySource.task.Record.ID), ModRevision: retrySource.task.Revision},
 			etcdstore.Condition{Key: backupruntime.BackupRunKey(retrySource.run.Record.TaskID), ModRevision: retrySource.run.Revision},
 			etcdstore.Condition{
 				Key:         backupruntime.BackupTerminalReceiptKey(retrySource.task.Record.ID),

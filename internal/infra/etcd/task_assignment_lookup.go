@@ -24,7 +24,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 		return TaskAssignment{}, errs.New(errs.KindValidationFailed, "Task assignment id is invalid")
 	}
 	indexed, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		taskKey(taskID), taskAssignmentIndexKey(taskID),
+		taskjournal.TaskStorageKey(taskID), taskjournal.TaskAssignmentIndexKey(taskID),
 	}})
 	if err != nil {
 		return TaskAssignment{}, err
@@ -52,7 +52,7 @@ func (repository *TaskRepository) GetTaskAssignment(
 		assignment.TaskID != taskID {
 		return TaskAssignment{}, errs.New(errs.KindStateConflict, "Task is not actively assigned")
 	}
-	claimKey := taskExecutionClaimKey(assignment.Executor, assignment.AgentID, taskID)
+	claimKey := taskjournal.TaskExecutionClaimKey(assignment.Executor, assignment.AgentID, taskID)
 	claim, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{claimKey},
 		Revision: indexed.ReadRevision,

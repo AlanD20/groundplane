@@ -122,7 +122,7 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 ) (backingHookCheckpointAnchor, error) {
 	checkpointKey := backingHookCheckpointKey(input.TaskID, input.StepID)
 	primary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		taskKey(input.TaskID), taskAssignmentIndexKey(input.TaskID), checkpointKey,
+		taskjournal.TaskStorageKey(input.TaskID), taskjournal.TaskAssignmentIndexKey(input.TaskID), checkpointKey,
 	}})
 	if err != nil {
 		return backingHookCheckpointAnchor{}, err
@@ -153,7 +153,7 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 			"Backing hook checkpoint does not own the running assignment",
 		)
 	}
-	claimKey := taskExecutionClaimKey(taskjournal.TaskExecutorAgent, input.AgentID, input.TaskID)
+	claimKey := taskjournal.TaskExecutionClaimKey(taskjournal.TaskExecutorAgent, input.AgentID, input.TaskID)
 	claim, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{claimKey}, Revision: primary.ReadRevision})
 	if err != nil {
 		return backingHookCheckpointAnchor{}, err
@@ -170,8 +170,8 @@ func (repository *AttachRepository) loadBackingHookCheckpointAnchor(
 		return backingHookCheckpointAnchor{}, errs.New(errs.KindInternal, "Backing hook assignment copies diverged")
 	}
 	anchor := backingHookCheckpointAnchor{readRevision: primary.ReadRevision, conditions: []etcdstore.Condition{
-		{Key: taskKey(input.TaskID), ModRevision: primary.Values[0].ModRevision},
-		{Key: taskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
+		{Key: taskjournal.TaskStorageKey(input.TaskID), ModRevision: primary.Values[0].ModRevision},
+		{Key: taskjournal.TaskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
 		{Key: claimKey, ModRevision: claim.Values[0].ModRevision},
 	}}
 	if primary.Values[2] == nil {

@@ -26,7 +26,7 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 	}
 	for batch := 0; batch < 32; batch++ {
 		task := current.Record
-		keys := []string{taskAssignmentIndexKey(task.ID), releaseFenceSetKey(task.Owner.EnvironmentID)}
+		keys := []string{taskjournal.TaskAssignmentIndexKey(task.ID), releaseFenceSetKey(task.Owner.EnvironmentID)}
 		read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: current.ReadRevision})
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -55,7 +55,7 @@ func (repository *TaskRepository) finishUnassignedReleaseAbort(
 			"",
 			*task.FinishedAt,
 			current.ReadRevision,
-			etcdstore.Condition{Key: taskKey(task.ID), ModRevision: current.Revision},
+			etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: current.Revision},
 			etcdstore.Condition{Key: keys[0]},
 		)
 		if err != nil {

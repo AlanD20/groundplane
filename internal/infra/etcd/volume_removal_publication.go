@@ -119,7 +119,7 @@ func (repository *HierarchyRepository) prepareVolumeRemovalDesiredPublication(
 				}
 				lockKey := removalrecord.EnvironmentLockKey(runtime.EnvironmentID)
 				publication.conditions = append(publication.conditions,
-					etcdstore.Condition{Key: taskMaterializationWriterKey(runtime.EnvironmentID)}, etcdstore.Condition{Key: lockKey},
+					etcdstore.Condition{Key: taskjournal.TaskMaterializationWriterKey(runtime.EnvironmentID)}, etcdstore.Condition{Key: lockKey},
 				)
 				publication.conditions = append(publication.conditions, evidenceConditions...)
 				publication.mutations = append(publication.mutations, etcdstore.Mutation{

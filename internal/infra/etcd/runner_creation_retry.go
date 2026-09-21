@@ -59,7 +59,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 			marker: idempotencyrecord.CloneIdempotencyMarker(existing.marker),
 		}, nil
 	}
-	sourceResult, err := repository.store.Get(ctx, taskKey(sourceTaskID))
+	sourceResult, err := repository.store.Get(ctx, taskjournal.TaskStorageKey(sourceTaskID))
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -136,11 +136,11 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	}
 	defer clear(reference)
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(retry.ID)},
-		{Key: taskOperationIndexKey(retry.OperationID, retry.ID)},
-		{Key: taskActiveOperationKey(retry.OperationID)},
-		{Key: taskQueueKey(retry.Executor, retry.ID)},
-		{Key: taskKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
+		{Key: taskjournal.TaskStorageKey(retry.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(retry.OperationID)},
+		{Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID)},
+		{Key: taskjournal.TaskStorageKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
 		{Key: runnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{Key: runnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
 		{Key: runnerRuntimeOwnershipKey(current.Record.Desired.ID)},
@@ -170,10 +170,10 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 		)
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(retry.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(retry.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(retry.Executor, retry.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(retry.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(retry.OperationID, retry.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(retry.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(retry.Executor, retry.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(current.Record.Desired.ID), Value: recordValue},
 	}
 	classifier := func(_ int64, values []*etcdstore.KeyValue) error {

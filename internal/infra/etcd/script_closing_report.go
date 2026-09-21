@@ -56,7 +56,7 @@ func taskHasScriptClosingReport(task TaskRecord) bool {
 }
 
 func (report scriptClosingReport) matches(status taskjournal.TaskStatus, result taskjournal.TaskResultRecord) bool {
-	return report.Status == status && taskResultsEqual(report.Result, result) &&
+	return report.Status == status && taskjournal.TaskResultsEqual(report.Result, result) &&
 		report.ExecutionEpoch == result.ExecutionEpoch && report.RecoveryRecordSHA256 == result.ReleaseRecoveryRecordSHA256
 }
 

@@ -31,7 +31,7 @@ type taskRecordData struct {
 	Configuration      *TaskConfiguration                        `json:"configuration,omitempty"`
 	TimeoutSeconds     int64                                     `json:"timeout_seconds"`
 	Status             taskjournal.TaskStatus                    `json:"status"`
-	Result             *taskResultData                           `json:"result,omitempty"`
+	Result             *taskjournal.TaskResultData               `json:"result,omitempty"`
 	TerminalAssignment *taskjournal.TaskTerminalAssignmentRecord `json:"terminal_assignment,omitempty"`
 	NextEventSequence  uint64                                    `json:"next_event_sequence"`
 	EventCount         uint32                                    `json:"event_count"`
@@ -99,7 +99,7 @@ func taskRecordToData(record TaskRecord) taskRecordData {
 		Configuration:                   cloneTaskConfiguration(record.Configuration),
 		Status:                          record.Status, NextEventSequence: record.NextEventSequence,
 		EventCheckpoints:   append([]TaskEventCheckpoint(nil), record.EventCheckpoints...),
-		Result:             taskResultToData(record.Result),
+		Result:             taskjournal.TaskResultToData(record.Result),
 		TerminalAssignment: taskjournal.CloneTaskTerminalAssignment(record.TerminalAssignment),
 		EventCount:         record.EventCount, CreatedAt: record.CreatedAt.UTC().Format(time.RFC3339Nano),
 		UpdatedAt:         record.UpdatedAt.UTC().Format(time.RFC3339Nano),
@@ -131,7 +131,7 @@ func taskRecordFromData(data taskRecordData) (TaskRecord, error) {
 	if err != nil {
 		return TaskRecord{}, err
 	}
-	result, err := taskResultFromData(data.Result)
+	result, err := taskjournal.TaskResultFromData(data.Result)
 	if err != nil {
 		return TaskRecord{}, err
 	}

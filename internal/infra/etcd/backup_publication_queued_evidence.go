@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: replay is valid only when every same-commit membership and
@@ -31,9 +32,9 @@ func (repository *BackupRuntimeRepository) exactBackupRunPublicationSubordinates
 	}
 	keys := []string{
 		membershipKey,
-		taskOperationIndexKey(task.OperationID, task.ID),
-		taskActiveOperationKey(task.OperationID),
-		taskQueueKey(task.Executor, task.ID),
+		taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+		taskjournal.TaskActiveOperationKey(task.OperationID),
+		taskjournal.TaskQueueKey(task.Executor, task.ID),
 	}
 	for _, exclusion := range exclusions {
 		key, keyErr := backupruntime.BackupSourceTargetExclusionKey(exclusion.TargetKind, exclusion.TargetID)

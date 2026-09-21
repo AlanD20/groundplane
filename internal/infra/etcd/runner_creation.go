@@ -89,10 +89,10 @@ func (repository *RunnerRepository) CreateRunnerWithTask(
 	defer values.clear()
 	layout := newRunnerCreateEvidence(desired, parents, allocationState, task)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: values.task},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: values.reference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: values.reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: values.reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: values.task},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: values.reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: values.reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: values.reference},
 		{Type: etcdstore.MutationPut, Key: runnerKey(desired.ID), Value: values.runner},
 		{Type: etcdstore.MutationPut, Key: runnerLifecycleKey(desired.ID), Value: values.lifecycle},
 		{Type: etcdstore.MutationPut, Key: runnerTenantSlugKey(desired.TenantID, desired.Slug), Value: []byte(desired.ID)},
@@ -214,10 +214,10 @@ func newRunnerCreateEvidence(
 		evidence.conditions = append(evidence.conditions, condition)
 		return index
 	}
-	evidence.task = add(etcdstore.Condition{Key: taskKey(task.ID)})
-	evidence.operation = add(etcdstore.Condition{Key: taskOperationIndexKey(task.OperationID, task.ID)})
-	evidence.active = add(etcdstore.Condition{Key: taskActiveOperationKey(task.OperationID)})
-	evidence.queue = add(etcdstore.Condition{Key: taskQueueKey(task.Executor, task.ID)})
+	evidence.task = add(etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID)})
+	evidence.operation = add(etcdstore.Condition{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)})
+	evidence.active = add(etcdstore.Condition{Key: taskjournal.TaskActiveOperationKey(task.OperationID)})
+	evidence.queue = add(etcdstore.Condition{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)})
 	evidence.runner = add(etcdstore.Condition{Key: runnerKey(desired.ID)})
 	evidence.lifecycle = add(etcdstore.Condition{Key: runnerLifecycleKey(desired.ID)})
 	evidence.slug = add(etcdstore.Condition{Key: runnerTenantSlugKey(desired.TenantID, desired.Slug)})

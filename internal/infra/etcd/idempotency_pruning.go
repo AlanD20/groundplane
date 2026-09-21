@@ -408,13 +408,13 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 	}
 	taskRead, err := repository.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{taskKey(marker.TaskID)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(marker.TaskID)}, Revision: revision},
 	)
 	if err != nil {
 		return nil, false, err
 	}
 	if taskRead == nil || taskRead.ReadRevision != revision || len(taskRead.Values) != 1 || taskRead.Values[0] == nil ||
-		taskRead.Values[0].Key != taskKey(marker.TaskID) || taskRead.Values[0].ModRevision <= 0 {
+		taskRead.Values[0].Key != taskjournal.TaskStorageKey(marker.TaskID) || taskRead.Values[0].ModRevision <= 0 {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer clearKeyValues(taskRead.Values)
@@ -451,7 +451,7 @@ func (repository *IdempotencyRepository) volumeRemovalPruneFences(
 	}
 	defer clearKeyValues(owners.Values)
 	fences := []etcdstore.Condition{
-		{Key: taskKey(task.ID), ModRevision: taskRead.Values[0].ModRevision},
+		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRead.Values[0].ModRevision},
 		{Key: root, Prefix: true},
 	}
 	fences = append(fences, rootFences...)
@@ -482,7 +482,7 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 	if recordcodec.ValidateID(ids.KindTask, originID) != nil {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
-	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{taskKey(originID)}, Revision: revision})
+	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(originID)}, Revision: revision})
 	if err != nil {
 		return nil, false, err
 	}
@@ -490,13 +490,13 @@ func (repository *IdempotencyRepository) volumeRemovalRootPruneFences(
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	defer clearKeyValues(read.Values)
-	fences := []etcdstore.Condition{{Key: taskKey(originID), ModRevision: keyValueRevision(read.Values[0])}}
+	fences := []etcdstore.Condition{{Key: taskjournal.TaskStorageKey(originID), ModRevision: keyValueRevision(read.Values[0])}}
 	if read.Values[0] == nil {
 		return fences, false, nil // Marker-first GC already removed the original Task.
 	}
 	origin, err := decodeTaskRecord(read.Values[0].Value)
 	if err != nil || origin.ID != originID || origin.OperationID != task.OperationID || origin.Owner != task.Owner ||
-		origin.idempotencyMarker == nil || read.Values[0].Key != taskKey(originID) || read.Values[0].ModRevision <= 0 {
+		origin.idempotencyMarker == nil || read.Values[0].Key != taskjournal.TaskStorageKey(originID) || read.Values[0].ModRevision <= 0 {
 		return nil, false, idempotencyrecord.CorruptIdempotencyMarker()
 	}
 	key, err := idempotencyrecord.IdempotencyMarkerKey(*origin.idempotencyMarker)

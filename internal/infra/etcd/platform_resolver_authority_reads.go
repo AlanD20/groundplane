@@ -149,7 +149,7 @@ func (repository *TaskRepository) platformResolverActiveAtRevision(
 		return nil, errs.New(errs.KindInternal, "platform resolver active fence is corrupt")
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskKey(string(active.Value))}, Revision: revision,
+		Keys: []string{taskjournal.TaskStorageKey(string(active.Value))}, Revision: revision,
 	})
 	if err != nil {
 		return nil, err

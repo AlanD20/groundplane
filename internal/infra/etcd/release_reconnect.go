@@ -61,15 +61,15 @@ func (repository *TaskRepository) ReconnectAgentAssignment(
 				transitioned, processed, transitionErr := repository.transitionReleaseAcknowledgementToRecovery(
 					ctx,
 					task,
-					&etcdstore.KeyValue{Key: taskKey(task.ID), Value: taskBytes, ModRevision: current.Task.Revision},
+					&etcdstore.KeyValue{Key: taskjournal.TaskStorageKey(task.ID), Value: taskBytes, ModRevision: current.Task.Revision},
 					assignment,
 					&etcdstore.KeyValue{
-						Key:         taskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
+						Key:         taskjournal.TaskExecutionClaimKey(assignment.Executor, assignment.AgentID, task.ID),
 						Value:       assignmentBytes,
 						ModRevision: current.Assignment.Revision,
 					},
 					&etcdstore.KeyValue{
-						Key:         taskAssignmentIndexKey(task.ID),
+						Key:         taskjournal.TaskAssignmentIndexKey(task.ID),
 						Value:       assignmentBytes,
 						ModRevision: current.Assignment.Revision,
 					},

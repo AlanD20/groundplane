@@ -332,7 +332,7 @@ func (repository *TaskRepository) blueprintCandidateLiveWriterAuthority(
 	writer taskMaterializationWriterRecord,
 	revision int64,
 ) (etcdstore.Condition, error) {
-	key := taskMaterializationWriterKey(task.Owner.EnvironmentID)
+	key := taskjournal.TaskMaterializationWriterKey(task.Owner.EnvironmentID)
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{key}, Revision: revision})
 	if err != nil {
 		return etcdstore.Condition{}, err

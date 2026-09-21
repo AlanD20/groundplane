@@ -203,7 +203,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalTaskRetry(
 			"environment deletion retry source retention is missing",
 		)
 	}
-	retentionKey := taskRetentionIndexKey(source.ID, *source.RetainUntil)
+	retentionKey := taskjournal.TaskRetentionIndexKey(source.ID, *source.RetainUntil)
 	owner := environmentMutationFenceOwner{
 		Kind: backupruntime.BackupOperationDeletion, OperationID: source.OperationID, TaskID: source.ID,
 	}
@@ -504,7 +504,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
-		taskKey(task.ID),
+		taskjournal.TaskStorageKey(task.ID),
 	}})
 	if err != nil {
 		return etcdstore.Versioned[EnvironmentDeletionIntentRecord]{}, err
@@ -584,7 +584,7 @@ func (repository *TaskRepository) CompleteEnvironmentDeletionCleanupEnumeration(
 		etcdstore.Condition{
 			Key: environmentDeletionIntentKey(task.OperationID), ModRevision: intent.Revision,
 		},
-		etcdstore.Condition{Key: taskKey(task.ID), ModRevision: state.Values[1].ModRevision},
+		etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: state.Values[1].ModRevision},
 	)
 	transaction, err := repository.store.Transact(ctx, conditions, []etcdstore.Mutation{
 		{

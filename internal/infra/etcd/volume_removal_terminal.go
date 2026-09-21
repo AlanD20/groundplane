@@ -131,8 +131,8 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 	if task.RetainUntil == nil {
 		return etcdstore.TransactionResult{}, volumeRemovalTerminalConflict()
 	}
-	queueKey := taskQueueKey(task.Executor, task.ID)
-	taskRetentionKey := taskRetentionIndexKey(task.ID, *task.RetainUntil)
+	queueKey := taskjournal.TaskQueueKey(task.Executor, task.ID)
+	taskRetentionKey := taskjournal.TaskRetentionIndexKey(task.ID, *task.RetainUntil)
 	for _, condition := range baseConditions {
 		// These are derived indexes owned by the exact Task primary CAS.
 		// Rebuild its retention index and remove its queue entry at commit;

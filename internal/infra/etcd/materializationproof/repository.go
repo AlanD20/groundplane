@@ -120,7 +120,7 @@ func publicationKeys(proof coreproof.Proof) []string {
 		environmentDeletionFenceKey(environmentID),
 		proofGenerationDeletionFenceKey(environmentID, proof.RenderGeneration()),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
-		base.TaskStorageKey(proof.ProducingTaskID()),
+		taskjournal.TaskStorageKey(proof.ProducingTaskID()),
 	}
 }
 

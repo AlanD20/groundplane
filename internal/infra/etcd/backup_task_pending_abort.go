@@ -182,8 +182,8 @@ func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 	}
 	defer clear(taskRetentionValue)
 	keys := []string{
-		taskActiveOperationKey(task.OperationID), markerKey,
-		taskQueueKey(task.Executor, task.ID), retentionKey, taskRetentionKey,
+		taskjournal.TaskActiveOperationKey(task.OperationID), markerKey,
+		taskjournal.TaskQueueKey(task.Executor, task.ID), retentionKey, taskRetentionKey,
 	}
 	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: keys, Revision: current.ReadRevision,
@@ -233,14 +233,14 @@ func (repository *TaskRepository) preparePendingBackupTaskTerminal(
 		return backupTaskTerminalPlan{}, errs.Wrap(errs.KindInternal, err)
 	}
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID), ModRevision: current.Revision},
+		{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: current.Revision},
 		{Key: keys[0], ModRevision: companions.Values[0].ModRevision},
 		{Key: keys[1], ModRevision: companions.Values[1].ModRevision},
 		{Key: keys[2], ModRevision: companions.Values[2].ModRevision},
 		{Key: keys[3]}, {Key: keys[4]},
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: terminalValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: terminalValue},
 		{Type: etcdstore.MutationDelete, Key: keys[0]},
 		{Type: etcdstore.MutationPut, Key: keys[1], Value: markerValue},
 		{Type: etcdstore.MutationDelete, Key: keys[2]},

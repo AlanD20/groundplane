@@ -202,14 +202,14 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 	conditions := backingServiceCreationConditions(creation, publication, creationStageKey)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: creationStageKey},
-		{Type: etcdstore.MutationPut, Key: taskKey(creation.Task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(creation.Task.ID), Value: taskValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   taskOperationIndexKey(creation.Task.OperationID, creation.Task.ID),
+			Key:   taskjournal.TaskOperationIndexKey(creation.Task.OperationID, creation.Task.ID),
 			Value: taskReference,
 		},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(creation.Task.OperationID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(creation.Task.Executor, creation.Task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(creation.Task.OperationID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(creation.Task.Executor, creation.Task.ID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
 		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(creation.Environment.ID), Value: taskReference},

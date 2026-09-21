@@ -77,8 +77,8 @@ func (repository *TaskRepository) prepareAcknowledgedAttachTask(
 	}
 	proof, err := json.Marshal(struct {
 		Preparation serviceruntimerecord.AttachPreparation `json:"preparation"`
-		Result      *taskResultData                        `json:"result"`
-	}{prepared, taskResultToData(result)})
+		Result      *taskjournal.TaskResultData            `json:"result"`
+	}{prepared, taskjournal.TaskResultToData(result)})
 	if err != nil {
 		clearAttachTaskChange(change)
 		return attachTaskChange{}, errs.Wrap(errs.KindInternal, err)

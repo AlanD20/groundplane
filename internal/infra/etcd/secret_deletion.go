@@ -115,10 +115,10 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	defer clear(reference)
 
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: secretrecord.RecordKey(secretID), ModRevision: current.Revision},
 		{
 			Key:         secretOwnerKey(current.Record.Secret),
@@ -156,14 +156,14 @@ func (repository *SecretRepository) BeginSecretDeletionWithTask(
 	})
 	conditions = append(conditions, secretScriptAbsenceConditions(secretID)...)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   taskOperationIndexKey(task.OperationID, task.ID),
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
 			Value: reference,
 		},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
 			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetSecret), secretID),
 			Value: tombstoneValue,

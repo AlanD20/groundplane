@@ -80,7 +80,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	generation := int64(1)
 	retryOf := ""
 	if previous != nil {
-		previousTaskRead, getErr := repository.store.Get(ctx, taskKey(previous.CurrentTaskID))
+		previousTaskRead, getErr := repository.store.Get(ctx, taskjournal.TaskStorageKey(previous.CurrentTaskID))
 		if getErr != nil {
 			return hierarchydeletion.HierarchyDeletionChildEntry{}, getErr
 		}
@@ -163,7 +163,7 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 		}
 		planHash = hex.EncodeToString(plan.PlanHash)
 	}
-	parentTask, err := repository.store.Get(ctx, taskKey(operation.Tombstone.CurrentTaskID))
+	parentTask, err := repository.store.Get(ctx, taskjournal.TaskStorageKey(operation.Tombstone.CurrentTaskID))
 	if err != nil {
 		return hierarchydeletion.HierarchyDeletionChildEntry{}, err
 	}
@@ -269,10 +269,10 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	}
 	defer clear(fenceValue)
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID)}, {Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)}, {Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)}, {Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)}, {Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: childKey, ModRevision: previousRevision}, {Key: successorKey},
-		{Key: taskKey(parent.ID), ModRevision: parentTask.Entry.ModRevision},
+		{Key: taskjournal.TaskStorageKey(parent.ID), ModRevision: parentTask.Entry.ModRevision},
 		{
 			Key: hierarchydeletion.HierarchyDeletionTombstoneKey(
 				string(operation.Tombstone.TargetKind),
@@ -284,10 +284,10 @@ func (repository *HierarchyDeletionRepository) publishHierarchyDeletionChildAtte
 	fenceKey, _ := hierarchydeletion.HierarchyDeletionCleanupFenceKey(operation.Tombstone.OperationID)
 	conditions = append(conditions, etcdstore.Condition{Key: fenceKey, ModRevision: operation.FenceRevision})
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: childKey, Value: entryValue},
 		{Type: etcdstore.MutationPut, Key: successorKey, Value: successorValue},
 		{

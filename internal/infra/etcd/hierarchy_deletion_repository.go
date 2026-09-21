@@ -281,16 +281,16 @@ func (repository *HierarchyDeletionRepository) Begin(
 	}
 	defer clear(taskReference)
 	conditions = append(conditions,
-		etcdstore.Condition{Key: taskKey(task.ID)},
-		etcdstore.Condition{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		etcdstore.Condition{Key: taskActiveOperationKey(task.OperationID)},
-		etcdstore.Condition{Key: taskQueueKey(task.Executor, task.ID)},
+		etcdstore.Condition{Key: taskjournal.TaskStorageKey(task.ID)},
+		etcdstore.Condition{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		etcdstore.Condition{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		etcdstore.Condition{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 	)
 	mutations = append(mutations,
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: encodedTask},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: encodedTask},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
 	)
 	plan, err := newTaskIdempotencyMutationPlan(
 		task,

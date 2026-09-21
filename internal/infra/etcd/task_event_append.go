@@ -31,10 +31,10 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if err := ctx.Err(); err != nil {
 			return TaskEventAppend{}, err
 		}
-		claimKey := taskAssignmentKey(input.Identity.AgentID, input.Identity.TaskID)
+		claimKey := taskjournal.TaskAssignmentKey(input.Identity.AgentID, input.Identity.TaskID)
 		result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-			taskKey(input.Identity.TaskID), taskEventDedupKey(input.Identity), claimKey,
-			taskAssignmentIndexKey(input.Identity.TaskID), blueprintClosingReportKey(input.Identity.TaskID),
+			taskjournal.TaskStorageKey(input.Identity.TaskID), taskjournal.TaskEventDedupKey(input.Identity), claimKey,
+			taskjournal.TaskAssignmentIndexKey(input.Identity.TaskID), blueprintClosingReportKey(input.Identity.TaskID),
 			manualScriptClosingReportKey(input.Identity.TaskID),
 		}})
 		if err != nil {
@@ -55,7 +55,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 		if err != nil {
 			return TaskEventAppend{}, err
 		}
-		if task.ID != input.Identity.TaskID || taskValue.Key != taskKey(task.ID) {
+		if task.ID != input.Identity.TaskID || taskValue.Key != taskjournal.TaskStorageKey(task.ID) {
 			return TaskEventAppend{}, errs.New(errs.KindInternal, "task event read returned a mismatched task")
 		}
 
@@ -150,7 +150,7 @@ func (repository *TaskRepository) AppendTaskEvent(
 			return TaskEventAppend{}, corruptTaskAssignment()
 		}
 
-		eventKey := taskEventKey(task.ID, prepared.Sequence)
+		eventKey := taskjournal.TaskEventKey(task.ID, prepared.Sequence)
 		eventAtRevision, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 			Keys: []string{eventKey}, Revision: result.ReadRevision,
 		})
@@ -181,10 +181,10 @@ func (repository *TaskRepository) AppendTaskEvent(
 			return TaskEventAppend{}, err
 		}
 		conditions := []etcdstore.Condition{
-			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
+			{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
 			{Key: claimKey, ModRevision: assignmentValue.ModRevision},
-			{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
-			{Key: taskEventDedupKey(input.Identity)},
+			{Key: taskjournal.TaskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
+			{Key: taskjournal.TaskEventDedupKey(input.Identity)},
 			{Key: eventKey},
 			{Key: scriptClosingReportKey(task)},
 		}
@@ -192,9 +192,9 @@ func (repository *TaskRepository) AppendTaskEvent(
 			conditions = append(conditions, etcdstore.Condition{Key: recoveryValue.Key, ModRevision: recoveryValue.ModRevision})
 		}
 		mutations := []etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: encodedTask},
+			{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: encodedTask},
 			{Type: etcdstore.MutationPut, Key: eventKey, Value: encodedEvent},
-			{Type: etcdstore.MutationPut, Key: taskEventDedupKey(input.Identity), Value: encodedDedup},
+			{Type: etcdstore.MutationPut, Key: taskjournal.TaskEventDedupKey(input.Identity), Value: encodedDedup},
 		}
 		mutations = append(mutations, recoveryMutation...)
 		conditions = append(conditions, trimConditions...)

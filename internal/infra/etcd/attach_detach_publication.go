@@ -239,10 +239,10 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	}
 
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: attachrecord.AttachKey(current.Record.ID), ModRevision: current.Revision},
 		exclusionCondition,
 		{Key: attachrecord.AttachCredentialByPrefix(current.Record.ID), Prefix: true},
@@ -267,10 +267,10 @@ func (repository *AttachRepository) beginAttachDetachWithTask(
 	}
 	conditions = append(conditions, desiredHeadConditions...)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: attachrecord.AttachKey(detaching.ID), Value: attachValue},
 		{Type: etcdstore.MutationPut, Key: attachTaskRenderInputKey(task.PlanID), Value: renderInputValue},
 		{Type: etcdstore.MutationPut, Key: planReferenceKey, Value: planReferenceValue},

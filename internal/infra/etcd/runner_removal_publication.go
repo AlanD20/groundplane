@@ -37,7 +37,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	if err := validateRunnerDeleteMarker(current.Record.Desired, task, marker); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	sourceResult, err := repository.store.Get(ctx, taskKey(current.Record.CreateTaskID))
+	sourceResult, err := repository.store.Get(ctx, taskjournal.TaskStorageKey(current.Record.CreateTaskID))
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -127,10 +127,10 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 	}
 	defer clear(intentValue)
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: runnerKey(current.Record.Desired.ID), ModRevision: current.Revision},
 		{Key: runnerLifecycleKey(current.Record.Desired.ID), ModRevision: current.Record.LifecycleRevision},
 		{
@@ -152,7 +152,7 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		{Key: runnerTenantQuotaKey(current.Record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
 		{Key: runnerHostSlotKey(current.Record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
 		{Key: systemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
-		{Key: taskKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
+		{Key: taskjournal.TaskStorageKey(source.ID), ModRevision: sourceResult.Entry.ModRevision},
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID)},
 		{Key: runnerRemovalIntentKey(current.Record.Desired.ID)},
 		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.tenant.Revision},
@@ -165,10 +165,10 @@ func (repository *RunnerRepository) BeginRunnerRemovalWithTask(
 		)
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
 			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID),
 			Value: tombstoneValue,

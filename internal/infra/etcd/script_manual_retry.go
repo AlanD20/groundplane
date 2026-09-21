@@ -125,7 +125,7 @@ func (repository *TaskRepository) prepareManualScriptRetry(
 		conditions: append(append([]etcdstore.Condition(nil), fragment.conditions...),
 			etcdstore.Condition{Key: executionValue.Key, ModRevision: executionValue.ModRevision},
 			etcdstore.Condition{Key: retentionKey, ModRevision: read.Values[1].ModRevision},
-			etcdstore.Condition{Key: taskAssignmentIndexKey(source.ID)}, etcdstore.Condition{Key: manualScriptClosingReportKey(source.ID)}),
+			etcdstore.Condition{Key: taskjournal.TaskAssignmentIndexKey(source.ID)}, etcdstore.Condition{Key: manualScriptClosingReportKey(source.ID)}),
 		mutations: mutations, values: values,
 	}, nil
 }

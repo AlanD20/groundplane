@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"time"
 )
@@ -53,7 +54,7 @@ func (repository *TaskRepository) PruneExpiredTasks(
 func (repository *TaskRepository) nextTaskPruneIntent(
 	ctx context.Context,
 ) (etcdstore.Versioned[taskPruneIntent], bool, error) {
-	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskPruneIntentPrefix, Limit: 1})
+	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{Prefix: taskjournal.TaskPruneIntentPrefix, Limit: 1})
 	if err != nil {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, err
 	}
@@ -66,7 +67,7 @@ func (repository *TaskRepository) nextTaskPruneIntent(
 	entry := page.Values[0]
 	defer clear(entry.Value)
 	intent, err := decodeTaskPruneIntent(entry.Value)
-	if err != nil || entry.Key != taskPruneIntentKey(intent.TaskID) || entry.ModRevision <= 0 {
+	if err != nil || entry.Key != taskjournal.TaskPruneIntentKey(intent.TaskID) || entry.ModRevision <= 0 {
 		return etcdstore.Versioned[taskPruneIntent]{}, false, corruptTaskPruneIntent()
 	}
 	return etcdstore.Versioned[taskPruneIntent]{

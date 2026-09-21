@@ -31,7 +31,7 @@ func (repository *BackupRuntimeRepository) validateExistingBackupRunPublication(
 	}
 	read, err := repository.readFixedKeys(ctx, []string{
 		backupruntime.BackupRunKey(marker.TaskID),
-		taskKey(marker.TaskID),
+		taskjournal.TaskStorageKey(marker.TaskID),
 		hierarchyrecord.EnvironmentOperationLockKey(marker.Locator.ScopeID),
 	}, readRevision)
 	if err != nil {

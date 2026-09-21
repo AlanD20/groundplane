@@ -202,7 +202,7 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	input ScriptCheckpointInput,
 ) (scriptCheckpointAnchor, error) {
 	primary, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		scriptExecutionKey(input.ExecutionID), taskKey(input.TaskID), taskAssignmentIndexKey(input.TaskID),
+		scriptExecutionKey(input.ExecutionID), taskjournal.TaskStorageKey(input.TaskID), taskjournal.TaskAssignmentIndexKey(input.TaskID),
 	}})
 	if err != nil {
 		return scriptCheckpointAnchor{}, err
@@ -248,8 +248,8 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 			return scriptCheckpointAnchor{}, err
 		}
 	}
-	claimKey := taskExecutionClaimKey(taskjournal.TaskExecutorAgent, input.AgentID, input.TaskID)
-	timeoutKey := taskTimeoutIndexKey(input.TaskID, assignment.Deadline)
+	claimKey := taskjournal.TaskExecutionClaimKey(taskjournal.TaskExecutorAgent, input.AgentID, input.TaskID)
+	timeoutKey := taskjournal.TaskTimeoutIndexKey(input.TaskID, assignment.Deadline)
 	claim, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{claimKey, timeoutKey}, Revision: primary.ReadRevision,
 	})
@@ -269,8 +269,8 @@ func (repository *ScriptRepository) loadScriptCheckpointAnchor(
 	}
 	conditions := []etcdstore.Condition{
 		{Key: scriptExecutionKey(input.ExecutionID), ModRevision: primary.Values[0].ModRevision},
-		{Key: taskKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
-		{Key: taskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[2].ModRevision},
+		{Key: taskjournal.TaskStorageKey(input.TaskID), ModRevision: primary.Values[1].ModRevision},
+		{Key: taskjournal.TaskAssignmentIndexKey(input.TaskID), ModRevision: primary.Values[2].ModRevision},
 		{Key: claimKey, ModRevision: claim.Values[0].ModRevision},
 		{Key: timeoutKey, ModRevision: claim.Values[1].ModRevision},
 	}

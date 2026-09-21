@@ -111,10 +111,10 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	}
 	conditions := []etcdstore.Condition{
 		{Key: scriptExecutionKey(execution.ID)},
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		primary,
 		{Key: scriptrecord.ScriptSetBodyGenerationKey(execution.EnvironmentID, execution.ScriptSetGeneration,
 			execution.ScriptID, execution.ScriptGeneration), ModRevision: sources.BodyGeneration.Revision},
@@ -147,10 +147,10 @@ func (repository *ScriptRepository) PublishExecutionWithTask(
 	defer clear(taskReference)
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: scriptExecutionKey(execution.ID), Value: executionValue},
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: taskReference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: taskReference},
 	}
 	mutations = append(mutations, fragment.mutations...)
 	plan, err := newTaskIdempotencyMutationPlan(task, initiation, conditions, mutations,

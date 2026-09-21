@@ -27,7 +27,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 		return nil, errs.New(errs.KindValidationFailed, "agent assignment query is invalid")
 	}
 	assignments, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: taskAssignmentScopePrefix(agentID),
+		Prefix: taskjournal.TaskAssignmentScopePrefix(agentID),
 		Limit:  int64(maximum) + 1,
 	})
 	if err != nil {
@@ -43,7 +43,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 	records := make([]TaskAssignmentRecord, len(assignments.Values))
 	companionKeys := make([]string, 0, len(assignments.Values)*4)
 	for index, value := range assignments.Values {
-		taskID, err := taskIDFromAssignmentKey(agentID, value.Key)
+		taskID, err := taskjournal.TaskIDFromAssignmentKey(agentID, value.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -67,10 +67,10 @@ func (repository *TaskRepository) ListAgentAssignments(
 		}
 		companionKeys = append(
 			companionKeys,
-			taskKey(taskID),
-			taskAssignmentIndexKey(taskID),
-			taskTimeoutIndexKey(taskID, timeoutDeadline),
-			taskRecoveryProofRequiredKey(taskID),
+			taskjournal.TaskStorageKey(taskID),
+			taskjournal.TaskAssignmentIndexKey(taskID),
+			taskjournal.TaskTimeoutIndexKey(taskID, timeoutDeadline),
+			taskjournal.TaskRecoveryProofRequiredKey(taskID),
 		)
 	}
 	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -122,7 +122,7 @@ func (repository *TaskRepository) ListAgentAssignments(
 			return nil, err
 		}
 		if materializes {
-			writerKeys := []string{taskMaterializationWriterKey(environmentID)}
+			writerKeys := []string{taskjournal.TaskMaterializationWriterKey(environmentID)}
 			writerRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 				Keys: writerKeys, Revision: assignments.ReadRevision,
 			})
@@ -185,7 +185,7 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 		return nil, err
 	}
 	claims, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: controllerTaskClaimPrefix,
+		Prefix: taskjournal.ControllerTaskClaimPrefix,
 		Limit:  2,
 	})
 	if err != nil {
@@ -202,15 +202,15 @@ func (repository *TaskRepository) ListControllerTaskClaims(
 	if err != nil {
 		return nil, err
 	}
-	if claim.Executor != taskjournal.TaskExecutorController || claimValue.Key != controllerTaskClaimKey(claim.TaskID) ||
+	if claim.Executor != taskjournal.TaskExecutorController || claimValue.Key != taskjournal.ControllerTaskClaimKey(claim.TaskID) ||
 		claim.ClaimedTaskRevision >= claimValue.ModRevision {
 		return nil, errs.New(errs.KindInternal, "controller Task claim does not match its key")
 	}
 	companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
-			taskKey(claim.TaskID),
-			taskAssignmentIndexKey(claim.TaskID),
-			taskTimeoutIndexKey(claim.TaskID, claim.Deadline),
+			taskjournal.TaskStorageKey(claim.TaskID),
+			taskjournal.TaskAssignmentIndexKey(claim.TaskID),
+			taskjournal.TaskTimeoutIndexKey(claim.TaskID, claim.Deadline),
 		},
 		Revision: claims.ReadRevision,
 	})

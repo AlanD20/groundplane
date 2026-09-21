@@ -46,22 +46,24 @@ func DecodeCapabilityIdempotencyMarker(value []byte, locator idempotencyrecord.I
 func CapabilityIdempotencyMarkerKey(locator idempotencyrecord.IdempotencyLocator) (string, error) {
 	return idempotencyrecord.IdempotencyMarkerKey(locator)
 }
-func CapabilityTaskKey(taskID string) string { return taskKey(taskID) }
+func CapabilityTaskKey(taskID string) string { return taskjournal.TaskStorageKey(taskID) }
 func CapabilityTaskOperationIndexKey(operationID, taskID string) string {
-	return taskOperationIndexKey(operationID, taskID)
+	return taskjournal.TaskOperationIndexKey(operationID, taskID)
 }
 func CapabilityTaskActiveOperationKey(operationID string) string {
-	return taskActiveOperationKey(operationID)
+	return taskjournal.TaskActiveOperationKey(operationID)
 }
 func CapabilityTaskQueueKey(executor taskjournal.TaskExecutor, taskID string) string {
-	return taskQueueKey(executor, taskID)
+	return taskjournal.TaskQueueKey(executor, taskID)
 }
 func CapabilityTaskExecutionClaimKey(executor taskjournal.TaskExecutor, agentID, taskID string) string {
-	return taskExecutionClaimKey(executor, agentID, taskID)
+	return taskjournal.TaskExecutionClaimKey(executor, agentID, taskID)
 }
-func CapabilityTaskAssignmentIndexKey(taskID string) string { return taskAssignmentIndexKey(taskID) }
+func CapabilityTaskAssignmentIndexKey(taskID string) string {
+	return taskjournal.TaskAssignmentIndexKey(taskID)
+}
 func CapabilityTaskTimeoutIndexKey(taskID string, deadline time.Time) string {
-	return taskTimeoutIndexKey(taskID, deadline)
+	return taskjournal.TaskTimeoutIndexKey(taskID, deadline)
 }
 
 func (s *store) TransactionSize(conditions []etcdstore.Condition, mutations []etcdstore.Mutation) (int, error) {

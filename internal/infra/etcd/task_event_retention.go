@@ -96,7 +96,7 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 	oldest := firstTaskEventSequence(task)
 	read, err := repository.store.GetMany(
 		ctx,
-		etcdstore.GetManyRequest{Keys: []string{taskEventKey(task.ID, oldest)}, Revision: revision},
+		etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskEventKey(task.ID, oldest)}, Revision: revision},
 	)
 	if err != nil {
 		return nil, nil, err
@@ -109,7 +109,7 @@ func (repository *TaskRepository) prepareTaskEventTrim(
 	if err != nil || event.Sequence != oldest || event.Identity.TaskID != task.ID {
 		return nil, nil, recordcodec.CorruptRecord()
 	}
-	dedupKey := taskEventDedupKey(event.Identity)
+	dedupKey := taskjournal.TaskEventDedupKey(event.Identity)
 	dedupRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{dedupKey}, Revision: revision})
 	if err != nil {
 		return nil, nil, err

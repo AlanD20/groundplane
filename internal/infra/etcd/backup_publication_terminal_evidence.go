@@ -6,6 +6,7 @@ import (
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 )
 
 // Rationale: terminalization releases transient execution ownership but keeps
@@ -50,22 +51,22 @@ func (repository *BackupRuntimeRepository) exactTerminalBackupRunSubordinates(
 	}
 	keys := []string{
 		membershipKey,
-		taskOperationIndexKey(task.OperationID, task.ID),
-		taskActiveOperationKey(task.OperationID),
-		taskQueueKey(task.Executor, task.ID),
-		taskAssignmentIndexKey(task.ID),
+		taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+		taskjournal.TaskActiveOperationKey(task.OperationID),
+		taskjournal.TaskQueueKey(task.Executor, task.ID),
+		taskjournal.TaskAssignmentIndexKey(task.ID),
 	}
 	keys = append(keys, ownerKeys...)
 	terminalOffset := len(keys)
 	keys = append(keys,
 		backupruntime.BackupTerminalReceiptKey(task.ID),
-		taskRetentionIndexKey(task.ID, *task.RetainUntil),
+		taskjournal.TaskRetentionIndexKey(task.ID, *task.RetainUntil),
 		markerRetentionKey,
 	)
 	claimIndex := -1
 	if task.TerminalAssignment != nil {
 		claimIndex = len(keys)
-		keys = append(keys, taskExecutionClaimKey(
+		keys = append(keys, taskjournal.TaskExecutionClaimKey(
 			task.Executor, task.TerminalAssignment.AgentID, task.ID,
 		))
 	}

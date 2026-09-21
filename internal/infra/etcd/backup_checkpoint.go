@@ -158,7 +158,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 		)
 	}
 	taskRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskKey(input.TaskID)}, Revision: revision,
+		Keys: []string{taskjournal.TaskStorageKey(input.TaskID)}, Revision: revision,
 	})
 	if err != nil {
 		return backupCheckpointPlan{}, err
@@ -188,13 +188,13 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 			"backup checkpoint step binding is invalid",
 		)
 	}
-	claimKey := taskExecutionClaimKey(task.Executor, input.AgentID, input.TaskID)
+	claimKey := taskjournal.TaskExecutionClaimKey(task.Executor, input.AgentID, input.TaskID)
 	cursorKey := backupCheckpointCursorKey(input)
 	dedupKey := backupCheckpointDedupKey(input)
 	assignmentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{
 			claimKey,
-			taskAssignmentIndexKey(input.TaskID),
+			taskjournal.TaskAssignmentIndexKey(input.TaskID),
 			cursorKey,
 			dedupKey,
 		},
@@ -233,7 +233,7 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 		)
 	}
 	timeoutRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskTimeoutIndexKey(input.TaskID, assignment.Deadline)}, Revision: revision,
+		Keys: []string{taskjournal.TaskTimeoutIndexKey(input.TaskID, assignment.Deadline)}, Revision: revision,
 	})
 	if err != nil {
 		return backupCheckpointPlan{}, err
@@ -316,11 +316,11 @@ func (repository *BackupRuntimeRepository) loadBackupCheckpointPlan(
 		return backupCheckpointPlan{}, err
 	}
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(input.TaskID), ModRevision: taskRead.Values[0].ModRevision},
+		{Key: taskjournal.TaskStorageKey(input.TaskID), ModRevision: taskRead.Values[0].ModRevision},
 		{Key: claimKey, ModRevision: claimValue.ModRevision},
-		{Key: taskAssignmentIndexKey(input.TaskID), ModRevision: indexValue.ModRevision},
+		{Key: taskjournal.TaskAssignmentIndexKey(input.TaskID), ModRevision: indexValue.ModRevision},
 		{
-			Key:         taskTimeoutIndexKey(input.TaskID, assignment.Deadline),
+			Key:         taskjournal.TaskTimeoutIndexKey(input.TaskID, assignment.Deadline),
 			ModRevision: timeoutRead.Values[0].ModRevision,
 		},
 		{Key: dedupKey},
@@ -365,7 +365,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 		return nil, errs.New(errs.KindValidationFailed, "backup assignment fence is invalid")
 	}
 	taskResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskKey(input.TaskID)}, Revision: revision,
+		Keys: []string{taskjournal.TaskStorageKey(input.TaskID)}, Revision: revision,
 	})
 	if err != nil {
 		return nil, err
@@ -382,9 +382,9 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 	if task.Status != taskjournal.TaskStatusRunning || !taskContainsStep(task, input.StepID) {
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
 	}
-	claimKey := taskExecutionClaimKey(task.Executor, input.AgentID, input.TaskID)
+	claimKey := taskjournal.TaskExecutionClaimKey(task.Executor, input.AgentID, input.TaskID)
 	assignmentResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{claimKey, taskAssignmentIndexKey(input.TaskID)}, Revision: revision,
+		Keys: []string{claimKey, taskjournal.TaskAssignmentIndexKey(input.TaskID)}, Revision: revision,
 	})
 	if err != nil {
 		return nil, err
@@ -404,7 +404,7 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 		return nil, errs.New(errs.KindStateConflict, "backup task assignment changed")
 	}
 	timeoutResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{taskTimeoutIndexKey(input.TaskID, assignment.Deadline)}, Revision: revision,
+		Keys: []string{taskjournal.TaskTimeoutIndexKey(input.TaskID, assignment.Deadline)}, Revision: revision,
 	})
 	if err != nil {
 		return nil, err
@@ -418,14 +418,14 @@ func (repository *BackupRuntimeRepository) loadBackupAssignmentFence(
 	}
 	defer clearKeyValues(timeoutResult.Values)
 	return []etcdstore.Condition{
-		{Key: taskKey(input.TaskID), ModRevision: taskResult.Values[0].ModRevision},
+		{Key: taskjournal.TaskStorageKey(input.TaskID), ModRevision: taskResult.Values[0].ModRevision},
 		{Key: claimKey, ModRevision: assignmentResult.Values[0].ModRevision},
 		{
-			Key:         taskAssignmentIndexKey(input.TaskID),
+			Key:         taskjournal.TaskAssignmentIndexKey(input.TaskID),
 			ModRevision: assignmentResult.Values[1].ModRevision,
 		},
 		{
-			Key:         taskTimeoutIndexKey(input.TaskID, assignment.Deadline),
+			Key:         taskjournal.TaskTimeoutIndexKey(input.TaskID, assignment.Deadline),
 			ModRevision: timeoutResult.Values[0].ModRevision,
 		},
 	}, nil

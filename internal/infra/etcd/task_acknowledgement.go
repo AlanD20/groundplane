@@ -106,7 +106,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		)
 	}
 
-	claimKey := taskExecutionClaimKey(executor, agentID, taskID)
+	claimKey := taskjournal.TaskExecutionClaimKey(executor, agentID, taskID)
 	submittedResult := taskjournal.CloneTaskResult(result)
 	submittedTerminalStatus := terminalStatus
 	conflicts := 0
@@ -114,7 +114,7 @@ func (repository *TaskRepository) acknowledgeTask(
 		terminalStatus = submittedTerminalStatus
 		result = taskjournal.CloneTaskResult(submittedResult)
 		primaryAndAssignment, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-			taskKey(taskID), claimKey, taskAssignmentIndexKey(taskID),
+			taskjournal.TaskStorageKey(taskID), claimKey, taskjournal.TaskAssignmentIndexKey(taskID),
 		}})
 		if err != nil {
 			return etcdstore.Versioned[TaskRecord]{}, err
@@ -208,7 +208,7 @@ func (repository *TaskRepository) acknowledgeTask(
 			}
 			if task.Status == terminalStatus &&
 				((result == nil && task.Result == nil) ||
-					(result != nil && task.Result != nil && taskResultsEqual(*task.Result, *result))) {
+					(result != nil && task.Result != nil && taskjournal.TaskResultsEqual(*task.Result, *result))) {
 				if executor == taskjournal.TaskExecutorAgent {
 					expected := taskjournal.TaskTerminalAssignmentRecord{
 						AssignmentID: assignmentID, AgentID: agentID, AgentGeneration: agentGeneration,
@@ -375,13 +375,13 @@ func (repository *TaskRepository) acknowledgeTask(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		companionKeys := []string{
-			taskActiveOperationKey(task.OperationID), markerKey, taskQueueKey(task.Executor, task.ID), retentionKey,
+			taskjournal.TaskActiveOperationKey(task.OperationID), markerKey, taskjournal.TaskQueueKey(task.Executor, task.ID), retentionKey,
 			lifecycleKey,
 		}
 		writerKey := ""
 		materializationWriter := taskMaterializationWriterRecord{}
 		if materializes {
-			writerKey = taskMaterializationWriterKey(materializationEnvironmentID)
+			writerKey = taskjournal.TaskMaterializationWriterKey(materializationEnvironmentID)
 			companionKeys = append(companionKeys, writerKey)
 		}
 		companions, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -443,22 +443,22 @@ func (repository *TaskRepository) acknowledgeTask(
 			return etcdstore.Versioned[TaskRecord]{}, err
 		}
 		conditions := []etcdstore.Condition{
-			{Key: taskKey(task.ID), ModRevision: taskValue.ModRevision},
+			{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskValue.ModRevision},
 			{Key: claimKey, ModRevision: assignmentValue.ModRevision},
-			{Key: taskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
-			{Key: taskActiveOperationKey(task.OperationID), ModRevision: companions.Values[0].ModRevision},
+			{Key: taskjournal.TaskAssignmentIndexKey(task.ID), ModRevision: assignmentIndexValue.ModRevision},
+			{Key: taskjournal.TaskActiveOperationKey(task.OperationID), ModRevision: companions.Values[0].ModRevision},
 			{Key: markerKey, ModRevision: companions.Values[1].ModRevision},
-			{Key: taskQueueKey(task.Executor, task.ID)},
+			{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 			{Key: retentionKey},
 			{Key: taskRetentionKey},
 			{Key: lifecycleKey, ModRevision: companions.Values[4].ModRevision},
 		}
 		conditions = append(conditions, timeoutEvidenceConditions...)
 		mutations := []etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: terminalValue},
+			{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: terminalValue},
 			{Type: etcdstore.MutationDelete, Key: claimKey},
-			{Type: etcdstore.MutationDelete, Key: taskAssignmentIndexKey(task.ID)},
-			{Type: etcdstore.MutationDelete, Key: taskActiveOperationKey(task.OperationID)},
+			{Type: etcdstore.MutationDelete, Key: taskjournal.TaskAssignmentIndexKey(task.ID)},
+			{Type: etcdstore.MutationDelete, Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 			{Type: etcdstore.MutationPut, Key: markerKey, Value: markerValue},
 			{Type: etcdstore.MutationPut, Key: retentionKey, Value: retentionValue},
 			{Type: etcdstore.MutationPut, Key: taskRetentionKey, Value: taskRetentionValue},

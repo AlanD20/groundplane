@@ -56,7 +56,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 	origin := source
 	if input.TaskID != source.Record.ID {
 		originRead, readErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{taskKey(input.TaskID)}, Revision: source.ReadRevision,
+			Keys: []string{taskjournal.TaskStorageKey(input.TaskID)}, Revision: source.ReadRevision,
 		})
 		if readErr != nil {
 			return hostResolutionReconciliationChange{}, readErr
@@ -91,7 +91,7 @@ func (repository *TaskRepository) preparePlatformDNSResolverTaskRetry(
 		{Key: platformComponentTaskActiveKey(input.ComponentID)},
 	}
 	if origin.Record.ID != source.Record.ID {
-		conditions = append(conditions, etcdstore.Condition{Key: taskKey(origin.Record.ID), ModRevision: origin.Revision})
+		conditions = append(conditions, etcdstore.Condition{Key: taskjournal.TaskStorageKey(origin.Record.ID), ModRevision: origin.Revision})
 	}
 	value := []byte(retry.ID)
 	return hostResolutionReconciliationChange{

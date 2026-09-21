@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"slices"
 	"time"
 
@@ -182,7 +183,7 @@ func collectRecoverySecretPins(
 func finishRecoverySecretPreparation(ctx context.Context, store hierarchyStore, task TaskRecord, cause error) error {
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	read, err := store.GetMany(cleanup, etcdstore.GetManyRequest{Keys: []string{taskKey(task.ID)}})
+	read, err := store.GetMany(cleanup, etcdstore.GetManyRequest{Keys: []string{taskjournal.TaskStorageKey(task.ID)}})
 	if err == nil && (read == nil || len(read.Values) != 1) {
 		err = errs.New(errs.KindInternal, "Secret pin cleanup Task read is incomplete")
 	}

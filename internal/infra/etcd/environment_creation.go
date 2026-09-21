@@ -140,10 +140,10 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 	scriptSetKey := scriptrecord.ScriptSetActiveKey(record.ID)
 
 	conditions := []etcdstore.Condition{
-		{Key: taskKey(task.ID)},
-		{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-		{Key: taskActiveOperationKey(task.OperationID)},
-		{Key: taskQueueKey(task.Executor, task.ID)},
+		{Key: taskjournal.TaskStorageKey(task.ID)},
+		{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+		{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(record.ID)},
 		{Key: hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name)},
 		{Key: hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID)},
@@ -164,10 +164,10 @@ func (repository *HierarchyRepository) CreateEnvironmentWithTask(
 		)
 	}
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
-		{Type: etcdstore.MutationPut, Key: taskOperationIndexKey(task.OperationID, task.ID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentKey(record.ID), Value: environmentValue},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name), Value: []byte(record.ID)},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID), Value: []byte(record.ID)},

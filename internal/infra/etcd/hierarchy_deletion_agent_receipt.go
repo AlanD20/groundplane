@@ -31,7 +31,7 @@ func (repository *HierarchyDeletionRepository) AgentTerminalProof(
 	if err != nil || !hierarchyDeletionChildMatches(entry, operation, action) {
 		return nil, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	taskRead, err := repository.store.Get(ctx, taskKey(entry.CurrentTaskID))
+	taskRead, err := repository.store.Get(ctx, taskjournal.TaskStorageKey(entry.CurrentTaskID))
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +240,7 @@ func (repository *HierarchyDeletionRepository) ensureHierarchyDeletionTerminalRe
 	childKey, _ := hierarchydeletion.HierarchyDeletionChildKey(operation.Tombstone.OperationID, entry.ChildOperationID)
 	transaction, err := repository.store.Transact(ctx,
 		[]etcdstore.Condition{
-			{Key: taskKey(task.ID), ModRevision: taskRevision},
+			{Key: taskjournal.TaskStorageKey(task.ID), ModRevision: taskRevision},
 			{Key: childKey, ModRevision: entryRevision}, {Key: receiptKey},
 			{Key: pointerKey, ModRevision: pointerRevision},
 		},

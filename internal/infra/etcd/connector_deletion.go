@@ -57,10 +57,10 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 		return existing, err
 	}
 	domainKeys := []string{
-		taskKey(task.ID),
-		taskOperationIndexKey(task.OperationID, task.ID),
-		taskActiveOperationKey(task.OperationID),
-		taskQueueKey(task.Executor, task.ID),
+		taskjournal.TaskStorageKey(task.ID),
+		taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
+		taskjournal.TaskActiveOperationKey(task.OperationID),
+		taskjournal.TaskQueueKey(task.Executor, task.ID),
 		connectorrecord.RecordKey(connector.ID),
 		connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
 		connectorNameKey(connector.EnvironmentID, connector.Name),
@@ -147,14 +147,14 @@ func (repository *ConnectorRepository) BeginConnectorDeletionWithTask(
 	}
 	defer clear(epochMutation.Value)
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationPut, Key: taskKey(task.ID), Value: taskValue},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		{
 			Type:  etcdstore.MutationPut,
-			Key:   taskOperationIndexKey(task.OperationID, task.ID),
+			Key:   taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
 			Value: reference,
 		},
-		{Type: etcdstore.MutationPut, Key: taskActiveOperationKey(task.OperationID), Value: reference},
-		{Type: etcdstore.MutationPut, Key: taskQueueKey(task.Executor, task.ID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{
 			Type:  etcdstore.MutationPut,
 			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetConnector), connector.ID),
@@ -348,10 +348,10 @@ func newConnectorDeletionEvidence(
 		environmentIndex: 5, nameIndex: 6, credentials: 7, tombstone: 8, intent: 9,
 		reference: 10, referenceStart: 11, current: current, operationID: task.OperationID, fence: fence,
 		conditions: []etcdstore.Condition{
-			{Key: taskKey(task.ID)},
-			{Key: taskOperationIndexKey(task.OperationID, task.ID)},
-			{Key: taskActiveOperationKey(task.OperationID)},
-			{Key: taskQueueKey(task.Executor, task.ID)},
+			{Key: taskjournal.TaskStorageKey(task.ID)},
+			{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
+			{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
+			{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 			{Key: connectorrecord.RecordKey(connector.ID), ModRevision: current.Revision},
 			{
 				Key:         connectorEnvironmentKey(connector.EnvironmentID, connector.ID),
