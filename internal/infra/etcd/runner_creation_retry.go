@@ -117,7 +117,7 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	allocation, err := repository.readRunnerAllocationEvidence(ctx, current.Record, current.ReadRevision)
+	allocation, err := repository.ReadRunnerAllocationEvidence(ctx, current.Record, current.ReadRevision)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -151,15 +151,15 @@ func (repository *RunnerRepository) RetryRunnerCreationWithTask(
 				current.Record.Desired.OwnerID,
 				current.Record.Desired.ID,
 			),
-			ModRevision: allocation.owner.ModRevision,
+			ModRevision: allocation.Owner.ModRevision,
 		},
 		{
 			Key:         runnerrecord.RunnerTenantSlugKey(current.Record.Desired.TenantID, current.Record.Desired.Slug),
-			ModRevision: allocation.slug.ModRevision,
+			ModRevision: allocation.Slug.ModRevision,
 		},
-		{Key: runnerrecord.RunnerTenantQuotaKey(current.Record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
-		{Key: runnerrecord.RunnerHostSlotKey(current.Record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
-		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
+		{Key: runnerrecord.RunnerTenantQuotaKey(current.Record.Desired.TenantID), ModRevision: allocation.Quota.ModRevision},
+		{Key: runnerrecord.RunnerHostSlotKey(current.Record.Allocation.Slot), ModRevision: allocation.Host.ModRevision},
+		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.System.ModRevision},
 		{Key: hierarchyrecord.TenantKey(current.Record.Desired.TenantID), ModRevision: parents.Tenant().Revision},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), current.Record.Desired.ID)},
 		{Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetTenant), current.Record.Desired.TenantID)},

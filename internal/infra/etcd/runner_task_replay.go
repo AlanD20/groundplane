@@ -61,7 +61,7 @@ func (repository *TaskRepository) validateRunnerCreationAcknowledgementReplay(
 	if record.ProvisioningState != wantState {
 		return errs.New(errs.KindStateConflict, "runner creation replay target state changed")
 	}
-	_, err = (composeRunnerRepository(repository.store)).readRunnerAllocationEvidence(ctx, record, revision)
+	_, err = (composeRunnerRepository(repository.store)).ReadRunnerAllocationEvidence(ctx, record, revision)
 	return err
 }
 
@@ -115,7 +115,7 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 			stored.Values[7] != nil || stored.Values[9] != nil {
 			return errs.New(errs.KindStateConflict, "completed runner removal retained target state")
 		}
-		index := sortSearchRunnerID(quota.RunnerIDs, task.Target)
+		index := runnerrecord.SortSearchRunnerID(quota.RunnerIDs, task.Target)
 		if (index < len(quota.RunnerIDs) && quota.RunnerIDs[index] == task.Target) ||
 			system.Reservations[runnerallocation.RunnerReservationOwner(task.Target)] != "" {
 			return errs.New(errs.KindStateConflict, "completed runner removal retained allocation ownership")
@@ -139,11 +139,11 @@ func (repository *TaskRepository) validateRunnerRemovalAcknowledgementReplay(
 	if slug == nil || len(slug.Values) != 1 {
 		return errs.New(errs.KindInternal, "runner removal replay slug evidence is incomplete")
 	}
-	return runnerAllocationEvidenceOwns(record, runnerAllocationEvidence{
-		owner:  stored.Values[5],
-		slug:   slug.Values[0],
-		quota:  stored.Values[6],
-		host:   stored.Values[7],
-		system: stored.Values[8],
+	return runnerrecord.RunnerAllocationEvidenceOwns(record, runnerrecord.RunnerAllocationEvidence{
+		Owner:  stored.Values[5],
+		Slug:   slug.Values[0],
+		Quota:  stored.Values[6],
+		Host:   stored.Values[7],
+		System: stored.Values[8],
 	})
 }

@@ -135,11 +135,3 @@ func hierarchyDeletionConnectorReferencePrefixes(connectorID string) []string {
 		backupruntime.BackupOrphanConnectorPrefix + connectorID + "/",
 	}
 }
-
-func clearRunnerAllocationEvidence(evidence runnerAllocationEvidence) {
-	for _, value := range []*etcdstore.KeyValue{evidence.owner, evidence.slug, evidence.quota, evidence.host, evidence.system} {
-		if value != nil {
-			clear(value.Value)
-		}
-	}
-}

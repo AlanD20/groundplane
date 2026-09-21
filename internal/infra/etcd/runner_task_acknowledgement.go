@@ -84,7 +84,7 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	allocation, err := (composeRunnerRepository(repository.store)).readRunnerAllocationEvidence(
+	allocation, err := (composeRunnerRepository(repository.store)).ReadRunnerAllocationEvidence(
 		ctx, record, revision,
 	)
 	if err != nil {
@@ -98,15 +98,15 @@ func (repository *TaskRepository) prepareRunnerCreationAcknowledgement(
 		{Key: runnerrecord.RunnerReadinessProofKey(task.ID), ModRevision: etcdstore.RevisionOf(proofValue)},
 		{
 			Key:         runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, record.Desired.ID),
-			ModRevision: allocation.owner.ModRevision,
+			ModRevision: allocation.Owner.ModRevision,
 		},
 		{
 			Key:         runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
-			ModRevision: allocation.slug.ModRevision,
+			ModRevision: allocation.Slug.ModRevision,
 		},
-		{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
-		{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
-		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
+		{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.Quota.ModRevision},
+		{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.Host.ModRevision},
+		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.System.ModRevision},
 	}
 	mutations := []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: runnerrecord.RunnerLifecycleKey(task.Target), Value: value}}
 	if proofValue != nil {
@@ -162,7 +162,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 		!evidence.matchesRecord(record) || !evidence.matchesIntent(intent) {
 		return runnerTaskChange{}, errs.New(errs.KindStateConflict, "runner removal intent does not match its task")
 	}
-	allocation, err := (composeRunnerRepository(repository.store)).readRunnerAllocationEvidence(ctx, record, revision)
+	allocation, err := (composeRunnerRepository(repository.store)).ReadRunnerAllocationEvidence(ctx, record, revision)
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
@@ -180,15 +180,15 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 			{Key: runnerrecord.RunnerRuntimeOwnershipKey(task.Target), ModRevision: etcdstore.RevisionOf(base.Values[5])},
 			{
 				Key:         runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, task.Target),
-				ModRevision: allocation.owner.ModRevision,
+				ModRevision: allocation.Owner.ModRevision,
 			},
 			{
 				Key:         runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
-				ModRevision: allocation.slug.ModRevision,
+				ModRevision: allocation.Slug.ModRevision,
 			},
-			{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
-			{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
-			{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
+			{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.Quota.ModRevision},
+			{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.Host.ModRevision},
+			{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.System.ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationDelete, Key: deletionrecord.TombstoneKey(string(deletionrecord.DeletionTargetRunner), task.Target)},
@@ -201,7 +201,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 	if base.Values[5] != nil {
 		return runnerTaskChange{}, errs.New(errs.KindResourceInUse, "runner runtime cleanup proof is required")
 	}
-	quota, err := runnerrecord.DecodeRunnerTenantQuota(allocation.quota.Value)
+	quota, err := runnerrecord.DecodeRunnerTenantQuota(allocation.Quota.Value)
 	if err != nil {
 		return runnerTaskChange{}, runnerrecord.CorruptRunnerTenantQuota()
 	}
@@ -209,7 +209,7 @@ func (repository *TaskRepository) prepareRunnerRemovalAcknowledgement(
 	if err != nil {
 		return runnerTaskChange{}, err
 	}
-	system, err := runnerrecord.DecodeSystemPoolRegistry(allocation.system.Value)
+	system, err := runnerrecord.DecodeSystemPoolRegistry(allocation.System.Value)
 	if err != nil {
 		return runnerTaskChange{}, runnerrecord.CorruptSystemPoolRegistry()
 	}

@@ -106,12 +106,12 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 	if err != nil || record.Desired.ID != action.TargetID {
 		return hierarchyDeletionControllerEffects{}, hierarchydeletion.CorruptHierarchyDeletion()
 	}
-	allocation, err := (composeRunnerRepository(repository.store)).readRunnerAllocationEvidence(ctx, record, 0)
+	allocation, err := (composeRunnerRepository(repository.store)).ReadRunnerAllocationEvidence(ctx, record, 0)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	defer clearRunnerAllocationEvidence(allocation)
-	quota, err := runnerrecord.DecodeRunnerTenantQuota(allocation.quota.Value)
+	defer runnerrecord.ClearRunnerAllocationEvidence(allocation)
+	quota, err := runnerrecord.DecodeRunnerTenantQuota(allocation.Quota.Value)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
@@ -119,7 +119,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
-	system, err := runnerrecord.DecodeSystemPoolRegistry(allocation.system.Value)
+	system, err := runnerrecord.DecodeSystemPoolRegistry(allocation.System.Value)
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
 	}
@@ -143,15 +143,15 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionRunnerFin
 		{Key: runnerrecord.RunnerRuntimeOwnershipKey(action.TargetID)},
 		{
 			Key:         runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID),
-			ModRevision: allocation.owner.ModRevision,
+			ModRevision: allocation.Owner.ModRevision,
 		},
 		{
 			Key:         runnerrecord.RunnerTenantSlugKey(record.Desired.TenantID, record.Desired.Slug),
-			ModRevision: allocation.slug.ModRevision,
+			ModRevision: allocation.Slug.ModRevision,
 		},
-		{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.quota.ModRevision},
-		{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.host.ModRevision},
-		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.system.ModRevision},
+		{Key: runnerrecord.RunnerTenantQuotaKey(record.Desired.TenantID), ModRevision: allocation.Quota.ModRevision},
+		{Key: runnerrecord.RunnerHostSlotKey(record.Allocation.Slot), ModRevision: allocation.Host.ModRevision},
+		{Key: runnerrecord.SystemPoolRegistryKey, ModRevision: allocation.System.ModRevision},
 	}
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationDelete, Key: runnerrecord.RunnerOwnerKey(record.Desired.OwnerKind, record.Desired.OwnerID, action.TargetID)},
