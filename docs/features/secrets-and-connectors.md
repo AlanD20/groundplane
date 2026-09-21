@@ -1,7 +1,5 @@
 # Reusable Secrets and Connectors
 
-## Purpose and scope
-
 Reusable Secrets store operator-supplied values once at Project or Platform
 scope. Consumers resolve a Project value before the Platform fallback. An
 S3-compatible Connector is instead owned by one Environment and records where
@@ -18,7 +16,7 @@ This document owns the feature behavior. Exact REST and CLI shapes remain in
 [the Blueprint contract](../blueprint.md), and Backup use and qualification in
 [Backups](backups.md).
 
-## Functional requirements
+## Configuration and behavior
 
 ### Reusable Secrets
 
@@ -53,7 +51,7 @@ Desired-state references do not block deletion. Later resolution uses the
 remaining normal fallback or fails when no value remains.
 
 Exact execution pins are different from desired references. Existing Script
-source guards remain in force. Under [ADR 0079](../decisions/0079-pinned-task-configuration-recovery.md),
+source guards remain in force. Under [Service release and recovery](../decisions/service-release-and-recovery.md#recover-the-pinned-configuration-not-current-configuration),
 a recoverable Task also blocks deletion of its exact Secret value with
 `resource.in_use` until recovery/retry authority releases it. Reservation,
 deletion admission, Retry and finalization must fence the same membership.
@@ -99,89 +97,17 @@ Backup Policy, any Recovery Point, or orphan authority that still retains the
 Connector. Failed or uncertain remote cleanup must retain the credential and
 reference authority needed for retry and diagnosis.
 
-## Non-functional requirements
+## Security and availability
 
-- Reusable Secret and direct Connector ciphertext use the Controller's age
-  protector. Metadata, indexes, ownership, uniqueness, ciphertext, tombstones,
-  and protected replay commit under the relevant fixed-revision fences.
-- Protected idempotency evidence for a reusable Secret stores only the value's
-  SHA-256 inside encrypted intent. No public plaintext digest is exposed.
-- Connector responses expose credential source metadata only. Direct values,
-  resolved Secret values, provider diagnostics, object locators, and immutable
-  object discriminators remain private.
-- Credential delivery is fenced to the exact active Task assignment, step, and
-  purpose. Header, chunk, and end records repeat that tuple. S3 credential
-  slots are bounded to 256 KiB and individual chunks to 32 KiB. Transient bytes
-  are cleared after consumption and on every terminal, cancellation,
-  disconnect, or reconnect path.
-- The Agent constructs the S3 client's static credential provider only for the
-  active assignment. Go strings and SDK, HTTP, or TLS internals may copy and
-  retain credentials until the operation terminates; the implementation must
-  drop those references at terminal cleanup and must not claim complete
-  in-process zeroization.
-- The S3 adapter must not consult ambient credentials, proxy, redirect,
-  logging, or custom-CA configuration. A credential or endpoint failure is an
-  execution failure, not a reason to mutate Connector intent.
-- A provider is conformant only after it proves the conditional object create,
-  multipart completion, delete, immutable metadata, and VersionId/ETag rules
-  required by the Backup contract. CRUD success is not provider qualification.
+Values are encrypted with the Controller's age protector. Credential delivery is
+limited to the exact active operation. Ordinary responses and diagnostics must
+not disclose values; transient references are released after use. GP cannot
+promise complete in-process zeroization of copies held by SDK or TLS internals.
 
-## Technical design
+The S3 adapter uses the declared endpoint and credentials, not ambient host
+credentials or proxy settings. Connector CRUD does not qualify a provider or
+prove that Backup/Restore works. Those workflows remain incomplete and deferred.
 
-[ADR 0030](../decisions/0030-reusable-secret-record-and-fallback.md) owns the
-reusable Secret record, fixed-revision Project/Platform fallback, value limits,
-and delete finalizer. [ADR 0045](../decisions/0045-connector-contract-and-credentials.md)
-owns Connector validation, encrypted direct credentials, late-bound Secret
-references, S3 adapter responsibility, transient credential delivery, and
-persistence.
-
-Reusable Secret metadata and ciphertext are separate records. A Connector has
-one Environment primary, owner and name indexes, and an optional encrypted
-credential bundle. Its finalizer removes those records after reference and
-remote-safety checks, while protected replay identity survives for its defined
-retention window.
-
-The Controller owns policy, scheduling, credential resolution, and transient
-slot authorization but never handles artifact bytes. The Agent's typed
-S3-compatible adapter owns SDK Put, Get, Head, and Delete. Backup source
-adapters own capture and restore formats, not object-store transport.
-
-## Acceptance
-
-Reusable Secret proof covers Project and Platform ownership, scoped uniqueness,
-fixed-revision fallback, stable-id scope checks, env-var and file validation,
-the 255 KiB boundary, value masking and explicit reveal, stdin create, protected
-replay, finalizer success, and failure/timeout/abort visibility restoration.
-
-Connector proof covers endpoint, bucket, prefix, region, and path-style
-validation; mixed direct and Secret-backed credentials; rotation through
-late-bound fallback; redacted reads; protected replay; reference-blocked and
-successful deletion; bounded transient slot cleanup; and negative tests for
-ambient SDK configuration. Provider qualification separately proves the exact
-immutable-object and conditional-operation contract against the selected live
-target.
-
-## Current status
-
-The [capability index](../capabilities.md) records qualification for reusable
-Secret lifecycle and Environment S3-compatible Connector lifecycle. That does
-not prove credential use in an actual Backup, Restore, or production recovery.
-Those execution and provider gates remain part of the Backup recovery gap.
-
-The deletion-side recovery-pin guard has local regression coverage for initial
-admission, direct and hierarchy finalization, Retry and malformed membership.
-The `infra/tasksecretpins` module stages exact memberships with source/deletion
-fences, supplies a constant-size atomic activation fragment, and releases members
-in bounded batches only after an explicit release transition. Interrupted
-preparation can be abandoned from its durable descriptor, with Task and active
-operation absence checked on every mutation. Blueprint/Entry desired publication
-and ordinary Release publication now activate the selected exact pins atomically
-with their Task. Failed attempts retain them; Retry transfers the active attempt
-without copying Secret values. Successful completion authorizes bounded cleanup.
-Expiry checks the newest attempt's retention and recovery state, with a root
-revision fence against a retry that starts and finishes during the check.
-Startup abandons unpublished preparation and resumes authorized release; the
-scheduler drains releases before daily history pruning. H18 records actual local
-publication, acknowledgement, Retry, expiry and deletion checks. Remaining file
-writers and live recovery still require qualification; these tests do not qualify
-production hosting.
+[Storage and idempotency decisions](../decisions/storage-and-idempotency.md)
+explain Secret ownership and resolution. [Backup recovery](../decisions/backup-recovery.md)
+records provider requirements and credential retention during remote cleanup.

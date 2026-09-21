@@ -1,20 +1,19 @@
-# Groundplane Go Coding Standards
+# Go and interface standards
 
-Coding standards, conventions, and architectural rules for the Groundplane
-Go codebase (Controller, Agent, CLI). Companion to `architecture.md` (the
-layout and principles) and `mvp.md` (the product contract). Adapted from
-the mvmctl codebase's proven rules.
+These rules define allowed dependencies and implementation boundaries. They are
+not a duplicate build recipe. [Architecture](architecture.md) explains ownership;
+[delivery](delivery.md) owns testing and release gates.
 
-## 1. Package structure and import matrix
+## Import boundaries
 
 | Path | Purpose | Imports from | NEVER imports |
 | --- | --- | --- | --- |
 | `cmd/groundplane` | CLI entry — thin: init ctx, init logging, run root | `internal/app`, `internal/cli` | anything else |
 | `cmd/controller` | Controller entry — root daemon | `internal/app` | anything else |
-| `cmd/agent` | Agent entry — the ECS-agent container | `internal/app` | anything else |
+| `cmd/agent` | Agent entry — the Agent container | `internal/app` | anything else |
 | `internal/app` | Composition roots only: construct concrete modules, register transports, run and shut down each binary | everything its binary needs | product validation, persistence transactions, rendering, task sequencing, or feature behavior |
 | `console/` | Build-tagged stdlib-only embedded Vite assets | stdlib only | every internal or external package |
-| `internal/cli/` | Cobra commands — one file per noun, zero logic; `common/` = error handler + output | `pkg/api`, `pkg/errs` (error plumbing only), `internal/cli/common`, `internal/common` | `internal/controller`, `internal/agent`, `internal/infra`, `internal/adapters`, registered Component modules |
+| `internal/cli/` | Cobra commands — parsing, transport and presentation; `common/` = error handler + output | `pkg/api`, `pkg/errs` (error plumbing only), `internal/cli/common`, `internal/common` | `internal/controller`, `internal/agent`, `internal/infra`, `internal/adapters`, registered Component modules |
 | `internal/controller/` | API server, task sequencing, serialization locks, renderers, secret store, scheduler | `internal/core`, `internal/adapters`, `internal/infra`, `internal/common`, `component-sdk`, `pkg/api`, `pkg/errs` | `internal/cli`, concrete registered Component implementations |
 | `internal/agent/` | gRPC client, worker pool, compose applier, materializers | `internal/core`, `internal/infra`, `internal/common`, `pkg/errs` | `internal/controller`, `internal/cli`, `internal/adapters`, `internal/components` |
 | `internal/core/` | Domain model + desired-state schema (Blueprint) — pure | `internal/common`, `component-sdk`, `pkg/errs` | `internal/infra`, `internal/controller`, `internal/agent`, `internal/adapters`, concrete registered Components, `internal/cli` |
@@ -27,306 +26,118 @@ the mvmctl codebase's proven rules.
 | `pkg/errs/` | The single error type + codes | stdlib only | everything — leaf package |
 | `proto/` | The agent channel contract — generated Go from `.proto`, never hand-edited | — | — |
 
-**Key rule:** named `internal/common/*` packages, `pkg/errs`, and `pkg/api` are
-leaves. The
-CLI never imports `internal/infra` (it must stay buildable without etcd,
-docker, systemd, age). Go's circular-import detection enforces the matrix:
-a violation is a compile error, not a review finding.
 
-## 2. Layer rules
+Go rejects import cycles, but not every forbidden dependency. Repository
+architecture gates enforce additional rules; compilation alone does not prove
+compliance. Named common packages are leaves, not an importable catch-all.
+Cross-domain transactions stay with their explicit coordinator rather than being
+split into independent commits merely to move code.
 
-- **CLI layer** — argument parsing, output, user-facing text ONLY here.
-  Commands call `pkg/api`-generated clients, never core/infra directly.
-  `PersistentPreRunE` on root sets up logging level (the `--debug` /
-  `--verbose` chain from architecture.md).
-- **Controller layer** — the single backend (locked): validates, sequences,
-  renders, schedules, serializes. Every handler is typed; request
-  validation happens at the API boundary.
-- **Agent layer** — dumb executor (locked): pulls tasks, runs the worker
-  pool (`max_concurrent`), applies Compose, materializes files at 0600,
-  acks. No decision authority.
-- **Core layer** — pure model + Blueprint schema. No infra imports, so it
-  tests in isolation.
-- **Adapters layer** — contract shapes (see architecture.md). One package
-  per kind. Core never switches on kind; the registry is the only entry.
-- **No generic extension points.** "This is extensible for future use" is a
-  smell. Prefer typed named methods that say exactly what they do
-  (`ProvisionDatabase`, `Dump`, `Restore`). Add methods when needs arise.
+## Modules, interfaces and types
 
-## Interface and type rules (locked: ADR 0056)
+- Composition roots construct and connect modules; they do not validate product
+  input, sequence Tasks, render configuration or own transactions.
+- The Controller decides and publishes work. The Agent executes sealed work and
+  reports evidence; it does not select new desired state or recovery targets.
+- Use concrete types and concrete constructor returns by default. An interface
+  needs real varying behavior, a side-effect seam, process port or standard
+  library contract. Declare it in the consuming package with only needed methods.
+- Do not create interfaces just for mocks, mirror a concrete implementation or
+  recover one through an assertion. Pure logic takes concrete inputs and results.
+- Persisted, JSON, protobuf, Blueprint and public API models have concrete fields.
+  Parse external values into validated types at their boundary. Use semantic
+  identifiers and closed variants where interchange would otherwise compile.
+- Conversion is explicit: no reflection, unsafe conversion, JSON round trips,
+  untyped maps, double assertions or TypeScript double casts. Dynamic boundary
+  assertions must handle failure and cannot recover an internal implementation.
+- Add named operations for actual needs, not generic extension points for imagined
+  future use. Components remain pure public-SDK planners with no direct I/O,
+  plaintext Secrets, raw Agent payloads or arbitrary command declarations.
 
-- Concrete types are the default. Implementing constructors return concrete
-  structs or pointers, not locally declared interfaces.
-- An interface requires a real varying behavior, a side-effect test seam, a
-  process port, or an existing standard-library contract.
-- Interfaces are declared by the consuming package and contain only methods
-  that consumer calls. Do not mirror an implementation's full method set.
-- Persisted, JSON, protobuf, Blueprint, and public API models never contain
-  local interface fields.
-- Never hide a concrete implementation behind an interface and recover it with
-  a type assertion. Add the required behavior to the owning seam or keep the
-  concrete type.
-- Do not introduce interfaces solely for mocks. Pure logic uses concrete
-  inputs/results; fakes belong only at real side-effect seams.
-- External data is parsed into validated concrete values at HTTP, CLI,
-  protobuf, etcd, YAML, Docker, systemd, filesystem, registry, and object-store
-  boundaries.
-- Semantic identifiers and closed variants use types that prevent accidental
-  interchange where that error would otherwise compile.
-- Conversion is explicit. Reflection, `unsafe`, JSON round trips,
-  `map[string]any`, double assertions, and TypeScript `unknown as T` or double
-  casts are prohibited conversion strategies.
-- A type assertion is allowed only at a true dynamic language or
-  standard-library boundary, must handle failure, and must not recover a local
-  implementation choice.
+## Errors
 
-## 3. Error handling (locked: one error type)
+Use [pkg/errs](../pkg/errs) as the single error taxonomy. Constructors take a
+closed Kind; its descriptor owns public code, class and HTTP status. Do not add
+bespoke error types, status overrides or string matching. Public codes are stable
+API values, not internal constructor choices.
 
-`pkg/errs` is the **only** error type in the codebase. No multi-type
-assertion chains, no bespoke error structs.
+Wrap private causes for diagnosis without exposing provider or secret text.
+Internal/request-failure details remain generic. Compare Kind or use semantic
+helpers; distinct Kinds can intentionally share a public code. CLI error handling
+and Controller problem responses each use their shared adapter rather than
+formatting errors in feature code. Cancellation and broken-pipe behavior remain
+with those adapters.
 
-```go
-// Simple — public Code, Class, status, and Op derive from closed internal Kind
-errs.New(errs.KindServiceNotFound, "service not found: app-api")
+## Context, processes and concurrency
 
-// Wrapping a cause
-errs.Wrap(errs.KindDeployInFlight, err)
+Every side-effecting repository or infrastructure function takes `context.Context`
+first. Fixed standard-library signatures may instead capture the operation context
+or use bounded cleanup. Propagate cancellation and join goroutines; do not leak
+unbounded workers. Agent concurrency follows its configured task bound. Controller
+operation owners provide serialization, not scattered ad hoc locks.
 
-```
+Subprocesses use [the shared Runner](../internal/common/runner) for deadlines,
+logging and cancellation. Raw execution exceptions are limited to:
 
-- Kinds are the closed internal constructor vocabulary. Each Kind maps in one
-  descriptor to exactly one public Code, Class, and HTTP status. Constructors
-  accept Kind only; no Code constructor, status override, or Class override
-  exists. `KindMalformedRequest` and `KindValidationFailed` intentionally share
-  `validation.failed` while remaining distinct 400 and 422 errors.
-- Codes are dot-namespaced constants, grouped by domain:
-  `service.not_found`, `deploy.in_flight`, `strategy.not_implemented`,
-  `attach.not_found`, `zone.not_found`, `slug.conflict`, … The
-  `code` string **is** the RFC 7807 `code` the API returns, verbatim.
-- `Class` categorizes semantically: `bad_request`, `validation`, `not_found`,
-  `conflict`, `retryable`, `internal`, and the narrow
-  framework request classes. Retry decisions derive from Class; HTTP status is
-  fixed by the Kind descriptor.
-- `errs.Wrap` preserves a private cause for logging and `errors.Is`, while the
-  public detail remains safe and Kind-owned.
-- `KindInternal` and `KindRequestFailed` constructor messages are private
-  diagnostics: problems always expose `Internal Server Error` as title and
-  detail. `KindNotImplemented` remains an explicit HTTP 501 response.
-- Checking: `errors.Is(err, errs.New(errs.KindServiceNotFound, ""))`,
-  `errs.KindOf`, or semantic helpers (`errs.IsNotFound`,
-  `errs.IsRetryable`). `errors.Is` compares Kind, never public Code. Never
-  string-match error messages.
-- One shared handler: the CLI's `common.HandleErrors` (BrokenPipe →
-  silent exit, `context.Canceled` → propagate, DomainError → code+message
-  display, unexpected → generic message, exit 1). The Controller maps the
-  taxonomy to RFC 7807 problem+json. Nothing else formats errors.
+- the infrastructure Docker SDK/CLI bridge;
+- infrastructure systemd unit control;
+- validated staged-binary handoff;
+- the fixed [PostgreSQL helper](../internal/postgres16helper) and its command,
+  where closed child execution and Linux process-control operations cannot be
+  represented by Runner.
 
-## 4. Context propagation
+These exceptions do not extend to callers. A new exception needs an explicit
+reason recorded with the change, not an undocumented bypass.
 
-Every repository method and every infrastructure function with side
-effects takes `ctx context.Context` as its **first parameter** — no
-exceptions. Signal handling (SIGINT/SIGTERM) in `cmd/*` cancels the root
-context; task aborts and in-flight step cancellation thread through it.
+## Shared utilities and input handling
 
-Implementations of fixed standard-library interfaces such as `io.Reader.Read`
-and `io.Closer.Close` are the only signature exception. They must capture the
-operation context at construction or use a bounded independent cleanup context;
-private side-effect helpers still take `ctx` first.
+Use [structured logging](../internal/common/logging) and `log/slog`, never secret
+values or interpolated diagnostic strings. CLI presentation is separate from
+logging. Logging precedence is debug, verbose, environment, config, then WARN;
+the log file retains DEBUG. No alternate logging framework or setup per feature.
 
-## 5. Subprocess execution (locked: the Runner)
+Use [the config reader](../internal/common/config) with strict keys and
+fail-fast validation. Precedence is defaults, file, environment, flags. Defaults
+belong in one owner and must be part of the contract, not silent fallbacks added
+in executors. Controller and Agent do not add independent YAML readers.
 
-ALL subprocesses go through `internal/common`'s Runner
-(`Runner.Run(ctx, opts)` / `Runner.Stream(ctx, opts)` with `RunCmdOpts`) —
-never raw `os/exec` outside of it. This is the Agent's heart: docker
-exec, pg_dump, psql, systemctl, staged-binary swaps all flow through one
-abstraction with uniform logging, timeouts, and testability (FakeRunner).
+Use [the ID package](../internal/common/ids) for stable prefixed ULIDs, not ad hoc
+random/time formatting. Use `time.RFC3339` for timestamps. CLI commands perform
+parsing, scoped resolution, transport and presentation; they never import host
+infrastructure. Empty tables still show headers. Command names and aliases are
+owned by the command source and [API/CLI conventions](api-cli.md).
 
-Documented exceptions (must be listed here before being written):
-- the docker driver inside `internal/infra` (SDK/CLI bridge),
-- systemd unit control inside `internal/infra`,
-- the staged-binary swap handoff (validate-before-exec, documented in
-  the controller update task),
-- the fixed PostgreSQL 16 image helper at `cmd/postgres16-helper` and its sole
-  implementation package `internal/postgres16helper`, solely for raw `os/exec`
-  and Linux process-control syscalls (`execve`, pidfd, `PDEATHSIG`, process
-  groups, and `wait4`) that the common Runner cannot express. Its public
-  protocol and PostgreSQL child argv remain closed; the exception does not
-  extend to callers or other PostgreSQL subprocesses.
+## Code style and prohibited patterns
 
-If a new raw-exec site is needed, add it to the exceptions with a reason
-in the same commit, or route it through the Runner.
+- Package and directory names agree; use descriptive names without underscores
+  or implementation-recovery aliases. Nullable values with meaningful zero values
+  use pointers. Error messages start lowercase.
+- No `goto`, implicit `init()` wiring, or reflection without an accepted decision.
+  No untyped model/validator fields; unavoidable standard-library boundaries are
+  not permission to propagate `any` internally.
+- Use address literals or a pointer helper, not `new(T)` for pointer construction.
+  Do not discard errors without an explicit reason.
+- Do not validate compile-time constants with runtime regexes or copy records
+  merely to restate the same fields. Copies needed to isolate mutable input or
+  protect immutable ownership are necessary, not redundant transformations.
+- New handwritten production files are limited to 600 physical lines and test
+  files to 1,000; generated files are excluded. Existing oversized files may
+  shrink but not grow without a specific approved exception. A pass-through split
+  is not a coherent module.
 
-## 6. Logging
+## Testing and enforcement
 
-- Only `log/slog` — never `log.Printf`, `fmt.Fprintf(os.Stderr, …)`, or a
-  third-party framework. The CLI is the only layer that prints user-facing
-  output.
-- Everything goes through the unified setup in `internal/common` (one
-  `SetupLogging` per entry point; level chain `--debug` > `--verbose` >
-  `GROUNDPLANE_LOG_LEVEL` > config `log.level` > WARN; file + stderr,
-  file always DEBUG).
-- Never log secret values — consistent with the locked reveal rule.
-- Structured attributes (key=value), never interpolated strings.
+Follow [delivery's testing policy](delivery.md). Straightforward wiring and static
+text/schema/declaration checks do not justify tests. Behavioral tests must name a
+[QA matrix](qa-matrix.md) case and explain the concrete failure they detect.
+A missing rationale comment alone does not make a useful regression disposable.
+Coverage percentages are diagnostic, not product readiness.
 
-## 7. Configuration
+Pure behavioral checks, hermetic side-effect checks and real operator journeys
+have different evidence boundaries. Formatting, generation, compilation and
+architecture gates are separate from product cases. The Makefile and workflows
+own executable gate commands; do not duplicate them here.
 
-- One config reader in `internal/common`. `internal/controller` and
-  `internal/agent` never parse YAML themselves.
-- Merge order everywhere: defaults < config file < env < flags.
-- Strict keys, fail-fast validation at load (see architecture.md
-  "Configuration").
-
-## 8. ID generation
-
-ULID ids via `internal/common`: `common.NewID("env")` — no raw
-`rand`/`time.Now`/`fmt.Sprintf` ad-hoc generation anywhere. One
-implementation, all three binaries. (`<kind>_` prefix + ULID body, per
-the stable-identifiers lock — the canonical prefix table lives in
-`mvp.md`'s "Stable identifiers" section; a new entity gets a row there
-in the same commit that adds it, never a guessed abbreviation.)
-
-## 9. CLI patterns
-
-- Cobra; one command file per noun (`service.go`, `zone.go`, …); the tree
-  matches api-cli.md verbatim (flat nouns, verbs last, scope resolved
-  once).
-- Aliases for humans: `ls`+`list`, `rm`+`remove`+`delete`+`del`.
-- Table commands always show headers, even when empty.
-- Every `RunE` wraps `common.HandleErrors`. User-facing output lives in
-  `internal/cli/common` — nowhere else.
-- `completion bash|zsh|fish` from Cobra; root `PersistentPreRunE` owns
-  verbose/debug and config loading.
-
-## 10. Concurrency
-
-- Agent worker pool: bounded by `max_concurrent_tasks`, never unbounded
-  goroutines; every task gets a context that can be cancelled (abort).
-- Controller: deploy/rollback serialization per service (locked) — one
-  lock, one place, no ad-hoc mutexes.
-- No goroutine leaks: every spawned goroutine must be joinable (WaitGroup/
-  errgroup) or tied to a context lifetime. Races are CI failures
-  (`-race` in tests).
-
-## 11. Banned patterns
-
-- `reflect` — banned unless approved via ADR (use `errors.As`, type
-  switches, interfaces, generics).
-- `goto` — banned.
-- `interface{}` / `any` — banned for model fields and validators
-  (required by stdlib where unavoidable, e.g. `json.Decoder.Decode`).
-- `log.Printf` / `fmt.Fprintf` below the CLI.
-- `init()` globals — everything wired explicitly in `internal/app`.
-- registered Component I/O, CLI/subprocess use, backend-shaped parameters,
-  secret reveal, raw Task/Agent payload construction, and arbitrary command
-  declarations — Components are pure capability planners.
-- `new(T)` for pointer types — use `&Type{}` or a `ptr` helper.
-- Implicit defaults — `if x == "" { x = default }` banned unless
-  approved via ADR; pass values explicitly.
-- 1:1 deep copies — return repo results directly; copy only when
-  transforming fields or changing types.
-- Cargo-cult validation — don't validate compile-time constants with
-  regex.
-- Discarded errors — `_ =` only with a comment or an explicit reason.
-
-## 12. Code style
-
-- Directory name = package name. No underscores, no `Xcore` aliases; bare
-  names (`controller`, not `controllercore`).
-- Timestamps: `time.RFC3339` constant — no hardcoded format strings.
-- Error messages start with lowercase (Go convention).
-- `*T` for every nullable field where the zero value has meaning.
-- Overridable defaults in ONE place (`internal/common`), never duplicated.
-- Every side-effecting function: `ctx` first, then inputs.
-- New handwritten production files are at most 600 physical lines; new
-  handwritten test files are at most 1,000. Generated files are excluded.
-- A pre-existing file above its applicable limit may shrink incrementally but
-  may not grow. Narrow correctness/security exceptions require an exact
-  path-specific record and cannot cover a directory or future file.
-- File splitting must create coherent modules. Pass-through files that only
-  relocate methods do not satisfy the size rule.
-
-## 13. Testing (tiered)
-
-- **L0 — pure function tests**: renderers, the YAML serializer, ULID
-  generation, config validation. Table-driven, no mocks.
-- **L1 — hermetic tests**: FakeRunner + fake docker driver + in-memory
-  etcd store — the Agent's step executor and the Controller's task
-  sequencing run against doubles; no host side effects.
-- **L2 — real-host system tests**: CLI against a real Controller+Agent on
-  a host; capability acceptance journeys exercise deploy, rollback, Backup and
-  recovery through the supported operator surfaces.
-- Every behavioral test names its [QA matrix case](qa-matrix.md) and carries a
-  `// Rationale:` header explaining the requirement or concrete failure it guards.
-  The assertions must actually detect that failure. Repeating the test name,
-  calling a helper, or increasing a coverage number is not a rationale.
-- Review existing tests against [the test-review rule](qa-matrix.md#existing-test-review).
-  Keep useful regressions and supply missing rationale/case links. Remove tests
-  with no defensible contract or failure-prevention reason, including tautologies
-  and redundant coverage-only checks. A missing comment alone does not prove that
-  a test is useless. Record deletions and the behavior that remains unproved.
-- Build, formatting, generation and architectural checks remain separate delivery
-  gates with their own reasons. They cannot count as passing product cases.
-- Go tests run with `-race -count=1`. Collected line/statement coverage is diagnostic
-  only, never a readiness target or a reason to add or retain a test. Product
-  coverage means documented cases and variants with adequate execution evidence.
-
-## 14. CI gate (mirrors the mandatory local checks)
-
-```bash
-test "$(node --version)" = "v24.19.0" && test "$(npm --version)" = "11.17.0"
-cd console && npm ci && npm test && npm run build && cd ..
-make console-verify
-make generate
-git diff --exit-code openapi.json internal/cli/apiclient/generated/client.gen.go console/src/lib/api.generated.ts proto/agentpb
-go mod tidy && git diff --exit-code
-make format-check
-make architecture-release-check
-go tool staticcheck -tags groundplane_console ./...
-go vet -tags groundplane_console ./...
-go test -tags groundplane_console ./... -count=1 -race -coverprofile=coverage.out -covermode=atomic
-make backupstage-host-acceptance-compile
-go build -tags groundplane_console -o bin/controller ./cmd/controller
-make console-release-smoke
-make agent-image-smoke
-```
-
-Integrated-journey and release qualification require this complete local gate,
-matching CI. Bounded changes follow the scoped proof and completion definitions in
-`delivery.md`; an implementation commit alone is not qualification. Generated
-contracts (proto Go, OpenAPI clients) are regenerated when their sources change,
-never hand-edited.
-
-For 0.0.1, the owner-approved [release deferral](delivery.md#approved-architecture-debt-for-001)
-permits an exact snapshot of existing structural findings, not new violations.
-`make architecture-check` remains available for strict compliance; neither its
-baseline nor the architecture requirements are relaxed.
-
-## 15. Verification checklist (before declaring code complete)
-
-- [ ] `go build ./...` passes
-- [ ] `go vet ./...` passes; `gofmt -l .` empty; lines ≤ 120
-- [ ] `ctx context.Context` is the first param in every side-effecting function
-- [ ] No `reflect`, `goto`, `log.Printf`, `init()`, `new(T)`, `os.Exit()` in handlers
-- [ ] No `_ =` discarded errors without reason
-- [ ] Error messages start with lowercase; timestamps use `time.RFC3339`
-- [ ] Every new error uses `errs.New/Wrap/WrapMsg` with a dot-namespaced code; code added to the RFC 7807 surface
-- [ ] All subprocesses through the Runner (or listed in the exceptions)
-- [ ] New config keys go through the one reader and are documented in the
-      Controller config or Controller-owned Agent runtime contract
-- [ ] New ids via `common.NewID(kind)`, never ad-hoc
-- [ ] New registered Component implementation imports only `component-sdk` and
-      approved stdlib, consumes only declared capabilities, and adds no core,
-      persistence, API, or Agent implementation branch
-- [ ] Component configuration and intents are closed typed variants; no
-      `any`, raw JSON, reflection, or generic map crosses the boundary
-- [ ] Tests: tiered (L0/L1/L2), `// Rationale:` headers, `-race` clean
-- [ ] Generated contracts regenerated, diff checked in
-- [ ] The 1:1 rule holds: every new Console action has a CLI command and an API endpoint (the OpenAPI diff proves it)
-- [ ] Interfaces are consumer-owned, justified by a real seam, and never
-      followed by implementation-recovery assertions
-- [ ] External values are parsed once at their boundary; no unsafe, reflective,
-      JSON-round-trip, untyped-map, or double-cast conversion was added
-- [ ] `internal/app` contains composition only; capability behavior lives in
-      its owning module
-- [ ] Architecture release gate and pinned Staticcheck pass; any approved
-      structural deferral is reported separately from strict compliance
+The production restructuring was implementation-only. Existing tests and frozen
+gate metadata were not migrated or run; current compliance is not established.
+See [remaining qualification](issues/runtime-qualification.md#architecture-and-tests).

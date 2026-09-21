@@ -1,102 +1,61 @@
-# Safe Controller and Agent updates
+# Controller and Agent updates
 
-## Purpose and scope
+GP updates must preserve application containers, data, routing and durable Tasks.
+The Console can briefly disconnect while the Controller restarts, but it must
+recover the result of the same update operation. A successful software update is
+not an application redeployment.
 
-Update Groundplane through its normal Console, CLI and API without interrupting
-application workloads or relying on a failed candidate to recover. Keep application
-containers, data, routing and durable Tasks intact. The Console may briefly
-reconnect, but it must recover the result of the same update operation.
+## Choosing what to update
 
-[ADR0074](../decisions/0074-native-controller-upgrade-recovery.md) defines native
-Controller activation and recovery; [architecture.md](../architecture.md) defines
-the shared process boundaries. Application Scripts do not perform self-update.
+Agent and Controller have independent releases. Fresh tagged installation uses
+`vX.Y.Z`; subsequent updates use `controller/vX.Y.Z` and `agent/vX.Y.Z`.
+Agent-only updates do not replace the Controller. Controller-only updates preserve
+the enrolled Agent. Updating both performs the Controller operation first and then
+the Agent operation. If the second fails, the completed Controller update is not
+silently undone.
 
-## Functional requirements
+Use [installation and updates](../deployment.md) for commands and artifact
+selection. An Agent update pins its exact image digest; changing that digest with
+the same idempotency key is a conflict.
 
-- Agent-only updates select an explicit immutable Agent image independently of
-  the Controller release. Its digest is part of the protected request identity
-  and frozen Task; a changed digest with the same idempotency key conflicts.
-- Tagged fresh installations use combined `vX.Y.Z` releases. Updates select only
-  `controller/` and `agent/` releases. A combined tag publishes those component
-  tags at the same commit, reusing its artifacts. See [deployment](../deployment.md#independent-release-scopes).
+## Admission and activation
 
-- Before activation, identify the current and candidate releases, check their
-  compatibility, and validate private staging and recovery state.
-- An unstaged requested release returns `validation.failed` before Task publication.
-  Missing store structure or files inside an existing release remain storage errors;
-  they must not be disguised as an ordinary absent candidate.
-- Pause new Agent assignments and drain admitted sends before checking for active
-  work. Busy work returns `resource.in_use`; an update must not abort it.
-- Wait for active work within the update's drain bound. Do not replay application
-  Scripts or migrations as part of the update.
-- If preparation fails or is cancelled before publication, release only that
-  operation's pause. Keep removal/revocation restrictions and newer Agent
-  generations intact. Reconnecting must not bypass a pause.
-- A committed replacement, or one whose commit result is unknown, must not reopen
-  the original Agent generation. Reconcile an unknown result before dispatch resumes.
-- Retain the update's phase and result across Controller interruption. Restore
-  unfinished Agent holds from the durable Task before opening its channel.
-- Recover a compatible predecessor binary and Agent image after candidate startup
-  or readiness failure. Recovery must work when the candidate cannot run.
-- Report a failed update with recovered health as a failed update, not success.
-  Reject incompatible persistent formats before replacing the running binary.
+The candidate must be staged, intact and compatible before activation. An unstaged
+release is rejected before Task publication. Corrupt staging remains a storage
+error, not an ordinary missing candidate.
 
-## Non-functional requirements
+GP pauses new Agent assignments and drains admitted sends before replacing it.
+Busy work is not aborted to make an update proceed. The bounded drain can reject
+an update with `resource.in_use`; let the existing work finish before trying again.
+Application Scripts and migrations are not replayed during an update.
 
-- Preserve secret isolation, prior runtime identities and durable recovery evidence.
-- Preserve operation ownership during cancellation, reconnect, concurrent lifecycle
-  changes and lost commit responses. Never automatically retry unknown application
-  effects or weaken a permanent lifecycle restriction to release an update pause.
-- Keep staging and recovery private. Use the immutable input, compatibility and
-  timing rules in ADR0074; do not add arbitrary host execution or new update surfaces.
-- Keep Console/CLI/API parity. Production, provider and other-host changes need
-  explicit operational approval; a feature requirement is not that approval.
+A rejected preparation releases only its own temporary pause. Removal restrictions
+and newer Agent generations remain protected. Reconnect cannot bypass the pause.
+When publication may have committed, GP retains the hold until it resolves the
+outcome instead of reopening the previous generation.
 
-## Technical design
+## Failure and interruption
 
-| Responsibility | Owner |
-| --- | --- |
-| Agent sessions and assignment admission | [agentchannel](../../internal/controller/agentchannel/) |
-| Agent replacement and lifecycle reconciliation | [localagent](../../internal/controller/localagent/) |
-| Native Controller update and recovery | [controllerupgrade](../../internal/controller/controllerupgrade/) |
-| Host operations | [infra](../../internal/infra/) |
-| Wiring these modules together | [app](../../internal/app/) |
+The durable Task and private update journal retain the operation across Controller
+or client interruption. Startup restores unfinished assignment holds before the
+Agent channel opens. Follow the original Task or printed resume instructions;
+do not delete the journal or replace binaries manually to force progress.
 
-An update pause belongs to one operation and is reversible only before replacement
-publication. Permanent lifecycle restrictions are separate and remain in force.
-This separation lets rejected preparation resume work without reopening removed
-or replaced generations.
+Native recovery uses a compatible predecessor even if the candidate cannot start.
+An update that fails and recovers remains **failed**, not successful. Incompatible
+persistent formats must be rejected before replacing the running binary.
+Healthy process readiness alone does not authorize writes after ambiguous recovery.
 
-For an unknown publication result, an unchanged read cannot prove that the write
-did not commit. A same-value, primary-revision compare-and-swap establishes the
-ordering needed to resolve that uncertainty. Keep the hold until lifecycle
-reconciliation resolves it; restart recovery uses the original durable Task.
-ADR0074 specifies the native journal, predecessor guard and activation sequence.
+Ordinary Controller restart may restart its Agent, but not etcd. A host reboot
+necessarily interrupts the machine; the requirement is automatic return to
+service without operator repair, not uninterrupted service while powered off.
 
-## Acceptance
+## Design and qualification
 
-Use real session-registry and lifecycle behavior, with test doubles only at
-storage and host boundaries. Adjacent tests must cover rejected preparation,
-overlapping permanent restrictions, reconnect, cancellation, send-drain races,
-unknown commit results and restart recovery. Retain the existing replacement,
-token and generation checks. Run affected concurrency tests with the race detector.
+[Release packaging and update recovery](../decisions/release-packaging.md) explains
+staging, the independent predecessor guard and durable acceptance. The
+[platform runtime](../decisions/platform-runtime.md) explains process ownership.
 
-The full operator journey must prove immutable staging, bounded drain,
-pre-activation cancellation, candidate failure, predecessor recovery and preservation
-of application workloads. Source inspection is not live qualification.
-Use the [verification policy](../delivery.md#verification-ladder) for focused checks,
-generation checks and final CI; all temporary state stays repository-local.
-
-## Current status
-
-Requirements were approved on 2026-09-10. Local implementation and bounded QA
-are recorded in [Agent admission](../acceptance/safe-updates.md),
-[native coordinator](../acceptance/safe-updates.md),
-[update surfaces](../acceptance/safe-updates.md) and
-[upgrade QA](../acceptance/safe-updates.md).
-
-Whole-build Tunnel continuity and remaining recovery qualification are unresolved.
-Live mutation checks are paused for the [storage incident](../acceptance/storage-integrity-incident.md).
-These records do not establish production readiness. Unfinished qualification
-is indexed in [capabilities](../capabilities.md); current user instructions
-determine operational permission.
+Historical update checks are in [acceptance](../acceptance.md#historical-evidence-register). Current source
+still needs the candidate-specific upgrade and connection-continuity cases in the
+[QA matrix](../qa-matrix.md); old incident pauses are not current host instructions.

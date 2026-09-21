@@ -1,200 +1,79 @@
 # Blueprint authoring and application
 
-## Purpose and scope
+A Blueprint describes desired Environment configuration using Compose plus GP
+extensions. It is not a record of running containers.
+[The Blueprint reference](../blueprint.md) owns syntax and accepted fields.
 
-Let operators inspect, validate and apply reproducible Environment desired state.
-A Blueprint contains decisions, not observations, generated paths, credentials or
-runtime artifacts. [blueprint.md](../blueprint.md) owns the complete grammar and
-execution semantics; this document routes authoring and publication design.
+## Read, edit, validate and apply
 
-## Functional requirements
+Use `environment blueprint show|validate|apply` in the CLI, or the Environment
+Blueprint editor in the Console. Export produces canonical single-file YAML.
+Import can accept a closed multi-file bundle.
 
-- The revisioned authoring singleton returns canonical single-file YAML, the
-  selected desired revision and `ETag`. Revision `0` means no desired head.
-  Validate and Apply require one exact quoted `If-Match`; stale input fails
-  without writes. [api-cli.md](../api-cli.md) owns the exact endpoints and commands.
-- Reconstruct authoring from normalized Compose and typed desired records, not
-  uploaded audit layout, rendered artifacts or partially loaded Console state.
-  Comments, anchors, aliases and file boundaries are not preserved. Script bodies
-  use literal YAML block scalars. Import still accepts a closed multi-file bundle.
-- Validate parses the same bundle as Apply and returns a non-destructive
-  `create | update | retain` diff without publishing any Task, revision or effect.
-  Apply accepts the latest desired input and publishes one reconcile Task.
-  [Latest-wins reconciliation](../decisions/0078-latest-wins-blueprint-reconciliation.md)
-  selects resource-level changes against verified applied inputs, supersedes
-  obsolete work, and seals each private execution unit after its safe handoff.
-- A Blueprint unit automatically superseded by a newer valid accepted input after
-  changing shared configuration may hand off forward repair without first restoring
-  the predecessor, but only after its executor is proven stopped and its exact
-  effects are accounted for. Accounted-but-diverged effects are neither unknown
-  nor applied success; successor planning uses those settled effects plus current
-  desired input.
-- Omitted existing resources are retained. Omission never deletes or renames;
-  ambiguous preservation fails closed. Only a resource's explicit protected
-  Remove action may remove it. The earlier Entry-omission deletion proposal is
-  superseded by this product-wide non-destructive rule.
-- The Console keeps drafts locally and supports view, edit, single-file or
-  closed-bundle import, export, validate and apply. The CLI uses
-  `environment blueprint show|validate|apply`, not a second `environment apply`.
+Export reconstructs normalized desired state. It does not preserve comments,
+anchors, aliases or source-file boundaries. Script bodies use literal YAML
+blocks. Drafts stay local until explicitly submitted.
 
-### Entry identity and values
+Read the desired revision before Validate or Apply and send that exact quoted
+`If-Match`. A stale revision fails without writes. Revision zero means no
+desired head. Validate parses the same input as Apply but creates no Task,
+revision or host effect; its diff is create, update or retain.
 
-An authored `x-gp-entry` key persists as `BlueprintKey`, separate from its env
-key or file path. New keys allocate stable Entry ids; existing source/exposure
-changes retain identity and choose exact immutable value generations. Destination,
-kind, numeric ownership and secret-storage changes are not in-place identity
-edits. Direct and Component-owned Entries have no Blueprint key and are preserved.
+Apply publishes one reconcile Task with immutable inputs. Follow its outcome;
+acceptance does not imply successful application. Required workload images must
+already exist in the host Docker daemon.
 
-Values and Entry-to-Environment routing may be prepared before publication, but
-remain inert until the sealed projection becomes the desired head. Task execution
-uses its captured generation, never a later source resolution. Reads use the
-current or cursor-pinned projection; a routing index is not a second desired
-authority. Explicit removal emits the required file/generated-env cleanup;
-omission alone does not authorize it.
+## Retention and identity
 
-## Non-functional requirements
+The intended rule is that omission retains existing resources, never deletes or
+renames them. **Current Entry reconciliation conflicts with this rule:** it can
+select omitted Blueprint-owned Entries for removal. Retain existing Entry keys
+until this [implementation gap](../issues/runtime-qualification.md#blueprint-entry-omission)
+is corrected and qualified.
 
-Input, staged records, rendered artifacts and complete transactions are bounded.
-Do not raise limits or truncate restoration evidence to make a large bundle fit.
-Validate source revisions, ownership and immutable digests before visibility or
-execution. Failed publication leaves no partial public revision. Retries and
-queued Tasks resolve their own sealed revision, not the latest desired head.
+Use the explicit protected Remove operation to delete a resource. Ambiguous
+preservation fails instead of guessing.
 
-## Technical design
+Blueprint Entry keys identify their reconciliation identity, separately from
+destination env keys or file paths. Source/exposure edits retain the Entry id;
+type, destination, file ownership and secret-storage class are not in-place
+identity edits. Direct and Component-owned Entries are preserved.
 
-[Latest-wins reconciliation](../decisions/0078-latest-wins-blueprint-reconciliation.md)
-owns the replacement for prebuilt whole-Environment execution and aggregate
-applied-state promotion. The implementation below predates that change; it must
-not be used to justify rejecting newer valid input or running obsolete units.
-Keep its safety fences until their resource-level replacements are connected.
+Existing Service runtime intent remains separate: applying a Blueprint must not
+restart a deliberately stopped or destroyed Service merely because its definition
+is still present.
 
-Its [forward-repair exception](../decisions/0078-latest-wins-blueprint-reconciliation.md#forward-repair-after-a-superseded-shared-configuration-write)
-is Blueprint-supersession handoff, not generic recovery. Cancellation alone never
-proves the old executor stopped. Unknown effects continue to fence conflicts;
-accounted-but-diverged effects remain visible and may leave affected Services
-unavailable until the successor succeeds; reads still report the actual observation,
-including `unavailable` or `degraded` where applicable. The handoff never reopens
-old forward work, restores a database, reverses a migration, rewrites history or
-changes unsuperseded failure and non-Blueprint recovery contracts. The earlier
-generic pinned-configuration restoration proposal remains unapproved.
+## Hooks and partial failure
 
-[Closed bundles](../decisions/0012-closed-blueprint-bundles.md) owns external input
-closure. [Staged publication](../decisions/0051-blueprint-staged-revision-publication.md)
-owns chunking, sealing, final publication, retries, cleanup and record/transaction
-bounds. [Direct desired mutations](../decisions/0058-revision-authoritative-direct-desired-mutations.md)
-uses that same revision authority; audit input is not execution input.
+Setup and migration hooks follow [Script rules](setup-scripts.md).
+For Custom backing hooks, first finish a standalone Attach before using its newly
+produced facts. A single Apply cannot create that hook-based owner and consume
+its new output in already-sealed files. Ready facts and credential reuse remain
+usable; see [Custom backing hooks](backing-services.md).
 
-### Bounded native predecessor references
+Retry/recovery use the captured input, not the latest desired document.
+Partial failure must remain visible. Pinned configuration recovery is limited to
+files that the failed operation was authorized to replace; it is not database
+restoration or migration reversal.
 
-Preparation captures and validates each current and optional retained native
-Release at one fixed revision. Exact native artifact bytes go into the candidate's
-existing `PriorRuntime` field before staging. Complete historical inputs remain
-transient validation evidence, not repeated aggregate-marker payloads. Historical
-Release records are not rewritten.
+## Latest-wins design: not yet available end to end
 
-These captured native records select each Service's restoration target and supply
-the exact artifact used by both recovery and independent observation. The applied
-Environment artifact remains independently fenced metadata, not a fallback
-runtime source; see [per-Service restoration](services-and-releases.md#per-service-restoration).
+The accepted design compares resource-level effective inputs and cancels obsolete
+work when a newer valid input supersedes it. Conflicting work waits for proven
+executor stop and accounted effects; unrelated work may continue.
 
-The marker keeps sorted Service/read/projection identities, compact serving,
-target and retained-Release summaries, and the canonical prior-runtime digest.
-Successful Apply without native Releases still records its sealed applied
-Environment artifact: it may have executed Components. Metadata-only edits and
-failed Tasks do not gain that authority. Independent per-Service runtime receipts
-remain unchanged by Component-only execution; retaining the aggregate artifact
-does not claim a new application Release succeeded.
+Only a superseded Blueprint shared-configuration write may hand off forward
+repair from accounted-but-diverged effects. Unknown effects remain restricted.
+This does not authorize replaying Scripts or superseding ordinary Deploy,
+Backup, upgrade or destructive operations.
 
-The candidate manifest owns the render input and its lifetime; references never
-depend on a separately prunable predecessor input. The executed Environment
-artifact remains marker-owned. No new blob namespace, collector or higher limit
-is introduced.
+The selector exists, but unit persistence, late plan preparation, safe handoff
+and full runtime integration remain incomplete. Do not depend on automatic
+supersession in production.
 
-Publication compares original Release sources/projections and exact staged
-candidate intent/input. Claim and recovery validate manifest and witness digests,
-scope, lineage, ownership and the full restoration pair at one revision, then
-compare those sources on mutation. Reconstruction and Agent admission retain
-exact artifact bytes. Missing, foreign or substituted evidence fails closed.
-Per-input, aggregate-marker, assignment, native aggregate, applied-artifact and
-complete transaction bounds all remain enforced.
+## Design and qualification
 
-The inspected QA installation had no inline serving witnesses; its existing
-absent-serving shape needed no migration. This is not a universal historical
-store claim. Old inline-serving history requires an explicit bounded offline
-disposition, never inferred witnesses or an ad-hoc compatibility reader.
-
-### Atomic terminal publication
-
-The existing aggregate implementation uses the envelope below. ADR 0078 replaces
-its all-members promotion rule with per-unit applied results; exact authority,
-source-release safety and physical transaction limits still apply. Until that
-integration is complete, retain the existing aggregate writer and terminal guards.
-
-One atomic terminal commit currently owns the original Task state, assignment/lifecycle
-removal, idempotency/retention, applied artifact, every candidate's serving and
-current-successful projection, terminal evidence, Environment fences and final
-Script-source fragment. The existing implementation cannot promote members
-separately. Never infer completion from healthy containers.
-
-Only the owning Task repository constructs the closed terminal envelope after
-validating complete authority. Its store capability is separate from ordinary
-transactions and desired publication. It uses the configured 256-operation
-comparison/success/failure arm ceilings and exact 1 MiB serialized physical
-request ceiling. Ordinary 96-operation transactions, staging and source-release
-batches keep their existing limits. Callers cannot choose a budget.
-
-Before irreversible source release, read-only preparation composes the complete
-envelope, reserving maximum positive ModRevision width for source keys that will
-change. Include root deletion, reverse-prefix absence, execution guards and
-closing-report deletion. The store validates namespace and exact physical size
-using its normal preparation. This budget projection is not executable or
-persistable. Only then may bounded source release proceed; final commit re-reads
-exact authority rather than using projected revisions.
-
-### Closing continuation
-
-For a candidate Task with hooks, entry into normal source release atomically saves
-the original terminal report at
-`/v1/records/blueprint-closing-reports/{task_id}`. It binds exact Task/assignment
-revisions, operation, plan, Agent generation, execution epoch, original outcome,
-recovery digest and Controller-normalized observation time. Normalization cannot
-replace that report. It is temporary continuation authority, not a second receipt;
-final completion deletes it with the source root while preserving generic
-terminal-delivery requirements.
-
-Every release batch compares the report. Conflicting reports and new events
-reject without writes; exact event retransmissions stay read-only. Reconnect
-consumes it before classifying effects or advancing epochs, resumes acknowledgement
-and returns Controller-completed work without Agent dispatch, capacity use or
-closed-Script resolution. Never reactivate references, invent a report for old
-closed Tasks or create a replacement plan. A valid report can finish at the
-maximum positive execution epoch; without it, exhausted epochs reject and never
-wrap. Persistence receives validated copied operations, not a mutable envelope.
-
-## Acceptance
-
-Prove strict grammar, canonical export, exact revision conflicts, non-destructive
-omission and fixed-generation Entry identity. Exercise actual producer publication,
-claim, terminal acknowledgement and replay for ten and the maximum 32 candidates,
-including maximum hook/source fragments. Measure all arm/byte limits; reject
-oversize and compare loss without writes. Prove missing/substituted witness
-rejection, interrupted release, public reconnect, no repeated Script effects and
-uncertain terminal-commit reconciliation from exact durable authority. Prove
-superseded shared-configuration repair from accounted effects, with unknown-effect
-fencing, current Service observation and immutable history, before enabling it.
-
-## Current status
-
-Latest-wins reconciliation is accepted but not connected to publication or Agent
-execution. Its pure resource/conflict selector is the first implementation slice;
-it is not an authorization to enable automatic cancellation. Resource fingerprint
-capture, private unit persistence, late plan preparation, safe supersession,
-forward-repair effect accounting and operator-surface/live proof remain required.
-
-Authoring and substantial publication paths are implemented. Bounded marker and
-terminal-envelope regressions have local proof, including changed-epoch rejection
-and lost-response replay without changing the original timestamp. Local
-storage and Agent-admission tests do not prove live gRPC, Docker or full-bundle
-Apply. [Script evidence](../acceptance/script-execution.md#preserved-broad-failures-and-remaining-qualification)
-retains broader failing fixtures. Full integration, remaining source/recovery
-paths and CI are not claimed complete; see [capabilities](../capabilities.md).
+[Desired-state publication](../decisions/desired-state-publication.md) explains
+immutable inputs, bounded staging, atomic visibility and the supersession design.
+[Capability status](../capabilities.md) and the [QA matrix](../qa-matrix.md) own
+implementation limits and behavioral proof.

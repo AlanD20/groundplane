@@ -27,183 +27,40 @@ hosting evidence. Local tooling checks do not qualify a host installation.
 | PKG-08 | Combined tags publish distinct Agent/Controller releases at the same commit without rebuilding or overwriting assets. Fresh installation selects the combined namespace; updates select only component namespaces. Controller-only preserves the installed Agent; Agent-only preserves Controller. Explicit image changes participate in Agent request idempotency. Scoped ref builds omit unrelated artifacts and preserve cleanup. | 2026-09-20: focused Agent API/CLI/app race checks, 120 packaging checks, and publication/receipt replay checks pass locally. Publication checks execute orchestration with mocked GitHub boundaries; resolver checks execute shell selection with mocked HTTP. Console build, generation parity, formatting and architecture release gate pass. Full CI encountered an unchanged proxy-cancellation failure, recorded in runtime-qualification.md. No publication or scoped-install live qualification yet; prior PKG-07 evidence does not qualify these new scopes. |
 | PKG-07 | Ref installation resolves one exact commit without published GP artifacts. Builds run in an isolated Docker builder; success, build failure and handled interruption remove owned build state without pruning pre-existing images/cache. Bad refs and missing Docker fail before installation. Repeated installation uses normal identity/health checks; failed build leaves the serving installation unchanged. | 2026-09-20, Ubuntu 24.04 amd64: `a71ac49a` fresh GitHub ref install, Host health, missing-Docker rejection, invalid-ref rejection and successful-build cleanup PASS. Its same-commit reinstall exposed build-clock-dependent Agent image identity; fixed in `8f7875b2` with commit-based image timestamps, without changing recovery guards. Two independent cold Agent builds produce the same image identity. Pushed `8f7875b2` normal upgrade and API/CLI Host health PASS; etcd does not restart, config and installed CLI checksums remain unchanged. Exact-commit reinstall PASS: identical Agent digest and release, healthy skip, unchanged Controller PID, Agent/etcd start times and last update Task. Owned build workspace, builder/cache, tool images and temporary tags are removed; earlier failed-install evidence is retained. Local deliberate build-failure cleanup and `scripts/test_install_ref.py` pass. Interruption, serving-host build failure, other supported OS/architecture variants and application-traffic continuity remain unrun in this installer journey. |
 
-## Minimum hosting and upgrade readiness checklist
+## Hosting and upgrade qualification scope
 
-Owner-approved priority checklist, 2026-09-14. The owner authorized its repairs
-and QA validation, including narrowly scoped pinned-file recovery. It targets a
-specified production application and its GP upgrade path; it does not replace
-the full catalogue or waive [MVP acceptance](mvp.md#acceptance-gates).
-No item below is complete merely because local tests pass.
+Select an exact candidate and the deployment-specific cases before execution.
+Production restructuring through `08ccb78b4` has not been built or runtime-qualified.
+Historical case results below are not a pass for that source. Current user
+instructions, not this catalogue, authorize a host, repairs and faults.
 
-Live continuation uses H43's signed writer repair `939fd039f`, installed fresh
-in H44 and normally upgraded through `.1` and `.2` to
-`0.0.0-qa.proxy20260914.3` in H47. H35 passes the repaired BP-05 first-cycle variant:
-router/native runtime and a held HTTP connection survive exact reapply. The
-configured first Deploy passes. The saved Attach/Entry/Detach cutover also passes
-actual password-only clients during the overlapping-network window and afterward
-(ATT-12), preserving serving Releases, proxies and the checked application profile.
-Short protected-update traffic windows pass, not full upgrade or sustained
-qualification. H39 resumes H36's original Task after the Volume-scope and rolling
-journal repairs: exact recovery completes, the Agent releases its claim, current
-bindings and authenticated data survive, and a later healthy Deploy passes.
-H36 and H41 remain failed historical runs. H46's fresh rerun on the repaired
-writer passes: Attach/Entry cutover → successful Deploy preserving the proxy →
-failed candidate → bounded automatic recovery → later healthy Deploy. Current
-bindings and authenticated data survive, the Agent releases its claim and the
-failed candidate is cleaned. H49 passes the approved sustained run: 9,000 successful
-requests, no errors/disconnections, five held WebSockets, 30 delivered jobs and
-p95 0.194 seconds. H47 passes normal update, failed native startup recovery,
-later normal update and normal restart with unchanged application/etcd runtime.
-H48 passes separate Controller and Agent loss during a Script, each with one
-observed runner start, same-Task completion/replay and owned cleanup. Final
-sustained traffic passes in H49. H50's guest reboot fails because the QA VMM exits
-without restarting. The owner replaced that VM. H51/H52 pass its fresh installation
-and functional hosting baseline, including all 11 Services and the real synthetic
-Identity workflow. Earlier reliability passes are not observations of the
-replacement, and no new operational fault ran there.
-H40 passes normal Controller restart with unchanged etcd/application runtime,
-45 authenticated requests and a held WebSocket without interruption. Sustained
-and complete native-upgrade qualification remain open. Earlier failures remain
-dated evidence, not passing runs.
+The immediate hosting assessment excludes deferred Backup/Restore (JOURNEY-04,
+D2 and Gate B). That exclusion is not data-loss acceptance. Failed-rollout
+recovery remains required because it is different from restoring database backups.
 
-The owner deferred GP Backup/Restore and external backup/restore work from this
-immediate scope. JOURNEY-04, D2 and Gate B remain incomplete; this is not data-loss
-acceptance or full production qualification. Failed-deployment recovery below is
-still required: recovering a working application after a bad rollout is separate
-from restoring its databases or files from a backup.
+The selected scope must include real hosting and configuration-change recovery,
+independent etcd during Controller restart, component-specific upgrades, and the
+relevant ingress, interruption, reboot and reliability variants. Preserve requests,
+held connections, jobs and data; measure unavoidable host-reboot downtime.
+A release decision needs per-case evidence or explicit scope restrictions, not
+a completed build or a blanket percentage. The unfinished repository-wide test
+audit is separate work, not permission to expand this qualification.
 
-Current execution priority is production operations, in this order: failed Deploy
-after configuration/cutover changes (SVC-15/JOURNEY-02), overlapping backing
-endpoints (ATT-12), independent etcd during Controller restart (REL-01), and
-Controller/Agent upgrade continuity (JOURNEY-05 and the existing UP cases).
-Then finish the already-approved sustained traffic and interrupted-Task/reboot
-cases. Preserve real application requests, held connections, jobs and data;
-record unavoidable single-host reboot downtime separately. Do not add features,
-new case families or a broad cleanup to this work. A newly confirmed product
-defect or required scope decision returns to the owner before repair.
+### Historical sustained target
 
-- [x] **Fix failed-rollout recovery first** — SVC-15, JOURNEY-02, D4, H46.
-  Recovery must preserve the last successfully applied networking and configuration
-  after Attach/Entry changes, not reconstruct obsolete Release input. Reuse the
-  landed runtime-record work, but complete the affected writers and source retention
-  before connecting readers; a partially maintained record is unsafe. Blueprint
-  success has local atomic/runtime/replay and maximum-size proof (H11 in the
-  [evidence register](acceptance.md)); Entry completion has local selected-runtime
-  and source-fence proof (H12). H16 proves local source snapshot and Task-head
-  bindings; H17–H24 record the integrated generated-file retention, remaining
-  writers, acknowledged-runtime readers and pinned-file execution. The combined
-  focused tests pass; H25–H27 distinguish candidate failures from their local
-  corrections. H39 proves resumed recovery after software repair and the subsequent
-  healthy Deploy. H46 now passes the clean bounded failure/recovery run without
-  intervention after correcting preserved proxy ownership in the receipt writer.
-  The owner approved blocking Secret deletion while a recoverable Task
-  holds its exact value. Those local retention checks alone did not close SVC-15;
-  H46 provides the combined live pass. The owner
-  approved restoring exact pinned configuration files as well as runtime under
-  [ADR 0079](decisions/0079-pinned-task-configuration-recovery.md). This excludes database restoration, migration
-  reversal, latest desired input and history rewriting. Close this item only after
-  the combined change/cutover/failed-Deploy journey preserves authenticated requests,
-  data and unrelated workloads without manual repair. Do not add latest-wins or
-  general reconciliation work to this fix. See the [confirmed cause and required
-  proof](issues/runtime-qualification.md#recovery-after-runtime-configuration-changes).
-- [x] **Resolve ambiguous backing endpoints** — ATT-12, H8/H35.
-  The approved local fix publishes stable runtime aliases and consistent HOST/URL
-  facts for standalone and Blueprint Attaches. Focused race tests, vet and
-  Staticcheck pass. H35's fresh-instance cutover proves actual clients authenticate
-  and subscribe to the selected backing while both networks remain attached,
-  then after old Detach. Old frozen artifacts do not gain the alias automatically.
-  Completing Detach or hardcoded IP access was not used to bypass the overlap
-  assertion. See the
-  [DNS finding](issues/runtime-qualification.md#same-name-backing-endpoints).
-- [x] **Keep etcd independent of normal Controller restart** — REL-01, D3, H40.
-  The owner permits the Agent to restart with the Controller, but not etcd.
-  The local stop-on-close correction and verifier regression pass (H13).
-  H40 qualifies that lifecycle path live: the Agent restarts, etcd does not, all
-  application container identities/start times and serving Releases survive, and
-  authenticated requests, the held WebSocket and checked data remain intact.
-  GP upgrades still require their separate uninterrupted-service qualification.
-- [ ] **Select one clean, identified release candidate and pass release gates.**
-  `main` is clean after the test-audit commits, but no current candidate has complete
-  qualification. Record source and Controller/Agent digests; run required
-  [delivery gates](delivery.md#required-gates). Build success is a prerequisite, not
-  product QA. Report concrete gate failures for a scoped decision; do not silently
-  waive a gate or start a repository-wide architecture cleanup.
-- [ ] **Run the real hosting and upgrade cases on that candidate** — JOURNEY-01/02/03/05,
-  UP-01 through UP-13 and applicable HTTP/UI cases. Use actual transactions,
-  background jobs, held WebSockets and durable sentinels through each selected
-  private/public ingress. Cover normal updates, standalone Agent updates, busy
-  refusal, invalid candidates, cancellation boundaries, lost responses, failed
-  Controller/Agent startup, activation interruption and successive upgrades.
-  Reuse valid recorded proof where its inputs still apply; enumerate remaining
-  variants before execution. Require original Task identity, no duplicate effects,
-  preserved application containers/data and measured continuity. Private HTTP does
-  not qualify the production ingress. Provider mutations require separate approval.
-- [ ] **Finish bounded restart, interruption and reliability QA** — REL-01 through
-  REL-09 as applicable to the selected deployment. After recovery passes, exercise
-  reboot, actual in-flight Task interruption, persistence failures, repeated cleanup,
-  drift/concurrency and safe resource pressure. The first sustained target is
-  approved below; separate fault recovery deadlines and numeric pressure stop
-  limits must be recorded before those fault/pressure variants. Record single-host
-  reboot downtime; do not promise uninterrupted
-  service through a machine reboot. The historical ten-minute run is supporting
-  evidence, not a substitute for the agreed sustained run.
-- [ ] **Make the release decision from per-case evidence.**
-  Record PASS, FAIL, BLOCKED and NOT RUN with exact build/topology and cleanup.
-  Every selected requirement needs a pass, or an explicit owner-approved scope
-  restriction that leaves the full-product gap visible. New safety/correctness
-  failures return to the owner before repairs. Stop at the agreed outcome; do not
-  keep adding speculative improvements or call a restricted deployment fully QA'd.
+The approved first REL-04 target was 30 minutes at five authenticated HTTP
+requests per second, with held WebSockets and background jobs: zero unexpected
+errors/disconnections, p95 HTTP latency below one second, correct responses and
+preserved data. Record achieved rate/count, latency, job outcomes and connection
+identities. H49 records that bounded run; it is not a production capacity claim.
 
-The remaining repository-wide test-quality audit stays unfinished, but it is not
-proposed as a prerequisite to starting this focused qualification. Review tests
-needed to trust the selected cases; do not resume blanket annotation/removal work,
-cosmetic cleanup, new harnesses or unrelated features under this checklist.
-
-### Approved first sustained QA target
-
-Owner-approved on 2026-09-14 for the designated QA host: 30 minutes at five
-authenticated HTTP requests per second, with held WebSockets and background
-jobs. Require zero unexpected request errors or disconnections, HTTP p95 below
-one second, correct application results and preserved data. Record achieved
-request rate/count, job outcomes, connection identities and latency samples;
-account for application rate limits rather than silently reducing traffic.
-This is an initial bounded REL-04 target, not a production capacity guarantee.
-Do not launch on an invalid baseline or bypass the recovery pause. Deliberate
-CPU/memory/disk pressure is separate: stop before unsafe host conditions, with
-numeric stop thresholds recorded before injection; no such thresholds were
-specified by this approval.
-
-The selected modest REL-05 variant records these experimental limits before
-execution: on the four-core QA host, run two CPU workers, then hold 512 MiB of
-memory, then write/hold an owned 128 MiB file, separately for 60 seconds each.
-Require one authenticated profile request per second and unchanged checked data
-and runtime identities. Stop on a non-200 response, a five-second request timeout,
-data mismatch, or less than 1 GiB available memory or disk. Remove only the probe's
-processes/file. Run after the sustained window and reboot, not as an undocumented
-change to the sustained target. These bounds test modest pressure, not resource
-exhaustion, storage-full recovery or production capacity; those variants remain
-unqualified.
-
-### Remaining effort estimate
-
-Planning estimate as of 2026-09-14, excluding deferred Backup/Restore: about four
-to seven focused engineering days, plus the agreed soak duration and any wait for
-owner decisions or host access. This is not a measured agent-runtime or token
-estimate, and it is not an implementation authorization.
-
-| Remaining work | Estimated effort |
-| --- | --- |
-| Resolve the configuration-recovery contract; complete affected runtime writers, retained sources and recovery readers; add causal regressions | 2–4 days |
-| Fix ambiguous backing identity if overlap is retained; resolve and test the restart rule | 0.5–1 day |
-| Release gates and candidate-bound hosting, upgrade and fault qualification, reusing valid existing proof | 1–2 days |
-
-Recovery is the largest uncertainty: the existing runtime records are only
-partially maintained. The pinned-file recovery contract is now approved.
-The range assumes timely decisions and no additional blocking gate or runtime
-failure. Any such failure needs a specific revised estimate and the owner's
-decision, not an open-ended extension. Excluding backing overlap can remove its
-repair, not the failed-rollout recovery requirement. Full-product qualification
-remains a separate, larger scope.
+The recorded modest REL-05 pressure variant used two CPU workers, then 512 MiB
+of memory, then an owned 128 MiB file, separately for 60 seconds on a four-core
+host. It required one authenticated request per second and unchanged data/runtime.
+Stops were non-200 response, five-second timeout, data mismatch, or less than
+1 GiB available memory/disk. These historical bounds do not authorize a new fault
+or prove exhaustion/storage-full recovery. Choose suitable limits and obtain
+current authority for another target.
 
 ## Qualification rules
 
@@ -256,9 +113,9 @@ uncommitted source or a future release.
 | FAIL H… | A required outcome failed. It stays failed until a subsequent qualifying run explicitly closes it. |
 | BLOCKED D… | Execution or an expected outcome needs the named implementation, authority or requirement decision. |
 
-H references resolve in [the evidence register](acceptance.md#matrix-evidence-register).
+H references resolve in [the evidence register](acceptance.md#historical-evidence-register).
 D references resolve under [decisions and blocked coverage](#decisions-and-blocked-coverage).
-Every new run follows [the case run record](acceptance.md#case-run-record).
+Every new run follows [the case run record](acceptance.md#minimum-record-for-future-runs).
 Automation availability and execution result are separate fields in that record.
 
 ## Coverage map
@@ -764,16 +621,12 @@ framework or change product behavior as an incidental test cleanup.
 
 ### Reviewed dispositions
 
-The 2026-09-20 cleanup removes static schema/type/source checks from Agent,
-Route, Zone, Recovery Point, Controller configuration/update, Script and backing
-authentication tests, and reflection-based Entry and release-group boundary tests.
-Their runtime behavior tests remain. Earlier dated counts below describe the
-historical runs, not the current suite. No test suite was run for this cleanup.
-
-This is a partial audit, not completion of the repository-wide review. Git retains
-removed files. Update this table by coherent test area, not by creating another
-document for each test cleanup. Passing a retained local check still does not
-qualify its full product case.
+These tables retain historical test-review decisions and their behavioral reasons.
+They are not a current inventory or passing-suite claim. Later removal of static
+checks supersedes earlier rows that retained them. No test files were changed or
+run during this documentation migration. The production refactor did not migrate
+tests; paths, fixtures and proof need review before reuse. Git at `08ccb78b4`
+retains the full dated review narrative and local run locators.
 
 | Reviewed tests | Disposition and reason | Matrix coverage |
 | --- | --- | --- |
@@ -792,20 +645,7 @@ qualify its full product case.
 | [Blueprint hook admission](../internal/app/environment_blueprint_custom_hook_test.go) | New custom hook owners reject before candidate allocation or publication preparation, with standalone-first guidance. | BACK-15: race-enabled local check passes; does not prove ready-fact consumption. |
 | [Disabled Backup authoring](../internal/controller/environment_blueprint_backup_validation_test.go) | Retained with rationale. Incomplete execution must not make a valid disabled desired declaration impossible to import. | BP-01, BAK-01: local validation only. |
 
-First-batch verification: `.tmp/qa-test-review-retained-go.log` records the four
-retained Go checks with `-race`; `.tmp/qa-test-review-console-assertions.log`
-records 75 individual assertions with pinned Node 24.19.0 and in-process test
-execution. The default runner also returned success, but its log summarizes file
-wrappers rather than named assertions. These are local cleanup results, not
-row-wide product passes or an endorsement of unreviewed tests.
-
 #### Console review
-
-All committed Console test files were reviewed, including the compile-time
-generated-error assertion. This second batch removed 37 source/document-text
-tests and one test of an unused parser. It retained 35 behavioral tests and two
-Node-run static checks, plus the compile-time assertion. Every retained behavioral
-test names its cases, reason and proof limit next to its assertions.
 
 | Reviewed tests | Disposition and reason | Matrix coverage or remaining gap |
 | --- | --- | --- |
@@ -836,24 +676,7 @@ test names its cases, reason and proof limit next to its assertions.
 | Two Controller update-intent tests | Already reviewed above; unchanged. | UP-11, UI-04: local protected-request state only. |
 | Former Environment edit schema and generated error-tuple tests | Removed: static schema/type inventories, not executed behavior. | No product-case proof removed. |
 
-Verification: `.tmp/qa-test-review-console-complete.log` records all 37 named Node
-tests passing with pinned Node 24.19.0 and `--test-isolation=none` (35 behavioral,
-two static). `.tmp/qa-test-review-console-types.log` records the TypeScript check,
-including the generated-error assertion. No runner configuration, dependency,
-production behavior or deployed state changed. Deleted source remains in Git.
-
-No committed Console browser/interaction suite was found. The retained tests do
-not establish action wiring, keyboard/mobile behavior, secret-download cleanup,
-or Environment deletion/reload recovery. Earlier isolated browser evidence stays
-bounded to its recorded build and scenarios; it does not fill these whole-case
-gaps. Adding the missing interaction suite or changing production behavior is not
-part of this existing-test cleanup.
-
 #### CLI inputs and scoped resolution
-
-Reviewed all 19 tests in the nine files below; retained all 19. Each calls the
-real CLI parser, request mapper or command against independent expected values
-or a local HTTP recorder. No production code changed.
 
 | Reviewed tests | Retention reason | Matrix coverage |
 | --- | --- | --- |
@@ -867,16 +690,7 @@ or a local HTTP recorder. No production code changed.
 | Four in [script_execution_test.go](../internal/cli/script_execution_test.go) | Resolve scoped Volume/Entry names across pages; encode inherited reset and reject conflicting flags; bypass lookup in ID mode; reject absent or ambiguous Entry keys before mutation. | SCRIPT-01/06, UI-02/03: local lookup and requests, not runner isolation. |
 | Two in [script_execution_file_test.go](../internal/cli/script_execution_file_test.go) | Preserve complete typed YAML with explicit false/inherited mode; reject null/coerced/duplicate/unknown/multi-document or oversized decisions. | SCRIPT-01/06, UI-03: file decoding only, not persistence or execution. |
 
-All 19 tests pass with `-race -count=1`; evidence is
-`.tmp/qa-test-review-cli-20260913.log`. The successful run allowed local loopback
-listeners after the sandbox-only attempt could not create them; no QA host was
-contacted. These results do not qualify any entire product row.
-
 #### CLI lifecycle, observation and Blueprint transport
-
-Reviewed all 48 tests in this second CLI batch; retained 46 behavioral tests and
-two separate command-inventory checks. Each has a reason and proof limit. The
-two CLI batches together cover 67 tests, not the entire CLI suite.
 
 | Reviewed tests | Retention reason and corrections | Matrix coverage or gap |
 | --- | --- | --- |
@@ -890,20 +704,7 @@ two CLI batches together cover 67 tests, not the entire CLI suite.
 | Four in [network_parity_test.go](../internal/cli/network_parity_test.go) | Keep the closed command inventory; encode Zone create; obtain impact before delete; use the canonical Route mutation endpoints. | Three local behavioral tests support NET-01/04, HTTP-01, UI-01. One inventory is delivery-only, not product parity. |
 | Nineteen in [parity_test.go](../internal/cli/parity_test.go) | Guard router reads, Agent lifecycle/config, rename/pool edits, stable Component IDs and Caddy replacement, Task streams/Retry, Attach targets, bodyless Backup and raw key export. Renamed the rename-routing test to stop claiming unasserted response values. Retain the Release Group command inventory separately. | Eighteen local HTTP/CLI tests support CMP-01/02, HOST-04/07, UP-02, OWN-02, NET-02, HTTP-03, TASK-05/06, ATT-01/03, BAK-05/14, UI-01/02/03. One delivery-only inventory. No real effects or cross-surface parity. |
 
-All 48 pass with the race detector in `.tmp/qa-test-review-cli-second.log`.
-After strengthening numeric output checks, the two affected observation tests
-pass again in `.tmp/qa-test-review-cli-observation-values.log`. Unchanged proof
-is reused. Environment pool-edit output values and Task-stream reconnect,
-compaction, cancellation and terminal drain remain unproved by this batch.
-
 #### Remaining CLI commands and presentation
-
-Reviewed the remaining 59 top-level CLI/common tests in 21 files. Retained
-45 behavioral tests and 14 delivery/tooling checks; none lacked a distinct
-requirement or failure-prevention reason. Together with the two earlier CLI
-batches and the API-client audit below, all 64 committed CLI test files are
-reviewed: 186 original tests, one duplicate removed, 185 retained. This is test
-review completion for the CLI, not completion of its product QA cases.
 
 | Reviewed tests | Retention reason | Matrix coverage or gap |
 | --- | --- | --- |
@@ -915,17 +716,7 @@ review completion for the CLI, not completion of its product QA cases.
 | Four in [controllerctl_test.go](../internal/cli/controllerctl_test.go), seven in [root_test.go](../internal/cli/root_test.go), two in [grammar_test.go](../internal/cli/grammar_test.go), one in [route_flags_test.go](../internal/cli/route_flags_test.go) | Preserve same-host/tool exemptions, safe diagnostic output, injected runner errors, fail-closed unavailable local commands, closed completions/flags and exact operands. Two are behavioral API admission tests; twelve are local tooling/static delivery checks. | UI-03: local admission only. Injected diagnostics are not live etcd/key/Controller observations; command inventory is not 1:1 product parity. |
 | One in [resource_test.go](../internal/cli/resource_test.go), two in [common/errors_test.go](../internal/cli/common/errors_test.go), one in [common/recovery_points_test.go](../internal/cli/common/recovery_points_test.go), three in [common/service_observation_test.go](../internal/cli/common/service_observation_test.go) | Preserve Task follow-up output, canonical/secret-safe errors, exact Recovery Point columns and honest observation freshness/empty arrays. Recovery Point checks now compare every header/value. Observation checks compare an independent full projection; distinct counts 1..7 detect swapped fields instead of seven identical values masking them. | TASK-01, SEC-05, BAK-07, OBS-01/02/03, UI-01/03: presentation only, not API publication, live observation or process exit behavior. |
 
-The focused 59-test race run passes in `.tmp/qa-test-review-cli-remaining.log`.
-The final distinct-count correction passes separately in
-`.tmp/qa-test-review-cli-common-values.log`; unchanged proof is reused. Formatting
-passes. No production code, dependency or live state changed.
-
 #### CLI API-client boundary
-
-Reviewed all 60 tests in the 24 API-client test files. Retained 57 behavioral
-checks and two static delivery checks; removed one duplicate. These execute
-local conversions, generated transport or loopback HTTP, not a Controller or
-Agent. Every retained test names its reason and limited matrix contribution.
 
 | Reviewed tests | Disposition and reason | Matrix coverage or gap |
 | --- | --- | --- |
@@ -942,20 +733,7 @@ Agent. Every retained test names its reason and limited matrix contribution.
 | One in [connector_test.go](../internal/cli/apiclient/connector_test.go) | Retained. Preserve exact scoped CRUD, explicit false, direct credential input, response metadata and accepted deletion Task. All returned Connector fields are now compared. The fixture is already redacted; this cannot prove server-side redaction. | CON-01/03/04: no provider access, secret resolution or deletion cleanup. |
 | One each in [environment_delete_test.go](../internal/cli/apiclient/environment_delete_test.go), [controller_config_test.go](../internal/cli/apiclient/controller_config_test.go), [host_test.go](../internal/cli/apiclient/host_test.go), [host_update_test.go](../internal/cli/apiclient/host_update_test.go) | Retained. Preserve protected Environment deletion identity, exact revision-fenced YAML replacement, nested Host fields and optional update/recovery metadata. | OWN-05/06, HOST-01/08/09, UP-01/05: request/read-model proof only, not deletion, file changes, health or upgrades. |
 
-All 59 retained tests pass with `-race -count=1` in
-`.tmp/qa-test-review-apiclient.log`; the three final assertion corrections pass
-in `.tmp/qa-test-review-apiclient-final.log`. Local loopback permission was needed
-after the sandbox refused the first listener. No production code, generated
-artifact, dependency or deployed state changed; whole-case qualification is
-unchanged. The removed test remains recoverable from Git.
-
 #### Deployment and repository helper tests
-
-Reviewed all 73 tests in the 11 root-level `scripts/test_*.py` files; retained
-all 73. These are not tests that merely ask whether a binary builds. They guard
-deployment authority, file safety, protected-request handling, resource limits
-or the reliability of the verification tooling. Each test now states its reason
-and either a partial case mapping or its separate delivery constraint.
 
 | Reviewed tests | Retention reason and assertion corrections | Proof limit |
 | --- | --- | --- |
@@ -971,25 +749,7 @@ and either a partial case mapping or its separate delivery constraint.
 | Two in [test_host_contract.py](../scripts/test_host_contract.py) | Execute the verifier predicate on valid nullable/history state and independently malformed metadata. These are positive/negative controls for the oracle. | Delivery/verifier correctness only; no Host was contacted or qualified. |
 | Thirteen in [test_repo_env.py](../scripts/test_repo_env.py) | Local defaults/cache reuse; unsafe, symlink and diagnostic-output path rejection; recursive Make and simulated sudo environment; formatter source/failure handling; owned smoke scratch; verifier success/failure cleanup, outside-path refusal and failed-preflight receipts. | Delivery safety: Go, sudo and remote commands are doubles. Their fake passing binaries do not count as product behavior. |
 
-The first complete local run is `.tmp/qa-test-review-deployment.log`: 59 pass,
-14 setup/trust errors because the sandbox presents `/` with an untrusted owner.
-The three affected files (15 tests, one overlapping pass) then pass with the real
-filesystem ownership view in `.tmp/qa-test-review-deployment-trusted-paths.log`.
-Together these runs exercise all 73 tests successfully. No trust check or directory
-permission was weakened. Scratch and cleanup stayed in ignored repository-local
-paths; no SSH connection, Docker workload, systemd operation or QA fault occurred.
-Of these checks, 31 support only portions of named cases and 42 enforce separate
-delivery/tooling constraints. None qualifies a complete product row.
-
 #### Component SDK and registered planners
-
-Reviewed all 35 tests in the ten SDK/registered-planner test files; retained all
-35 with cases, rationale and local proof limits. Removed six redundant internal
-checks, not whole tests: three Caddy rejection inputs already exercised through
-the same `Plan` entrypoint in the comprehensive template table; a same-fixture
-file-equality assertion; a repeated valid-image equality check already covered
-by registration authority; and CoreDNS validation argv already checked by its
-dedicated validation-port case.
 
 | Reviewed tests | Retention reason and corrections | Matrix coverage |
 | --- | --- | --- |
@@ -1003,30 +763,7 @@ dedicated validation-port case.
 | Three in [cloudflaretunnel_test.go](../registered-components/cloudflaretunnel/cloudflaretunnel_test.go) | Preserve opaque Secret and explicit Zone/gateway decisions; reject incomplete identity and invalid/internal-only placement. | CMP-01/04, NET-03, HTTP-08: plan only, not credential resolution or provider ingress. |
 | Six in [coredns_test.go](../registered-components/coredns/coredns_test.go) | Deterministic bytes/digest; conflicting-host rejection; overridable validation port; exact serving image/observation action; exact marker expansion; invalid-template rejection. Renamed the image/action test after removing its duplicated argv assertion. | CMP-01/04, DNS-01/02: renderer/catalog output only, not serving DNS or restoration. |
 
-The initial race run in `.tmp/qa-test-review-components.log` passes every package
-except the new DNS observation-recipe copy assertion. The constructor validated
-an `OCIImage` but stored its caller-owned `Platforms` slice. Changing that slice
-after construction changed the recipe's supposedly immutable image authority;
-the old test compared shared state to itself and missed the alias. The other
-recipe constructors and the image getter already copied this slice.
-
-The owner explicitly approved the scoped fix. The constructor now uses the same
-defensive copy, without a new interface or changed catalog identity for unchanged
-inputs. The exact failing regression and all catalog tests pass with the race
-detector in `.tmp/qa-test-review-catalog-copy-fixed.log`; unchanged passing SDK and
-planner proof is reused. The two existing affected app runtime-wiring tests pass
-in `.tmp/qa-test-review-catalog-wiring.log`; focused vet and pinned Staticcheck
-pass in `.tmp/qa-test-review-catalog-vet.log` and
-`.tmp/qa-test-review-catalog-staticcheck.log`. This is an L0 ownership fix, not an
-observed QA incident or proof of live DNS, upgrade recovery or publication races.
-No deployment occurred. CMP-04 remains unqualified as a whole.
-
 #### Verifier-helper safety tests
-
-Reviewed and retained all 20 checks in the three verifier-helper test files:
-11 named Python tests and nine separately documented shell scenarios. Each has
-a delivery-safety reason; none counts as a GP product-case pass. No actual SSH
-connection, host fault or GP process was used.
 
 | Reviewed tests | Retention reason and proof limits |
 | --- | --- |
@@ -1034,20 +771,7 @@ connection, host fault or GP process was used.
 | Five scenarios in [test_known_hosts_initialization.sh](../.agents/skills/verify-groundplane/scripts/test_known_hosts_initialization.sh) | Exact trusted-file copy with mode 0600; reject symlink, FIFO and over-2-MiB sources; remove temporary output after failed atomic replacement. These use actual temporary files but do not establish remote host identity or authorize trust enrollment. |
 | Four scenarios in [test_supervisor_wait.sh](../.agents/skills/verify-groundplane/scripts/test_supervisor_wait.sh) | Bound waiting for a running process; accept zombie and absent-process states; reject mismatched PID evidence as ambiguous. Simulated procfs, not a real GP restart or lifecycle test. |
 
-All 11 Python tests pass in `.tmp/qa-test-review-verifier-python.log`. Both shell
-scripts exit zero under separate ten-second limits; evidence is
-`.tmp/qa-test-review-verifier-known-hosts.log` and
-`.tmp/qa-test-review-verifier-wait.log`. Expected refused-input diagnostics are
-not failures; the wait log is empty on success. The tests clean their owned
-temporary files/children; the run logs remain. No helper implementation or
-verification workflow changed.
-
 #### Controller HTTP lifecycle, admission and errors
-
-Reviewed 46 tests in ten files. Retained 35 local behavioral checks and ten
-delivery checks; removed one duplicate overflow-classification test. Local
-socket tests use shortened deadlines and injected handlers. They do not qualify
-normal GP restart, upgrade recovery, durable replay or application continuity.
 
 | Reviewed tests | Disposition and reason | Matrix coverage or gap |
 | --- | --- | --- |
@@ -1058,27 +782,7 @@ normal GP restart, upgrade recovery, durable replay or application continuity.
 | Three in [mutation_admission_test.go](../internal/controller/mutation_admission_test.go) | Retained. Native trial blocks real Script-route dispatch and fake scheduled writes; failures stay private; only exact documented exceptions reach the recorder. Exception checks now require exactly zero or one downstream call. | UP-10, SCRIPT-01: guard and scheduler invocation only. Fake admission does not establish durable trial recovery, actual replay or Abort eligibility. |
 | One in [openapi_test.go](../internal/controller/openapi_test.go) | Retained the HTTP endpoint check. Removed three static checks and the Environment, Project and Tenant OpenAPI inventory files. | Generation parity remains a CI gate. |
 
-Two timeout tests formerly accepted their own client read deadline as apparent
-server closure; they now require EOF from the server. Oversized headers must
-return 431. Deadline-writer assertions now check exact instants, including
-delayed first output. The raw-body test formerly wrapped away the fixture's known
-length; it now explicitly sets each length mode and independently counts reads
-to prove early refusal and deferred streaming. Its name no longer claims full
-Blueprint multipart proof. The grace-expiry test was renamed to describe actual
-base-context cancellation and stopped serving, not unobserved forced socket closure.
-
-`.tmp/qa-test-review-controller-http.log` records 31 passing tests and 14
-sandbox-only listener failures. Those 14 pass with local loopback permission in
-`.tmp/qa-test-review-controller-http-loopback.log`; together these verify all 45
-retained tests with the race detector. Formatting passes. No production code,
-generated artifact, dependency or deployed state changed.
-
 #### Agent transport, workers and transient inputs
-
-Reviewed and retained all 54 tests in eight files. Each now names its matrix
-cases, local proof limit and concrete failure-prevention reason. None was a
-confirmed duplicate or coverage-only test. These are local behavioral checks,
-not live Agent, application or upgrade qualification.
 
 | Reviewed tests | Retention reason | Matrix coverage or gap |
 | --- | --- | --- |
@@ -1091,25 +795,7 @@ not live Agent, application or upgrade qualification.
 | Three in [workload_images_test.go](../internal/agent/workload_images_test.go) | Unknown envelope rejection, exact image-result forwarding without Task capacity use, and one bounded image worker joined at teardown. | SVC-01, TASK-07, HOST-05: fake resolver/session behavior, not actual Docker inspection, Release publication or reconnect fencing. |
 | Ten in [backup_secret_inbox_test.go](../internal/agent/backup_secret_inbox_test.go) | Exact one-use slot ownership, receive-buffer clearing, stale assignment refusal, closed purpose selection, terminal/abort/stop clearing, cancellation races, malformed sequences and fresh-pool redispatch. | CON-07, TASK-10, BAK-05/08/16: in-memory ownership only, not Controller credential resolution, S3 execution, durable claim recovery or process-wide erasure. |
 
-Stronger assertions check complete Task identity, nested DNS proof ownership,
-independent 32-byte token and 128-record queue expectations, bounded receive-pump
-exit and exact observation/image values. Secret tests now prove the accepted copy
-survives receive-buffer clearing, a stale frame leaves the current slot usable,
-and duplicate headers clear previously accumulated bytes.
-
-All 54 tests pass with the race detector in
-`.tmp/qa-test-review-agent-transport.log`; the log also includes a passing focused
-rerun of two final assertion changes. Two Unix-socket checks initially required
-local socket permission; the complete successful run used that permission.
-Formatting passes. No production defect was reproduced, and no production code
-or live state changed.
-
 #### Public API models and error taxonomy
-
-Reviewed all 40 existing tests in `pkg/api` and `pkg/errs`. Removed two duplicate
-error checks and split one existing source-limit assertion into a separate
-delivery test. The final 39 tests comprise 37 local behavioral checks and two
-delivery checks. Each behavioral test names its cases, reason and proof limit.
 
 | Reviewed tests | Disposition and reason | Matrix coverage or gap |
 | --- | --- | --- |
@@ -1121,28 +807,7 @@ delivery checks. Each behavioral test names its cases, reason and proof limit.
 | Five in [types_test.go](../pkg/api/types_test.go) | Retained four behavioral checks for runtime intent, exact redacted Connector metadata and explicit S3 addressing presence. Source-kind vocabulary remains a separate delivery check. Exact Connector JSON subsumes its old partial absence assertions. | SVC-01/02, CON-02/03/04, SEC-05, UI-01/03: model encoding/decoding, not lifecycle, Controller redaction, encryption, provider access or Backup dispatch. |
 | Thirteen original tests in [errs_test.go](../pkg/errs/errs_test.go) | Retained eleven: full closed catalog, unknown/zero normalization, distinct malformed/semantic failures, wrapping/joining/classification, exact problem JSON, untrusted reconstruction, mutable-carrier defense and opaque-error secrecy. Removed `TestAcceptedPersistenceAndIdempotencyStatuses` and `TestPublicCodesUseCanonicalDotNamespaces`; the strengthened full catalog covers both subsets. | UI-03/05, TASK-07, SVC-12: error-package behavior, not HTTP dispatch, Controller logs, clients, actual recovery or live failures. |
 
-The error catalog now uses independent literal code/class/status tuples rather
-than implementation constants. Every tuple is checked through both the internal
-descriptor and public constructor/accessors, preserving the removed status
-test's protection. Reconstruction starts from independently authored public
-problems. The joined-cause assertion now requires both diagnostics to be present
-in order; two missing messages can no longer pass the ordering comparison.
-
-All 39 tests pass with the race detector in
-`.tmp/qa-test-review-public-models.log`. Three final primary assertion corrections
-pass in `.tmp/qa-test-review-public-models-final.log`; unchanged proof is reused.
-Formatting passes. Removed tests are recoverable from Git. No production defect
-was reproduced and no production code or live state changed.
-
 #### Controller Task, Activity and log boundaries
-
-Reviewed all 26 tests in the six root Controller Task/log test files. Retained
-22 local behavioral checks and four delivery checks; none is a confirmed duplicate
-or coverage-only test. Each has a case/proof-limit or delivery annotation and a
-concrete rationale. All 26 pass with the race detector in
-`.tmp/qa-test-review-controller-task-logs.log`, with permitted local HTTP listeners.
-Formatting and diff checks pass. No product defect was reproduced; no production
-code, generated artifact or live state changed.
 
 | Reviewed tests | Retention reason | Matrix coverage or gap |
 | --- | --- | --- |
@@ -1153,50 +818,14 @@ code, generated artifact or live state changed.
 | One in [task_step_contract_test.go](../internal/controller/task_step_contract_test.go) | Retained invalid Script/operation identity rejection; removed schema-shape assertions. | TASK-01, SCRIPT-03: projection only. |
 | Two in [task_wake_test.go](../internal/controller/task_wake_test.go) | Accepted 202 mutations hint both executor owners once; synchronous 204 does not. | TASK-01: callback invocation only, not actual Task publication, scheduler latency or executor progress. |
 
-The fixed-revision test formerly used a fake that ignored read arguments; it now
-requires the exact Task id and revision 17. Projection rejection starts from
-valid baselines. Task/Activity identities, timestamps and step kinds are explicit;
-conflicting scopes must make no query. Missing Task, rejected resume and invalid
-log requests require exact public error codes, not status alone. The post-frame
-failure must preserve its exact initial frame and emit nothing else. The 32 KiB
-line bound is independent of the implementation constant. OpenAPI assertions are
-scoped to the event operation and the step's actual forbidden fields. Two test
-names now describe fake-page projection and injected resume-rejection mapping,
-without claiming storage behavior. Local HTTP clients have a two-second bound.
-
 #### Controller-Agent report containment and log ownership
-
-Reviewed and retained all ten behavioral tests in two Agent-channel files; all
-have concrete reasons and local case/proof-limit annotations. All ten pass with
-the race detector in `.tmp/qa-test-review-controller-agent-report-logs.log`.
-The logged quarantine warnings/errors are deliberately injected test inputs,
-not failures from a deployed Agent. Formatting and diff checks pass. No product
-defect was reproduced; no production code or live state changed.
 
 | Reviewed tests | Retention reason | Matrix coverage or gap |
 | --- | --- | --- |
 | Five in [task_report_containment_test.go](../internal/controller/agentchannel/task_report_containment_test.go) | An applied exact-report conflict preserves its claim while unrelated work completes; known Component diagnostics validate and map correctly; capacity-one dispatch cannot overclaim; only exact delivered ownership can enter quarantine. | TASK-07/09/10, HOST-07, CMP-05: scripted channel, fake store and pure selection, not real publication races, Agent restart/recovery or live workload continuity. |
 | Five in [logs_test.go](../internal/controller/agentchannel/logs_test.go) | Distinct pre-ready failures release slots; post-ready failure closes events; caller cleanup expiry and stalled subscribe sends retain ownership until cancel delivery; overflow reserves its slot until cancellation is confirmed. | LOG-01/02: controlled in-memory registry/channel tests, not actual gRPC send completion, Docker cleanup, public SSE or process memory measurements. |
 
-Stronger report assertions require the exact failed step/epoch and independent
-diagnostic spellings. A different assignment cannot be quarantined; refusal,
-successful containment and repeated reports must preserve unrelated ownership.
-Log limits now use independent eight-slot and 128-record expectations instead
-of production constants. Confirmed cancellation must remove the old slot;
-replacement must preserve all seven unrelated subscriptions. Sixteen sequential
-cancel cycles test slot reuse. Command waits and the overflow admission probe
-are bounded so a broken limit or missing handoff reports a local failure.
-
 #### Controller-Agent assignment admission and session lifecycle
-
-Reviewed and retained all 29 behavioral tests in these seven files. Each has a
-case link, a concrete failure-prevention reason and a local proof limit. No test
-in this batch was a confirmed tautology or duplicate. The verification target is
-the exact 29 tests plus one unchanged consumer of the simplified fence helper.
-All 30 pass with the race detector in
-`.tmp/qa-test-review-agent-admission-registry.log`. That log also retains the
-initial test-only compile error: the three new plan-hash assertions addressed
-the assignment instead of its nested plan. The corrected assertions pass.
 
 | Reviewed tests | Retention reason and corrections | Matrix coverage or gap |
 | --- | --- | --- |
@@ -1208,79 +837,15 @@ the assignment instead of its nested plan. The corrected assertions pass.
 | One in [native_predecessor_assignment_test.go](../internal/controller/agentchannel/native_predecessor_assignment_test.go) | Preserve complete restoration identity, candidate target and durable digest; native artifact bytes remain unchanged after the caller mutates its buffers. | SVC-09/12, TASK-10: wire conversion and copy ownership, not digest derivation, valid runtime artifacts or actual restoration. |
 | Nineteen in [registry_test.go](../internal/controller/agentchannel/registry_test.go) | Preserve coalesced wake signals, replacement/revocation ownership, exact-generation fresh Ready, canceled subscription cleanup, lifecycle drain responsiveness and stale/invalid/canceled-open rejection. Stronger checks require actual subscription removal, a fresh report after reconnect and rejected send callbacks while stopped. | HOST-04/05/07, TASK-01/09/10, UP-04: local registry and controlled send races, not credentials, durable lifecycle state, network teardown or process recovery. |
 
-The fence helper now calls the concrete registry method directly, removing stale
-runtime interface discovery. Its unchanged consumer
-`TestConnectDoesNotDeliverAssignmentClaimedDuringPriorGenerationFence` is included
-in verification; the rest of `server_test.go` is not reviewed by this batch.
-No production code or live state changed. These checks do not qualify a whole
-product case or uninterrupted hosting. Formatting and diff checks pass.
-
 #### Durable Task event-stream boundaries
 
-The bounded review retains five tests in
-[task_event_stream_test.go](../internal/infra/etcd/task_event_stream_test.go),
-each linked to TASK-06: suffix replay and terminal closure, resume validation
-before opening watches, sequence-based compaction recovery, gap refusal and
-subscription cleanup on blocked-consumer cancellation. Their in-memory store
-does not qualify real etcd compaction, HTTP SSE or Controller/Agent execution.
-The first focused race run passed all five in
-`.tmp/qa-test-review-durable-task-stream.log`, but subsequent failure invalidated
-the compaction pass. Seven of 20 runs fail in
-`.tmp/qa-test-review-durable-task-stream-compaction-repeat.log`. A final bounded
-run with an early-return assertion fails on its first iteration in
-`.tmp/qa-test-review-durable-task-stream-compaction-error.log` with
-`internal: task event watch closed unexpectedly`.
-
-The memory store injects the compaction error and closes both watch channels;
-the production adapter uses the same error-then-close sequence. The old Task stream
-could select the closed event channel instead of the queued compaction error,
-returning before the required resnapshot. This reproduced a local stream failure,
-not a live etcd incident or application outage. The owner approved the scoped
-repair (D6), with no deployment or broader refactor.
-
-Stronger retained assertions require exact watch selectors and snapshot-successor
-revisions, no extra events after closure, zero watch starts for an invalid resume,
-preserved terminal replay records and released subscriptions after gap/cancellation.
-The blocked consumer is now actually delivering an event before cancellation.
-Final-drain delivery order remains scheduler-selected in these fixtures; they do
-not independently prove every notification ordering. No failure assertion was
-weakened or converted into an expected-success disconnect.
-
-Approved repair proof: `TestTaskEventStreamRecoversClosedWatchBeforeFollow` closes
-each watch before following begins, then commits a new event. It requires both
-watches to reopen, sequences 2 and 3 exactly once, terminal closure and no retained
-subscriptions. Its pre-fix failure is `.tmp/task-stream-completion-red.log` and
-its passing post-fix run is `.tmp/task-stream-completion-green.log`. Completion
-is arranged before following, rather than racing the producer against the reader;
-Go may still select either ready channel, and neither order may cause failure.
-The existing live-compaction regression remains.
-
-`TestTaskEventStreamClosedWatchPreservesFailureAndCancellation` exercises storage
-failure, closure without an error and caller cancellation on both watches. It
-requires the correct error, no invented progress, no watch restart and no retained
-subscription. Together these are seven final Task-stream tests: five reviewed and
-two added for the approved repair, all with reasons and local proof limits.
-
-The implementation disables closed event channels and handles both watches'
-terminal errors through one path. Compaction still resnapshots from the last
-sequence; ordinary failures disconnect and cancellation remains cancellation.
-All seven stream tests plus three existing watch-adapter tests pass with the race
-detector in `.tmp/task-stream-completion-tests.log`. The live-compaction,
-closed-before-follow and failure/cancellation tests each pass 20 bounded repeats
-in `.tmp/task-stream-completion-repeat.log` (60 top-level executions).
-Vet and pinned Staticcheck pass in `.tmp/task-stream-completion-vet.log` and
-`.tmp/task-stream-completion-staticcheck-local.log`. The initial analyzer log,
-`.tmp/task-stream-completion-staticcheck.log`, preserves a read-only external-cache
-error; the successful rerun uses the ignored repository-local cache. Formatting
-and diff checks pass. This closes the local failure, not whole-case TASK-06,
-full CI, hosting continuity or live compaction qualification.
+| Reviewed tests | Behavioral reason | Coverage limit |
+| --- | --- | --- |
+| Five original tests in `internal/infra/etcd/task_event_stream_test.go` | Suffix replay, resume validation before watches, compaction resnapshot, gap refusal and blocked-consumer cancellation cleanup. Stronger assertions retain exact selectors/revisions, closure and released subscriptions. | TASK-06, in-memory persistence only. A repeated-run compaction failure invalidated the initial pass. |
+| `TestTaskEventStreamRecoversClosedWatchBeforeFollow` | Both watches reopen after pre-follow closure, deliver sequences exactly once and release subscriptions. | Local correction for D6; no live etcd/HTTP proof. |
+| `TestTaskEventStreamClosedWatchPreservesFailureAndCancellation` | Error, clean closure and cancellation cannot invent progress, restart failed watches or leak subscriptions. | Seven final stream tests and three watch-adapter tests passed in the recorded local race run; 60 bounded repeated executions supported the fix, not whole-case TASK-06. |
 
 #### Controller-Agent image, observation and materialization exchanges
-
-Reviewed and retained all 13 behavioral tests in the three files below. Each
-has a concrete reason and local proof limit; none is a confirmed tautology or
-duplicate. All 13 pass with the race detector in
-`.tmp/qa-test-review-agent-read-transfer.log`. Formatting and diff checks pass.
 
 | Reviewed tests | Retention reason and corrections | Matrix coverage or gap |
 | --- | --- | --- |
@@ -1288,18 +853,7 @@ duplicate. All 13 pass with the race detector in
 | Six in [service_observation_test.go](../internal/controller/agentchannel/service_observation_test.go) | Observation is independent of Task/image capacity; fresh exact correlation is required; replaced sessions and malformed rows fail without evidence; cancellation precedes replacement; offline/invalid/canceled reads retain the correct cause. Success now checks the full returned row and identity. The deadline check uses a ten-second parent and an independent five-second expectation, so omitting the product timeout can no longer pass. | OBS-01/03/04, HOST-05: local exchange and ordered sends, not actual container counts, serving-source revision races, public freshness or Agent worker teardown. |
 | Two in [materialization_sender_test.go](../internal/controller/agentchannel/materialization_sender_test.go) | Assignment precedes header/content/End; every record has exact execution identity; selected header fields and distinct chunk contents match the source at the independent 32 KiB boundary. Same-length corrupt bytes reach digest verification, return Internal and never send End. | ENT-02/04, BP-04, TASK-10: sender/recording-stream proof, not Agent/helper validation, file publication, ownership/mode effects or live secret safety. |
 
-The materialization recorder copies messages during Send because the sender clears
-its transient content afterward. Assertions observe bytes handed to transport,
-not cleared caller-owned references. The fake source's closed/cleared state proves
-the sender invoked its Close method; it does not qualify production-source memory
-clearing. No production code, test framework or live state changed, and no new
-product defect was reproduced. These results do not qualify a complete case.
-
 #### Durable Task assignment and result boundaries
-
-Reviewed and retained four behavioral tests across three files. Each has a
-concrete reason and a local proof limit. All four pass with the race detector in
-`.tmp/qa-test-review-task-assignment-result.log`; formatting and diff checks pass.
 
 | Reviewed test | Retention reason and corrections | Matrix coverage or gap |
 | --- | --- | --- |
@@ -1307,18 +861,6 @@ concrete reason and a local proof limit. All four pass with the race detector in
 | `TestAgentTaskProgressFencesExactAssignmentAndGeneration` in that file | Stale assignment/generation and missing authority cannot consume a sequence; valid progress has exact identity, state and payload, with independently expected event count and next sequence. | TASK-07/10: local journal admission, not protobuf transport, actual reconnect or all event bounds. |
 | `TestGetTaskAssignmentResolvesTheTaskIndexedExecutionClaim` in [task_assignment_lookup_test.go](../internal/infra/etcd/task_assignment_lookup_test.go) | Lookup selects the exact Task's claim even while the Agent owns another Task; returned Task/assignment revisions agree at one read. Pending work is not mistaken for an assigned executor. | TASK-03/10: in-memory indexed lookup, not public Abort, real fixed-revision races or executor cancellation. |
 | `TestTaskResultRecordRoundTripsAsBoundedSummary` in [task_result_test.go](../internal/infra/etcd/task_result_test.go) | Preserve distinct summary counts, execution epoch and recovery digest; accept 64 project summaries and reject 65; reject missing/zero DNS image evidence; cloning must detach project entries and canonical DNS evidence bytes. | TASK-07: codec/validation and copy ownership, not Agent report transport, durable publication, secret/log inspection or recovery execution. |
-
-The initial replay assertion treated nil and empty project-summary slices as
-different despite identical persisted values; its evidence remains in
-`.tmp/qa-test-review-task-assignment-result-initial.log`. The corrected assertion
-compares persisted bytes and revision while retaining independent expected
-terminal fields. No product behavior was changed to satisfy that test. No test
-was removed, no new reflection was retained, and no product defect was reproduced.
-
-The remaining root-module Go tests outside the reviewed files still require review.
-Helpers and fixtures are not standalone test cases; inventory counts must not
-classify them as behavioral coverage. No automatic blanket deletion based on
-filenames, missing comments, mocks or small test size.
 
 ## Running and maintaining the matrix
 

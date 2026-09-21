@@ -1,110 +1,66 @@
-# Managed Components and network routing
+# Managed Components and routing
 
-## Purpose and scope
+GP includes three compiled integrations: CoreDNS for host DNS, Caddy for an
+Environment's HTTP routing, and Cloudflare Tunnel for its outbound edge tunnel.
+There is no runtime plugin loader or operator-uploaded planner. Controller and
+Agent are host processes, not Components.
 
-Provide the host DNS resolver and each Environment's HTTP router and outbound
-tunnel through normal Groundplane resources. The MVP has three compiled
-implementations: CoreDNS (`dns-resolver`), Caddy (`http-router`) and Cloudflare
-Tunnel (`edge-tunnel`). It has no runtime plugins or operator-uploaded planners.
+## Routes and the HTTP router
 
-[mvp.md](../mvp.md) owns the product model. The shared SDK, grants, immutable
-catalog and execution boundary are defined in
-[the Component decision](../decisions/0061-closed-registered-component-capabilities.md).
-Read that contract when changing an integration, not for an ordinary config edit.
+An Environment can enable one logical HTTP router. Routes belong to the
+Environment, not Caddy: disabling the router preserves them and reports them as
+`unserved`. Enabling it applies the stored Routes.
 
-## Functional requirements
+A Route selects a Service and target port, public or internal exposure, host and
+path. Public Routes require a lowercase ASCII DNS host; internal Routes may omit
+the host. Paths default to `/`, must be absolute, have no query or fragment and
+allow only a terminal `*`. Duplicate host/path matches are rejected. Overlaps
+prefer the longest path, then stable Route ID. Routes do not publish application
+ports on the host.
 
-- An Environment has at most one enabled logical HTTP router. Routes belong to
-  the Environment, not its router implementation. Routes remain valid without
-  a router and report `unserved`; enabling applies stored Routes, while disabling
-  preserves them. Desired-only Route Tasks have no Agent effect.
-- Caddy and Tunnel each have an explicit ordered Zone list. Caddy retains its
-  reserved address on the first Zone; secondary memberships are dynamic. Tunnel
-  chooses the first non-internal Zone for its gateway and does not follow Caddy's
-  membership automatically. Route targets must share reachable Zone membership.
-- Tunnel config authorizes an opaque Secret reference and connector lifecycle.
-  It does not configure provider DNS, public hostnames, ingress or origin policy.
-- CoreDNS is a Platform Component. It serves exact internal Route names using
-  router private addresses, structured upstreams and per-domain forwarders.
-  Tailnet detection sets a default that the operator may override. Network Zones
-  and DNS zones are different concepts; network identity never becomes a DNS name.
-- CoreDNS requires one full Corefile template containing exactly one
-  `{groundplane}` marker. The renderer owns its managed directives. Invalid
-  configuration must retain the serving configuration. The Agent owns resolver
-  file materialization and restores the predecessor when DNS is removed.
-- Component config is a closed typed union. Disabled or unconfigured Components
-  project `config: null`; config reads return a non-null `managed_files` array.
-  Preview uses durable desired inputs without writes and is not live-file proof.
-- Component-owned resources retain their product owner but are excluded from
-  ordinary collections. The Component detail groups them by capability; direct
-  known-ID reads remain possible, but direct mutation is forbidden. Their Tasks
-  remain in the normal owning workspace journal.
+Caddy has an ordered Zone list and keeps a reserved address on the first Zone.
+Targets must have reachable Zone membership. Additional memberships do not change
+that primary address. Use [full Caddyfile templates](router-template.md) to set
+request policy; a template cannot grant access absent from GP's Routes.
 
-The exact requests and desired-state variants belong to [api-cli.md](../api-cli.md)
-and [blueprint.md](../blueprint.md). Complete Caddyfile behavior and the router's
-optional network alias are in [Router templates](router-template.md).
+## Cloudflare Tunnel
 
-## Non-functional requirements
+Tunnel has its own Zone selection. Its gateway is the first non-internal Zone;
+it does not automatically follow Caddy's memberships. GP configures the connector
+and its opaque Secret reference. The operator still configures provider DNS,
+public hostnames, ingress and origin policy. Tunnel is not an HTTP router.
 
-Registered code compiles only against the public SDK and approved standard
-library. It gets immutable scoped inputs and returns typed intents, never
-repositories, Docker, filesystem access, secret plaintext or arbitrary execution.
-Groundplane validates authorization, revisions, ownership, images and limits
-before atomic publication. The Agent executes only compiled generic recipes.
-Controller and Agent runtime resources are not Components.
+## CoreDNS
 
-## Technical design
+The Platform resolver serves exact internal Route names using router addresses.
+It supports upstream resolvers and per-domain forwarding. Tailnet detection
+provides an overridable default. A network Zone is not a DNS zone and does not
+automatically become a DNS name.
 
-The owning capability modules validate the planner's intents and contribute to
-one publication. [architecture.md](../architecture.md#the-component-capability-seam)
-owns the shared planning and execution seam. Implementations live in
-[registered-components](../../registered-components/); public types live in
-[component-sdk](../../component-sdk/).
+Provide a full Corefile containing exactly one `{groundplane}` marker for GP's
+managed directives. Invalid configuration must leave serving configuration in
+place. Removing DNS restores the captured predecessor resolver configuration.
 
-Catalog recipes own copies of caller-supplied image/platform and argument slices;
-getters return copies too. Validating an input does not make its backing memory
-immutable. Test ownership by changing the original input and a returned value,
-then comparing the recipe to a separate expected snapshot.
+## Configuration and owned resources
 
-### Task-owned Component candidates
+Preview shows the saved desired configuration and managed-file rendering, not
+unsaved text validation or proof of live files. Disabled or unconfigured
+Components have no active config. Their owned resources appear under Component
+details rather than ordinary editable collections. A known-ID read is allowed;
+direct mutation bypassing the Component is not.
 
-An unchanged Component retains its exact acknowledged runtime ownership across
-Blueprint reapply. Equivalence covers its own configuration and only the shared
-networks, volumes, configs and secrets it references. Unrelated resources added
-by normal Service Deploys must not restart it. A changed or missing consumed
-definition prevents retention; desired shared definitions are never replaced by
-historical Component input. The Controller's existing Component-runtime retention
-path enforces this rule without granting Components storage or execution access.
+Unchanged Components should retain their runtime when a Blueprint changes
+unrelated resources. A changed Component remains a candidate until its Task
+succeeds; failed application retains the active configuration and addresses.
 
-One Agent Task owns one immutable Component candidate set for an Environment.
-The active Component records remain unchanged while that Task is pending or
-running. An Environment-scoped active-intent index rejects another candidate
-based on the same active state; the MVP serializes reconciliation rather than
-merging concurrent graphs.
+## Design and qualification
 
-Publication captures the exact current record and revision, replacement and
-address transitions. A new primary router address is reserved atomically with
-the candidate and Task; existing addresses remain reserved during execution.
-Successful terminal publication promotes all candidates and releases only
-superseded addresses. Failure, Abort or timeout retains active Components and
-releases only new candidate addresses. Terminal replay checks retained intent
-without repeating Component or address mutations. Adding terminal status and
-time does not mutate the candidate payload. This private intent is not another
-public Component model.
+[Component boundaries](../decisions/component-boundaries.md) explains the public
+SDK and closed capability model. Registered code receives scoped inputs and
+returns typed requests; it has no direct database, filesystem, Docker or secret
+plaintext access. [Network decisions](../decisions/network-and-shared-access.md)
+explain reservations and reachability.
 
-## Acceptance
-
-Prove fixed-revision preview without writes; typed config and 1:1 surface parity;
-grant, catalog and ownership rejection before effects; deterministic Route
-rendering; retained addresses and config after failure; and terminal replay
-without duplicate publication. On authorized QA, prove DNS, routing and tunnel
-behavior without modifying provider or host policy outside the approved scope.
-Implementation-named core paths or arbitrary execution fail the architecture gate.
-
-## Current status
-
-The closed boundary and Environment Components have implementation evidence.
-CoreDNS reference-host qualification remains open. Caddy template and reload
-qualification is tracked in [Router templates](router-template.md); the
-[capability index](../capabilities.md) records product-wide limits. Dated checks
-do not establish current host health or permission to bypass the QA integrity pause.
+DNS, routing, Tunnel and restart continuity require runtime evidence for the
+candidate being shipped. See [current limitations](../capabilities.md) and the
+[QA matrix](../qa-matrix.md).

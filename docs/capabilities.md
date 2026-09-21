@@ -1,64 +1,45 @@
-# Product capability status
+# Capability status and limits
 
-This is the product-wide implementation and qualification index. It does not
-define behavior. Product requirements live in [mvp.md](mvp.md), human surfaces
-in [api-cli.md](api-cli.md), desired state in [blueprint.md](blueprint.md), and
-implementation boundaries in [architecture.md](architecture.md).
+**GP is not fully qualified for production.** The production architecture cleanup
+ending at `08ccb78b4` preserved intended behavior but deliberately ran no builds,
+tests, generation, architecture gates or runtime QA. This documentation migration
+does not change that boundary. Earlier passes apply only to their recorded builds
+and cases, not automatically to the restructured source.
 
-Status is deliberately conservative:
+The [QA matrix](qa-matrix.md) owns behavioral cases and variants.
+[Acceptance](acceptance.md#historical-evidence-register) owns historical results. This page summarizes gaps;
+it does not redefine the [product contract](mvp.md) or authorize implementation.
 
-- **Recorded qualification** means dated evidence proves the named scope. It is
-  not a statement about current host health.
-- **Implemented** means the production path exists, but required operator or
-  failure-path qualification remains.
-- **In progress** means required production behavior is still being built.
+## Available implementation and remaining proof
 
-Missing implementation or evidence does not narrow the product contract.
-The feature entries below record remaining implementation and qualification.
-
-[The product QA matrix](qa-matrix.md) breaks these areas into behavioral cases,
-failure/recovery sequences and reviewed execution evidence. This coarse capability
-index is not a substitute for case-by-case qualification.
-
-## Product-wide index
-
-| Capability | Current position | Remaining gap or qualification limit |
+| Area | Implementation position | Remaining qualification or limitation |
 | --- | --- | --- |
-| Host, Controller, Agent and updates | Host health and the Controller-owned Agent lifecycle have recorded qualification. Native Controller and coordinated Agent update paths have implementation and bounded QA evidence. | Whole-build Tunnel continuity and the remaining recovery cases are unresolved. Live mutation proof is paused pending storage integrity. See [Safe updates](features/upgrade-safety.md). |
-| Tenants and Projects | Lifecycle, persistence, protected mutations and aggregate deletion have recorded qualification. | Recheck live state only when a later journey depends on it; dated evidence is not current host health. |
-| Environments | Creation, identity, network-pool editing, logs and hierarchy deletion are implemented with recorded bounded evidence. | Complete Environment qualification remains coupled to its Service, Route, Script, Blueprint and recovery paths below. |
-| Services, Releases and rollback | Direct lifecycle and historical singleton deploy/rollback paths have recorded qualification. Service observation is implemented across Agent, Controller and operator surfaces with focused local proof. | Deploy and qualify observation; exact-count recreate, replicated rollout and recovery, and alignment with Release Groups and logical Scripts remain open. |
-| Zones, Routes and HTTP routing | Durable Zone and Route lifecycles and operator surfaces are implemented. The Route summary has recorded 2026-09-12 local evidence. | Deploy the Route summary, complete Caddy template/reload qualification, and prove HTTP, WebSocket, callback and deny-default policy. See [Router templates](features/router-template.md). |
-| Volumes and Entries | Lifecycle, desired-revision integration, materialization and removal have recorded qualification. | Reprove only the source-specific persistence and restore paths exercised by production qualification. |
-| Scripts and deploy hooks | Ordered hooks, explicit contexts, immutable sources and grants, all human surfaces, and runtime composition are implemented with focused local evidence. | Real first Apply and exact reapply, resource preparation, hook failure, Abort, reconnect, unknown-outcome recovery and guarded native-write proof remain. See [Script execution](features/setup-scripts.md). |
-| Backing services and Attaches | PostgreSQL and Valkey creation plus Attach lifecycle have recorded qualification. Valkey authentication modes have focused and isolated-container evidence. | Live Groundplane qualification of the Valkey authentication extension and its backup/restore behavior remains. |
-| Components and CoreDNS | The closed Component boundary, Environment Caddy/Cloudflare components and CoreDNS template/config surfaces are implemented. | CoreDNS reference-host qualification remains. Caddy template and retained-reload work has the limits recorded in [Router templates](features/router-template.md). |
-| Secrets and Connectors | Project/platform Secret lifecycle and Environment S3-compatible Connector lifecycle have recorded qualification. | Credential use during real backup, restore and production recovery is part of the recovery gap, not proved by metadata lifecycle evidence. |
-| Backups and restores | Policy, source catalog, scheduling, points, retry foundations, age-key rotation/export and parts of the execution protocol are implemented. | Terminal delivery, actual-source capture and upload, PostgreSQL runtime, Config/Volume transfer, staging recovery, Restore, remote cleanup, failure injection and end-to-end proof remain. Restore stays unavailable until its production path and overwrite confirmation are complete. |
-| GitHub Runners | Durable lifecycle and earlier isolation/negative-path cleanup have recorded evidence; this does not prove the complete accepted runtime contract. | The [Runner contract](features/runners.md) retains missing host/runtime, approved token-handoff implementation, parity and qualification work. Ready-state creation and real jobs also require a fresh GitHub token. |
-| Tasks and Activity | Durable Tasks, retry, abort, events, retention and hierarchical Activity have recorded qualification. | Feature-owned Task producers still require their own failure and recovery proof. |
-| Release Groups | Ordered singleton deploy, failure and switch-back behavior has recorded evidence; current surfaces and runtime are implemented. | Replicated members, persisted/request tag precedence and grouped Script-hook behavior remain unqualified. |
-| Blueprint | Canonical show/validate/apply, desired resources, immutable execution inputs and bounded final publication are implemented across substantial source paths. | Generated/full verification, remaining Script and recovery failures, non-Entry removal coverage, and complete reference-host application proof remain. |
-| Console delivery and parity | The production SPA packaging and API-first serving path have recorded qualification. | Full operator-surface parity, generation cleanliness and the remaining feature actions must pass the final gates; packaging evidence does not qualify every Console action. |
+| Host, Controller and Agent | Native Controller, owned Agent and independent etcd lifecycle; staged updates and recovery paths exist. | Candidate-bound fresh installation, component-specific updates, failed activation, in-flight interruption and ingress continuity. Historical restart/upgrade passes are bounded. |
+| Hierarchy and networking | Tenant/Project/Environment lifecycle, Zone reservations and aggregate deletion exist. | Current partial-failure, concurrency and physical-cleanup proof. Conflicting old Tasks are not repaired by admission guards. |
+| Services and Release Groups | Lifecycle, immutable Releases, singleton blue-green, recreate and serial groups exist. | Exact-count replicas, grouped hooks, tag selection and recovery after configuration changes require complete current-case evidence. Rolling and replicated blue-green are unsupported. |
+| Observation and logs | Serving observations, Task streams and transient workload logs exist. | Current live health/Route parity and log-follow interruption checks. The last recorded Environment log-stream rerun is outstanding. |
+| Blueprints | Authoring, validation, bounded publication and immutable execution paths exist. | Entry omission currently conflicts with the non-destructive contract; retain Entry keys. Full current Apply/reapply and recovery remain unqualified. Latest-wins is not connected end to end; `x-gp-network` is reserved, not operable. |
+| Volumes and Entries | Managed storage, configuration materialization and deletion exist. | Mounted-consumer cleanup, source retirement, pinned-file recovery and interruption need candidate-specific proof. |
+| Scripts | Ordered hooks and explicit image/user/resource contexts exist. | First Apply, exact reapply, cleanup, Abort and unknown-outcome recovery on current runtime. Scripts cannot undo arbitrary writes. |
+| Backing services | PostgreSQL, explicit Valkey authentication modes and Custom creation/hooks exist. | Current live provisioning, hook timeout/retry and credential-retention evidence. New Custom hook owners must Attach before a Blueprint consumes their facts. Permanent backing deletion is not supported. |
+| Components and ingress | CoreDNS, Caddy and Cloudflare Tunnel integrations exist. | Real DNS, template/reload, restart and selected public/private ingress continuity. Provider setup is not performed by GP. |
+| Secrets and Connectors | Scoped Secret lifecycle and Environment-owned Connector metadata exist. | Current execution pin/deletion races and provider use. Connector creation does not validate remote storage. |
+| Backup/Restore | Policy, source, key and Recovery Point scaffolding plus partial execution exist. | Incomplete and deferred. Restore is not operationally qualified; Valkey has no safe accepted source/artifact contract. |
+| GitHub Runners | Durable lifecycle and allocation code exists. | The full accepted host-isolation, transient-token, helper/proxy and reboot contract is incomplete and unqualified. Real jobs need a fresh operator token. |
+| Console, CLI and API | Production surfaces and generated clients exist. | Current generation/build cleanliness and complete operator-action parity. Packaging or schema generation alone does not prove parity. |
 
-The acceptance index contains the dated evidence behind recorded qualification:
-[acceptance.md](acceptance.md). Keep each claim bounded to the source revision,
-artifact and topology named there.
+## Release boundary
 
-## Acceptance
+The owner deferred Backup/Restore from the immediate hosting assessment. That is
+not a Gate B pass or data-loss acceptance. Failed-rollout recovery remains part
+of hosting safety and is distinct from restoring a database backup.
 
-[The MVP acceptance gates](mvp.md#acceptance-gates) define hosting and recovery
-proof. They remain incomplete. Each row above also retains the requirements of
-its owning feature document; a focused suite or one live journey does not
-qualify unrelated capabilities.
+Select an exact candidate and required deployment-specific cases before QA.
+Record failures and missing variants openly; the owner decides repairs, further
+scope and operational permission. A single-host reboot has unavoidable downtime,
+and recreate intentionally interrupts workloads. Do not advertise high
+availability or unconditional zero interruption.
 
-Live mutations remain paused pending storage and source-integrity qualification.
-Current operational authority comes from explicit user instructions. Historical
-host observations do not lift the pause.
-
-## Completion
-
-MVP completion requires its accepted feature requirements, operator journeys,
-failure and recovery cases, generated artifacts and full CI gates to pass.
-Every relevant safety, data, parity and security issue must be closed. A working
-fixture, historical host result or source inspection alone is not completion.
+[Remaining qualification](issues/runtime-qualification.md) records the actionable
+proof gaps and known unresolved observations. Historical incidents do not describe
+the current host or impose a permanent QA pause.

@@ -1,7 +1,5 @@
 # Backing services and Attaches
 
-## Purpose and scope
-
 Backing services provide shared datastores and caches without creating a second
 resource model. A Backing Service is the facade over one Platform-owned
 hierarchy:
@@ -19,7 +17,7 @@ or facts. Custom does not inherit database grants or managed Backup support.
 
 Backing creation does not accept an uploaded Blueprint, an existing Zone, an
 operator-selected PostgreSQL image, or runtime plugins. Existing-Zone selection
-is deferred post-MVP; [ADR 0055](../decisions/0055-revision-bound-network-observation-and-backing-blueprint-scope.md)
+is deferred post-MVP; [Backing Service provisioning](../decisions/backing-service-provisioning.md#network-selection-is-intentionally-narrow)
 records the constraints that a future decision must resolve without making
 that path current behavior.
 
@@ -27,7 +25,7 @@ The exact public operations are owned by [the API and CLI
 contract](../api-cli.md). Desired-state Attach syntax is owned by [the
 Blueprint contract](../blueprint.md).
 
-## Functional requirements
+## Operating a backing service
 
 ### Creation and lifecycle
 
@@ -54,7 +52,7 @@ Permanent Backing deletion is outside the current MVP, by owner decision on
 2026-09-12. Start recreates runtime using the retained configuration and data.
 A future permanent Delete needs a separate Console action, CLI command and API
 operation with impact preview, confirmation and explicit approval. The
-[deferred safeguards](../decisions/0053-durable-hierarchy-and-backing-facade-deletion.md#8-deferred-backing-service-permanent-deletion)
+[deferred safeguards](../decisions/resource-deletion.md#permanent-backing-deletion-remains-deferred)
 do not authorize a route or a change to Destroy.
 
 ### Unified provisioning and optional Custom hooks
@@ -207,111 +205,25 @@ environment, save ACL changes to the owned data Volume, and prove success
 before publishing ready facts. Existing ACL state is retained on restart; it
 must not be regenerated in a way that erases Attach users. Consumer identities
 must not receive administrative commands. The exact accepted modes and fact
-forms remain in [ADR 0068](../decisions/0068-valkey-authentication-modes.md).
+forms remain in [Networks, Connectors, and shared access](../decisions/network-and-shared-access.md#valkey-authentication).
 
-## Non-functional requirements
+## Limits and design
 
-- Aggregate creation, Attach creation, detach, retry, and runtime destruction
-  preserve stable ids, immutable plans, operation fences, and protected replay.
-- Credential and fact plaintext stays in encrypted subordinate storage or a
-  bounded execution/reveal path. It is never logged or stored in public Task
-  evidence.
-- Adapter execution fails closed when its selected procedure, image authority,
-  encrypted identity, or persistent ACL state cannot be validated. It must not
-  substitute a mutable tag, a same-major runtime, or an advisory shell string.
-- The rejected release-registry design formerly recorded as ADR 0054 provides
-  no registry, wire, helper, image, platform, or acceptance authority. In
-  particular, its ARM64-only scope conflicts with the product's AMD64 and ARM64
-  requirement.
-- Valkey data recovery remains a production requirement. Shared-instance RDB
-  capture is not a safe per-Attach artifact, and `valkey-cli --pipe` does not
-  restore an RDB image. Until an exact source, consistency, artifact, and
-  restore-publication contract is accepted and implemented, Valkey Backup and
-  Restore fail before Task publication with `strategy.not_implemented`; live
-  data-directory archival is not authorized.
+Valkey shares one instance keyspace across Attaches. Removing a password blocks
+future authentication with it; it does not terminate already established
+application connections. Grants are a PostgreSQL provisioning feature, not
+generic Custom or Valkey access controls.
 
-## Technical design
+Valkey Backup/Restore has no accepted safe per-Attach artifact and restore
+contract. A live data-directory archive is not a substitute; unsupported requests
+fail with `strategy.not_implemented`. Custom has no managed Backup support.
+Backup/Restore work is currently deferred.
 
-[ADR 0037](../decisions/0037-backing-service-network-selection.md) owns atomic
-Backing Service creation and runtime lifecycle. [ADR 0031](../decisions/0031-durable-attach-facts-and-grants.md)
-owns durable Attach credential ownership, reverse references, task behavior,
-facts, grants, and Backup-source identity. [ADR 0068](../decisions/0068-valkey-authentication-modes.md)
-owns the accepted Valkey authentication modes. ADR 0053 owns the accepted
-hierarchy-deletion engine and retains the separate deferred Backing extension;
-neither changes the current runtime-only Destroy action.
+[Backing-service provisioning](../decisions/backing-service-provisioning.md)
+explains why credential ownership, network edges and hook results are separate.
+[Network decisions](../decisions/network-and-shared-access.md) explain dedicated
+backing networks and authentication. [Resource deletion](../decisions/resource-deletion.md)
+records the deferred permanent-deletion boundary.
 
-Facts and encrypted values have separate durable records. A dependent fact
-read follows `credential_attach_id` to the direct owner while preserving the
-consumer Attach as the public reference. Reverse references serialize owner
-detach against dependent creation. Creation publishes the primary, indexes,
-immutable render input, Task, operation locks, queue entry, and idempotency
-evidence atomically.
-
-Custom hook inputs are captured in an operation-owned encrypted record. The
-Task binds its ciphertext digest and exact Secret sources; publication activates
-the existing Secret pins in the same transaction. Explicit retry uses that
-capture, not newly edited Secret values. Successful completion deletes the
-private input record and releases its pins. Attach-owned generated values and
-returned facts remain with the credential owner; source Secret plaintext does
-not remain in its fact bundle.
-
-Each hook records STARTED before execution and RESULT before the Task can
-complete. A repeated result acknowledges the same validated result digest and
-preserves the first encrypted record. An interrupted STARTED hook requires
-explicit retry; reconnecting the Agent does not authorize another execution.
-
-Standalone Attach and Detach capture native runtime, current Entry bindings and
-running intent at one fixed revision. Their immutable input retains that capture;
-the Environment mutation epoch fences publication. Network changes target the
-selected active physical workloads, keep historical Release labels and exclude
-Components, stable proxies, inactive slots and dependencies. Retained Component
-ownership never authorizes Component startup, recreation or lifecycle steps in
-an Attach or Detach plan. A stopped or configured-only
-consumer validates Compose without starting a container. The complete Attach
-union replaces the old managed network overlay; ordinary-name containers are
-not substitutes for native workloads. Captured runtime may contain one serving
-slot at the current desired generation because native Deploy does not advance
-desired state. This does not permit incomplete fresh desired slot topology.
-
-The rejected ADR 0054 attempted to define a compiled release ledger, runtime
-registry mutation rules, an ARM64-only image chain, new wire messages, and one
-static Valkey helper in a single proposal. It was rejected because that scope
-conflicted with the accepted C10 implementation and dual-platform requirement,
-introduced unavailable release inputs, and coupled independent release,
-runtime, wire, and Backup decisions. Git history retains that proposal; none of
-its detailed clauses is a routed current contract.
-
-## Acceptance
-
-Feature acceptance requires cross-surface proof of atomic creation, exact
-replay, new-Zone ownership, lifecycle intent, Attach new/existing credential
-rules, owner/dependent detach races, grant resolution, masked list output,
-explicit fact reveal, and restart-stable facts. PostgreSQL and each Valkey
-authentication mode need create, attach, reveal, stop/start, detach, retry, and
-failure-path proof against the same durable identities.
-Destroy must preserve durable configuration and data so Start can recreate
-runtime. No permanent Backing deletion or impact-preview surface is exposed.
-
-Production Gate B additionally requires source-specific Backup, verified
-original-target Restore, and retention proof for every persistent source.
-PostgreSQL Attach recovery is routed through [Backups](backups.md). Valkey does
-not pass Gate B until its unresolved safe source and restore contract is closed
-and proved.
-
-## Current status
-
-Custom creation and the unified hook pipeline are implemented locally, including
-standalone Attach/Detach, initial after-start and explicit lifecycle hooks.
-Focused checks cover creation/admission, output validation, bounded executor
-behavior, checkpoint replay, creation ordering and terminal result gating.
-Live command execution, encrypted fact consumption, Secret input retry/release
-and expiry, and the complete operator journey are not yet qualified. These local
-checks are not a production-readiness claim.
-
-The [capability index](../capabilities.md) records qualification for PostgreSQL
-and Valkey creation plus the core Attach lifecycle, with focused isolated proof
-for Valkey authentication modes. Required explicit selection has HTTP, CLI,
-domain and local Console/browser proof; omission no longer chooses a mode.
-Live Groundplane qualification of the Valkey
-authentication extension remains. Valkey Backup and Restore are not
-implemented or qualified, so this feature is not production-accepted.
+Custom hooks are implemented but not freshly runtime-qualified. See
+[current limitations](../capabilities.md) and the [QA matrix](../qa-matrix.md).

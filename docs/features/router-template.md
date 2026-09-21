@@ -1,17 +1,15 @@
 # Full Caddyfile templates
 
-## Purpose and scope
-
 Let an operator edit a complete Caddyfile through the existing Component Configure,
 CLI config-set and API config-PUT actions. Caddy syntax owns request policy and
 ordering. Groundplane substitutes only its reserved references to existing Routes.
 There is no second hostname, upstream, port or template-binding resource.
 
-[ADR0075](../decisions/0075-full-caddyfile-route-references.md) records the design.
+[Configuration materialization and Scripts](../decisions/configuration-materialization-and-scripts.md#router-configuration-owns-the-complete-native-file) records the design.
 Shared product, API and desired-state rules remain in [mvp.md](../mvp.md),
 [api-cli.md](../api-cli.md) and [blueprint.md](../blueprint.md).
 
-## Functional requirements
+## Configuration and behavior
 
 - An empty template uses `{gp.routes}`, which expands once to the deterministic
   configuration for all Routes. The former `{routes}` marker is rejected.
@@ -73,45 +71,12 @@ attachment; no host DNS, Cloudflare configuration or execution authority changes
   runtime plugin, host-execution permission or Caddy-specific Controller/Agent
   procedure is introduced.
 
-## Technical design
+## Design and qualification
 
-[registered-components/caddy](../../registered-components/caddy/) owns pure rendering
-and its tests. The [Component SDK](../../component-sdk/) supplies immutable HTTP
-Routes. Generic Component read and planning modules compose the preview;
-`internal/app` only connects the modules.
+The [Component boundary](../decisions/component-boundaries.md) keeps rendering in
+[the Caddy integration](../../registered-components/caddy) and execution in
+Groundplane's generic capabilities. [Configuration decisions](../decisions/configuration-materialization-and-scripts.md)
+explain captured sources and safe file replacement.
 
-Console editing belongs in a focused feature module, not new behavior in the
-root store or oversized Environment page. Typed CLI/API source schemas generate
-the wire artifacts; regenerate clients when those sources change. Shared module
-and type rules are in [architecture.md](../architecture.md) and
-[standards.md](../standards.md).
-
-## Acceptance
-
-Pure tests must prove byte-preserving policy outside substitutions, valid/default
-reference expansion, rejection of invalid input, native-placeholder preservation,
-stable upstreams, unchanged inputs and unchanged primary address allocation.
-Read tests must prove a consistent, read-only preview. Console/CLI/API tests must
-show the same complete file and rendered result, preserving Enable/Configure parity.
-
-On authorized disposable QA, prove host/path HTTP, held WebSocket delivery through
-both replicas, stable upstreams, router alias, public Tunnel, explicit deny policy
-and old-config retention after invalid edits. Check direct router ingress where
-the authorized topology allows it. Preserve original workload and Component identities.
-Public Tunnel success does not prove direct-LAN access or client trust; record
-unavailable checks without changing host or provider policy to make them pass.
-Remove an old workaround only after its normal replacement journey is qualified.
-
-Use [delivery.md](../delivery.md#verification-ladder) for focused checks and full
-qualification. The relevant suites live beside the renderer, SDK and generic
-Component code; generation, Console and real-surface checks follow affected behavior.
-
-## Current status
-
-Rendering, preview and operator surfaces have [local implementation evidence](../acceptance/router-and-visibility.md).
-[Native preflight](../acceptance/router-and-visibility.md) has bounded QA
-evidence. The [retained-reload correction](../acceptance/router-and-visibility.md)
-has local proof but is not deployed. Live mutations remain paused for the
-[storage incident](../acceptance/storage-integrity-incident.md).
-The [router evidence](../acceptance/router-and-visibility.md) records the
-retained-reload defect and remaining live checks; this is not full qualification.
+The [QA matrix](../qa-matrix.md) tracks routing, invalid-config retention and
+connection continuity. Current source has not been requalified after restructuring.

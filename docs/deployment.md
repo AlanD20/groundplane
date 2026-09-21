@@ -1,209 +1,17 @@
-# Controller installation and native updates
+# Install and update Groundplane
 
-This runbook implements ADR0074's machine-bootstrap exception. Normal native
-activation remains the same Console/CLI/API Controller update Task. It does not
-authorize a production target or changes to ingress, host firewall or other hosts.
+The installer targets Ubuntu 24.04, Ubuntu 26.04 and Debian 13 on native
+amd64/arm64. It requires root. Supported targets are not proof that every fresh
+installation and upgrade combination has passed QA; see [current limitations](capabilities.md).
 
-## Build and install a Git ref
-
-Use `sudo sh install.sh --ref main` or replace `main` with a branch, tag or
-commit. This path requires no published Groundplane release or image. It resolves
-the ref once through GitHub, downloads that exact commit and builds the Controller,
-embedded Console, CLI, Agent and Runner locally. The selected commit must include
-the ref-install helper and build Dockerfile. Only select code you trust: installation
-executes that commit's deployment helpers as root.
-
-Docker Engine must already be running locally. Python, curl and CA certificates
-are installed when missing, as with tagged installation. Go, Node, npm, Git and
-Buildx are not installed on the host. The Docker build client and toolchains run
-in containers. Internet access and at least 10 GiB of free build space are required;
-this is a preflight minimum, not a bound on peak disk use.
-
-Each invocation owns its builder and cache. Normal completion and handled failures
-remove those, the source checkout, temporary image tags and newly pulled build-tool
-images. Existing images and unrelated caches are not pruned. A machine crash or
-SIGKILL cannot run cleanup. Runtime images in GP's loopback registry and files
-required for unresolved installation/recovery remain; they are not build debris.
-
-Installation reuses the normal bootstrap or guarded Controller/Agent update.
-Existing installations retain their CLI, Runner, etcd, configuration and keys.
-They skip the Runner build because normal updates do not replace it.
-Image configuration and layer timestamps use the resolved commit's UTC committer
-time, not the build clock. This keeps repeated Agent builds of the same source
-from appearing as a different runtime solely because they were built later.
-The display version includes the full source commit; immutable image and binary
-identities still govern activation. `--stage-only`, `--listen-ip` and initial-only
-`--config` remain available. `--ref` cannot be combined with `--version`, `--bundle`
-or `--sha256`. Without `--ref`, installation still downloads tagged release artifacts.
-
-Ref installation is separate from release publication: it never creates a GitHub
-release, pushes an image or publishes per-commit artifacts.
-
-## Prebuilt releases
-
-### Independent release scopes
-
-- `vX.Y.Z` publishes a fresh-install release and automatically creates
-  `controller/vX.Y.Z` and `agent/vX.Y.Z` at the same commit. Component releases
-  reuse the qualified artifacts from that build; generated tags do not start
-  duplicate workflows. Existing tags or published assets are never overwritten.
-- `controller/vX.Y.Z` publishes the Controller/Console/CLI installation bundle
-  and its Runner dependency, without building an Agent image.
-- `agent/vX.Y.Z` publishes only the Agent image, image metadata and small Agent
-  installer archives. Its embedded version is `agent/vX.Y.Z`, with no commit suffix.
-
-`scripts/release.py --version X.Y.Z` builds both; `--agent-only` and
-`--controller-only` select one component. These flags are mutually exclusive.
-Agent builds take `--image REPOSITORY:TAG`; bundles take a published
-`--runner-image REPOSITORY@sha256:DIGEST`. A combined build requires `--push`
-so the bundle can pin its built Agent's registry digest. GitHub publication is
-separate from these build commands.
-
-The same scope flags apply to `install.sh`, including `--ref` builds. A fresh
-default tagged installation selects only `vX.Y.Z`. Existing tagged installations
-select Controller releases only from `controller/` and Agent releases only from
-`agent/`; plain `v` releases are never upgrade candidates. Without an explicit
-version, each selected component independently uses the highest published stable
-version in its namespace. Drafts and prereleases are excluded. Resolution happens
-once before activation and all runtime images are digest-pinned.
-
-Controller-only updates keep the existing Agent. A Controller-only fresh install
-gets the latest Agent release if no Agent exists. Agent-only updates require the
-Controller and enrolled Agent, use the normal protected Agent update Task and do
-not restart or replace the Controller. Updating both performs the guarded
-Controller update first, preserving the Agent, then its independent Agent update.
-If the second operation fails, the completed Controller update is not undone;
-the Agent Task retains its own result and rollback evidence.
-
-The Controller's displayed tagged version is `controller/vX.Y.Z`. OCI tag syntax
-does not permit `/`, so component repositories use `vX.Y.Z` image tags while the
-embedded version retains the Git release namespace. Installation uses digests,
-not mutable image tags. Source branch/commit builds remain local and do not publish
-release tags.
-
-Local release scripts build artifacts without implicitly publishing or installing.
-The tagged GitHub workflow below publishes them. Builds use explicit versions;
-the installer may resolve the latest stable release once before downloading.
-Build from the intended source commit with the repository-pinned toolchains.
-
-### Publish through GitHub Actions
-
-`.github/workflows/release.yml` runs on a pushed `vMAJOR.MINOR.PATCH`,
-`controller/vMAJOR.MINOR.PATCH` or `agent/vMAJOR.MINOR.PATCH` tag whose
-commit belongs to `main`. All external Actions use supported major-version tags
-(such as `@v7`), not patch-version pins or commit hashes. Check upstream releases
-and migration requirements when adopting a new major.
-The first selected release is `0.0.1`. After local `make ci` passes, commit the
-reviewed changes on `main`, push that commit, then create and push `v0.0.1`.
-Review the matching [changelog entry](../CHANGELOG.md) before publication;
-replace its pending-publication label with the actual release date when published.
-
-### Prepare a version
-
-`VERSION` records the intended GP release. Console package and root lockfile
-versions mirror it. Development Go builds still report `dev`; release binaries
-receive their explicit version through the existing build flags. `.runner-version`
-is the upstream GitHub Actions Runner dependency version, not the GP version.
-
-Record changes under `## [Unreleased]` in the root changelog. Then prepare the
-next chosen stable version, for example:
-
-```sh
-bash scripts/repo-env.sh python3 scripts/bump_version.py 0.0.2 --dry-run
-bash scripts/repo-env.sh python3 scripts/bump_version.py 0.0.2
-bash scripts/repo-env.sh python3 scripts/bump_version.py --check
-```
-
-The script updates all four metadata files and moves Unreleased notes into a
-new pending-publication section, retaining earlier sections. With no notes it
-creates empty Added/Changed/Fixed headings; fill them before validation passes.
-It rejects malformed, repeated or older versions and inconsistent metadata before
-writing. Dry-run prints the proposed diff without edits. It never commits, tags,
-pushes, publishes or changes package visibility. Review and commit the changes,
-pass CI, then create and push the matching `vVERSION` tag separately.
-
-Default CI checks metadata consistency and nonempty release notes. The release
-workflow checks that combined and Controller tags match `VERSION`, and publishes
-that version's changelog body as their release notes. Agent tags have independent
-versions and Agent release notes. Existing 0.0.1 architecture
-deferrals do not automatically authorize debt exceptions for a later release.
-
-### Published artifacts
-
-The workflow reuses the full CI gate before publication. It builds and smoke-tests
-Agent and Runner images on native amd64/arm64 GitHub runners, pushes those children
-to `ghcr.io/aland20/groundplane-agent` and `ghcr.io/aland20/groundplane-runner`,
-then publishes and reads back their two-platform indexes. It builds native bundles
-with those immutable index digests and publishes both archives, both checksums and
-`install.sh` to the tagged GitHub Release. Runtime image digests and file checksums
-remain required; using Action tags does not remove artifact integrity checks.
-
-GitHub's workflow token needs package-write and release-write permissions, scoped
-to the relevant jobs. The packages must allow public anonymous pulls: newly created
-GHCR packages may need their visibility changed in GitHub package settings. The
-workflow checks anonymous access and stops before publishing installer assets if
-either image is private. No personal access token is embedded or required by the
-workflow. The repository's release assets must also be publicly downloadable for
-the installer, which does not accept GitHub credentials.
-
-The owner approved public visibility for `groundplane-agent` and
-`groundplane-runner` on 2026-09-20. This does not authorize changing repository
-visibility. Approval is not proof that the remote package settings have changed.
-After the packages exist, an account with package-admin access must select
-**Package settings → Change visibility → Public** for each package. Follow
-[GitHub's package visibility instructions](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility).
-Rerun the failed anonymous-access job after that change. Do not remove its check
-or claim public distribution before anonymous pulls succeed.
-
-Failed jobs do not deploy to hosts. Already pushed image children can remain after
-a later failure. Rerun failed jobs for the same unchanged tag; do not move a release
-tag or overwrite an existing GitHub Release. Manual dispatch is available against
-an existing release tag, not an arbitrary branch. Publishing is not proof of the
-still-unrun fresh-install OS/architecture or uninterrupted-upgrade journeys.
-
-### Public installation site
-
-The owner selected public release assets and GHCR images, with
-`https://gp.aland20.com` as the primary website and `groundplane.aland20.com`
-redirecting to it. This workflow does not change repository visibility. Its current
-same-repository release URLs must be public; a private source repository would
-need a separate public release location before these URLs could work.
-
-The independent `.github/workflows/pages.yml` runs on every push to `main`,
-without path filters or a dependency on release/CI jobs. It can also be dispatched
-manually on `main`. It validates version metadata and
-publishes the exact installer from that commit with its checksum.
-Only the landing page, installer, installer checksum and `.nojekyll` are uploaded;
-the repository, private evidence and internal docs are not exported to Pages.
-The page offers latest-stable installation, independent of the unreleased source
-version. Site deployment does not prove that release assets are published.
-Installation requires a published stable release and its public assets.
-
-One-time setup, performed by an account with GitHub and DNS administration access:
-
-1. Enable Pages with **GitHub Actions** as its source and set its custom domain to
-   `gp.aland20.com`. Verify domain ownership through GitHub's account settings.
-   Ensure the `github-pages` environment permits deployments from `main`.
-2. Create `CNAME gp → aland20.github.io` in the `aland20.com` DNS zone. Do not put
-   a scheme, repository name or URL path in the target.
-3. Enable **Enforce HTTPS** in Pages after DNS verification and certificate issuance.
-4. Configure an HTTPS 301 redirect from `groundplane.aland20.com` to
-   `https://gp.aland20.com`, preserving path and query. This requires the DNS/edge
-   provider's URL-forwarding service; a CNAME alone does not perform a redirect.
-   The redirect service must also cover TLS for the source hostname.
-
-See [GitHub's custom-domain instructions](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/managing-a-custom-domain-for-your-github-pages-site)
-and [multiple-domain limits](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/troubleshooting-custom-domains-and-github-pages).
-With an Actions deployment, a tracked CNAME file does not configure the custom domain.
-
-After a stable release is published, install with:
+## Install a published release
 
 ```sh
 curl -fsSL https://gp.aland20.com/install.sh | sudo bash
 ```
 
-This executes the HTTPS-delivered script as root. To inspect it first and pin a
-specific release instead:
+This runs the downloaded script as root. Use only a trusted installer and source.
+To inspect the script first and choose a version:
 
 ```sh
 curl -fsSLO https://gp.aland20.com/install.sh
@@ -212,263 +20,142 @@ sha256sum --check install.sh.sha256
 sudo sh install.sh --version 0.0.1
 ```
 
-Without `--version`, the installer selects the highest published stable version
-in the required namespace from GitHub's release list, excluding drafts and
-prereleases. Fresh installs use `v*`; updates use `controller/v*` and `agent/v*`.
-Each selected component's downloads and manifest validation are pinned to its
-resolved version. Resolution errors stop before
-bundle download; prerequisite packages may already have been installed. Explicit
-versions bypass discovery. Local `--bundle` use still requires `--version` and
-`--sha256`. Archive integrity and guarded native-upgrade checks are unchanged.
+The website being available does not mean a release has been published. Without
+`--version`, installation selects the highest published stable version in the
+required namespace, excluding drafts and prereleases. Selection happens once.
 
-The release builder already generates bundle SHA256 files. The installer computes
-the downloaded bundle's checksum and compares it with the expected checksum before
-extracting executable files; it also verifies the internal manifest. Pages adds
-an installer checksum. Checksums from the same distribution channel detect changed
-bytes but are not independent publisher signatures. Acceptance requires HTTPS,
-exact installer bytes, working public downloads and path-preserving redirect checks.
+The installer verifies the downloaded archive checksum and manifest before
+executing bundled code. It rejects incorrect version/platform, missing or altered
+members, duplicate paths, links and path traversal. A checksum delivered by the
+same channel detects changed bytes; it is not an independent publisher signature.
+Use `--sha256` to supply an independently obtained archive hash.
 
-### Build the Agent image
+For a local bundle:
 
 ```sh
-bash scripts/release-agent.sh --version agent/v1.0.0 \
-  --image ghcr.io/aland20/groundplane-agent:v1.0.0
+sudo sh install.sh --version 0.0.1 \
+  --bundle /path/to/groundplane-0.0.1-linux-amd64.tar.gz --sha256 ARCHIVE_SHA256
 ```
 
-The default only builds. Add `--push` when publication is intended and registry
-credentials are configured on the builder. Use the returned registry digest in
-the bundle command, not the local Docker image id. Runner remains a separate
-release input built with `make runner-image`; publish it explicitly and supply
-its registry digest too. These images contain no installation credentials.
-The final Agent image uses `scratch`, retaining the Agent, static Docker CLI,
-Compose and CA bundle. The measured amd64 image is 147.5 MB uncompressed versus
-276.0 MB before (46.6% smaller); required Docker/Compose binaries account for much
-of the remaining size. This is a measured reduction, not an absolute minimum claim.
+Replace the path and hash with the actual archive and checksum. This skips the
+archive download, not package-manager or runtime-registry access.
 
-### Build the native bundle
+## What initial installation changes
+
+Bootstrap provisions Docker/Compose and the loopback registry prerequisites,
+installs Controller/CLI and the native recovery guard, creates the age identity,
+configures the pinned Agent/Runner images and enrolls the Agent. No Go or Node
+toolchain is installed on the host. Python, curl and CA certificates are installed
+when needed. A partial or mixed Docker installation is refused, not replaced.
+
+The unauthenticated Controller listens on loopback by default. To expose it on a
+trusted private interface, add `--listen-ip PRIVATE_IPV4`. Use
+`--config /path/to/controller.yaml` for initial configuration, including suitable
+non-overlapping address pools. Bootstrap fills its pinned image selections.
+The installer does not configure public ingress, wildcard listeners or host
+firewalls. Do not expose the API to an untrusted network.
+
+## Build and install a Git ref
 
 ```sh
-bash scripts/repo-env.sh python3 scripts/release_bundle.py --version 1.0.0 \
-  --agent-image ghcr.io/aland20/groundplane-agent@sha256:AGENT_DIGEST \
-  --runner-image ghcr.io/aland20/groundplane-runner@sha256:RUNNER_DIGEST
+curl -fsSL https://gp.aland20.com/install.sh | sudo bash -s -- --ref main
 ```
 
-Replace both digest markers with the actual 64-character registry hashes.
-Build natively on each supported Linux architecture. The script builds the
-production Controller with embedded Console, CLI and source-derived compatibility
-descriptor. It bundles the existing bootstrap, release stager, protected update
-client, unit, tmpfiles and startup example; it does not create another updater.
-Image bytes are not in the archive: installation requires access to their registry.
-The supplied image digests must contain the matching platform; the publisher owns
-registry readback and two-platform qualification under ADR0060.
+Replace `main` with a branch, tag or commit. The installer resolves it once,
+downloads that exact commit and builds locally in containers. This does not need
+a published GP release and does not publish per-commit artifacts. The selected
+commit must contain the ref installer and build Dockerfile. Its deployment helpers
+execute as root, so selecting a ref is a code-trust decision.
 
-Outputs are `.tmp/releases/groundplane-VERSION-linux-ARCH.tar.gz` and the adjacent
-`.tar.gz.sha256`. Existing archives are never overwritten. Archive headers are
-stable; this is not a claim that independent compiler runs are byte-reproducible.
-After qualification, upload these exact files and the reviewed root `install.sh`
-to GitHub Release `vVERSION`, or use the tagged workflow above. The local bundle
-command itself uploads nothing.
+Docker Engine must already be running. Go, Node, npm, Git and Buildx are not
+installed on the host; build tools run in containers. Internet access and at least
+10 GiB of free build space are required. This is a preflight minimum, not a bound
+on peak disk or memory use.
 
-### Install or upgrade on a host
+Each invocation owns its builder, cache, source checkout, temporary tags and newly
+pulled build-tool images. Normal completion and handled failures clean those up
+without pruning existing images or unrelated caches. SIGKILL or a machine crash
+cannot run cleanup. Installed runtime images and files needed by unresolved
+recovery are intentionally retained.
 
-Download the reviewed `install.sh` from the selected release, inspect it, then run:
+Existing installations skip the Runner build and retain their CLI, Runner, etcd,
+configuration and keys. Builds use the resolved commit's timestamp for image
+metadata; the displayed version includes its commit. Activation still checks exact
+image and binary identities.
+
+`--ref` cannot combine with `--version`, `--bundle` or `--sha256`. Scope flags,
+`--stage-only`, `--listen-ip` and initial-only `--config` retain their normal roles.
+
+## Independent release scopes
+
+| Release | Intended use |
+| --- | --- |
+| `vX.Y.Z` | Combined fresh installation; publication also creates matching component releases. |
+| `controller/vX.Y.Z` | Controller/Console/CLI bundle and Runner dependency; no Agent build. |
+| `agent/vX.Y.Z` | Agent image, metadata and small installer archives. |
+
+Updates select only the component namespaces, never plain `v` releases. With no
+version specified, each selected component resolves its own latest stable version.
+Runtime images use immutable digests. OCI repositories use `vX.Y.Z` image tags
+because `/` is not valid in an image tag; embedded component versions retain their
+Git namespace.
+
+The installer accepts mutually exclusive `--controller-only` and `--agent-only`.
+A Controller-only update keeps the existing Agent; a Controller-only fresh install
+selects the latest Agent release when none exists. Agent-only requires the
+Controller and an enrolled Agent and does not replace the Controller.
+
+Updating both runs the guarded Controller update first, preserving the Agent,
+then its independent update. A failed second operation does not undo a completed
+Controller update. Inspect each Task's result.
+
+## Updates, staging and repeat runs
+
+On an existing guarded installation, the installer stages and follows normal
+protected update Tasks. It does not rerun bootstrap, replace CLI/Runner, rewrite
+configuration or keys, or independently restart etcd and application workloads.
+`--config` is rejected on this path. Partial or legacy layouts require explicit
+diagnosis; the installer does not silently repair them.
+
+`--stage-only` requires an existing guarded installation. It prepares a candidate
+without activation so an operator can review it. Activate the printed digest
+through Host's Controller view or the CLI:
 
 ```sh
-sudo sh install.sh --version 1.0.0
+groundplane --host PRIVATE_CONTROLLER_URL controller update --release sha256:DIGEST
+groundplane --host PRIVATE_CONTROLLER_URL task show TASK_ID
 ```
 
-The installer targets Ubuntu 24.04/26.04 and Debian 13 on native amd64/arm64
-and needs root. Ubuntu 22.04 and other distribution versions are rejected. It
-downloads the architecture-specific bundle from this repository's GitHub Release
-and verifies its SHA256 before executing bundled code. It rejects incorrect
-version/platform, incomplete or altered members, duplicate paths, links and path
-traversal. Downloads use HTTPS only and bounded sizes/timeouts. The trust root is
-the reviewed installer plus GitHub's HTTPS release assets; a checksum from the
-same release is integrity checking, not an independent publisher signature.
-Supply `--sha256 HEX` to pin an independently obtained archive hash.
+Replace those values with the private endpoint and actual candidate/Task identity.
+Compatibility is checked again by the running Controller. Staging is not update
+success and does not authorize a changed Agent selection.
 
-For a previously downloaded bundle:
+A repeat of an already completed healthy installation can skip activation after
+checking exact Controller bytes, recovery availability, platform health and Agent
+ownership/image. It may repeat downloads and staging. Matching a version string
+alone cannot hide unhealthy or foreign runtime.
 
-```sh
-sudo sh install.sh --version 1.0.0 \
-  --bundle /path/to/groundplane-1.0.0-linux-amd64.tar.gz --sha256 ARCHIVE_SHA256
-```
+An unresolved receipt takes priority over that shortcut. Lost request responses
+reuse the original acceptance key, body and Task. Follow the printed retained
+helper/resume path; never delete the update journal or bundle to force a new
+request. A recovered failed update stays failed. Only a completed Task is success.
 
-This avoids the archive download, not registry or package-manager access. A fresh
-host provisions the existing Docker/Compose, registry and Runner prerequisites,
-installs Controller/CLI and the recovery guard, creates the age identity and
-enrolls the Agent. No Go, Node or source checkout is needed on the host. The
-Controller listens on loopback by default; use `--listen-ip PRIVATE_IPV4` for a
-trusted private listener. Use `--config /path/to/controller.yaml` for initial
-startup settings, including address pools appropriate for the host. Bootstrap
-fills the pinned Agent/Runner images into that configuration. Public/wildcard
-listeners, public ingress and firewall changes are not part of this installer.
+See [update safety](features/upgrade-safety.md) for busy-work, interruption and
+application-continuity guarantees. Current source has not been freshly qualified.
 
-On an existing guarded installation the same command stages and follows a normal
-Controller update Task. It does not run prerequisite setup, replace CLI/Runner,
-rewrite configuration/keys/units or independently restart etcd/applications.
-`--config` is refused on that path. `--stage-only` requires an existing guarded
-installation and stages without activation; use the Console or the existing CLI
-command below to activate the printed release digest. Legacy and partial
-installations are refused, not silently converted or repaired.
+## Maintainer deployment helper
 
-Failures retain the invocation's private files when recovery needs them. Follow
-the printed resume instructions; never delete the update journal to retry.
-The new entrypoint's real fresh-host and native-update journeys remain unrun;
-host-free safety checks and earlier `deploy.py` QA do not qualify them.
+[scripts/deploy.py](../scripts/deploy.py) builds and transfers from a checkout over
+SSH for explicitly authorized development hosts. Its help owns the command
+options. Supply a private identity and independently verified known-hosts file;
+provisioning is not implied by a documentation example.
 
-### Repeating installation
+The helper reuses the same native stager and update operation. Bootstrap or a
+one-time legacy transition is separate, requires an idle host and may need a
+maintenance window. It refuses retained nonterminal work and does not abort it.
+Guarded hosts cannot use the legacy bootstrap path. Unresolved recovery files
+remain until the reported outcome is resolved.
 
-Repeating installation is safe for an already completed healthy release. After
-staging, the installer checks the running and installed Controller digest, native
-recovery availability, platform health and the enrolled Agent's actual container
-ownership, pinned image and image bytes. An exact match prints `already installed
-and healthy; skipped` without another update Task or process restart. A changed
-version follows the normal protected update. Downloads and staging may repeat;
-this guarantee concerns installed runtime, not an absence of file reads/writes.
-
-An unresolved deployment receipt takes precedence over that shortcut: the client
-resumes its original acceptance key or Task instead of submitting another update.
-A failed update stays failed in history. Matching binary bytes alone never hide
-an unhealthy Agent, active recovery, changed disk bytes or foreign container.
-
-Prerequisite setup reuses a complete working Docker installation and an existing
-matching registry; it does not reinstall/restart them on a successful repeat.
-Ubuntu uses `docker.io` plus `docker-compose-v2`; Debian 13 explicitly installs
-`docker.io`, `docker-cli` and `docker-compose` (Compose v2), since the daemon's
-client dependency is only a recommendation. Package sources:
-[Ubuntu 24.04](https://packages.ubuntu.com/noble/docker-compose-v2),
-[Ubuntu 26.04](https://packages.ubuntu.com/resolute/docker.io), and
-[Debian 13](https://packages.debian.org/trixie/docker.io).
-Partial/mixed Docker
-installations are refused rather than replaced. No upstream Docker APT repository
-or convenience installer is added.
-
-This is not an automatic repair tool for every interrupted bootstrap. Partial
-recovery layouts and an unfinished initial Agent enrollment require the retained
-diagnostic/recovery instructions. Existing configuration is preserved; `--config`
-remains initial-install-only and is refused on a native installation. Repeating
-an install must not become an implicit configuration change or destructive reset.
-
-## Prerequisites
-
-Use the repository-pinned Go, Node and npm toolchains, local Docker and SSH,
-an existing Ubuntu 24.04/26.04 or Debian 13 host of the same architecture, a private root
-SSH identity and an independently verified, pre-populated known-hosts file.
-The target needs Docker/Compose, the loopback registry, curl, Python3, flock and
-systemd. Optional `--setup` provisions the documented host prerequisites; use
-it only with explicit host provisioning authority.
-
-All examples use operator-supplied paths and a target address. The Controller
-remains private; `--ip` configures its LAN listener only at initial bootstrap.
-The native update route does not change listeners or host networking.
-
-## Initial installation or one-time legacy transition
-
-```sh
-python3 scripts/deploy.py --key /path/to/key --known-hosts /path/to/known_hosts \
-  --ip HOST_IP --version RELEASE_VERSION
-```
-
-For an existing legacy Controller, add `--bootstrap` during a maintenance window.
-Stop new operator/scheduled work and wait for existing Tasks to finish; the
-installer checks all retained Task pages and refuses nonterminal work. An old
-binary cannot provide an admission fence retroactively. No active Task is aborted
-by this check. A host already using native recovery refuses `--bootstrap`.
-
-The first installation backs up existing files, creates the private release root,
-installs the Controller and predecessor recovery executable, then installs the
-unit's `ExecStartPre` guard before enabling the service. Controller/recovery
-executables are root-owned0500, matching native immutable input validation.
-It installs the CLI,
-bootstrap Agent/Runner image configuration and age identity only on this path.
-Agent enrollment/update must settle before the first candidate is made selectable.
-On failure, restoration requires a successful Controller stop. Unresolved Agent
-work, native evidence or failed restoration retains the private recovery files;
-follow the reported state before another deployment. Never remove recovery data
-to bypass a failed preflight.
-
-## Normal release deployment
-
-Run the same command without `--bootstrap`. On a guarded host it:
-
-1. Builds release assets and source-derived Controller compatibility metadata.
-2. Publishes/resolves the immutable Agent OCI digest and verifies the transferred
-   Controller bytes against the build descriptor.
-3. Publishes an immutable manifest/binary under
-   `/var/lib/groundplane/controller-updates/releases/<sha256>` and atomically
-   selects it in `candidate.json`.
-4. Persists a protected request receipt, submits `POST /controller/update` and
-   follows that exact Task through the brief Controller disconnect.
-
-Distribution reuses an image only after the local and target Docker content ids
-match exactly, then creates its invocation-owned transport tag. Missing images
-use a4MiB/s paced archive. Runner build/transfer is bootstrap-only: an initial
-read-only recovery-guard presence hint selects artifacts, while the remote
-installer still performs authoritative complete-layout validation and rejects
-partial or changed layouts before lifecycle effects. This
-transport optimization does not authorize a local image id as runtime identity:
-the remote publisher still resolves the registry-reported Agent RepoDigest.
-
-Compilation is deliberately modest on a shared builder: native deployment sets
-build-process `GOMAXPROCS=2`, and the Agent Docker build uses `GOMAXPROCS=2` and
-`go build -p=2`. These are build-only settings, not deployed runtime limits.
-[Go's build documentation](https://pkg.go.dev/cmd/go) defines `-p` as parallel
-build programs; [the runtime documentation](https://pkg.go.dev/runtime#GOMAXPROCS)
-defines the per-process execution limit. Neither is a hard memory or whole-host
-resource guarantee. Provision separate build capacity when application traffic
-cannot tolerate shared CPU, storage or network pressure.
-
-The checkout filesystem must have at least10GiB free before target access and
-before each uncached build stage; at least2GiB must remain before image transfer
-or publication. Deployment refuses insufficient or unreadable capacity and does
-not delete anything automatically. These are conservative admission checks, not
-reservations or a whole-host guarantee: independently provision and monitor
-Docker, Go cache, target and VM backing storage when they use other filesystems.
-Never fill a filesystem that also backs an active application's virtual disk.
-
-Only a `completed` Task is success. A recovered failed update remains failed.
-The Controller owns drain, activation, Agent replacement and recovery. Deployment
-does not overwrite executables, YAML, keys or systemd units, abort work, or
-redeploy application Services. CLI and Runner distribution/configuration are not
-part of the native Controller/Agent release; they remain unchanged on this path.
-
-To stage for later operator review, add `--stage-only`. It requires an already
-guarded host and never submits an update. Review the candidate in the Console's
-Controller page, or activate the printed digest explicitly:
-
-```sh
-bin/groundplane --host PRIVATE_CONTROLLER_URL controller update --release sha256:DIGEST
-bin/groundplane --host PRIVATE_CONTROLLER_URL task show TASK_ID
-```
-
-Compatibility is enforced again by the running Controller before activation.
-An incompatible or modified candidate cannot be activated. Staging never executes
-candidate code and never updates the qualified Agent selection.
-
-## Interrupted deployment client
-
-The private `deployment.json` receipt retains one release, idempotency key and
-accepted Task id. A lost POST response is resolved with the same key/body. Once
-the Task id is known, polling never submits another update. The client waits up
-to720seconds; unresolved outcome is exit2, failed/rejected update is exit1.
-
-On failure, deployment prints the exact retained helper path. Resume that helper
-on the target with `python3 PRINTED_HELPER_PATH --resume`; it uses fixed loopback
-HTTP and the existing receipt, not a new key. Repeating deployment for the same
-unresolved release also reuses its receipt. A different release is refused until
-the earlier request settles. After terminal failure and completed native recovery,
-a fresh explicit deployment is a new update attempt.
-
-Do not manually replace the Controller, remove `journal.json`, or delete the
-retained bundle to make an uncertain operation look complete. Host and Task
-surfaces remain the operator evidence. The receipt contains no credentials.
-
-## Local verification
-
-`make deployment-check` exercises staging safety, partial bootstrap rejection,
-empty-only rollback, idle preflight, durable acceptance replay, same-Task resume
-and the installer native/legacy branch boundary. `make controller VERSION=...`
-builds embedded Console assets, Controller and its matching build descriptor.
-These checks do not substitute for live A→B, bad-candidate, drain, interruption
-and workload-traffic qualification or the required complete `make ci` gate.
+Build-space checks do not reserve capacity: do not fill a filesystem that also
+backs an application's virtual disk. Release production and Pages publication
+are described in [releasing](releasing.md), not performed by host installation.

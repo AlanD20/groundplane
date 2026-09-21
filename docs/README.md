@@ -1,129 +1,89 @@
-# Groundplane documentation
+# Documentation
 
-Documentation describes the current product, its requirements and its design.
-Git preserves previous versions. Start with the document that owns the question.
+## Operators
 
-## Document owners
+Start with [installation and upgrades](deployment.md), then choose the feature
+you need below. [Product scope](mvp.md) explains the resource model and trust
+boundary. [Capability status](capabilities.md) distinguishes available
+implementation from unfinished or unqualified behavior.
 
-| Document | Purpose |
-| --- | --- |
-| [mvp.md](mvp.md) | Product scope, shared behavior, domain terms and acceptance outcomes |
-| [Feature documents](#features) | One entry point for a feature's requirements, design and acceptance |
-| [api-cli.md](api-cli.md) | Operator actions, CLI commands and REST surfaces |
-| [blueprint.md](blueprint.md) | Desired-state grammar and validation |
-| [architecture.md](architecture.md) | Shared process, module and dependency boundaries; wire generation |
-| [standards.md](standards.md) | Enforceable coding rules |
-| [agents.md](agents.md) and [delivery.md](delivery.md) | Repository workflow, verification and delivery |
-| [deployment.md](deployment.md) and [acceptance.md](acceptance.md) | Deployment and qualification procedures |
-| [qa-matrix.md](qa-matrix.md) | Product cases, independent expected outcomes, coverage gaps and links to execution evidence |
-| [capabilities.md](capabilities.md) | Product-wide implementation and qualification gaps |
-| [Changelog](../CHANGELOG.md) | Release features and known limits; not product or qualification authority |
-
-Read relevant sections, not every linked document.
-Requirements describe what must be true; implementation and
-qualification status describe what has been built and proved. Neither a missing
-implementation nor an old test result changes a requirement.
+[CLI and API usage](api-cli.md) explains scope, request replay and asynchronous
+operations. [Blueprint reference](blueprint.md) explains authored configuration.
+The [changelog](../CHANGELOG.md) records release changes, not production readiness.
 
 ## Features
 
-| Feature | Document |
+| Operator question | Guide |
 | --- | --- |
-| Host health, bootstrap, Controller and Agent settings | [Platform runtime](features/platform.md) |
-| Resource ownership, names and aggregate deletion | [Hierarchy](features/hierarchy.md) |
-| Operator surfaces and production SPA delivery | [Console and API](features/console-and-api.md) |
-| Managed Components, DNS, Routes and Zone membership | [Components and routing](features/components.md) |
-| Durable work, Activity, cancellation and transient output | [Tasks and logs](features/tasks-and-logs.md) |
-| Persistent storage and exposed configuration values | [Volumes and Entries](features/storage-and-entries.md) |
-| Revisioned desired-state editing and reconciliation | [Blueprints](features/blueprints.md) |
-| Workload lifecycle, Deploy, Rollback and recovery | [Services and Releases](features/services-and-releases.md) |
-| Policy, artifacts, source recovery and retention | [Backups](features/backups.md) |
-| Shared services, built-in adapters, custom hooks and consumer facts | [Backing services and Attaches](features/backing-services.md) |
-| Reusable values and S3 credential configuration | [Secrets and Connectors](features/secrets-and-connectors.md) |
-| Isolated GitHub Actions execution | [Runners](features/runners.md) |
-| Controller and Agent updates | [Safe updates](features/upgrade-safety.md) |
-| Complete operator-authored Caddyfile | [Router templates](features/router-template.md) |
-| Ordered setup hooks with explicit resources | [Script execution](features/setup-scripts.md) |
+| How do I manage the host, Controller and Agent? | [Platform](features/platform.md) |
+| How are applications grouped, renamed and removed? | [Hierarchy](features/hierarchy.md) |
+| How do Console actions relate to the CLI and API? | [Console and API](features/console-and-api.md) |
+| How do networking, DNS and ingress work? | [Components and routing](features/components.md) |
+| How do I customize Caddy routing? | [Router templates](features/router-template.md) |
+| How do I deploy, stop or roll back a Service? | [Services and Releases](features/services-and-releases.md) |
+| How do I validate and apply desired state? | [Blueprints](features/blueprints.md) |
+| How do I share a database, cache or custom container? | [Backing services and Attaches](features/backing-services.md) |
+| How do I supply persistent storage and configuration? | [Volumes and Entries](features/storage-and-entries.md) |
+| How do I store credentials and select object storage? | [Secrets and Connectors](features/secrets-and-connectors.md) |
+| How do setup and migration hooks run? | [Scripts](features/setup-scripts.md) |
+| How do I follow work, retry, abort or read logs? | [Tasks and logs](features/tasks-and-logs.md) |
+| What are the backup and restore limits? | [Backups](features/backups.md) |
+| How are GitHub Runners isolated? | [Runners](features/runners.md) |
+| What must an update preserve? | [Update safety](features/upgrade-safety.md) |
 
-Feature entrypoints route detailed runtime, persistence and wire contracts when
-those details would obscure the feature overview. The retained
-[technical decisions](decisions/README.md) are current design references, not a
-chronological reading list. Read only the sections needed for the task.
+## Maintainers
 
-## Feature document
+- [Architecture](architecture.md): process and module ownership, data flow and code entry points.
+- [Technical decisions](decisions/README.md): reasons, boundaries and consequences.
+- [Coding standards](standards.md): rules that are not obvious from the implementation.
+- [Delivery](delivery.md): contribution, testing and release expectations.
+- [Releasing](releasing.md): version preparation, artifacts, publication and Pages.
+- [Agent workflow](agents.md): task authority, bounded delegation and local checkpoints.
+- [QA matrix](qa-matrix.md): behavioral cases and independent expected outcomes.
+- [Qualification records](acceptance.md#historical-evidence-register) and [open limitations](issues/runtime-qualification.md):
+  what earlier runs established and what still needs proof.
 
-Use one living `docs/features/<feature>.md` for each coherent feature. A small
-change belongs in its existing feature document, not a new file per task or fix.
-Use these sections when relevant:
+Requirements and evidence are different. Accepted design is not necessarily
+implemented; implementation is not necessarily qualified. Missing code does not
+silently remove a requirement.
 
-1. **Purpose and scope.** Who needs the feature, the outcome, and what it excludes.
-2. **Functional requirements.** Operator behavior, inputs, outputs, state changes
-   and failure behavior. Link to the API and Blueprint definitions.
-3. **Non-functional requirements.** Relevant security, reliability, performance,
-   resource and compatibility constraints. State measurable limits when they are
-   required; do not invent targets to fill a template.
-4. **Technical design.** Owning modules, interfaces, data flow, state transitions
-   and dependencies. Explain important choices and link to the code and schemas.
-5. **Acceptance.** Observable conditions; add tests or operator checks only when
-   warranted by [testing policy](delivery.md#testing-policy). Map justified
-   behavioral tests to stable cases in [the QA matrix](qa-matrix.md)
-   and link per-case evidence; do not paste execution transcripts. Build success
-   is a prerequisite, not feature acceptance.
-6. **Current status.** Distinguish agreed requirements, implemented behavior and
-   completed qualification. State remaining gaps and link to their evidence.
+## Documentation rules
 
-A feature document should explain the behavior and why its design meets the
-requirements. Put shared rules in their owning document and link to them.
-Generated schemas, manifests and code remain the sources for mechanical details.
+Every document has an audience and answers a concrete question.
 
-## Plain language
+Operator guides explain available actions, inputs, consequences, failure handling
+and limitations. Include a small example when it helps someone perform the task.
+Mark accepted-but-unavailable behavior where the operator would otherwise try it.
 
-Name the actor, action, object and failure condition. Use one term for one
-concept, and define unfamiliar terms when they first matter. Preserve exact
-code and API names; explain them rather than inventing new labels.
-Use normal spacing, short sentences and headings that describe their content.
-Keep the reason for a non-obvious constraint beside that constraint.
-Remove filler, repeated rules, unexplained abbreviations and claims such as
-“robust” or “production-ready” without a stated condition and evidence.
-Clarity and complete meaning matter more than an arbitrary word limit.
+Architecture documentation explains who owns a decision, why that boundary exists,
+and which consequences matter. Link to the owning code. Do not translate functions
+into prose or copy structs, source trees, command inventories or implemented wire
+schemas. The code, generated OpenAPI, protobuf and command help own those details.
+An accepted protocol not yet implemented may retain its missing contract in one
+clearly marked design reference; do not present it as a usable feature.
 
-## Maintenance and deletion
+Use ordinary technical language. Name the actor, action and consequence. Define
+necessary terms once. Delete filler, unexplained labels, repeated constraints and
+claims such as “production-ready” without evidence. No mandatory six-section
+template, research-paper format or document per fix.
 
-Update the root changelog with user-visible changes and release limits before
-publishing a version. Mark an unpublished version clearly. Do not list planned
-or partial capabilities as completed features or copy test transcripts into it.
+Keep each requirement in one owner:
+product-wide rules in `mvp.md`, feature behavior in its feature guide, authored
+syntax in `blueprint.md`, surface conventions in `api-cli.md`, module boundaries
+in `architecture.md`. Link instead of restating. ADRs explain decisions; they do
+not form a competing product specification.
 
-- Update the owning document when behavior or design changes. Update only
-  affected references and dependent contracts; do not copy the same rule into
-  several documents.
-- Record a design choice in the feature document. Use a separate ADR when a
-  shared or expensive-to-reverse decision needs its own rationale and alternatives.
-  An ordinary commit does not require a new ADR or acceptance report.
-- Keep agent checkpoints, task schedules and local integration logs untracked.
-  Existing local records (`docs/head.md`, `tasks/todo.md` and
-  `docs/acceptance/repository-consolidation.md`) are ignored; new iteration
-  records belong under ignored `.tmp/`. Public docs must not depend on them.
-  Replace completed next actions instead of appending a journal. Product gaps,
-  requirements and reusable qualification evidence remain in tracked documents.
-- Retain evidence needed for unfinished qualification, unresolved incidents or
-  a claim still used by the project. It is dated evidence, not a current command
-  or permission. Keep private logs and credentials out of tracked documentation.
-- Before deleting a document, check its requirements, rationale, unresolved
-  work and incoming references. Move anything still needed to its current owner,
-  then remove the old file and repair references in the same commit.
-- Fully superseded ADRs, plans and reports may be deleted after that check.
-  Record the replacement in the commit; recover history from Git when needed.
-  Do not build another Markdown archive of obsolete instructions.
-- A missing implementation is not a stale requirement. Preserve uncommitted
-  work and failed evidence. Ask the owner when a conflict needs a product decision.
+Before retiring a document, retain its still-valid requirements, rationale and
+unresolved limitations in the appropriate owner. Repair incoming links in the
+same change. Delete the superseded file; Git is the archive. Do not keep a second
+Markdown archive, compatibility document or stale “next steps” list.
 
-## Moving an existing contract
+Agent checkpoints, investigation transcripts, work plans, private host details
+and raw QA artifacts stay in ignored local storage. Public documentation must be
+usable without those files. A dated incident describes that run, not current host
+state or permission for future actions. Update the current checkpoint instead of
+appending an endless journal.
 
-Migrate one feature or related document group at a time. Record the source and
-destination, preserve requirement meaning and qualification limits, check
-references, and land the slice before starting another independent migration.
-A readability change does not authorize new behavior or code restructuring.
-
-`mvp.md`, `api-cli.md`, `blueprint.md` and `architecture.md` retain their shared
-authority. A feature document owns its feature-specific detail and routes exact
-technical contracts. Moving a requirement means updating its old home and readers
-in the same slice, not creating competing copies or changing its approval status.
+Preserve the behavioral QA matrix and honest qualification limits. Tests need
+a concrete behavioral reason under [testing policy](delivery.md#testing-policy);
+documentation edits do not call for static-text tests or a build.

@@ -1,152 +1,72 @@
 # Volumes and Entries
 
-## Purpose and scope
+Volumes provide persistent Environment-owned storage. Entries provide explicit
+configuration values as environment variables or files. Reusable Project and
+Platform Secrets are separate resources referenced by Entries.
 
-Give an Environment persistent host storage and explicit configuration inputs
-without putting generated paths or secret plaintext into desired state. Volumes
-own storage roots; Entries expose a value as an environment variable or file.
-Reusable Project and Platform Secrets are a separate resource.
+## Volumes
 
-[mvp.md](../mvp.md) owns behavior, [blueprint.md](../blueprint.md) owns authored
-syntax, and [api-cli.md](../api-cli.md) owns the public operations.
+A Volume has a stable ID, a renamable slug and an immutable Compose key. Mounts and
+Backup sources retain the ID; the managed host directory retains the key.
+Paths are relative to GP's managed storage, not arbitrary host paths. GP rejects
+escapes, unsafe links and ownership mismatches.
 
-## Functional requirements
+Removing a Service does not remove its Volumes. Volume removal is an explicit,
+impact-checked operation: review mounts, Backup effects and active operations.
+The complete preview supplies the removal token; confirm the immutable key, not
+the slug. Changed impact invalidates confirmation, and there is no force shortcut.
+The operation publishes its replacement desired state and proves consumers detached
+before destroying data. Cleanup must succeed before ownership disappears. A failed or
+interrupted removal keeps its identity and recovery information; Retry does not
+repeat a physical deletion when its exact directory absence has already been
+proved.
 
-- A Volume has a stable identity independent of its renamable label. Its managed
-  root and directory lifecycle are Groundplane-owned. A desired path cannot
-  escape that authority or select arbitrary host storage.
-- Volume removal is an explicit impact-checked workflow, not an incidental
-  consequence of removing a Service. Host cleanup and successful terminal
-  publication must agree before desired ownership disappears.
-- Entry metadata binds one immutable current value generation. A plain literal
-  remains visible; a secret literal stores no plaintext in the primary. Fact and
-  reusable-Secret sources remain live desired references while an execution
-  captures exact resolved bytes for retry and restart.
-- Entry type, destination, secret storage class and file ownership are immutable
-  under edit. Source and exposure may change. Every file Entry has explicit
-  numeric `uid` and `gid`, including zero; an env Entry has neither.
-- Entry removal keeps metadata and generations on failure, Abort or timeout.
-  Successful terminal publication deletes the Entry, indexes and its owned
-  generations together. Never-applied removal has no host effect.
-- Direct desired mutations and complete Blueprint application share the same
-  Environment revision authority. Retry never silently selects later values or
-  a different serving workload.
-- Sharing desired publication does not grant file-recovery authority. Blueprint
-  Apply and explicit file-writing mutations capture configuration sources;
-  metadata-only and Volume operations do not acknowledge unrelated file state.
-  A Volume Retry with proved directory absence completes its bookkeeping without
-  another physical deletion, within the existing transaction limits.
+## Entries
 
-## Non-functional requirements
+An Entry can use a literal value, a reusable Secret or an Attach fact. Exposure is
+explicit: it applies to all Services or the selected Services. GP does not inject
+every backing-service credential automatically.
 
-Use canonical root-relative paths, exact owner checks and bounded filesystem
-operations. Secret values are encrypted durably and exposed only through explicit
-authorized reveal or transient materialization. Protected replay stores literal
-digests, not secret bytes. A lost acknowledgement is not permission to repeat a
-destructive filesystem operation without its retained authority.
+Entry type, destination, secret storage class and file ownership cannot change
+through edit. Source and exposure can change. File Entries require numeric `uid`
+and `gid`, including explicit zero; environment-variable Entries have neither.
+Generated environment files and secret files use mode `0600`; plain file Entries
+use read-only mode `0444`.
+See the [Blueprint reference](../blueprint.md) for exact input fields.
 
-## Technical design
+A plain literal remains visible. Secret literals are encrypted; ordinary reads
+do not reveal plaintext. Desired references can resolve to newer values for a
+new operation, but an accepted Task pins exact value generations for its own
+execution and Retry. A later edit must not change an in-flight operation.
 
-| Concern | Current technical contract |
-| --- | --- |
-| Value generations, destinations and Agent materialization | [Entry materialization](../decisions/0020-environment-entry-materialization.md) |
-| Entry primaries, replay, deletion and API/YAML conversion | [Entry records](../decisions/0029-environment-entry-durable-record.md) |
-| Managed roots, directories and permissions | [Volume filesystem lifecycle](../decisions/0025-environment-volume-root-and-directory-lifecycle.md) |
-| Exact identity, removal impact, runtime state and recovery | [Volume removal](../decisions/0049-volume-identity-and-removal.md) |
-| Shared desired-revision publication | [Direct desired changes](../decisions/0058-revision-authoritative-direct-desired-mutations.md) and [Blueprint publication](../decisions/0051-blueprint-staged-revision-publication.md) |
+## Applying changes
 
-### One Volume-removal record format
+Entry create, edit and bulk-upsert capture the acknowledged running workloads
+affected by the changed exposure. They materialize configuration and select only
+those workload instances, without restarting unrelated Services or stable
+proxies. A stopped or absent Service is not started merely because its previous
+Release remains in history. With no selected running workload, the operation only
+materializes files.
 
-`internal/infra/volumeremovalrecord` owns validated record values, canonical binary
-encoding, digests, physical keys and size limits. It imports no etcd client,
-repository, Task model, Agent protocol or process capability. Both the desired
-publisher and `internal/infra/etcd/volumeremoval` consume it without a cycle.
-It is a narrowly named format package, not a shared-record framework.
+Entry removal is different: it updates or removes the pinned configuration files
+without running Compose or restarting a Service. A running process keeps its
+already-loaded environment until its next deployment or reconciliation. The
+shared environment file is rewritten even when empty; an empty Service-specific
+file is removed. Removing a never-applied Entry has no host effect.
 
-The runtime repository owns checkpoint transitions, reads, assignment validation
-and Retry. The desired publisher owns the single desired/operation/Task
-publication. The format package cannot perform either operation or supply
-arbitrary store mutations or callbacks. Its replay locator is a plain value;
-the runtime adapter converts it to the existing idempotency API, whose owner
-retains lookup, replay and retention. Record consumers share one unchanged binary
-format and key contract without aliases or alternate decoders.
+On failure, timeout or Abort, Entry metadata and generations remain available for
+retry. Successful cleanup removes them together. Entry deletion is not reusable
+Secret deletion; the latter also protects Component references and values pinned
+by recoverable Tasks.
 
-### Entry changes capture serving runtime
+## Safety and design
 
-Create, edit and bulk-upsert capture each running Service's acknowledged runtime
-at the desired read's fixed revision. The receipt must identify its serving
-Release; missing or mismatched authority fails without historical backfill. Each
-retained workload keeps its exact Release, image, proxy and ownership metadata.
-Entry decoration updates only the captured bindings. The mixed-runtime merger
-retains persistent resource authority.
+File operations use bounded, root-relative paths and exact ownership. A lost
+acknowledgement does not authorize another destructive operation. Metadata-only
+changes do not acknowledge unrelated file or runtime state.
 
-The same fixed-revision capture reads the current complete Attach union for the
-desired baseline and retains acknowledged running fragments over that baseline.
-Release history may predate an Attach or Detach; an Entry edit must not restore
-those old network memberships. The Environment epoch and exact receipt revisions
-reject an intervening runtime change.
-
-Before merging, remove a predecessor stable proxy's generated config only after
-proving its canonical name, sealed content and digest, sole proxy binding and
-absence of another Service reference. The captured proxy supplies current config;
-authored/shared config and Network/Volume guards are unchanged.
-
-The immutable desired candidate stores the capture. Reconstruction uses that
-runtime and the baseline revision's prior Entry decorations, never a later live
-slot; the existing plan hash seals the pair. The Task's typed `entry_runtime`
-capture stores sorted, unique running Service ids. Reconstruction intersects that
-set with changed Entry exposure and the candidate's retained workload identities.
-Execution therefore selects only exposed running workload instances, without
-dependency or stable-proxy restarts. Stopped and absent Services receive no
-startup step, even when their serving Release remains in history. An explicitly
-empty set produces materialization-only work; missing capture cannot authorize
-publication or execution. Entry DELETE remains materialization-only and does not
-use this capture. Journal encoding, status transitions and retry preserve this
-selection without sharing mutable slices between Tasks.
-
-The Task also stores a compact update recipe for each selected running Service:
-its exact source receipt revision and new current/retained artifact identities.
-It does not duplicate full runtime bytes. Publication, claim and successful
-acknowledgement compare those source revisions. Completion atomically records the
-selected workloads' new receipts, materialized generations and Task outcome.
-Stable proxy bytes and the independently applied aggregate Compose artifact stay
-unchanged; pending desired Volumes or workloads cannot become applied through an
-Entry edit. Materialization-only work writes no runtime receipt. See
-[runtime authority](services-and-releases.md#technical-design) for the remaining
-recovery-reader and file-retention limits.
-
-`entry_runtime_epoch_revision` records the captured Environment mutation epoch.
-It must equal the direct publisher's epoch, which final commit also compares.
-Ordinary Release publication and terminalization advance that epoch and planning
-excludes active Release/Environment operations. Drift before publication or at
-commit rejects the capture. This adds no second publisher, per-Service
-transaction or higher record/transaction limit. Blueprint
-domain fragments remain forbidden on direct mutations. An old unstarted plan
-without capture authority is not rewritten; a fresh operation must capture it.
-
-## Acceptance
-
-Prove path and ownership rejection, explicit file permissions, exact generation
-replay, atomic primary/value publication and deletion, failed-removal retention,
-impact guards, bounded cleanup and restart recovery. Pin Volume record bytes and
-key/replay admission; prove the combined publisher uses that same format within
-the complete transaction budget.
-
-For Entry capture, model a published native Blueprint followed by Deploy/Rollback
-with real immutable codecs. Prove serving selection, reconstruction and rejection
-of both pre-publication and commit-time epoch drift; replay must be read-only.
-Include stopped and absent runtime intent after a retained Release, then an Entry
-change. Prove materialization-only execution after loading the published Task,
-explicit empty-set retention on retry, and rejection of missing or malformed
-capture. A present Release alone is not evidence that a Service should run.
-Hermetic storage proof and real Docker/CLI proof remain distinct.
-
-## Current status
-
-Lifecycle and desired-revision integration have recorded bounded qualification.
-The Entry serving-capture regressions proved selection, reconstruction and both
-epoch fences. Stopped and absent cases also pass through capture, publication and
-stored-plan reconstruction; journal/retry tests preserve explicit empty capture.
-Source-specific persistence and restore remain part of production
-qualification. See [capabilities.md](../capabilities.md), [acceptance.md](../acceptance.md)
-and the open storage/recovery issues; no fresh runtime proof is claimed here.
+[Configuration materialization](../decisions/configuration-materialization-and-scripts.md)
+explains why execution pins values and workload identity.
+[Resource deletion](../decisions/resource-deletion.md) explains cleanup before
+publication. Current qualification limits are in [capabilities](../capabilities.md);
+behavioral cases remain in the [QA matrix](../qa-matrix.md).

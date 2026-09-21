@@ -11,13 +11,13 @@ Console (`console/`), and the Go Controller, Agent and CLI.
 
 - **docs/README.md** — documentation owners, feature format and migration rules.
   Read it before creating, moving or deleting documentation.
-- **docs/features/** — feature purpose, functional and non-functional requirements,
-  technical design and acceptance. Use the feature index in `docs/README.md`.
+- **docs/features/** — operator capabilities, actions, constraints and limits.
+  Use the feature index in `docs/README.md`; each guide links its design owner.
 - **docs/mvp.md** — the authoritative product contract. Reach for it on
   any product, model, or locked-decision question, and BEFORE changing
   product or Console behavior. Missing implementation does not narrow this contract.
-- **docs/api-cli.md** — the CLI command tree and the REST API. Reach for
-  it on any command or endpoint work. The 1:1 rule: every operator-facing
+- **docs/api-cli.md** — API/CLI conventions and authoritative source locations.
+  Reach for it on command or endpoint work. The 1:1 rule: every operator-facing
   Controller capability has exactly one Console action, CLI command, and API
   endpoint; local tooling and machine bootstrap are explicitly exempt.
 - **docs/blueprint.md** — the spec-file grammar (desired state). Reach
@@ -26,8 +26,8 @@ Console (`console/`), and the Go Controller, Agent and CLI.
 - **docs/architecture.md** — the implementation contract: Go layout,
   adapter and closed Component Capability boundaries, OpenAPI, frontend stack.
   Reach for it when planning implementation.
-- **docs/standards.md** — the enforceable Go rules (import matrix, one
-  error type, the subprocess Runner, banned patterns, CI gate). Reach
+- **docs/standards.md** — Go rules (import matrix, one
+  error type, the subprocess Runner and banned patterns). Reach
   for it when writing Go code.
 - **docs/agents.md** — primary-owned delivery, bounded delegation, task-context
   requirements and the source-of-truth map. Read its root-cause repair policy before
@@ -37,8 +37,9 @@ Console (`console/`), and the Go Controller, Agent and CLI.
   before committing, opening a PR, or declaring a change complete.
 - **docs/capabilities.md** — the current implementation and qualification gaps.
   Reach for it before selecting or declaring an MVP slice complete.
-- **docs/decisions/** — accepted architectural decisions. Reach for the
-  relevant ADR before changing a recorded seam or dependency choice.
+- **docs/decisions/** — grouped technical decisions and rationale, with code
+  pointers. Read the relevant topic before changing its seam; accepted design
+  does not imply implementation. Deferred decisions are explicitly labeled.
 
 ## Context recovery (MUST)
 
@@ -55,22 +56,6 @@ authoritative contracts remain the source of truth. Read dated acceptance
 evidence only when it is relevant to the current task.
 
 ## Execution
-
-### Active architecture cleanup rules
-
-For the owner-authorized architecture cleanup, change production code only,
-apart from this requested rule and the ignored local checkpoint. Preserve
-product behavior and migrate production callers directly to the new owning
-modules. Remove superseded production implementations; add no compatibility
-aliases, forwarding shims, fallback paths or parallel legacy implementations.
-
-Leave tests, fixtures, generated artifacts, CI gates and architecture allowances
-untouched. Do not run tests, builds, typechecks, static analysis, architecture
-checks, generation, runtime validation, QA or deployment. Only linting and
-formatting are authorized. Read source as needed to implement the migration;
-do not disguise validation as a migration tool. Report all results as unverified.
-These task-specific restrictions override the normal verification workflow
-until the owner explicitly changes them. QA remains paused.
 
 **Testing scope:** do not write tests for straightforward implementation. Tests
 are for complex logic, interacting actions or substantial edge cases. If uncertain,
@@ -95,8 +80,10 @@ not product or wire authority.
 
 ## Non-negotiables
 
-- Docs stay in sync: mvp.md is authoritative; the other docs and Console
-  mirror it.
+- Shared product rules belong to `docs/mvp.md`, feature behavior to its operator
+  guide, syntax to `docs/blueprint.md`, and design rationale to its decision topic.
+  Keep them consistent; do not duplicate contracts, code inventories or task
+  journals. Record implementation discrepancies without weakening requirements.
 - The 1:1 rule always holds for operator-facing Controller capabilities — no
   Console action without a CLI command and API endpoint, and vice versa. Local
   process/tooling commands and machine bootstrap surfaces are exempt exactly
