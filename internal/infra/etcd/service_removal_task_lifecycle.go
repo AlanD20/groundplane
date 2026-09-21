@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -21,7 +22,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskRetry(
 	revision int64,
 ) (routeTaskChange, error) {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{serviceRemovalIntentKey(source.ID)}, Revision: revision,
+		Keys: []string{environmentchanges.ServiceRemovalIntentKey(source.ID)}, Revision: revision,
 	})
 	if err != nil {
 		return routeTaskChange{}, err
@@ -46,7 +47,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	revision int64,
 ) (routeTaskChange, error) {
 	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{serviceRemovalIntentKey(task.ID)}, Revision: revision,
+		Keys: []string{environmentchanges.ServiceRemovalIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
 		return routeTaskChange{}, err
@@ -58,7 +59,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	if intentValue == nil {
 		return routeTaskChange{}, nil
 	}
-	intent, err := decodeServiceRemovalIntent(intentValue.Value)
+	intent, err := environmentchanges.DecodeServiceRemovalIntent(intentValue.Value)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -96,7 +97,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		}
 	}
 	if !foundDesired {
-		return routeTaskChange{}, corruptServiceRemovalIntent()
+		return routeTaskChange{}, environmentchanges.CorruptServiceRemovalIntent()
 	}
 	tombstone, err := deletionrecord.DecodeDeletionTombstone(state.Values[1].Value)
 	if err != nil || tombstone.TargetKind != deletionrecord.DeletionTargetService || tombstone.TargetID != intent.ServiceID ||
@@ -105,21 +106,21 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal tombstone changed")
 	}
 	projection, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[3].Value)
-	if err != nil || !sameRouteRemovalProjection(projection, intent.CurrentProjection) {
+	if err != nil || !environmentchanges.SameRouteRemovalProjection(projection, intent.CurrentProjection) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Service removal projection changed")
 	}
-	terminalIntent, err := terminalServiceRemovalIntent(intent, terminalStatus, terminalAt)
+	terminalIntent, err := environmentchanges.TerminalServiceRemovalIntent(intent, terminalStatus, terminalAt)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	terminalValue, err := encodeServiceRemovalIntent(terminalIntent)
+	terminalValue, err := environmentchanges.EncodeServiceRemovalIntent(terminalIntent)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
 	change := routeTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: serviceRemovalIntentKey(task.ID), ModRevision: intentValue.ModRevision},
+			{Key: environmentchanges.ServiceRemovalIntentKey(task.ID), ModRevision: intentValue.ModRevision},
 			{Key: keys[0], ModRevision: intent.RuntimeRevision},
 			{Key: keys[1], ModRevision: state.Values[1].ModRevision},
 			{Key: keys[2], ModRevision: state.Values[2].ModRevision},
@@ -127,7 +128,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 			{Key: keys[4], ModRevision: state.Values[4].ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: serviceRemovalIntentKey(task.ID), Value: terminalValue},
+			{Type: etcdstore.MutationPut, Key: environmentchanges.ServiceRemovalIntentKey(task.ID), Value: terminalValue},
 			{Type: etcdstore.MutationDelete, Key: keys[1]},
 			{Type: etcdstore.MutationDelete, Key: keys[4]},
 		},
@@ -196,7 +197,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 	revision int64,
 ) error {
 	result, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{serviceRemovalIntentKey(task.ID)}, Revision: revision,
+		Keys: []string{environmentchanges.ServiceRemovalIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
 		return err
@@ -207,7 +208,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 	if result.Values[0] == nil {
 		return nil
 	}
-	intent, err := decodeServiceRemovalIntent(result.Values[0].Value)
+	intent, err := environmentchanges.DecodeServiceRemovalIntent(result.Values[0].Value)
 	if err != nil {
 		return err
 	}
@@ -243,7 +244,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 	}
 	projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[3].Value)
 	if state.Values[2].ModRevision != wantRevision || decodeErr != nil ||
-		!sameRouteRemovalProjection(projection, wantProjection) {
+		!environmentchanges.SameRouteRemovalProjection(projection, wantProjection) {
 		return errs.New(errs.KindStateConflict, "Service removal terminal desired state is inconsistent")
 	}
 	return nil

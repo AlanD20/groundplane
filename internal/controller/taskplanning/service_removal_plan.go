@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -15,13 +16,13 @@ import (
 )
 
 type serviceRemovalPlanReader interface {
-	GetServiceRemovalIntent(context.Context, string) (etcdstore.Versioned[etcd.ServiceRemovalIntent], bool, error)
+	GetServiceRemovalIntent(context.Context, string) (etcdstore.Versioned[environmentchanges.ServiceRemovalIntent], bool, error)
 }
 
 func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	intent etcd.ServiceRemovalIntent,
+	intent environmentchanges.ServiceRemovalIntent,
 	artifactID string,
 	stepID string,
 ) (etcd.TaskRecord, error) {
@@ -68,7 +69,7 @@ func (resolver *TaskPlanResolver) resolveServiceRemovalPlan(
 func (resolver *TaskPlanResolver) buildServiceRemovalPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	intent etcd.ServiceRemovalIntent,
+	intent environmentchanges.ServiceRemovalIntent,
 ) (*agentpb.ExecutionPlan, error) {
 	if err := validateServiceRemovalPlanTask(task, intent); err != nil {
 		return nil, err
@@ -112,7 +113,7 @@ func (resolver *TaskPlanResolver) buildServiceRemovalPlan(
 	})
 }
 
-func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent etcd.ServiceRemovalIntent) error {
+func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent environmentchanges.ServiceRemovalIntent) error {
 	if task.ID != intent.TaskID || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
 		task.Target != intent.ServiceID || len(task.Params) != 4 || len(task.Steps) != 1 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||

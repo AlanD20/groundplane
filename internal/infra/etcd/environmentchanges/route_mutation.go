@@ -1,0 +1,265 @@
+package environmentchanges
+
+import (
+	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
+	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
+	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
+	"time"
+
+	componentsdk "github.com/AlanD20/groundplane-component-sdk/component"
+
+	"github.com/AlanD20/groundplane/internal/common/ids"
+	"github.com/AlanD20/groundplane/pkg/errs"
+)
+
+const routeMutationIntentPrefix = "/v1/records/route-mutation-intents/"
+
+// RouteMutationKind identifies the desired Route operation pinned by a Task.
+type RouteMutationKind string
+
+const (
+	RouteMutationCreate RouteMutationKind = "create"
+	RouteMutationEdit   RouteMutationKind = "edit"
+)
+
+// RouteMutationIntent is the immutable reconciliation input for one Route
+// create/edit Task. Route and target data are copied here so restart/retry
+// never rebases rendering on mutable desired state.
+type RouteMutationIntent struct {
+	TaskID                    string                                         `json:"task_id"`
+	OperationID               string                                         `json:"operation_id"`
+	EnvironmentID             string                                         `json:"environment_id"`
+	RouteID                   string                                         `json:"route_id"`
+	Kind                      RouteMutationKind                              `json:"kind"`
+	RouteRevision             int64                                          `json:"route_revision,omitempty"`
+	Route                     routerecord.Record                             `json:"route"`
+	Previous                  *etcdstore.Versioned[routerecord.Record]       `json:"previous,omitempty"`
+	CurrentProjectionRevision int64                                          `json:"current_projection_revision,omitempty"`
+	CurrentProjection         *projectionrecord.EnvironmentComposeProjection `json:"current_projection,omitempty"`
+	CandidateProjection       *projectionrecord.EnvironmentComposeProjection `json:"candidate_projection,omitempty"`
+	Provider                  *RouteProviderPin                              `json:"provider,omitempty"`
+	Status                    taskjournal.TaskStatus                         `json:"status"`
+	CreatedAt                 time.Time                                      `json:"created_at"`
+	TerminalAt                *time.Time                                     `json:"terminal_at,omitempty"`
+}
+
+type RouteProviderPin struct {
+	ComponentID      string                       `json:"component_id"`
+	DefinitionDigest string                       `json:"definition_digest"`
+	CatalogDigest    string                       `json:"catalog_digest"`
+	InputRevision    int64                        `json:"input_revision"`
+	InputGeneration  uint64                       `json:"input_generation"`
+	Destination      string                       `json:"destination"`
+	ActionID         string                       `json:"action_id"`
+	ServiceID        string                       `json:"service_id"`
+	Input            componentsdk.HTTPRouterInput `json:"input"`
+}
+
+// RouteMutationProcedureIDs are allocated before publication by the planner.
+// Keeping these ids in the etcd-facing contract makes replay deterministic.
+type RouteMutationProcedureIDs struct {
+	ArtifactID        string
+	MaterializationID string
+	MaterializeStepID string
+	ApplyStepID       string
+	ActivateStepID    string
+}
+
+func NewRouteMutationIntent(
+	taskID string,
+	operationID string,
+	environmentID string,
+	route routerecord.Record,
+	previous *etcdstore.Versioned[routerecord.Record],
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
+	createdAt time.Time,
+) (RouteMutationIntent, error) {
+	intent := RouteMutationIntent{
+		TaskID: taskID, OperationID: operationID, EnvironmentID: environmentID,
+		RouteID: route.Desired.ID, Kind: RouteMutationCreate, Route: route,
+		Status: taskjournal.TaskStatusPending, CreatedAt: createdAt,
+	}
+	if previous != nil {
+		intent.Kind = RouteMutationEdit
+		intent.RouteRevision = previous.Revision
+		prior := etcdstore.Versioned[routerecord.Record]{
+			Record: routerecord.CloneRecord(previous.Record), Revision: previous.Revision, ReadRevision: previous.ReadRevision,
+		}
+		intent.Previous = &prior
+	}
+	if projection != nil {
+		current := projectionrecord.CloneEnvironmentComposeProjection(projection.Record)
+		intent.CurrentProjectionRevision = projection.Revision
+		intent.CurrentProjection = &current
+	}
+	// The planner seals the provider candidate after validating the immutable
+	// registered input. Validate the Route operation now, while
+	// allowing that one intentionally unsealed planning seam.
+	identity := intent
+	identity.CurrentProjection = nil
+	identity.CandidateProjection = nil
+	identity.CurrentProjectionRevision = 0
+	identity.Provider = nil
+	if err := ValidateRouteMutationIntent(identity); err != nil {
+		return RouteMutationIntent{}, err
+	}
+	return CloneRouteMutationIntent(intent), nil
+}
+
+func RouteMutationIntentKey(taskID string) string { return routeMutationIntentPrefix + taskID }
+
+func TerminalRouteMutationIntent(
+	intent RouteMutationIntent,
+	status taskjournal.TaskStatus,
+	terminalAt time.Time,
+) (RouteMutationIntent, error) {
+	if intent.Status != taskjournal.TaskStatusPending || !taskjournal.IsTerminalTaskStatus(status) {
+		return RouteMutationIntent{}, errs.New(errs.KindStateConflict, "Route mutation intent is not pending")
+	}
+	terminal := CloneRouteMutationIntent(intent)
+	terminal.Status = status
+	terminal.TerminalAt = timePointer(terminalAt)
+	if err := ValidateRouteMutationIntent(terminal); err != nil {
+		return RouteMutationIntent{}, err
+	}
+	return terminal, nil
+}
+
+func EncodeRouteMutationIntent(intent RouteMutationIntent) ([]byte, error) {
+	if err := ValidateRouteMutationIntent(intent); err != nil {
+		return nil, err
+	}
+	return recordcodec.Encode("route_mutation_intent", intent)
+}
+
+func DecodeRouteMutationIntent(value []byte) (RouteMutationIntent, error) {
+	intent, err := recordcodec.Decode[RouteMutationIntent](value, "route_mutation_intent")
+	if err != nil {
+		return RouteMutationIntent{}, err
+	}
+	if err := ValidateRouteMutationIntent(intent); err != nil {
+		return RouteMutationIntent{}, CorruptRouteMutationIntent()
+	}
+	return intent, nil
+}
+
+func ValidateRouteMutationIntent(intent RouteMutationIntent) error {
+	if recordcodec.ValidateID(ids.KindTask, intent.TaskID) != nil ||
+		recordcodec.ValidateID(ids.KindOperation, intent.OperationID) != nil ||
+		recordcodec.ValidateID(ids.KindEnvironment, intent.EnvironmentID) != nil ||
+		recordcodec.ValidateID(ids.KindRoute, intent.RouteID) != nil ||
+		intent.Route.EnvironmentID != intent.EnvironmentID || intent.Route.Desired.ID != intent.RouteID {
+		return errs.New(errs.KindValidationFailed, "Route mutation intent identity is invalid")
+	}
+	if err := routerecord.ValidateRecord(intent.Route); err != nil {
+		return err
+	}
+	if err := recordcodec.ValidateTimestamp("Route mutation intent created_at", intent.CreatedAt); err != nil {
+		return err
+	}
+	switch intent.Kind {
+	case RouteMutationCreate:
+		if intent.Previous != nil || intent.RouteRevision != 0 {
+			return errs.New(errs.KindValidationFailed, "Route create intent has edit state")
+		}
+	case RouteMutationEdit:
+		if intent.Previous == nil || intent.RouteRevision <= 0 ||
+			intent.Previous.Record.EnvironmentID != intent.EnvironmentID ||
+			intent.Previous.Record.Desired.ID != intent.RouteID ||
+			intent.Previous.Revision != intent.RouteRevision {
+			return errs.New(errs.KindValidationFailed, "Route edit intent has incomplete prior state")
+		}
+		if err := routerecord.ValidateRecord(intent.Previous.Record); err != nil {
+			return err
+		}
+		if intent.Previous.Record.Desired.Host != intent.Route.Desired.Host ||
+			intent.Previous.Record.Desired.Path != intent.Route.Desired.Path ||
+			intent.Previous.Record.Desired.TargetServiceID != intent.Route.Desired.TargetServiceID ||
+			intent.Previous.Record.Desired.TargetPort != intent.Route.Desired.TargetPort {
+			return errs.New(errs.KindValidationFailed, "Route edit intent changed immutable route fields")
+		}
+	default:
+		return errs.New(errs.KindValidationFailed, "Route mutation intent kind is invalid")
+	}
+	if intent.Status == taskjournal.TaskStatusPending {
+		if intent.TerminalAt != nil {
+			return errs.New(errs.KindValidationFailed, "pending Route mutation intent has a terminal timestamp")
+		}
+	} else if !taskjournal.IsTerminalTaskStatus(intent.Status) || intent.TerminalAt == nil || intent.TerminalAt.Before(intent.CreatedAt) {
+		return errs.New(errs.KindValidationFailed, "Route mutation intent terminal state is invalid")
+	}
+	if intent.CurrentProjection == nil || intent.CandidateProjection == nil {
+		if intent.CurrentProjection != nil || intent.CandidateProjection != nil ||
+			intent.CurrentProjectionRevision != 0 ||
+			intent.Provider != nil {
+			return errs.New(errs.KindValidationFailed, "Route mutation intent projection state is incomplete")
+		}
+		return nil
+	}
+	if intent.CurrentProjectionRevision <= 0 || intent.CurrentProjection.EnvironmentID != intent.EnvironmentID ||
+		intent.CandidateProjection.EnvironmentID != intent.EnvironmentID || projectionrecord.ValidateEnvironmentComposeProjection(*intent.CurrentProjection) != nil ||
+		projectionrecord.ValidateEnvironmentComposeProjection(
+			*intent.CandidateProjection,
+		) != nil || intent.CandidateProjection.RenderGeneration <= intent.CurrentProjection.RenderGeneration ||
+		ValidateRouteProviderPin(intent.Provider) != nil {
+		return errs.New(errs.KindValidationFailed, "Route mutation intent projection is invalid")
+	}
+	return nil
+}
+
+func ValidateRouteProviderPin(provider *RouteProviderPin) error {
+	if provider == nil {
+		return errs.New(errs.KindValidationFailed, "Route provider pin is missing")
+	}
+	if routerecord.ValidateProviderObservation(&routerecord.ProviderObservation{
+		ComponentID: provider.ComponentID, DefinitionDigest: provider.DefinitionDigest,
+		CatalogDigest: provider.CatalogDigest, InputRevision: provider.InputRevision,
+		InputGeneration: provider.InputGeneration,
+	}) != nil || provider.Destination == "" || provider.ActionID == "" ||
+		recordcodec.ValidateID(ids.KindService, provider.ServiceID) != nil ||
+		provider.Input.ComponentID != provider.ComponentID ||
+		provider.Input.GeneratedServiceID != provider.ServiceID ||
+		componentsdk.ValidateHTTPRouterInput(provider.Input) != nil {
+		return errs.New(errs.KindValidationFailed, "Route provider pin is invalid")
+	}
+	return nil
+}
+
+func CloneRouteProviderPin(source RouteProviderPin) RouteProviderPin {
+	clone := source
+	clone.Input = componentsdk.CloneHTTPRouterInput(source.Input)
+	return clone
+}
+
+func CloneRouteMutationIntent(source RouteMutationIntent) RouteMutationIntent {
+	clone := source
+	clone.Route = routerecord.CloneRecord(source.Route)
+	if source.Previous != nil {
+		previous := etcdstore.Versioned[routerecord.Record]{
+			Record:       routerecord.CloneRecord(source.Previous.Record),
+			Revision:     source.Previous.Revision,
+			ReadRevision: source.Previous.ReadRevision,
+		}
+		clone.Previous = &previous
+	}
+	if source.CurrentProjection != nil {
+		value := projectionrecord.CloneEnvironmentComposeProjection(*source.CurrentProjection)
+		clone.CurrentProjection = &value
+	}
+	if source.CandidateProjection != nil {
+		value := projectionrecord.CloneEnvironmentComposeProjection(*source.CandidateProjection)
+		clone.CandidateProjection = &value
+	}
+	if source.Provider != nil {
+		value := CloneRouteProviderPin(*source.Provider)
+		clone.Provider = &value
+	}
+	clone.TerminalAt = cloneTimePointer(source.TerminalAt)
+	return clone
+}
+
+func CorruptRouteMutationIntent() error {
+	return errs.New(errs.KindInternal, "Route mutation intent is corrupt")
+}

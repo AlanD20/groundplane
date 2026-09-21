@@ -12,6 +12,7 @@ import (
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -28,14 +29,14 @@ import (
 )
 
 type routeMutationPlanStateReader interface {
-	GetRouteMutationIntent(context.Context, string) (etcdstore.Versioned[etcd.RouteMutationIntent], bool, error)
+	GetRouteMutationIntent(context.Context, string) (etcdstore.Versioned[environmentchanges.RouteMutationIntent], bool, error)
 }
 
 func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	intent etcd.RouteMutationIntent,
-	procedure etcd.RouteMutationProcedureIDs,
+	intent environmentchanges.RouteMutationIntent,
+	procedure environmentchanges.RouteMutationProcedureIDs,
 ) (etcd.RouteMutationTaskPreparation, error) {
 	if intent.CurrentProjection == nil {
 		return prepareNativeRouteMutation(task, intent)
@@ -150,7 +151,7 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 
 func prepareNativeRouteMutation(
 	task etcd.TaskRecord,
-	intent etcd.RouteMutationIntent,
+	intent environmentchanges.RouteMutationIntent,
 ) (etcd.RouteMutationTaskPreparation, error) {
 	task.Executor = taskjournal.TaskExecutorController
 	task.TimeoutSeconds = 30
@@ -161,10 +162,10 @@ func prepareNativeRouteMutation(
 	}
 	task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}
 	value, err := json.Marshal(struct {
-		Version    int                    `json:"version"`
-		Kind       etcd.RouteMutationKind `json:"kind"`
-		RouteID    string                 `json:"route_id"`
-		Generation uint64                 `json:"generation"`
+		Version    int                                  `json:"version"`
+		Kind       environmentchanges.RouteMutationKind `json:"kind"`
+		RouteID    string                               `json:"route_id"`
+		Generation uint64                               `json:"generation"`
 	}{1, intent.Kind, intent.RouteID, intent.Route.DesiredGeneration})
 	if err != nil {
 		return etcd.RouteMutationTaskPreparation{}, err
@@ -196,7 +197,7 @@ func (resolver *TaskPlanResolver) resolveRouteMutationPlan(
 func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	intent etcd.RouteMutationIntent,
+	intent environmentchanges.RouteMutationIntent,
 ) (*agentpb.ExecutionPlan, error) {
 	if resolver == nil || resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent ||
 		(task.Type != taskjournal.TaskCreate && task.Type != taskjournal.TaskUpdate) ||

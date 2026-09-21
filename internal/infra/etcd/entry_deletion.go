@@ -4,6 +4,7 @@ import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -21,7 +22,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	ctx context.Context, environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	entry etcdstore.Versioned[entryrecord.Record],
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	tombstone deletionrecord.DeletionTombstoneRecord, intent EntryRemovalIntent, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
+	tombstone deletionrecord.DeletionTombstoneRecord, intent environmentchanges.EntryRemovalIntent, task TaskRecord, marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
 	if err := validateEntryHierarchy(ctx, environment, project, entry.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -32,7 +33,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateEntryRemovalIntent(intent); err != nil {
+	if err := environmentchanges.ValidateEntryRemovalIntent(intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateEntryDeletionProjection(projection, intent); err != nil {
@@ -82,7 +83,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(tombstoneValue)
-	intentValue, err := encodeEntryRemovalIntent(intent)
+	intentValue, err := environmentchanges.EncodeEntryRemovalIntent(intent)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -101,7 +102,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		taskjournal.TaskQueueKey(task.Executor, task.ID),
 		entryrecord.RecordKey(entry.Record.Entry.ID),
 		entryOwnerKey(entry.Record.EnvironmentID, entry.Record.Entry.ID),
-		entryRemovalIntentKey(task.ID),
+		environmentchanges.EntryRemovalIntentKey(task.ID),
 		tombstoneKey,
 	}
 	if projection != nil {
@@ -148,7 +149,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: entryrecord.RecordKey(entry.Record.Entry.ID), ModRevision: entry.Revision},
 		{Key: entryOwnerKey(entry.Record.EnvironmentID, entry.Record.Entry.ID), ModRevision: ownerRevision},
-		{Key: entryRemovalIntentKey(task.ID)},
+		{Key: environmentchanges.EntryRemovalIntentKey(task.ID)},
 		{Key: tombstoneKey},
 	}
 	if projection != nil {
@@ -175,7 +176,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
-		{Type: etcdstore.MutationPut, Key: entryRemovalIntentKey(task.ID), Value: intentValue},
+		{Type: etcdstore.MutationPut, Key: environmentchanges.EntryRemovalIntentKey(task.ID), Value: intentValue},
 		epochMutation,
 	}
 	if projection != nil {
@@ -223,7 +224,7 @@ func (repository *EntryRepository) BeginEntryDeletionWithTask(
 }
 
 func validateEntryDeletionProjection(
-	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], intent EntryRemovalIntent,
+	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], intent environmentchanges.EntryRemovalIntent,
 ) error {
 	if intent.CurrentProjection == nil {
 		if projection != nil {
@@ -233,7 +234,7 @@ func validateEntryDeletionProjection(
 	}
 	if projection == nil || projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
 		projection.Revision != intent.CurrentProjectionRevision ||
-		!sameEntryRemovalProjection(projection.Record, *intent.CurrentProjection) {
+		!environmentchanges.SameEntryRemovalProjection(projection.Record, *intent.CurrentProjection) {
 		return errs.New(errs.KindStateConflict, "entry applied projection changed before deletion")
 	}
 	return nil

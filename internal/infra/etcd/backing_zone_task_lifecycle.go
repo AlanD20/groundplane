@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -47,7 +48,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry changed its pinned Task")
 	}
 	keys := []string{
-		zoneRemovalIntentKey(operationID), deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
+		environmentchanges.ZoneRemovalIntentKey(operationID), deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
 		blueprints.EnvironmentBlueprintHeadKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 		componentTaskActiveEnvironmentKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
@@ -60,7 +61,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		state.Values[2] == nil || state.Values[3] == nil || state.Values[4] != nil {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone is not available for removal retry")
 	}
-	intent, err := decodeZoneRemovalIntent(state.Values[0].Value)
+	intent, err := environmentchanges.DecodeZoneRemovalIntent(state.Values[0].Value)
 	if err != nil || validateZoneRemovalTaskOwner(source, intent) != nil || intent.Status != source.Status ||
 		intent.TerminalAt == nil || !intent.TerminalAt.Equal(*source.FinishedAt) ||
 		state.Values[2].ModRevision != intent.DesiredHeadRevision ||
@@ -72,13 +73,13 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry head changed")
 	}
 	projection, decodeErr := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[3].Value)
-	if decodeErr != nil || !sameServiceRemovalProjection(projection, intent.AppliedProjection) {
+	if decodeErr != nil || !environmentchanges.SameServiceRemovalProjection(projection, intent.AppliedProjection) {
 		return backingZoneTaskChange{}, errs.New(errs.KindStateConflict, "Zone removal retry projection changed")
 	}
 	if _, err := projectedZoneRemovalTarget(intent, revision); err != nil {
 		return backingZoneTaskChange{}, err
 	}
-	retryIntent, err := TransferZoneRemovalIntent(intent, retry.ID, retry.CreatedAt)
+	retryIntent, err := environmentchanges.TransferZoneRemovalIntent(intent, retry.ID, retry.CreatedAt)
 	if err != nil {
 		return backingZoneTaskChange{}, err
 	}
@@ -103,7 +104,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 	if err != nil {
 		return backingZoneTaskChange{}, err
 	}
-	intentValue, err := encodeZoneRemovalIntent(retryIntent)
+	intentValue, err := environmentchanges.EncodeZoneRemovalIntent(retryIntent)
 	if err != nil {
 		clear(publication.publishedDescriptor)
 		return backingZoneTaskChange{}, err

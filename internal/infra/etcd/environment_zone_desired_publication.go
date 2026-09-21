@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -263,18 +264,18 @@ func validateDirectZoneProjection(
 func sameDirectZoneFinalProjection(left projectionrecord.EnvironmentComposeProjection, right projectionrecord.EnvironmentComposeProjection) bool {
 	return left.EnvironmentID == right.EnvironmentID && left.RevisionID == right.RevisionID &&
 		left.RenderGeneration == right.RenderGeneration &&
-		sameServiceRemovalBytes(left.ComposeArtifact, right.ComposeArtifact) &&
-		sameServiceRemovalBytes(left.NormalizedCompose, right.NormalizedCompose) &&
-		sameServiceRemovalBlueprintFiles(left.RuntimeFiles, right.RuntimeFiles) &&
-		sameServiceRemovalServiceExtensions(left.ServiceExtensions, right.ServiceExtensions) &&
-		sameServiceRemovalDesiredZones(left.DesiredZones, right.DesiredZones) &&
-		sameServiceRemovalDesiredServices(left.DesiredServices, right.DesiredServices) &&
-		sameServiceRemovalDesiredRoutes(left.DesiredRoutes, right.DesiredRoutes) &&
-		sameServiceRemovalComparableSlices(left.Volumes, right.Volumes) &&
-		sameServiceRemovalComparableSlices(left.VolumeMounts, right.VolumeMounts) &&
-		sameServiceRemovalComponents(left.Components, right.Components) &&
-		sameServiceRemovalEntries(left.Entries, right.Entries) &&
-		sameServiceRemovalDependencyPlans(left.ServiceDependencyPlans, right.ServiceDependencyPlans)
+		environmentchanges.SameServiceRemovalBytes(left.ComposeArtifact, right.ComposeArtifact) &&
+		environmentchanges.SameServiceRemovalBytes(left.NormalizedCompose, right.NormalizedCompose) &&
+		environmentchanges.SameServiceRemovalBlueprintFiles(left.RuntimeFiles, right.RuntimeFiles) &&
+		environmentchanges.SameServiceRemovalServiceExtensions(left.ServiceExtensions, right.ServiceExtensions) &&
+		environmentchanges.SameServiceRemovalDesiredZones(left.DesiredZones, right.DesiredZones) &&
+		environmentchanges.SameServiceRemovalDesiredServices(left.DesiredServices, right.DesiredServices) &&
+		environmentchanges.SameServiceRemovalDesiredRoutes(left.DesiredRoutes, right.DesiredRoutes) &&
+		environmentchanges.SameServiceRemovalComparableSlices(left.Volumes, right.Volumes) &&
+		environmentchanges.SameServiceRemovalComparableSlices(left.VolumeMounts, right.VolumeMounts) &&
+		environmentchanges.SameServiceRemovalComponents(left.Components, right.Components) &&
+		environmentchanges.SameServiceRemovalEntries(left.Entries, right.Entries) &&
+		environmentchanges.SameServiceRemovalDependencyPlans(left.ServiceDependencyPlans, right.ServiceDependencyPlans)
 }
 
 func validateZoneArtifactAddition(currentValue []byte, candidateValue []byte, zone zonerecord.Record) error {

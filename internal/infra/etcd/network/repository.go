@@ -9,6 +9,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -171,9 +172,9 @@ func (repository *Repository) BeginZoneDeletionWithTask(
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	project etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 	zone etcdstore.Versioned[zonerecord.Record],
-	authorities etcd.EnvironmentZoneRemovalAuthorities,
+	authorities environmentchanges.EnvironmentZoneRemovalAuthorities,
 	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent etcd.ZoneRemovalIntent,
+	intent environmentchanges.ZoneRemovalIntent,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -216,7 +217,7 @@ func (repository *Repository) BeginRouteMutationWithTask(
 	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current *etcdstore.Versioned[routerecord.Record],
 	record routerecord.Record,
-	intent etcd.RouteMutationIntent,
+	intent environmentchanges.RouteMutationIntent,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -235,7 +236,7 @@ func (repository *Repository) GetEnvironmentComposeProjection(
 func (repository *Repository) GetEnvironmentZoneRemovalAuthorities(
 	ctx context.Context,
 	environmentID string,
-) (etcd.EnvironmentZoneRemovalAuthorities, bool, error) {
+) (environmentchanges.EnvironmentZoneRemovalAuthorities, bool, error) {
 	return repository.hierarchy.GetEnvironmentZoneRemovalAuthorities(ctx, environmentID)
 }
 
@@ -254,7 +255,7 @@ func (repository *Repository) BeginRouteDeletionWithTask(
 	route etcdstore.Versioned[routerecord.Record],
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent etcd.RouteRemovalIntent,
+	intent environmentchanges.RouteRemovalIntent,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {
@@ -305,7 +306,7 @@ func (repository *Repository) GetSystemTaskInitiation(
 func (repository *Repository) GetZoneRemovalIntent(
 	ctx context.Context,
 	operationID string,
-) (etcdstore.Versioned[etcd.ZoneRemovalIntent], bool, error) {
+) (etcdstore.Versioned[environmentchanges.ZoneRemovalIntent], bool, error) {
 	return repository.hierarchy.GetZoneRemovalIntent(ctx, operationID)
 }
 
@@ -314,7 +315,7 @@ func (repository *Repository) HandoffBackingZoneDeletion(
 	zone etcdstore.Versioned[zonerecord.Record],
 	parentTaskID string,
 	tombstone etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord],
-	intent etcd.ZoneRemovalIntent,
+	intent environmentchanges.ZoneRemovalIntent,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {

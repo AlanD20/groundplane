@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	componentrender "github.com/AlanD20/groundplane/internal/controller/componentrender"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -36,7 +37,7 @@ func ResolveComponentTaskRouteProvider(
 	candidates []etcd.ComponentTaskCandidate,
 	inputRevision int64,
 	inputGeneration uint64,
-) (*etcd.RouteProviderPin, bool, error) {
+) (*environmentchanges.RouteProviderPin, bool, error) {
 	if err := componentrender.ValidateEnvironmentComponentCatalog(catalog); err != nil {
 		return nil, false, err
 	}
@@ -48,7 +49,7 @@ func ResolveComponentTaskRouteProvider(
 	if !changesProvider {
 		return nil, false, nil
 	}
-	var selected *etcd.RouteProviderPin
+	var selected *environmentchanges.RouteProviderPin
 	for _, record := range components {
 		if !record.Desired.Enabled {
 			continue
@@ -76,7 +77,7 @@ func ResolveComponentTaskRouteProvider(
 			return nil, false, errs.New(errs.KindInternal, "HTTP router Component lifecycle pin is incomplete")
 		}
 		definitionDigest := registration.Definition.Digest()
-		pin := etcd.RouteProviderPin{
+		pin := environmentchanges.RouteProviderPin{
 			ComponentID:      record.Desired.ID,
 			DefinitionDigest: hex.EncodeToString(definitionDigest[:]),
 			CatalogDigest:    hex.EncodeToString(registration.CatalogDigest[:]),
@@ -97,7 +98,7 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 	desired *routerecord.Record,
 	removedRouteID string,
 	inputGeneration uint64,
-) (*etcd.RouteProviderPin, error) {
+) (*environmentchanges.RouteProviderPin, error) {
 	if resolver == nil {
 		return nil, errs.New(errs.KindInternal, "Route plan state reader is unavailable")
 	}
@@ -130,7 +131,7 @@ func (resolver *TaskPlanResolver) pinRouteProvider(
 		return nil, errs.New(errs.KindStateConflict, "Route provider projection is newer than its fixed snapshot")
 	}
 	definitionDigest := registration.Definition.Digest()
-	return &etcd.RouteProviderPin{
+	return &environmentchanges.RouteProviderPin{
 		ComponentID:      component.ID,
 		DefinitionDigest: hex.EncodeToString(definitionDigest[:]),
 		CatalogDigest:    hex.EncodeToString(registration.CatalogDigest[:]),
@@ -229,7 +230,7 @@ func (resolver *TaskPlanResolver) routeProviderEnvironment(
 }
 
 func (resolver *TaskPlanResolver) renderPinnedRouteProvider(
-	pin etcd.RouteProviderPin,
+	pin environmentchanges.RouteProviderPin,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) (componentsdk.EnvironmentPlan, core.Component, [sha256.Size]byte, [sha256.Size]byte, error) {
 	definitionBytes, err := hex.DecodeString(pin.DefinitionDigest)

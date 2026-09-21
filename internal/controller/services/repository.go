@@ -6,6 +6,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -52,7 +53,7 @@ type serviceMutationRepository interface {
 		etcdstore.Versioned[servicerecord.ServiceRecord],
 		etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 		deletionrecord.DeletionTombstoneRecord,
-		etcd.ServiceRemovalIntent,
+		environmentchanges.ServiceRemovalIntent,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -166,7 +167,7 @@ func (repository *MutationRepository) BeginServiceRemovalWithTask(
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent etcd.ServiceRemovalIntent,
+	intent environmentchanges.ServiceRemovalIntent,
 	task etcd.TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (etcd.IdempotencyTransactionResult, error) {

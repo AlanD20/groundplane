@@ -6,6 +6,7 @@ import (
 	backinghooks "github.com/AlanD20/groundplane/internal/infra/etcd/backinghooks"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -80,9 +81,9 @@ func (repository *TaskRepository) beginTaskPrune(
 		taskjournal.TaskOperationIndexKey(task.OperationID, task.ID),
 		taskjournal.TaskPruneIntentKey(task.ID),
 		componentTaskIntentKey(task.ID),
-		routeRemovalIntentKey(task.ID),
-		routeMutationIntentKey(task.ID),
-		entryRemovalIntentKey(task.ID),
+		environmentchanges.RouteRemovalIntentKey(task.ID),
+		environmentchanges.RouteMutationIntentKey(task.ID),
+		environmentchanges.EntryRemovalIntentKey(task.ID),
 		blueprintAttachTaskIntentKey(task.ID),
 	}
 	environmentDeletionFenceStart := -1
@@ -172,7 +173,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		}
 	}
 	if companions.Values[5] != nil {
-		routeIntent, decodeErr := decodeRouteRemovalIntent(companions.Values[5].Value)
+		routeIntent, decodeErr := environmentchanges.DecodeRouteRemovalIntent(companions.Values[5].Value)
 		if decodeErr != nil || validateRouteRemovalTaskOwner(task, routeIntent) != nil ||
 			routeIntent.Status != task.Status || routeIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!routeIntent.TerminalAt.Equal(*task.FinishedAt) {
@@ -180,7 +181,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		}
 	}
 	if companions.Values[6] != nil {
-		mutationIntent, decodeErr := decodeRouteMutationIntent(companions.Values[6].Value)
+		mutationIntent, decodeErr := environmentchanges.DecodeRouteMutationIntent(companions.Values[6].Value)
 		if decodeErr != nil || validateRouteMutationTaskOwner(task, mutationIntent) != nil ||
 			mutationIntent.Status != task.Status || mutationIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!mutationIntent.TerminalAt.Equal(*task.FinishedAt) {
@@ -188,7 +189,7 @@ func (repository *TaskRepository) beginTaskPrune(
 		}
 	}
 	if companions.Values[7] != nil {
-		entryIntent, decodeErr := decodeEntryRemovalIntent(companions.Values[7].Value)
+		entryIntent, decodeErr := environmentchanges.DecodeEntryRemovalIntent(companions.Values[7].Value)
 		if decodeErr != nil || validateEntryRemovalTaskOwner(task, entryIntent) != nil ||
 			entryIntent.Status != task.Status || entryIntent.TerminalAt == nil || task.FinishedAt == nil ||
 			!entryIntent.TerminalAt.Equal(*task.FinishedAt) {
@@ -319,27 +320,27 @@ func (repository *TaskRepository) beginTaskPrune(
 		)
 	}
 	conditions = append(conditions, componentCondition)
-	routeCondition := etcdstore.Condition{Key: routeRemovalIntentKey(task.ID)}
+	routeCondition := etcdstore.Condition{Key: environmentchanges.RouteRemovalIntentKey(task.ID)}
 	if companions.Values[5] != nil {
 		routeCondition.ModRevision = companions.Values[5].ModRevision
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routeRemovalIntentKey(task.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.RouteRemovalIntentKey(task.ID)},
 		)
 	}
 	conditions = append(conditions, routeCondition)
-	mutationCondition := etcdstore.Condition{Key: routeMutationIntentKey(task.ID)}
+	mutationCondition := etcdstore.Condition{Key: environmentchanges.RouteMutationIntentKey(task.ID)}
 	if companions.Values[6] != nil {
 		mutationCondition.ModRevision = companions.Values[6].ModRevision
-		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routeMutationIntentKey(task.ID)})
+		mutations = append(mutations, etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.RouteMutationIntentKey(task.ID)})
 	}
 	conditions = append(conditions, mutationCondition)
-	entryCondition := etcdstore.Condition{Key: entryRemovalIntentKey(task.ID)}
+	entryCondition := etcdstore.Condition{Key: environmentchanges.EntryRemovalIntentKey(task.ID)}
 	if companions.Values[7] != nil {
 		entryCondition.ModRevision = companions.Values[7].ModRevision
 		mutations = append(
 			mutations,
-			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: entryRemovalIntentKey(task.ID)},
+			etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.EntryRemovalIntentKey(task.ID)},
 		)
 	}
 	conditions = append(conditions, entryCondition)

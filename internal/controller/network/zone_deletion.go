@@ -8,6 +8,7 @@ import (
 	"errors"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -39,7 +40,7 @@ type zoneDeletionRepository interface {
 	GetZone(context.Context, string) (etcdstore.Versioned[zonerecord.Record], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironmentZoneRemovalAuthorities(context.Context, string) (etcd.EnvironmentZoneRemovalAuthorities, bool, error)
+	GetEnvironmentZoneRemovalAuthorities(context.Context, string) (environmentchanges.EnvironmentZoneRemovalAuthorities, bool, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		blueprints.EnvironmentBlueprintStageClaimRequest,
@@ -53,9 +54,9 @@ type zoneDeletionRepository interface {
 		etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 		etcdstore.Versioned[hierarchyrecord.ProjectRecord],
 		etcdstore.Versioned[zonerecord.Record],
-		etcd.EnvironmentZoneRemovalAuthorities,
+		environmentchanges.EnvironmentZoneRemovalAuthorities,
 		deletionrecord.DeletionTombstoneRecord,
-		etcd.ZoneRemovalIntent,
+		environmentchanges.ZoneRemovalIntent,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -194,7 +195,7 @@ type zoneDeletionPlanResolver interface {
 	PrepareZoneRemovalTask(
 		context.Context,
 		etcd.TaskRecord,
-		etcd.ZoneRemovalIntent,
+		environmentchanges.ZoneRemovalIntent,
 		taskplanning.ZoneRemovalTaskProcedureIDs,
 	) (etcd.TaskRecord, error)
 }
@@ -426,7 +427,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 		TimeoutSeconds: zoneDeletionTimeoutSeconds,
 		Status:         taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
-	intent, err := etcd.NewZoneRemovalIntent(
+	intent, err := environmentchanges.NewZoneRemovalIntent(
 		task.OperationID, task.ID, zone, authorities, claim, candidate, affected, now,
 	)
 	if err != nil {
@@ -518,7 +519,7 @@ func (service *zoneDeletionService) removeZoneOnce(
 	}
 }
 
-func backingZoneCascadePlanHash(intent etcd.ZoneRemovalIntent, impactToken string) (string, error) {
+func backingZoneCascadePlanHash(intent environmentchanges.ZoneRemovalIntent, impactToken string) (string, error) {
 	value, err := json.Marshal(struct {
 		Version                               int `json:"version"`
 		Type, ZoneID, ImpactToken, RevisionID string

@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -26,7 +27,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		return mutation, err
 	}
 	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{routeRemovalIntentKey(task.ID)}, Revision: revision,
+		Keys: []string{environmentchanges.RouteRemovalIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
 		return routeTaskChange{}, err
@@ -38,7 +39,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 	if intentValue == nil {
 		return routeTaskChange{}, nil
 	}
-	intent, err := decodeRouteRemovalIntent(intentValue.Value)
+	intent, err := environmentchanges.DecodeRouteRemovalIntent(intentValue.Value)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -77,25 +78,25 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		ctx, repository.store, intent.EnvironmentID, revision,
 	)
 	if err != nil || !found || projection.Revision != intent.CurrentProjectionRevision ||
-		!sameRouteRemovalProjection(projection.Record, *intent.CurrentProjection) {
+		!environmentchanges.SameRouteRemovalProjection(projection.Record, *intent.CurrentProjection) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal selected projection changed")
 	}
 	if _, err := routeAtProjection(ctx, repository.store, projection.Record, projection.Revision, revision, intent.RouteID); err != nil {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal selected Route changed")
 	}
 
-	terminalIntent, err := terminalRouteRemovalIntent(intent, terminalStatus, terminalAt)
+	terminalIntent, err := environmentchanges.TerminalRouteRemovalIntent(intent, terminalStatus, terminalAt)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	intentBytes, err := encodeRouteRemovalIntent(terminalIntent)
+	intentBytes, err := environmentchanges.EncodeRouteRemovalIntent(terminalIntent)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
 	change := routeTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: routeRemovalIntentKey(task.ID), ModRevision: intentValue.ModRevision},
+			{Key: environmentchanges.RouteRemovalIntentKey(task.ID), ModRevision: intentValue.ModRevision},
 			{
 				Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
 				ModRevision: state.Values[0].ModRevision,
@@ -104,7 +105,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 			{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: routeRemovalIntentKey(task.ID), Value: intentBytes},
+			{Type: etcdstore.MutationPut, Key: environmentchanges.RouteRemovalIntentKey(task.ID), Value: intentBytes},
 			{Type: etcdstore.MutationDelete, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID)},
 		},
 		values: [][]byte{intentBytes},
@@ -114,7 +115,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 		etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 	)
 	if terminalStatus == taskjournal.TaskStatusCompleted {
-		change.mutations[0] = etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: routeRemovalIntentKey(task.ID)}
+		change.mutations[0] = etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentchanges.RouteRemovalIntentKey(task.ID)}
 		promotion, promotionErr := prepareRouteHeadPromotion(ctx, repository.store, intent, revision)
 		if promotionErr != nil {
 			clearRouteTaskChange(change)
@@ -163,7 +164,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	revision int64,
 ) (routeTaskChange, error) {
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{routeMutationIntentKey(task.ID)}, Revision: revision,
+		Keys: []string{environmentchanges.RouteMutationIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
 		return routeTaskChange{}, err
@@ -174,7 +175,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	if read.Values[0] == nil {
 		return routeTaskChange{}, nil
 	}
-	intent, err := decodeRouteMutationIntent(read.Values[0].Value)
+	intent, err := environmentchanges.DecodeRouteMutationIntent(read.Values[0].Value)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -238,7 +239,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	terminalIntent, err := terminalRouteMutationIntent(intent, terminalStatus, terminalAt)
+	terminalIntent, err := environmentchanges.TerminalRouteMutationIntent(intent, terminalStatus, terminalAt)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -246,7 +247,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	intentValue, err := encodeRouteMutationIntent(terminalIntent)
+	intentValue, err := environmentchanges.EncodeRouteMutationIntent(terminalIntent)
 	if err != nil {
 		clear(routeValue)
 		return routeTaskChange{}, err
@@ -264,12 +265,12 @@ func (repository *TaskRepository) prepareRouteMutationTaskAcknowledgement(
 	change := routeTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: routeMutationIntentKey(task.ID), ModRevision: read.Values[0].ModRevision},
+			{Key: environmentchanges.RouteMutationIntentKey(task.ID), ModRevision: read.Values[0].ModRevision},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[0].ModRevision},
 			observationCondition,
 		},
 		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
+			{Type: etcdstore.MutationPut, Key: environmentchanges.RouteMutationIntentKey(task.ID), Value: intentValue},
 			{Type: etcdstore.MutationPut, Key: routerecord.ObservationKey(intent.RouteID), Value: routeValue},
 			{Type: etcdstore.MutationDelete, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 		},

@@ -5,6 +5,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -15,7 +16,7 @@ import (
 )
 
 func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
-	ctx context.Context, task TaskRecord, intent EntryRemovalIntent, intentRevision int64,
+	ctx context.Context, task TaskRecord, intent environmentchanges.EntryRemovalIntent, intentRevision int64,
 	status taskjournal.TaskStatus, terminalAt time.Time, revision int64,
 ) (routeTaskChange, error) {
 	keys := []string{deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), intent.EntryID),
@@ -37,21 +38,21 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 		tombstone.Phase != entryRemovalTombstonePhase(intent) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal tombstone changed")
 	}
-	terminal, err := terminalEntryRemovalIntent(intent, status, terminalAt)
+	terminal, err := environmentchanges.TerminalEntryRemovalIntent(intent, status, terminalAt)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	value, err := encodeEntryRemovalIntent(terminal)
+	value, err := environmentchanges.EncodeEntryRemovalIntent(terminal)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
 	change := routeTaskChange{applies: true,
-		conditions: []etcdstore.Condition{{Key: entryRemovalIntentKey(task.ID), ModRevision: intentRevision},
+		conditions: []etcdstore.Condition{{Key: environmentchanges.EntryRemovalIntentKey(task.ID), ModRevision: intentRevision},
 			{
 				Key:         keys[0],
 				ModRevision: read.Values[0].ModRevision,
 			}, {Key: keys[1], ModRevision: read.Values[1].ModRevision}},
-		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: entryRemovalIntentKey(task.ID), Value: value},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: environmentchanges.EntryRemovalIntentKey(task.ID), Value: value},
 			{Type: etcdstore.MutationDelete, Key: keys[0]}, {Type: etcdstore.MutationDelete, Key: keys[1]}}, values: [][]byte{value}}
 	if task.Executor == taskjournal.TaskExecutorController {
 		if read.Values[2] == nil {
@@ -87,7 +88,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalAcknowledgement(
 }
 
 func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
-	ctx context.Context, intent EntryRemovalIntent, revision int64,
+	ctx context.Context, intent environmentchanges.EntryRemovalIntent, revision int64,
 ) (routeTaskChange, error) {
 	desired := intent.Desired
 	keys := []string{blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
@@ -207,7 +208,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal applied state changed")
 		}
 		current, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(read.Values[3].Value)
-		if err != nil || !sameEntryRemovalProjection(current, *intent.CurrentProjection) {
+		if err != nil || !environmentchanges.SameEntryRemovalProjection(current, *intent.CurrentProjection) {
 			clearRouteTaskChange(change)
 			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal applied state changed")
 		}

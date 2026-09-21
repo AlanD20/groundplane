@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
@@ -18,7 +19,7 @@ import (
 )
 
 type zoneRemovalPlanReader interface {
-	GetZoneRemovalIntent(context.Context, string) (etcdstore.Versioned[etcd.ZoneRemovalIntent], bool, error)
+	GetZoneRemovalIntent(context.Context, string) (etcdstore.Versioned[environmentchanges.ZoneRemovalIntent], bool, error)
 }
 
 type ZoneRemovalTaskProcedureIDs struct {
@@ -30,7 +31,7 @@ type ZoneRemovalTaskProcedureIDs struct {
 func (resolver *TaskPlanResolver) PrepareZoneRemovalTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	intent etcd.ZoneRemovalIntent,
+	intent environmentchanges.ZoneRemovalIntent,
 	procedure ZoneRemovalTaskProcedureIDs,
 ) (etcd.TaskRecord, error) {
 	if resolver == nil || ctx == nil || task.Executor != taskjournal.TaskExecutorAgent ||
@@ -89,7 +90,7 @@ func (resolver *TaskPlanResolver) resolveZoneRemovalPlan(
 
 func (resolver *TaskPlanResolver) buildZoneRemovalPlan(
 	task etcd.TaskRecord,
-	intent etcd.ZoneRemovalIntent,
+	intent environmentchanges.ZoneRemovalIntent,
 ) (*agentpb.ExecutionPlan, error) {
 	if resolver == nil || task.Executor != taskjournal.TaskExecutorAgent || task.Type != taskjournal.TaskRemove ||
 		task.Target != intent.ZoneID || task.ID != intent.ActiveTaskID || intent.Status != taskjournal.TaskStatusPending ||

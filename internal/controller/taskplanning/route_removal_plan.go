@@ -11,6 +11,7 @@ import (
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -27,7 +28,7 @@ import (
 )
 
 type routeRemovalPlanStateReader interface {
-	GetRouteRemovalIntent(context.Context, string) (etcdstore.Versioned[etcd.RouteRemovalIntent], bool, error)
+	GetRouteRemovalIntent(context.Context, string) (etcdstore.Versioned[environmentchanges.RouteRemovalIntent], bool, error)
 }
 
 type RouteRemovalTaskProcedureIDs struct {
@@ -41,7 +42,7 @@ type RouteRemovalTaskProcedureIDs struct {
 func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	intent etcd.RouteRemovalIntent,
+	intent environmentchanges.RouteRemovalIntent,
 	procedure RouteRemovalTaskProcedureIDs,
 ) (etcd.RouteRemovalTaskPreparation, error) {
 	if intent.CandidateProjection == nil {
@@ -150,7 +151,7 @@ func (resolver *TaskPlanResolver) resolveRouteRemovalPlan(
 func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	intent etcd.RouteRemovalIntent,
+	intent environmentchanges.RouteRemovalIntent,
 ) (*agentpb.ExecutionPlan, error) {
 	if resolver == nil || resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskRemove ||
@@ -309,7 +310,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 }
 
 func (resolver *TaskPlanResolver) routeProviderFile(
-	pin etcd.RouteProviderPin,
+	pin environmentchanges.RouteProviderPin,
 	projection projectionrecord.EnvironmentComposeProjection,
 ) ([]byte, error) {
 	plan, _, _, _, err := resolver.renderPinnedRouteProvider(pin, projection)

@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -26,7 +27,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	route etcdstore.Versioned[routerecord.Record],
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent RouteRemovalIntent,
+	intent environmentchanges.RouteRemovalIntent,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
@@ -39,7 +40,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateRouteRemovalIntent(intent); err != nil {
+	if err := environmentchanges.ValidateRouteRemovalIntent(intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateRouteDeletionProjection(projection, intent); err != nil {
@@ -115,7 +116,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(tombstoneValue)
-	intentValue, err := encodeRouteRemovalIntent(intent)
+	intentValue, err := environmentchanges.EncodeRouteRemovalIntent(intent)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -139,7 +140,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
 		{Key: hierarchyrecord.EnvironmentKey(environment.Record.ID), ModRevision: environment.Revision},
 		{Key: hierarchyrecord.ProjectKey(project.Record.ID), ModRevision: project.Revision},
-		{Key: routeRemovalIntentKey(task.ID)},
+		{Key: environmentchanges.RouteRemovalIntentKey(task.ID)},
 		{Key: tombstoneKey},
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
@@ -158,7 +159,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: tombstoneKey, Value: tombstoneValue},
-		{Type: etcdstore.MutationPut, Key: routeRemovalIntentKey(task.ID), Value: intentValue},
+		{Type: etcdstore.MutationPut, Key: environmentchanges.RouteRemovalIntentKey(task.ID), Value: intentValue},
 	}
 	mutations = append(
 		mutations,
@@ -215,7 +216,7 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 
 func validateRouteDeletionProjection(
 	projection *etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
-	intent RouteRemovalIntent,
+	intent environmentchanges.RouteRemovalIntent,
 ) error {
 	if intent.CurrentProjection == nil {
 		if projection != nil {
@@ -225,7 +226,7 @@ func validateRouteDeletionProjection(
 	}
 	if projection == nil || projection.Revision <= 0 || projection.ReadRevision < projection.Revision ||
 		projection.Revision != intent.CurrentProjectionRevision ||
-		!sameRouteRemovalProjection(projection.Record, *intent.CurrentProjection) {
+		!environmentchanges.SameRouteRemovalProjection(projection.Record, *intent.CurrentProjection) {
 		return errs.New(errs.KindStateConflict, "Route applied projection changed before deletion")
 	}
 	return nil

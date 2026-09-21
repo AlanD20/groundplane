@@ -8,6 +8,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -163,7 +164,7 @@ func (repository *EtcdRepository) PublishRemoval(
 		Type: taskjournal.TaskRemove, Target: request.EntryID, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: taskInput.CreatedAt, UpdatedAt: taskInput.CreatedAt,
 	}
-	intent, err := etcd.NewEntryRemovalIntent(
+	intent, err := environmentchanges.NewEntryRemovalIntent(
 		task.ID, state.environment.Record.ID, request.EntryID, state.entry.Revision,
 		state.projection, task.CreatedAt,
 	)

@@ -8,6 +8,7 @@ import (
 	"errors"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -43,13 +44,13 @@ type backingZoneCascadeRepository interface {
 	) ([]etcdstore.Versioned[attachrecord.Record], error)
 	GetTask(context.Context, string) (etcdstore.Versioned[etcd.TaskRecord], error)
 	GetSystemTaskInitiation(context.Context, string) (etcd.TaskInitiation, error)
-	GetZoneRemovalIntent(context.Context, string) (etcdstore.Versioned[etcd.ZoneRemovalIntent], bool, error)
+	GetZoneRemovalIntent(context.Context, string) (etcdstore.Versioned[environmentchanges.ZoneRemovalIntent], bool, error)
 	HandoffBackingZoneDeletion(
 		context.Context,
 		etcdstore.Versioned[zonerecord.Record],
 		string,
 		etcdstore.Versioned[deletionrecord.DeletionTombstoneRecord],
-		etcd.ZoneRemovalIntent,
+		environmentchanges.ZoneRemovalIntent,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -293,7 +294,7 @@ func (service *backingZoneCascadeService) publishFinalRemoval(
 	if !found {
 		return "", errs.New(errs.KindStateConflict, "backing Zone removal intent is missing")
 	}
-	intent, err := etcd.TransferZoneRemovalIntent(storedIntent.Record, child.ID, now)
+	intent, err := environmentchanges.TransferZoneRemovalIntent(storedIntent.Record, child.ID, now)
 	if err != nil {
 		return "", err
 	}

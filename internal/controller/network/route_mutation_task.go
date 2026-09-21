@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -64,7 +65,7 @@ func (service *routeMutationService) prepareRouteMutationTask(
 	if previous != nil {
 		task.Type = taskjournal.TaskUpdate
 	}
-	intent, err := etcd.NewRouteMutationIntent(
+	intent, err := environmentchanges.NewRouteMutationIntent(
 		taskID, operationID, environment.Record.ID, record, previous, applied, now,
 	)
 	if err != nil {
@@ -87,7 +88,7 @@ func (service *routeMutationService) prepareRouteMutationTask(
 		}
 		return etcd.RouteMutationTaskPreparation{Intent: intent, Task: task}, nil
 	}
-	procedures := etcd.RouteMutationProcedureIDs{
+	procedures := environmentchanges.RouteMutationProcedureIDs{
 		ArtifactID: ids.New(ids.KindConfig), MaterializationID: ids.New(ids.KindConfig),
 		MaterializeStepID: ids.New(ids.KindStep), ApplyStepID: ids.New(ids.KindStep),
 		ActivateStepID: ids.New(ids.KindStep),
@@ -140,7 +141,7 @@ func (service *routeMutationService) routeHierarchy(
 
 func prepareControllerRouteMutationTask(
 	task etcd.TaskRecord,
-	intent etcd.RouteMutationIntent,
+	intent environmentchanges.RouteMutationIntent,
 ) (etcd.TaskRecord, error) {
 	if intent.Provider != nil || intent.CurrentProjection != nil || intent.CandidateProjection != nil {
 		return etcd.TaskRecord{}, errs.New(errs.KindInternal, "desired-only Route mutation has provider state")

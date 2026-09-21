@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -19,7 +20,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 		return err
 	}
 	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{routeRemovalIntentKey(task.ID)}, Revision: revision,
+		Keys: []string{environmentchanges.RouteRemovalIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
 		return err
@@ -33,7 +34,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 		}
 		return nil
 	}
-	intent, err := decodeRouteRemovalIntent(intentRead.Values[0].Value)
+	intent, err := environmentchanges.DecodeRouteRemovalIntent(intentRead.Values[0].Value)
 	if err != nil {
 		return err
 	}
@@ -72,7 +73,7 @@ func (repository *TaskRepository) validateRouteTaskAcknowledgementReplay(
 		ctx, repository.store, intent.EnvironmentID, revision,
 	)
 	if projectionErr != nil || !found || intent.CurrentProjection == nil ||
-		!sameRouteRemovalProjection(projection.Record, *intent.CurrentProjection) {
+		!environmentchanges.SameRouteRemovalProjection(projection.Record, *intent.CurrentProjection) {
 		return errs.New(errs.KindStateConflict, "Route removal terminal projection changed")
 	}
 	return nil
@@ -85,7 +86,7 @@ func (repository *TaskRepository) validateRouteMutationTaskAcknowledgementReplay
 	revision int64,
 ) (bool, error) {
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{routeMutationIntentKey(task.ID)}, Revision: revision,
+		Keys: []string{environmentchanges.RouteMutationIntentKey(task.ID)}, Revision: revision,
 	})
 	if err != nil {
 		return false, err
@@ -96,7 +97,7 @@ func (repository *TaskRepository) validateRouteMutationTaskAcknowledgementReplay
 	if read.Values[0] == nil {
 		return false, nil
 	}
-	intent, err := decodeRouteMutationIntent(read.Values[0].Value)
+	intent, err := environmentchanges.DecodeRouteMutationIntent(read.Values[0].Value)
 	if err != nil || validateRouteMutationTaskOwner(task, intent) != nil || intent.Status != terminalStatus ||
 		intent.TerminalAt == nil || task.FinishedAt == nil || !intent.TerminalAt.Equal(*task.FinishedAt) {
 		return true, errs.New(errs.KindStateConflict, "Route mutation replay evidence changed")

@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -56,14 +57,14 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 	}
 	expected.RevisionID, expected.RenderGeneration = candidate.RevisionID, candidate.RenderGeneration
 	expected.ComposeArtifact = candidate.ComposeArtifact
-	if !sameEntryRemovalProjection(expected, candidate) {
+	if !environmentchanges.SameEntryRemovalProjection(expected, candidate) {
 		return entryDesiredRemovalPublication{}, errs.New(
 			errs.KindValidationFailed,
 			"Entry removal changed unrelated desired decisions",
 		)
 	}
 	keys := []string{projectionrecord.EnvironmentComposeProjectionStorageKey(claim.EnvironmentID),
-		deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), task.Target), entryRemovalIntentKey(task.ID),
+		deletionTombstoneKey(string(deletionrecord.DeletionTargetEntry), task.Target), environmentchanges.EntryRemovalIntentKey(task.ID),
 		componentTaskActiveEnvironmentKey(claim.EnvironmentID), taskjournal.TaskMaterializationWriterKey(claim.EnvironmentID),
 		blueprints.EnvironmentBlueprintDescriptorKeyByID(claim.DescriptorID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
@@ -104,7 +105,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 			}
 		}
 	}
-	intent, err := NewDesiredEntryRemovalIntent(task.Target, current.Record.RevisionID, claim, applied)
+	intent, err := environmentchanges.NewDesiredEntryRemovalIntent(task.Target, current.Record.RevisionID, claim, applied)
 	if err != nil {
 		return entryDesiredRemovalPublication{}, err
 	}
@@ -118,7 +119,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 	if err != nil {
 		return entryDesiredRemovalPublication{}, err
 	}
-	intentValue, err := encodeEntryRemovalIntent(intent)
+	intentValue, err := environmentchanges.EncodeEntryRemovalIntent(intent)
 	if err != nil {
 		clear(tombstone)
 		return entryDesiredRemovalPublication{}, err

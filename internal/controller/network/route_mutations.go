@@ -4,6 +4,7 @@ import (
 	"context"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -32,7 +33,7 @@ type routeMutationRepository interface {
 		etcdstore.Versioned[servicerecord.ServiceRecord],
 		*etcdstore.Versioned[routerecord.Record],
 		routerecord.Record,
-		etcd.RouteMutationIntent,
+		environmentchanges.RouteMutationIntent,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -54,8 +55,8 @@ type routeMutationTaskPlanner interface {
 	PrepareRouteMutationTask(
 		context.Context,
 		etcd.TaskRecord,
-		etcd.RouteMutationIntent,
-		etcd.RouteMutationProcedureIDs,
+		environmentchanges.RouteMutationIntent,
+		environmentchanges.RouteMutationProcedureIDs,
 	) (etcd.RouteMutationTaskPreparation, error)
 }
 

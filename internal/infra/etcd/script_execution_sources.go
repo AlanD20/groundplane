@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -403,7 +404,7 @@ func (repository *ScriptRepository) loadExecutionSources(
 // render digest above; neither this comparison nor hook loading rewrites them.
 func sameReleaseHookAuthoredInputs(root, captured projectionrecord.EnvironmentComposeProjection) bool {
 	captured.ComposeArtifact = root.ComposeArtifact
-	return sameServiceRemovalProjection(root, captured)
+	return environmentchanges.SameServiceRemovalProjection(root, captured)
 }
 
 func loadScriptExecutionDesiredProjection(

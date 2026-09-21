@@ -9,6 +9,7 @@ import (
 	entrycapability "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -20,7 +21,7 @@ type entryRemovalPlanStateReader interface {
 	GetEntryRemovalIntent(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EntryRemovalIntent], bool, error)
+	) (etcdstore.Versioned[environmentchanges.EntryRemovalIntent], bool, error)
 }
 
 // EntryRemovalMaterializationResolver resolves one closed durable source while
@@ -59,7 +60,7 @@ func (planner *EntryRemovalPlanner) PrepareEntryRemoval(
 	if !found || projection.Revision != request.ProjectionRevision {
 		return entrycapability.RemovalTaskPlan{}, errs.New(errs.KindStateConflict, "entry removal projection changed")
 	}
-	intent, err := etcd.NewEntryRemovalIntent(
+	intent, err := environmentchanges.NewEntryRemovalIntent(
 		request.TaskID, request.EnvironmentID, request.EntryID, request.EntryRevision, &projection, request.CreatedAt,
 	)
 	if err != nil {
@@ -91,7 +92,7 @@ func (planner *EntryRemovalPlanner) PrepareEntryRemoval(
 func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	intent etcd.EntryRemovalIntent,
+	intent environmentchanges.EntryRemovalIntent,
 	procedure entryRemovalTaskProcedureIDs,
 	materials EntryRemovalMaterializationResolver,
 	identity entrycapability.RemovalEnvironmentIdentity,

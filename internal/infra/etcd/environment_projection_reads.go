@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -11,34 +12,27 @@ import (
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-// EnvironmentZoneRemovalAuthorities binds the desired revision being edited
-// to the independently mutable projection last acknowledged by the runtime.
-type EnvironmentZoneRemovalAuthorities struct {
-	Desired etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
-	Applied etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
-}
-
 // GetEnvironmentZoneRemovalAuthorities reads both authorities required to
 // fence a Zone removal. Each returned revision belongs to its own etcd key.
 func (repository *HierarchyRepository) GetEnvironmentZoneRemovalAuthorities(
 	ctx context.Context,
 	environmentID string,
-) (EnvironmentZoneRemovalAuthorities, bool, error) {
+) (environmentchanges.EnvironmentZoneRemovalAuthorities, bool, error) {
 	desired, found, err := repository.GetEnvironmentComposeProjection(ctx, environmentID)
 	if err != nil || !found {
-		return EnvironmentZoneRemovalAuthorities{}, found, err
+		return environmentchanges.EnvironmentZoneRemovalAuthorities{}, found, err
 	}
 	applied, found, err := repository.GetEnvironmentAppliedComposeProjection(ctx, environmentID)
 	if err != nil {
-		return EnvironmentZoneRemovalAuthorities{}, false, err
+		return environmentchanges.EnvironmentZoneRemovalAuthorities{}, false, err
 	}
 	if !found {
-		return EnvironmentZoneRemovalAuthorities{}, false, errs.New(
+		return environmentchanges.EnvironmentZoneRemovalAuthorities{}, false, errs.New(
 			errs.KindStateConflict,
 			"Environment applied projection is missing",
 		)
 	}
-	return EnvironmentZoneRemovalAuthorities{Desired: desired, Applied: applied}, true, nil
+	return environmentchanges.EnvironmentZoneRemovalAuthorities{Desired: desired, Applied: applied}, true, nil
 }
 
 func (repository *HierarchyRepository) GetEnvironmentComposeProjection(

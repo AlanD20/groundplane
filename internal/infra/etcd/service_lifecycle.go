@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -318,7 +319,7 @@ func validateServiceLifecycleReplacement(current servicerecord.ServiceRecord, re
 	if servicerecord.ValidateServiceRecord(current) != nil || servicerecord.ValidateServiceRecord(replacement) != nil ||
 		replacement.EnvironmentID != current.EnvironmentID ||
 		replacement.BackingNetworkID != current.BackingNetworkID ||
-		!sameServiceRemovalDesired(replacement.Desired, current.Desired) ||
+		!environmentchanges.SameServiceRemovalDesired(replacement.Desired, current.Desired) ||
 		replacement.Runtime.ServiceID != current.Runtime.ServiceID || task.Target != current.Desired.ID ||
 		task.Status != taskjournal.TaskStatusPending || task.NextEventSequence != 1 || len(task.Steps) < 1 || len(task.Steps) > 3 {
 		return errs.New(errs.KindValidationFailed, "Service lifecycle replacement is invalid")
@@ -357,7 +358,7 @@ func validateServiceLifecycleProjection(
 		task.Executor != taskjournal.TaskExecutorAgent || uint64(task.RenderGeneration) != projection.Record.RenderGeneration ||
 		input.PlanID != task.PlanID || input.ServiceID != task.Target ||
 		input.EnvironmentID != projection.Record.EnvironmentID ||
-		!sameRouteRemovalProjection(input.Projection, projection.Record) ||
+		!environmentchanges.SameRouteRemovalProjection(input.Projection, projection.Record) ||
 		len(task.Params) != 2 || task.Params[taskjournal.TaskServiceEnvironmentParam] != input.EnvironmentID ||
 		task.Params[taskjournal.TaskComposeArtifactParam] != input.ArtifactID {
 		return errs.New(errs.KindValidationFailed, "applied Service lifecycle Task is invalid")

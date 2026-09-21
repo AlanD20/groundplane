@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -104,7 +105,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	current etcdstore.Versioned[servicerecord.ServiceRecord],
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	tombstone deletionrecord.DeletionTombstoneRecord,
-	intent ServiceRemovalIntent,
+	intent environmentchanges.ServiceRemovalIntent,
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (IdempotencyTransactionResult, error) {
@@ -114,14 +115,14 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateServiceRemovalIntent(intent); err != nil {
+	if err := environmentchanges.ValidateServiceRemovalIntent(intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateServiceRemovalTaskOwner(task, intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if projection.Revision != intent.CurrentProjectionRevision ||
-		!sameRouteRemovalProjection(projection.Record, intent.CurrentProjection) ||
+		!environmentchanges.SameRouteRemovalProjection(projection.Record, intent.CurrentProjection) ||
 		intent.ServiceRevision != current.Revision || intent.ExpectedHeadRevision != projection.Revision ||
 		tombstone.TargetKind != deletionrecord.DeletionTargetService || tombstone.TargetID != current.Record.Desired.ID ||
 		tombstone.TargetRevision != current.Revision || tombstone.TaskID != task.ID ||
@@ -216,7 +217,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(tombstoneValue)
-	intentValue, err := encodeServiceRemovalIntent(intent)
+	intentValue, err := environmentchanges.EncodeServiceRemovalIntent(intent)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -227,7 +228,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		servicerecord.ServiceDesiredCondition(current),
 		servicerecord.ServiceRuntimeCondition(current),
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID)},
-		{Key: serviceRemovalIntentKey(task.ID)},
+		{Key: environmentchanges.ServiceRemovalIntentKey(task.ID)},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID), ModRevision: indexes.Values[1].ModRevision},
 		{Key: serviceLifecycleActiveKey(current.Record.Desired.ID)},
 		{Key: componentTaskActiveEnvironmentKey(environment.Record.ID)},
@@ -248,7 +249,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 			Key:   deletionTombstoneKey(string(deletionrecord.DeletionTargetService), current.Record.Desired.ID),
 			Value: tombstoneValue,
 		},
-		{Type: etcdstore.MutationPut, Key: serviceRemovalIntentKey(task.ID), Value: intentValue},
+		{Type: etcdstore.MutationPut, Key: environmentchanges.ServiceRemovalIntentKey(task.ID), Value: intentValue},
 		{Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(environment.Record.ID), Value: []byte(task.ID)},
 	}
 	originalClassify := func(_ int64, values []*etcdstore.KeyValue) error {

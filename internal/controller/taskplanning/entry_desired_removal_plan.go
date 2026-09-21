@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -71,7 +72,7 @@ func (planner *EntryRemovalPlanner) PrepareDesiredEntryRemoval(
 			}
 		}
 	}
-	intent, err := etcd.NewDesiredEntryRemovalIntent(task.Target, desired.Record.RevisionID, claim, cleanup)
+	intent, err := environmentchanges.NewDesiredEntryRemovalIntent(task.Target, desired.Record.RevisionID, claim, cleanup)
 	if err != nil {
 		return etcd.TaskRecord{}, err
 	}

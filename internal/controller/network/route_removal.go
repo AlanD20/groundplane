@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -49,7 +50,7 @@ type routeRemovalRepository interface {
 		etcdstore.Versioned[routerecord.Record],
 		*etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 		deletionrecord.DeletionTombstoneRecord,
-		etcd.RouteRemovalIntent,
+		environmentchanges.RouteRemovalIntent,
 		etcd.TaskRecord,
 		idempotencyrecord.IdempotencyMarker,
 	) (etcd.IdempotencyTransactionResult, error)
@@ -152,7 +153,7 @@ type routeRemovalPlanResolver interface {
 	PrepareRouteRemovalTask(
 		context.Context,
 		etcd.TaskRecord,
-		etcd.RouteRemovalIntent,
+		environmentchanges.RouteRemovalIntent,
 		taskplanning.RouteRemovalTaskProcedureIDs,
 	) (etcd.RouteRemovalTaskPreparation, error)
 }
@@ -277,7 +278,7 @@ func (service *routeRemovalService) removeRouteOnce(
 		Type: taskjournal.TaskRemove, Target: routeID, Status: taskjournal.TaskStatusPending,
 		NextEventSequence: 1, CreatedAt: now, UpdatedAt: now,
 	}
-	intent, err := etcd.NewRouteRemovalIntent(
+	intent, err := environmentchanges.NewRouteRemovalIntent(
 		task.ID, environment.Record.ID, routeID, current.Revision, projectionInput, now,
 	)
 	if err != nil {
@@ -375,7 +376,7 @@ func (service *routeRemovalService) replayIndexedRemoval(
 
 func prepareControllerRouteRemovalTask(
 	task etcd.TaskRecord,
-	intent etcd.RouteRemovalIntent,
+	intent environmentchanges.RouteRemovalIntent,
 ) (etcd.TaskRecord, error) {
 	renderGeneration := uint64(1)
 	if intent.CandidateProjection != nil {
@@ -403,7 +404,7 @@ func prepareControllerRouteRemovalTask(
 	return task, nil
 }
 
-func controllerRouteRemovalPlanHash(intent etcd.RouteRemovalIntent) (string, error) {
+func controllerRouteRemovalPlanHash(intent environmentchanges.RouteRemovalIntent) (string, error) {
 	value, err := json.Marshal(struct {
 		Version                   int    `json:"version"`
 		Type                      string `json:"type"`

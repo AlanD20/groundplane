@@ -7,14 +7,15 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	environmentfile "github.com/AlanD20/groundplane/internal/controller/environmentfile"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
+
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
 )
 
 func entryRemovalMaterializationTemplates(
-	intent etcd.EntryRemovalIntent,
+	intent environmentchanges.EntryRemovalIntent,
 ) ([]materializationrecord.Record, error) {
 	if intent.CurrentProjection == nil || intent.CandidateProjection == nil ||
 		intent.CurrentProjection.EnvironmentID != intent.EnvironmentID ||
@@ -83,7 +84,7 @@ func entryRemovalMaterializationTemplates(
 }
 
 func entryRemovalEnvironmentTemplate(
-	intent etcd.EntryRemovalIntent,
+	intent environmentchanges.EntryRemovalIntent,
 	scope string,
 ) (materializationrecord.Record, error) {
 	reference := materializationrecord.Record{

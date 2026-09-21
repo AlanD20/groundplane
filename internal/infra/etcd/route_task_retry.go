@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -24,7 +25,7 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 		return mutation, err
 	}
 	intentRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{routeRemovalIntentKey(source.ID)}, Revision: revision,
+		Keys: []string{environmentchanges.RouteRemovalIntentKey(source.ID)}, Revision: revision,
 	})
 	if err != nil {
 		return routeTaskChange{}, err
@@ -36,7 +37,7 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	if intentValue == nil {
 		return routeTaskChange{}, nil
 	}
-	intent, err := decodeRouteRemovalIntent(intentValue.Value)
+	intent, err := environmentchanges.DecodeRouteRemovalIntent(intentValue.Value)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -50,12 +51,12 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 		retry.RenderGeneration != source.RenderGeneration || !maps.Equal(retry.Params, source.Params) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route removal retry changed its pinned Task")
 	}
-	retryIntent := cloneRouteRemovalIntent(intent)
+	retryIntent := environmentchanges.CloneRouteRemovalIntent(intent)
 	retryIntent.TaskID = retry.ID
 	retryIntent.Status = taskjournal.TaskStatusPending
 	retryIntent.CreatedAt = retry.CreatedAt
 	retryIntent.TerminalAt = nil
-	if err := validateRouteRemovalIntent(retryIntent); err != nil {
+	if err := environmentchanges.ValidateRouteRemovalIntent(retryIntent); err != nil {
 		return routeTaskChange{}, err
 	}
 	if err := validateRouteRemovalTaskOwner(retry, retryIntent); err != nil {
@@ -87,8 +88,8 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	change := routeTaskChange{
 		applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: routeRemovalIntentKey(source.ID), ModRevision: intentValue.ModRevision},
-			{Key: routeRemovalIntentKey(retry.ID)},
+			{Key: environmentchanges.RouteRemovalIntentKey(source.ID), ModRevision: intentValue.ModRevision},
+			{Key: environmentchanges.RouteRemovalIntentKey(retry.ID)},
 			{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID)},
 		},
 	}
@@ -108,7 +109,7 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	intentBytes, err := encodeRouteRemovalIntent(retryIntent)
+	intentBytes, err := environmentchanges.EncodeRouteRemovalIntent(retryIntent)
 	if err != nil {
 		clear(tombstoneValue)
 		return routeTaskChange{}, err
@@ -119,7 +120,7 @@ func (repository *TaskRepository) prepareRouteTaskRetry(
 			Type: etcdstore.MutationPut, Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
 			Value: tombstoneValue,
 		},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: routeRemovalIntentKey(retry.ID), Value: intentBytes},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.RouteRemovalIntentKey(retry.ID), Value: intentBytes},
 	)
 	if intent.CurrentProjection != nil {
 		change.mutations = append(change.mutations, etcdstore.Mutation{
@@ -136,7 +137,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	revision int64,
 ) (routeTaskChange, error) {
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{routeMutationIntentKey(source.ID)}, Revision: revision,
+		Keys: []string{environmentchanges.RouteMutationIntentKey(source.ID)}, Revision: revision,
 	})
 	if err != nil {
 		return routeTaskChange{}, err
@@ -147,7 +148,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	if read.Values[0] == nil {
 		return routeTaskChange{}, nil
 	}
-	intent, err := decodeRouteMutationIntent(read.Values[0].Value)
+	intent, err := environmentchanges.DecodeRouteMutationIntent(read.Values[0].Value)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
@@ -173,26 +174,26 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 	if err != nil || !found || !routeMutationSelectedProjection(current.Record, source, intent) {
 		return routeTaskChange{}, errs.New(errs.KindStateConflict, "Route mutation retry desired state changed")
 	}
-	retryIntent := cloneRouteMutationIntent(intent)
+	retryIntent := environmentchanges.CloneRouteMutationIntent(intent)
 	retryIntent.TaskID, retryIntent.Status, retryIntent.CreatedAt, retryIntent.TerminalAt =
 		retry.ID, taskjournal.TaskStatusPending, retry.CreatedAt, nil
-	if err := validateRouteMutationIntent(retryIntent); err != nil {
+	if err := environmentchanges.ValidateRouteMutationIntent(retryIntent); err != nil {
 		return routeTaskChange{}, err
 	}
-	encoded, err := encodeRouteMutationIntent(retryIntent)
+	encoded, err := environmentchanges.EncodeRouteMutationIntent(retryIntent)
 	if err != nil {
 		return routeTaskChange{}, err
 	}
 	conditions := []etcdstore.Condition{
-		{Key: routeMutationIntentKey(source.ID), ModRevision: read.Values[0].ModRevision},
-		{Key: routeMutationIntentKey(retry.ID)},
+		{Key: environmentchanges.RouteMutationIntentKey(source.ID), ModRevision: read.Values[0].ModRevision},
+		{Key: environmentchanges.RouteMutationIntentKey(retry.ID)},
 		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 	}
 	return routeTaskChange{
 		applies:    true,
 		conditions: conditions,
 		mutations: []etcdstore.Mutation{
-			{Type: etcdstore.MutationPut, Key: routeMutationIntentKey(retry.ID), Value: encoded},
+			{Type: etcdstore.MutationPut, Key: environmentchanges.RouteMutationIntentKey(retry.ID), Value: encoded},
 			{Type: etcdstore.MutationPut, Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), Value: []byte(retry.ID)},
 		},
 		values: [][]byte{encoded},
@@ -202,7 +203,7 @@ func (repository *TaskRepository) prepareRouteMutationTaskRetry(
 func (repository *TaskRepository) readRouteRetryDependencies(
 	ctx context.Context,
 	route routerecord.Record,
-	intent RouteRemovalIntent,
+	intent environmentchanges.RouteRemovalIntent,
 	revision int64,
 ) (*etcdstore.GetManyResult, []string, error) {
 	service, err := findServiceAtRevision(ctx, repository.store, route.Desired.TargetServiceID, revision)

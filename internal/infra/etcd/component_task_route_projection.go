@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -25,8 +26,8 @@ type ComponentTaskRouteCandidate struct {
 // by a Component that provides the HTTP router capability. A nil Provider means
 // successful removal of that capability projects every retained Route unserved.
 type ComponentTaskRouteProjection struct {
-	Provider *RouteProviderPin             `json:"provider,omitempty"`
-	Routes   []ComponentTaskRouteCandidate `json:"routes"`
+	Provider *environmentchanges.RouteProviderPin `json:"provider,omitempty"`
+	Routes   []ComponentTaskRouteCandidate        `json:"routes"`
 }
 
 // WithComponentTaskRouteProjection attaches immutable Route observation input
@@ -34,7 +35,7 @@ type ComponentTaskRouteProjection struct {
 func WithComponentTaskRouteProjection(
 	preparation ComponentTaskPreparation,
 	routes []routerecord.Record,
-	provider *RouteProviderPin,
+	provider *environmentchanges.RouteProviderPin,
 ) (ComponentTaskPreparation, error) {
 	if componentTaskPreparationIsZero(preparation) {
 		return ComponentTaskPreparation{}, errs.New(errs.KindInternal, "Component Route projection requires a Task")
@@ -43,7 +44,7 @@ func WithComponentTaskRouteProjection(
 		Routes: make([]ComponentTaskRouteCandidate, len(routes)),
 	}
 	if provider != nil {
-		cloned := cloneRouteProviderPin(*provider)
+		cloned := environmentchanges.CloneRouteProviderPin(*provider)
 		projection.Provider = &cloned
 	}
 	for index, route := range routes {
@@ -75,7 +76,7 @@ func validateComponentTaskRouteProjection(intent ComponentTaskIntent) error {
 		return nil
 	}
 	if projection.Provider != nil {
-		if err := validateRouteProviderPin(projection.Provider); err != nil {
+		if err := environmentchanges.ValidateRouteProviderPin(projection.Provider); err != nil {
 			return err
 		}
 		matched := false
@@ -105,7 +106,7 @@ func cloneComponentTaskRouteProjection(source *ComponentTaskRouteProjection) *Co
 		Routes: append([]ComponentTaskRouteCandidate(nil), source.Routes...),
 	}
 	if source.Provider != nil {
-		provider := cloneRouteProviderPin(*source.Provider)
+		provider := environmentchanges.CloneRouteProviderPin(*source.Provider)
 		clone.Provider = &provider
 	}
 	return clone

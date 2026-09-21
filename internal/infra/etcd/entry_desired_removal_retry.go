@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -13,7 +14,7 @@ import (
 )
 
 func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
-	ctx context.Context, source, retry TaskRecord, intent EntryRemovalIntent, sourceIntentRevision, revision int64,
+	ctx context.Context, source, retry TaskRecord, intent environmentchanges.EntryRemovalIntent, sourceIntentRevision, revision int64,
 ) (routeTaskChange, error) {
 	desired := intent.Desired
 	keys := []string{blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
@@ -64,7 +65,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 		if err != nil || applied.EnvironmentID != intent.EnvironmentID {
 			return routeTaskChange{}, projectionrecord.CorruptEnvironmentComposeProjection()
 		}
-		if intent.CurrentProjection != nil && !sameEntryRemovalProjection(applied, *intent.CurrentProjection) {
+		if intent.CurrentProjection != nil && !environmentchanges.SameEntryRemovalProjection(applied, *intent.CurrentProjection) {
 			return routeTaskChange{}, errs.New(errs.KindStateConflict, "Entry removal retry applied state changed")
 		}
 		if intent.CurrentProjection == nil {
@@ -88,17 +89,17 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 	if err != nil {
 		return routeTaskChange{}, err
 	}
-	value, err := encodeEntryRemovalIntent(intent)
+	value, err := environmentchanges.EncodeEntryRemovalIntent(intent)
 	if err != nil {
 		clear(tombstone)
 		return routeTaskChange{}, err
 	}
 	change := routeTaskChange{applies: true,
 		conditions: []etcdstore.Condition{
-			{Key: entryRemovalIntentKey(source.ID), ModRevision: sourceIntentRevision},
-			{Key: entryRemovalIntentKey(retry.ID)},
+			{Key: environmentchanges.EntryRemovalIntentKey(source.ID), ModRevision: sourceIntentRevision},
+			{Key: environmentchanges.EntryRemovalIntentKey(retry.ID)},
 		},
-		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: entryRemovalIntentKey(retry.ID), Value: value},
+		mutations: []etcdstore.Mutation{{Type: etcdstore.MutationPut, Key: environmentchanges.EntryRemovalIntentKey(retry.ID), Value: value},
 			{
 				Type:  etcdstore.MutationPut,
 				Key:   keys[1],

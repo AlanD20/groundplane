@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -21,7 +22,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 	switch task.Params[taskjournal.TaskResourceKindParam] {
 	case taskjournal.TaskResourceRoute:
 		mutationRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{routeMutationIntentKey(task.ID)}, Revision: revision,
+			Keys: []string{environmentchanges.RouteMutationIntentKey(task.ID)}, Revision: revision,
 		})
 		if err != nil {
 			return "", nil, nil, err
@@ -31,7 +32,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 		}
 		if mutationRead.Values[0] == nil {
 			removalRead, removalErr := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-				Keys: []string{routeRemovalIntentKey(task.ID)}, Revision: revision,
+				Keys: []string{environmentchanges.RouteRemovalIntentKey(task.ID)}, Revision: revision,
 			})
 			if removalErr != nil {
 				return "", nil, nil, removalErr
@@ -43,7 +44,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 				)
 			}
 			if removalRead.Values[0] != nil {
-				intent, decodeErr := decodeRouteRemovalIntent(removalRead.Values[0].Value)
+				intent, decodeErr := environmentchanges.DecodeRouteRemovalIntent(removalRead.Values[0].Value)
 				if decodeErr != nil {
 					return "", nil, nil, decodeErr
 				}
@@ -52,7 +53,7 @@ func (repository *TaskRepository) hostResolutionTerminalOverlay(
 				}
 			}
 		} else {
-			intent, decodeErr := decodeRouteMutationIntent(mutationRead.Values[0].Value)
+			intent, decodeErr := environmentchanges.DecodeRouteMutationIntent(mutationRead.Values[0].Value)
 			if decodeErr != nil {
 				return "", nil, nil, decodeErr
 			}

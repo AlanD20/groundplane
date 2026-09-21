@@ -3,6 +3,7 @@ package etcd
 import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -20,10 +21,10 @@ type routeTaskChange struct {
 func routeMutationSelectedProjection(
 	projection projectionrecord.EnvironmentComposeProjection,
 	task TaskRecord,
-	intent RouteMutationIntent,
+	intent environmentchanges.RouteMutationIntent,
 ) bool {
 	if intent.CandidateProjection != nil {
-		return sameRouteRemovalProjection(projection, *intent.CandidateProjection)
+		return environmentchanges.SameRouteRemovalProjection(projection, *intent.CandidateProjection)
 	}
 	selectedRevisionID := task.ID
 	if task.RetryOf != "" {
@@ -41,7 +42,7 @@ func routeMutationSelectedProjection(
 	return false
 }
 
-func validateRouteMutationTaskOwner(task TaskRecord, intent RouteMutationIntent) error {
+func validateRouteMutationTaskOwner(task TaskRecord, intent environmentchanges.RouteMutationIntent) error {
 	executor := taskjournal.TaskExecutorController
 	if intent.Provider != nil {
 		executor = taskjournal.TaskExecutorAgent
@@ -61,7 +62,7 @@ func sameRouteDesiredVersion(left routerecord.Record, right routerecord.Record) 
 		left.DesiredGeneration == right.DesiredGeneration
 }
 
-func validateRouteRemovalTaskOwner(task TaskRecord, intent RouteRemovalIntent) error {
+func validateRouteRemovalTaskOwner(task TaskRecord, intent environmentchanges.RouteRemovalIntent) error {
 	expectedExecutor := taskjournal.TaskExecutorController
 	validParams := len(task.Params) == 2 && task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceRoute &&
 		task.Params[taskjournal.TaskRouteEnvironmentParam] == intent.EnvironmentID
@@ -79,7 +80,7 @@ func validateRouteRemovalTaskOwner(task TaskRecord, intent RouteRemovalIntent) e
 	return nil
 }
 
-func routeRemovalTombstonePhase(intent RouteRemovalIntent) deletionrecord.DeletionPhase {
+func routeRemovalTombstonePhase(intent environmentchanges.RouteRemovalIntent) deletionrecord.DeletionPhase {
 	if intent.Provider != nil {
 		return deletionrecord.DeletionPhaseHostEffects
 	}

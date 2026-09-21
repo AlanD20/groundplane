@@ -8,6 +8,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -160,7 +161,7 @@ func (service *serviceMutationService) removeServiceOnce(
 		Type: taskjournal.TaskRemove, Target: serviceID, TimeoutSeconds: serviceLifecycleAgentTimeoutSeconds,
 		Status: taskjournal.TaskStatusPending, NextEventSequence: 1, CreatedAt: claim.CreatedAt, UpdatedAt: claim.CreatedAt,
 	}
-	removalIntent, err := etcd.NewServiceRemovalIntent(
+	removalIntent, err := environmentchanges.NewServiceRemovalIntent(
 		taskID, current, projection, expectedHeadRevision, claim, candidate, claim.CreatedAt,
 	)
 	if err != nil {

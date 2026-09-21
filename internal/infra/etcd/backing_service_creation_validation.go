@@ -4,6 +4,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
@@ -48,7 +49,7 @@ func validateBackingServiceProjection(creation BackingServiceCreation) error {
 		projection.DesiredZones[0].Desired != creation.Zone.Desired ||
 		projection.DesiredServices[0].EnvironmentID != creation.Environment.ID ||
 		projection.DesiredServices[0].BackingNetworkID != creation.Service.BackingNetworkID ||
-		!sameServiceRemovalDesired(projection.DesiredServices[0].Desired, creation.Service.Desired) {
+		!environmentchanges.SameServiceRemovalDesired(projection.DesiredServices[0].Desired, creation.Service.Desired) {
 		return errs.New(errs.KindValidationFailed, "Backing-service desired projection is invalid")
 	}
 	if volumeCount == 1 && (projection.VolumeMounts[0].ServiceID != creation.Service.Desired.ID ||

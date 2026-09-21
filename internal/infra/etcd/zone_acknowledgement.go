@@ -4,6 +4,7 @@ import (
 	"context"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -27,7 +28,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	keys := []string{
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		networkreservations.ZonePoolRegistryKey(environmentID), networkreservations.ComponentAddressRegistryKey(task.Target),
-		zoneRemovalIntentKey(operationID), blueprints.EnvironmentBlueprintHeadKey(environmentID),
+		environmentchanges.ZoneRemovalIntentKey(operationID), blueprints.EnvironmentBlueprintHeadKey(environmentID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID), componentTaskActiveEnvironmentKey(environmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
@@ -39,7 +40,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		state.Values[5] == nil || state.Values[6] == nil {
 		return nil, nil, errs.New(errs.KindInternal, "Zone removal state is inconsistent")
 	}
-	intent, err := decodeZoneRemovalIntent(state.Values[3].Value)
+	intent, err := environmentchanges.DecodeZoneRemovalIntent(state.Values[3].Value)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -55,7 +56,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal desired head changed")
 	}
 	applied, err := projectionrecord.DecodeEnvironmentComposeProjectionStorage(state.Values[5].Value)
-	if err != nil || !sameServiceRemovalProjection(applied, intent.AppliedProjection) {
+	if err != nil || !environmentchanges.SameServiceRemovalProjection(applied, intent.AppliedProjection) {
 		return nil, nil, errs.New(errs.KindStateConflict, "Zone removal applied projection changed")
 	}
 	zone, err := projectedZoneRemovalTarget(intent, readRevision)
@@ -92,11 +93,11 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 		{Key: keys[6], ModRevision: state.Values[6].ModRevision},
 	}
 	if terminalStatus != taskjournal.TaskStatusCompleted {
-		terminalIntent, transitionErr := terminalZoneRemovalIntent(intent, terminalStatus, terminalAt)
+		terminalIntent, transitionErr := environmentchanges.TerminalZoneRemovalIntent(intent, terminalStatus, terminalAt)
 		if transitionErr != nil {
 			return nil, nil, transitionErr
 		}
-		intentValue, encodeErr := encodeZoneRemovalIntent(terminalIntent)
+		intentValue, encodeErr := environmentchanges.EncodeZoneRemovalIntent(terminalIntent)
 		if encodeErr != nil {
 			return nil, nil, encodeErr
 		}
@@ -177,7 +178,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	}
 	keys := []string{
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
-		networkreservations.ZonePoolRegistryKey(environmentID), zoneRemovalIntentKey(operationID),
+		networkreservations.ZonePoolRegistryKey(environmentID), environmentchanges.ZoneRemovalIntentKey(operationID),
 		blueprints.EnvironmentBlueprintHeadKey(environmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
 		componentTaskActiveEnvironmentKey(environmentID),
 	}
@@ -216,12 +217,12 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	if state.Values[1] == nil || state.Values[2] == nil {
 		return errs.New(errs.KindStateConflict, "failed Zone removal lost durable state")
 	}
-	intent, err := decodeZoneRemovalIntent(state.Values[2].Value)
+	intent, err := environmentchanges.DecodeZoneRemovalIntent(state.Values[2].Value)
 	if err != nil || validateZoneRemovalTaskOwner(task, intent) != nil || intent.Status != terminalStatus ||
 		intent.TerminalAt == nil || task.FinishedAt == nil || !intent.TerminalAt.Equal(*task.FinishedAt) ||
 		state.Values[3].ModRevision != intent.DesiredHeadRevision || headID != intent.DesiredProjection.RevisionID ||
 		state.Values[4].ModRevision != intent.AppliedProjectionRevision ||
-		!sameServiceRemovalProjection(applied, intent.AppliedProjection) {
+		!environmentchanges.SameServiceRemovalProjection(applied, intent.AppliedProjection) {
 		return errs.New(errs.KindStateConflict, "failed Zone removal changed sealed desired state")
 	}
 	zone, err := projectedZoneRemovalTarget(intent, readRevision)
@@ -235,7 +236,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	return nil
 }
 
-func projectedZoneRemovalTarget(intent ZoneRemovalIntent, readRevision int64) (zonerecord.Record, error) {
+func projectedZoneRemovalTarget(intent environmentchanges.ZoneRemovalIntent, readRevision int64) (zonerecord.Record, error) {
 	projection := etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{
 		Record: intent.DesiredProjection, Revision: intent.DesiredHeadRevision, ReadRevision: readRevision,
 	}

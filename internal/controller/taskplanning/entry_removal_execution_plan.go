@@ -8,6 +8,7 @@ import (
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -35,7 +36,7 @@ func (resolver *TaskPlanResolver) resolveEntryRemovalPlan(
 func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 	ctx context.Context,
 	task etcd.TaskRecord,
-	intent etcd.EntryRemovalIntent,
+	intent environmentchanges.EntryRemovalIntent,
 ) (*agentpb.ExecutionPlan, error) {
 	if resolver == nil || resolver.blueprints == nil || task.Executor != taskjournal.TaskExecutorAgent ||
 		task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindEnvEntry, task.Target) != nil ||
@@ -102,7 +103,7 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 
 func pinnedEntryRemovalIdentity(
 	task etcd.TaskRecord,
-	intent etcd.EntryRemovalIntent,
+	intent environmentchanges.EntryRemovalIntent,
 ) (pinnedEnvironmentIdentity, error) {
 	identity := pinnedEnvironmentIdentity{
 		TenantID: task.Owner.TenantID, TenantSlug: task.Params[taskjournal.TaskEntryTenantSlugParam],

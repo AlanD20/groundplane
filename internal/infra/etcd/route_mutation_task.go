@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -27,7 +28,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	target etcdstore.Versioned[servicerecord.ServiceRecord],
 	current *etcdstore.Versioned[routerecord.Record],
 	record routerecord.Record,
-	intent RouteMutationIntent,
+	intent environmentchanges.RouteMutationIntent,
 	task TaskRecord,
 	directMarker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
@@ -41,12 +42,12 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		if err := validateRouteVersion(*current); err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
-		if intent.Kind != RouteMutationEdit || intent.RouteRevision != current.Revision {
+		if intent.Kind != environmentchanges.RouteMutationEdit || intent.RouteRevision != current.Revision {
 			return IdempotencyTransactionResult{}, errs.New(
 				errs.KindStateConflict, "Route mutation current revision changed",
 			)
 		}
-	} else if intent.Kind != RouteMutationCreate {
+	} else if intent.Kind != environmentchanges.RouteMutationCreate {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindValidationFailed, "Route mutation create intent is required",
 		)
@@ -56,7 +57,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 			errs.KindValidationFailed, "Route mutation intent does not match desired Route",
 		)
 	}
-	if err := validateRouteMutationIntent(intent); err != nil {
+	if err := environmentchanges.ValidateRouteMutationIntent(intent); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := validateRouteTaskAcceptanceMarker(directMarker, record.EnvironmentID); err != nil {
@@ -86,7 +87,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	}
 	action := blueprints.EnvironmentRouteMutationEdit
 	request := &blueprints.EnvironmentRouteMutationRequest{Exposure: record.Desired.Exposure}
-	if intent.Kind == RouteMutationCreate {
+	if intent.Kind == environmentchanges.RouteMutationCreate {
 		action = blueprints.EnvironmentRouteMutationCreate
 		request = &blueprints.EnvironmentRouteMutationRequest{
 			EnvironmentID: record.EnvironmentID, Host: record.Desired.Host, Path: record.Desired.Path,
@@ -149,7 +150,7 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	defer clear(reference)
-	intentValue, err := encodeRouteMutationIntent(intent)
+	intentValue, err := environmentchanges.EncodeRouteMutationIntent(intent)
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
@@ -160,14 +161,14 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 		etcdstore.Condition{Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID)},
 		etcdstore.Condition{Key: taskjournal.TaskActiveOperationKey(task.OperationID)},
 		etcdstore.Condition{Key: taskjournal.TaskQueueKey(task.Executor, task.ID)},
-		etcdstore.Condition{Key: routeMutationIntentKey(task.ID)},
+		etcdstore.Condition{Key: environmentchanges.RouteMutationIntentKey(task.ID)},
 	)
 	mutations = append(mutations,
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskStorageKey(task.ID), Value: taskValue},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskOperationIndexKey(task.OperationID, task.ID), Value: reference},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskActiveOperationKey(task.OperationID), Value: reference},
 		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
-		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: routeMutationIntentKey(task.ID), Value: intentValue},
+		etcdstore.Mutation{Type: etcdstore.MutationPut, Key: environmentchanges.RouteMutationIntentKey(task.ID), Value: intentValue},
 	)
 	conditions = append(conditions, publication.conditions...)
 	conditions, err = routeHeadTargetConditions(conditions, servicerecord.ServiceDesiredCondition(target))

@@ -7,6 +7,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	requestidempotency "github.com/AlanD20/groundplane/internal/controller/idempotency"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -41,7 +42,7 @@ type serviceLifecyclePlanResolver interface {
 	PrepareServiceRemovalTask(
 		context.Context,
 		etcd.TaskRecord,
-		etcd.ServiceRemovalIntent,
+		environmentchanges.ServiceRemovalIntent,
 		string,
 		string,
 	) (etcd.TaskRecord, error)

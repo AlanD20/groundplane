@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
+	environmentchanges "github.com/AlanD20/groundplane/internal/infra/etcd/environmentchanges"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -177,7 +178,7 @@ func prepareRouteHeadPublication(
 func prepareRouteHeadPromotion(
 	ctx context.Context,
 	store hierarchyStore,
-	intent RouteRemovalIntent,
+	intent environmentchanges.RouteRemovalIntent,
 	revision int64,
 ) (routeHeadPublication, error) {
 	lock, err := store.GetMany(ctx, etcdstore.GetManyRequest{
@@ -198,7 +199,7 @@ func prepareRouteHeadPromotion(
 func prepareRouteHeadCandidate(
 	ctx context.Context,
 	store hierarchyStore,
-	intent RouteRemovalIntent,
+	intent environmentchanges.RouteRemovalIntent,
 	revision int64,
 ) (routeHeadPublication, error) {
 	if err := etcdstore.ValidateContext(ctx); err != nil {
@@ -305,7 +306,7 @@ func validateCompletedRouteHeadReplay(
 	candidateRevisionID := task.ID
 	if task.RetryOf != "" {
 		read, err := store.GetMany(ctx, etcdstore.GetManyRequest{
-			Keys: []string{routeRemovalIntentKey(task.RetryOf)}, Revision: revision,
+			Keys: []string{environmentchanges.RouteRemovalIntentKey(task.RetryOf)}, Revision: revision,
 		})
 		if err != nil {
 			return err
@@ -313,7 +314,7 @@ func validateCompletedRouteHeadReplay(
 		if read == nil || len(read.Values) != 1 || read.Values[0] == nil {
 			return errs.New(errs.KindStateConflict, "Route removal retry candidate is unavailable")
 		}
-		intent, err := decodeRouteRemovalIntent(read.Values[0].Value)
+		intent, err := environmentchanges.DecodeRouteRemovalIntent(read.Values[0].Value)
 		if err != nil || intent.CandidateProjection == nil || intent.EnvironmentID != environmentID ||
 			intent.RouteID != task.Target {
 			return errs.New(errs.KindStateConflict, "Route removal retry candidate changed")
