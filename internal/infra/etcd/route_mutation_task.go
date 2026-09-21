@@ -10,6 +10,7 @@ import (
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	routepersistence "github.com/AlanD20/groundplane/internal/infra/etcd/routepersistence"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -36,11 +37,11 @@ func (repository *RouteRepository) BeginRouteMutationWithTask(
 	if err := etcdstore.ValidateContext(ctx); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateRouteHierarchy(ctx, environment, project, target, record); err != nil {
+	if err := routepersistence.ValidateRouteHierarchy(ctx, environment, project, target, record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if current != nil {
-		if err := validateRouteVersion(*current); err != nil {
+		if err := routepersistence.ValidateRouteVersion(*current); err != nil {
 			return IdempotencyTransactionResult{}, err
 		}
 		if intent.Kind != environmentchanges.RouteMutationEdit || intent.RouteRevision != current.Revision {

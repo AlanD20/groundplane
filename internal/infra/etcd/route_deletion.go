@@ -10,6 +10,7 @@ import (
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
+	routepersistence "github.com/AlanD20/groundplane/internal/infra/etcd/routepersistence"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -32,10 +33,10 @@ func (repository *RouteRepository) BeginRouteDeletionWithTask(
 	task TaskRecord,
 	marker idempotencyrecord.IdempotencyMarker,
 ) (_ IdempotencyTransactionResult, publicationErr error) {
-	if err := validateRouteHierarchy(ctx, environment, project, target, route.Record); err != nil {
+	if err := routepersistence.ValidateRouteHierarchy(ctx, environment, project, target, route.Record); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
-	if err := validateRouteVersion(route); err != nil {
+	if err := routepersistence.ValidateRouteVersion(route); err != nil {
 		return IdempotencyTransactionResult{}, err
 	}
 	if err := deletionrecord.ValidateDeletionTombstone(tombstone); err != nil {

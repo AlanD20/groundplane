@@ -5,6 +5,7 @@ import (
 	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
+	routepersistence "github.com/AlanD20/groundplane/internal/infra/etcd/routepersistence"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -71,7 +72,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChangesAt
 		seenMatches[matchKey] = struct{}{}
 		item := preparedEnvironmentBlueprintRoute{change: change}
 		if change.Current != nil {
-			if err := validateRouteVersion(*change.Current); err != nil {
+			if err := routepersistence.ValidateRouteVersion(*change.Current); err != nil {
 				clearPreparedEnvironmentBlueprintRoutes(prepared)
 				return nil, err
 			}
