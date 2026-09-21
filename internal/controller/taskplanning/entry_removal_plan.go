@@ -8,6 +8,7 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	entrycapability "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -106,7 +107,7 @@ func (resolver *TaskPlanResolver) prepareEntryRemovalTask(
 	task.Params = map[string]string{
 		taskjournal.TaskEntryEnvironmentParam:           intent.EnvironmentID,
 		taskjournal.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
-		etcd.EnvironmentDesiredRevisionParam:            intent.CandidateProjection.RevisionID,
+		blueprints.EnvironmentDesiredRevisionParam:      intent.CandidateProjection.RevisionID,
 		taskjournal.TaskComposeArtifactParam:            procedure.ArtifactID,
 		taskjournal.TaskEntryTenantSlugParam:            identity.TenantSlug,
 		taskjournal.TaskEntryProjectSlugParam:           identity.ProjectSlug,

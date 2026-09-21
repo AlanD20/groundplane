@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -47,7 +48,7 @@ func (repository *TaskRepository) prepareZoneRemovalTaskRetry(
 	}
 	keys := []string{
 		zoneRemovalIntentKey(operationID), deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), source.Target),
-		environmentBlueprintHeadKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
+		blueprints.EnvironmentBlueprintHeadKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 		componentTaskActiveEnvironmentKey(source.Params[taskjournal.TaskZoneEnvironmentParam]),
 	}
@@ -177,7 +178,7 @@ func taskOwnsBackingZoneCascade(task TaskRecord) (bool, error) {
 	if task.Type != taskjournal.TaskRemove || ids.Validate(ids.KindNetwork, task.Target) != nil || len(task.Params) != 5 ||
 		ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskZoneEnvironmentParam]) != nil ||
 		ids.Validate(ids.KindOperation, task.Params[taskjournal.TaskZoneRemovalOperationParam]) != nil ||
-		ids.Validate(ids.KindTask, task.Params[EnvironmentDesiredRevisionParam]) != nil ||
+		ids.Validate(ids.KindTask, task.Params[blueprints.EnvironmentDesiredRevisionParam]) != nil ||
 		!recordcodec.ValidSHA256(task.Params[taskjournal.TaskZoneImpactTokenParam]) {
 		return false, errs.New(errs.KindInternal, "backing Zone cascade Task has invalid durable input")
 	}

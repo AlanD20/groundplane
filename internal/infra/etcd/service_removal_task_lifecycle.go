@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -70,7 +71,7 @@ func (repository *TaskRepository) prepareServiceRemovalTaskAcknowledgement(
 	keys := []string{
 		servicerecord.ServiceRuntimeKey(intent.ServiceID),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
-		environmentBlueprintHeadKey(intent.EnvironmentID),
+		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}
@@ -219,7 +220,7 @@ func (repository *TaskRepository) validateServiceRemovalTaskAcknowledgementRepla
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		servicerecord.ServiceRuntimeKey(intent.ServiceID), deletionTombstoneKey(string(deletionrecord.DeletionTargetService), intent.ServiceID),
-		environmentBlueprintHeadKey(intent.EnvironmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
+		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 	}, Revision: revision})
 	if err != nil {

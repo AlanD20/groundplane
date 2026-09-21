@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -22,7 +23,7 @@ func desiredRevisionTaskEnvironment(task TaskRecord) (string, bool, error) {
 		ids.Validate(ids.KindEnvEntry, task.Target) == nil && len(task.Params) == 3 &&
 		task.Params[taskjournal.TaskResourceKindParam] == taskjournal.TaskResourceEntry && len(task.Materializations) == 0 &&
 		ids.Validate(ids.KindEnvironment, task.Params[taskjournal.TaskEntryEnvironmentParam]) == nil &&
-		ids.Validate(ids.KindTask, task.Params[EnvironmentDesiredRevisionParam]) == nil {
+		ids.Validate(ids.KindTask, task.Params[blueprints.EnvironmentDesiredRevisionParam]) == nil {
 		return task.Params[taskjournal.TaskEntryEnvironmentParam], true, nil
 	}
 	return taskMaterializationEnvironment(task)
@@ -163,7 +164,7 @@ func (repository *HierarchyRepository) prepareDesiredEntryRemovalPublication(
 			{Type: etcdstore.MutationPut, Key: keys[2], Value: intentValue},
 			{Type: etcdstore.MutationPut, Key: keys[3], Value: []byte(task.ID)},
 			{Type: etcdstore.MutationPut, Key: keys[5], Value: descriptorValue}}, writer...),
-		deferred: map[string]bool{environmentBlueprintHeadKey(claim.EnvironmentID): true,
+		deferred: map[string]bool{blueprints.EnvironmentBlueprintHeadKey(claim.EnvironmentID): true,
 			environmentBlueprintDescriptorKeyByID(claim.DescriptorID): true, locatorKey: true}}, nil
 }
 

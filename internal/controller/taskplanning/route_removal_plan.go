@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -89,7 +90,7 @@ func (resolver *TaskPlanResolver) PrepareRouteRemovalTask(
 	task.Params = map[string]string{
 		taskjournal.TaskRouteEnvironmentParam:           intent.EnvironmentID,
 		taskjournal.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
-		etcd.EnvironmentDesiredRevisionParam:            intent.CandidateProjection.RevisionID,
+		blueprints.EnvironmentDesiredRevisionParam:      intent.CandidateProjection.RevisionID,
 		EnvironmentBlueprintArtifactParam:               procedure.ArtifactID,
 	}
 	task.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
@@ -170,7 +171,7 @@ func (resolver *TaskPlanResolver) buildRouteRemovalPlan(
 	}
 	pin := *intent.Provider
 	candidate := *intent.CandidateProjection
-	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
+	revisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
 	if task.Params[taskjournal.TaskRouteEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||

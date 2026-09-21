@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -79,7 +80,7 @@ func (ledger *ReleaseLedger) GetBlueprintTaskRenderInput(
 		intent, decodeErr := releases.DecodeReleaseRecord[domain.Intent](intentValue.Value, "release-intent")
 		if decodeErr != nil || domain.ValidateIntent(intent) != nil || intent.ID != reference.ReleaseID ||
 			intent.ServiceID != reference.ServiceID || intent.OperationKind != domain.OperationBlueprintApply ||
-			intent.OperationID != task.OperationID || intent.OriginatingTaskID != task.Params[EnvironmentDesiredRevisionParam] {
+			intent.OperationID != task.OperationID || intent.OriginatingTaskID != task.Params[blueprints.EnvironmentDesiredRevisionParam] {
 			return ReleaseTaskRenderInput{}, releases.CorruptReleaseRecord()
 		}
 		raw, decodeErr := releases.DecodeReleaseRecord[json.RawMessage](renderValue.Value, "release-render-input")

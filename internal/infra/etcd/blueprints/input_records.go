@@ -1,4 +1,4 @@
-package etcd
+package blueprints
 
 import (
 	"fmt"
@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	environmentBlueprintMaxFiles      = 64
-	environmentBlueprintMaxFileBytes  = 256 * 1024
+	EnvironmentBlueprintMaxFiles      = 64
+	EnvironmentBlueprintMaxFileBytes  = 256 * 1024
 	environmentBlueprintMaxTotalBytes = 768 * 1024
-	environmentBlueprintMaxPathBytes  = 240
+	EnvironmentBlueprintMaxPathBytes  = 240
 
 	EnvironmentDesiredRevisionParam = "desired_revision_id"
 )
@@ -78,14 +78,14 @@ type environmentBlueprintManifestFile struct {
 	SHA256 string `json:"sha256"`
 }
 
-func environmentBlueprintHeadKey(environmentID string) string {
+func EnvironmentBlueprintHeadKey(environmentID string) string {
 	return "/v1/records/environment-blueprints/" + environmentID + "/current"
 }
-func environmentBlueprintRevisionsPrefix(environmentID string) string {
+func EnvironmentBlueprintRevisionsPrefix(environmentID string) string {
 	return "/v1/records/environment-blueprints/" + environmentID + "/revisions/"
 }
 func environmentBlueprintRevisionPrefix(environmentID string, revisionID string) string {
-	return environmentBlueprintRevisionsPrefix(environmentID) + revisionID + "/"
+	return EnvironmentBlueprintRevisionsPrefix(environmentID) + revisionID + "/"
 }
 func environmentBlueprintManifestKey(environmentID string, revisionID string) string {
 	return environmentBlueprintRevisionPrefix(environmentID, revisionID) + "manifest"

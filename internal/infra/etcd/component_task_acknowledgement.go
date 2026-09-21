@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -73,7 +74,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 	keys = append(
 		keys,
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
-		environmentBlueprintHeadKey(intent.EnvironmentID),
+		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 	)
 	for _, candidate := range intent.Candidates {
@@ -104,7 +105,7 @@ func (repository *TaskRepository) prepareComponentTaskAcknowledgement(
 		conditions: []etcdstore.Condition{
 			{Key: componentTaskIntentKey(task.ID), ModRevision: intentValue.ModRevision},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[0].ModRevision},
-			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
+			{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
 		},
 	}
 	if componentTaskAcknowledgementRequiresBlueprintRootCondition(task, terminalStatus, intent.EnvironmentID) {

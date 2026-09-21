@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -9,7 +10,7 @@ import (
 )
 
 type preparedEnvironmentBlueprintRoute struct {
-	change        EnvironmentBlueprintRouteChange
+	change        blueprints.EnvironmentBlueprintRouteChange
 	value         []byte
 	ownerRevision int64
 	matchRevision int64
@@ -18,8 +19,8 @@ type preparedEnvironmentBlueprintRoute struct {
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChanges(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	services []EnvironmentBlueprintServiceChange,
-	changes []EnvironmentBlueprintRouteChange,
+	services []blueprints.EnvironmentBlueprintServiceChange,
+	changes []blueprints.EnvironmentBlueprintRouteChange,
 ) ([]preparedEnvironmentBlueprintRoute, error) {
 	return repository.prepareEnvironmentBlueprintRouteChangesAtRevision(
 		ctx,
@@ -33,8 +34,8 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChanges(
 func (repository *HierarchyRepository) prepareEnvironmentBlueprintRouteChangesAtRevision(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
-	services []EnvironmentBlueprintServiceChange,
-	changes []EnvironmentBlueprintRouteChange,
+	services []blueprints.EnvironmentBlueprintServiceChange,
+	changes []blueprints.EnvironmentBlueprintRouteChange,
 	readRevision int64,
 ) ([]preparedEnvironmentBlueprintRoute, error) {
 	targets := make(map[string]struct{}, len(services))

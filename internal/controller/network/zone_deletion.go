@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -434,11 +435,11 @@ func (service *zoneDeletionService) removeZoneOnce(
 	if backing {
 		task.Executor = taskjournal.TaskExecutorController
 		task.Params = map[string]string{
-			taskjournal.TaskResourceKindParam:         taskjournal.TaskResourceBackingZone,
-			taskjournal.TaskZoneEnvironmentParam:      environment.Record.ID,
-			taskjournal.TaskZoneImpactTokenParam:      impactToken,
-			taskjournal.TaskZoneRemovalOperationParam: task.OperationID,
-			etcd.EnvironmentDesiredRevisionParam:      claim.RevisionID,
+			taskjournal.TaskResourceKindParam:          taskjournal.TaskResourceBackingZone,
+			taskjournal.TaskZoneEnvironmentParam:       environment.Record.ID,
+			taskjournal.TaskZoneImpactTokenParam:       impactToken,
+			taskjournal.TaskZoneRemovalOperationParam:  task.OperationID,
+			blueprints.EnvironmentDesiredRevisionParam: claim.RevisionID,
 		}
 		task.RenderGeneration = int32(candidate.RenderGeneration)
 		task.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: ids.New(ids.KindStep)}}

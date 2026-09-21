@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -140,7 +141,7 @@ func validateBlueprintCandidateAttempts(
 	seal EnvironmentBlueprintSeal,
 ) error {
 	if seal.EnvironmentID != task.Owner.EnvironmentID ||
-		seal.RevisionID != task.Params[EnvironmentDesiredRevisionParam] ||
+		seal.RevisionID != task.Params[blueprints.EnvironmentDesiredRevisionParam] ||
 		seal.RenderGeneration != uint64(task.RenderGeneration) ||
 		validateBlueprintCandidateAttemptAuthorityRecord(record, task) != nil {
 		return releases.CorruptReleaseRecord()
@@ -364,7 +365,7 @@ type blueprintCandidateAuthoritySnapshot struct {
 // Retry authorizes new execution, unlike acknowledgement of an already-owned
 // execution. It must still target the current input and unchanged terminal epoch.
 func (authority blueprintCandidateAuthoritySnapshot) validateRetry(task TaskRecord, terminalRevision int64) error {
-	if authority.desiredRevisionID != task.Params[EnvironmentDesiredRevisionParam] {
+	if authority.desiredRevisionID != task.Params[blueprints.EnvironmentDesiredRevisionParam] {
 		return errs.New(errs.KindStateConflict, "Blueprint desired head changed")
 	}
 	if terminalRevision <= 0 || authority.epochRevision != terminalRevision {
@@ -383,12 +384,12 @@ func (repository *TaskRepository) readBlueprintCandidateAuthority(
 	appliedPredecessor taskMaterializationAppliedPredecessor,
 	revision int64,
 ) (blueprintCandidateAuthoritySnapshot, error) {
-	desiredRevisionID := task.Params[EnvironmentDesiredRevisionParam]
+	desiredRevisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	keys := []string{
 		releases.ReleasePublicationKey(publicationID),
 		releases.ReleaseManifestStagingKey(publicationID),
 		hierarchyrecord.EnvironmentMutationEpochKey(task.Owner.EnvironmentID),
-		environmentBlueprintHeadKey(task.Owner.EnvironmentID),
+		blueprints.EnvironmentBlueprintHeadKey(task.Owner.EnvironmentID),
 		environmentBlueprintRootKey(task.Owner.EnvironmentID, desiredRevisionID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(task.Owner.EnvironmentID),
 	}

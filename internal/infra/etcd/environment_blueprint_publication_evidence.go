@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -88,7 +89,7 @@ func (repository *HierarchyRepository) prepareEnvironmentBlueprintPublication(
 		seal.BaselineHeadRevision != expectedHeadRevision || seal.DependencyDigest != digest ||
 		descriptor.Claim.TaskID != task.ID || taskEnvironmentErr != nil || !materializes ||
 		taskEnvironmentID != revision.EnvironmentID ||
-		task.Params[EnvironmentDesiredRevisionParam] != revision.RevisionID ||
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != revision.RevisionID ||
 		uint64(task.RenderGeneration) != descriptor.Claim.RenderGeneration || marker.TaskID != task.ID ||
 		!sameBlueprintProtectedIntent(marker.Intent, descriptor.Claim.Intent) {
 		return environmentBlueprintPublicationEvidence{}, errs.New(
@@ -252,7 +253,7 @@ func (repository *HierarchyRepository) getEnvironmentComposeProjectionAtRevision
 	revision int64,
 ) (etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection], bool, error) {
 	headResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys: []string{environmentBlueprintHeadKey(environmentID)}, Revision: revision,
+		Keys: []string{blueprints.EnvironmentBlueprintHeadKey(environmentID)}, Revision: revision,
 	})
 	if err != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err

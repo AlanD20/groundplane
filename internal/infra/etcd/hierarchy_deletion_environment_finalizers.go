@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
@@ -54,7 +55,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name), hierarchyrecord.EnvironmentOwnerKey(record.ProjectID, record.ID),
-		environmentBlueprintHeadKey(record.ID), projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID),
+		blueprints.EnvironmentBlueprintHeadKey(record.ID), projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID),
 		releaseGroupCollectionEpochKey(record.ID),
 	}})
 	if err != nil {
@@ -74,7 +75,7 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		return hierarchyDeletionControllerEffects{}, err
 	}
 	revisions, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-		Prefix: environmentBlueprintRevisionsPrefix(record.ID), Limit: 1, Revision: indexes.ReadRevision,
+		Prefix: blueprints.EnvironmentBlueprintRevisionsPrefix(record.ID), Limit: 1, Revision: indexes.ReadRevision,
 	})
 	if err != nil {
 		return hierarchyDeletionControllerEffects{}, err
@@ -92,17 +93,17 @@ func (repository *HierarchyDeletionRepository) prepareHierarchyDeletionEnvironme
 		{Key: primary.Key, ModRevision: primary.ModRevision},
 		{Key: indexes.Values[0].Key, ModRevision: indexes.Values[0].ModRevision},
 		{Key: indexes.Values[1].Key, ModRevision: indexes.Values[1].ModRevision},
-		{Key: environmentBlueprintHeadKey(record.ID), ModRevision: keyValueRevision(indexes.Values[2])},
+		{Key: blueprints.EnvironmentBlueprintHeadKey(record.ID), ModRevision: keyValueRevision(indexes.Values[2])},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID), ModRevision: keyValueRevision(indexes.Values[3])},
 		{Key: releaseGroupCollectionEpochKey(record.ID), ModRevision: keyValueRevision(indexes.Values[4])},
 	}
 	conditions = append(
 		conditions,
 		environmentDeletionLiveAuthorityConditions(record.ID, operation.Tombstone.OperationID)...)
-	conditions = append(conditions, etcdstore.Condition{Key: environmentBlueprintRevisionsPrefix(record.ID), Prefix: true})
+	conditions = append(conditions, etcdstore.Condition{Key: blueprints.EnvironmentBlueprintRevisionsPrefix(record.ID), Prefix: true})
 	conditions = append(conditions, etcdstore.Condition{Key: scriptrecord.ScriptEnvironmentLocatorPrefixFor(record.ID), Prefix: true})
 	mutations := []etcdstore.Mutation{
-		{Type: etcdstore.MutationDelete, Key: environmentBlueprintHeadKey(record.ID)},
+		{Type: etcdstore.MutationDelete, Key: blueprints.EnvironmentBlueprintHeadKey(record.ID)},
 		{Type: etcdstore.MutationDelete, Key: projectionrecord.EnvironmentComposeProjectionStorageKey(record.ID)},
 		{Type: etcdstore.MutationDelete, Key: releaseGroupCollectionEpochKey(record.ID)},
 		{Type: etcdstore.MutationDelete, Key: hierarchyrecord.EnvironmentNameKey(record.ProjectID, record.Name)},

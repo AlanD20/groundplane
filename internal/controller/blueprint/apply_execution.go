@@ -17,6 +17,7 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -455,7 +456,7 @@ func (service *Service) applyBlueprintOnce(
 		return idempotencyrecord.IdempotencyResponse{}, err
 	}
 	params := map[string]string{
-		etcd.EnvironmentDesiredRevisionParam:            taskID,
+		blueprints.EnvironmentDesiredRevisionParam:      taskID,
 		taskjournal.TaskMaterializationEnvironmentParam: environmentID,
 		taskcontract.EnvironmentBlueprintArtifactParam:  artifactID,
 		taskcontract.EnvironmentBlueprintProcedureParam: string(

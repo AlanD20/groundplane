@@ -4,6 +4,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -65,7 +66,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 			result.Values[dynamic.index[attachrecord.AttachFactsKey(source.TargetID)]],
 			result.Values[dynamic.index[hierarchyrecord.ProjectKey(snapshot.BackingProjectID)]],
 			result.Values[dynamic.index[hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID)]],
-			result.Values[dynamic.index[environmentBlueprintHeadKey(snapshot.BackingEnvironmentID)]],
+			result.Values[dynamic.index[blueprints.EnvironmentBlueprintHeadKey(snapshot.BackingEnvironmentID)]],
 		}
 		return validateBackupPostgresPublicationEvidence(keys, source, *snapshot)
 	case backupruntime.BackupRuntimeSourceVolume:
@@ -77,7 +78,7 @@ func (reader *BackupSecretResolutionReader) validateCaptureTargetEvidence(
 		keys = append(
 			keys,
 			result.Values[dynamic.index[hierarchyrecord.EnvironmentKey(snapshot.EnvironmentID)]],
-			result.Values[dynamic.index[environmentBlueprintHeadKey(snapshot.EnvironmentID)]],
+			result.Values[dynamic.index[blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID)]],
 			result.Values[dynamic.index[environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID)]],
 		)
 		for _, service := range snapshot.Services {

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -127,7 +128,7 @@ func (service *serviceMutationService) publishServiceDesiredMutation(
 	}
 	defer clear(marker.Intent.Ciphertext)
 	defer clear(marker.Response.Body)
-	change := etcd.EnvironmentBlueprintServiceChange{Record: record}
+	change := blueprints.EnvironmentBlueprintServiceChange{Record: record}
 	if current != nil {
 		currentCopy := *current
 		change.Current = &currentCopy

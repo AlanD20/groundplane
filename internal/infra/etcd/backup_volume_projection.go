@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -276,7 +277,7 @@ func loadBackupVolumeProjectionEvidence(
 		)
 	}
 	headRead, err := store.GetMany(ctx, etcdstore.GetManyRequest{
-		Keys:     []string{hierarchyrecord.EnvironmentKey(environmentID), environmentBlueprintHeadKey(environmentID)},
+		Keys:     []string{hierarchyrecord.EnvironmentKey(environmentID), blueprints.EnvironmentBlueprintHeadKey(environmentID)},
 		Revision: fixedRevision,
 	})
 	if err != nil {

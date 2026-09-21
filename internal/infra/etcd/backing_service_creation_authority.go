@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
@@ -32,7 +33,7 @@ func backingServiceCreationConditions(
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
-		{Key: environmentBlueprintHeadKey(creation.Environment.ID)},
+		{Key: blueprints.EnvironmentBlueprintHeadKey(creation.Environment.ID)},
 		{Key: hierarchyrecord.ProjectKey(creation.Project.ID)},
 		{Key: hierarchyrecord.ProjectSlugKey(creation.Project)},
 		{Key: hierarchyrecord.ProjectOwnerKey(creation.Project)},

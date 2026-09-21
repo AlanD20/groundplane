@@ -2,7 +2,8 @@ package blueprint
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -15,7 +16,7 @@ func prepareEnvironmentBlueprintZoneChanges(
 	environmentID string,
 	desired []core.Zone,
 	current []etcdstore.Versioned[zonerecord.Record],
-) ([]etcd.EnvironmentBlueprintZoneChange, error) {
+) ([]blueprints.EnvironmentBlueprintZoneChange, error) {
 	currentByID := make(map[string]etcdstore.Versioned[zonerecord.Record], len(current))
 	for _, zone := range current {
 		if zone.Record.EnvironmentID != environmentID || zone.Record.Desired.ID == "" {
@@ -26,7 +27,7 @@ func prepareEnvironmentBlueprintZoneChanges(
 		}
 		currentByID[zone.Record.Desired.ID] = zone
 	}
-	changes := make([]etcd.EnvironmentBlueprintZoneChange, 0, len(desired))
+	changes := make([]blueprints.EnvironmentBlueprintZoneChange, 0, len(desired))
 	for _, next := range desired {
 		if existing, found := currentByID[next.ID]; found {
 			if existing.Record.Desired != next {
@@ -36,7 +37,7 @@ func prepareEnvironmentBlueprintZoneChanges(
 				)
 			}
 			currentCopy := existing
-			changes = append(changes, etcd.EnvironmentBlueprintZoneChange{
+			changes = append(changes, blueprints.EnvironmentBlueprintZoneChange{
 				Current: &currentCopy,
 				Record:  existing.Record,
 			})
@@ -47,7 +48,7 @@ func prepareEnvironmentBlueprintZoneChanges(
 		if err != nil {
 			return nil, err
 		}
-		changes = append(changes, etcd.EnvironmentBlueprintZoneChange{Record: record})
+		changes = append(changes, blueprints.EnvironmentBlueprintZoneChange{Record: record})
 	}
 	if len(currentByID) != 0 {
 		return nil, errs.New(
@@ -59,9 +60,9 @@ func prepareEnvironmentBlueprintZoneChanges(
 }
 
 func environmentBlueprintTopologyProjection(
-	zones []etcd.EnvironmentBlueprintZoneChange,
-	services []etcd.EnvironmentBlueprintServiceChange,
-	routes []etcd.EnvironmentBlueprintRouteChange,
+	zones []blueprints.EnvironmentBlueprintZoneChange,
+	services []blueprints.EnvironmentBlueprintServiceChange,
+	routes []blueprints.EnvironmentBlueprintRouteChange,
 ) ([]projectionrecord.EnvironmentZoneProjection, []servicerecord.EnvironmentServiceProjection, []projectionrecord.EnvironmentRouteProjection) {
 	zoneProjection := make([]projectionrecord.EnvironmentZoneProjection, len(zones))
 	for index, change := range zones {
@@ -92,7 +93,7 @@ func prepareEnvironmentBlueprintRouteChanges(
 	environmentID string,
 	desired []core.Route,
 	current []etcdstore.Versioned[routerecord.Record],
-) ([]etcd.EnvironmentBlueprintRouteChange, error) {
+) ([]blueprints.EnvironmentBlueprintRouteChange, error) {
 	currentByID := make(map[string]etcdstore.Versioned[routerecord.Record], len(current))
 	for _, route := range current {
 		if route.Record.EnvironmentID != environmentID || route.Record.Desired.ID == "" {
@@ -103,7 +104,7 @@ func prepareEnvironmentBlueprintRouteChanges(
 		}
 		currentByID[route.Record.Desired.ID] = route
 	}
-	changes := make([]etcd.EnvironmentBlueprintRouteChange, 0, len(desired))
+	changes := make([]blueprints.EnvironmentBlueprintRouteChange, 0, len(desired))
 	for _, next := range desired {
 		if existing, found := currentByID[next.ID]; found {
 			replacement, err := routerecord.ReplaceDesired(existing.Record, next)
@@ -111,7 +112,7 @@ func prepareEnvironmentBlueprintRouteChanges(
 				return nil, err
 			}
 			currentCopy := existing
-			changes = append(changes, etcd.EnvironmentBlueprintRouteChange{
+			changes = append(changes, blueprints.EnvironmentBlueprintRouteChange{
 				Current: &currentCopy,
 				Record:  replacement,
 			})
@@ -122,7 +123,7 @@ func prepareEnvironmentBlueprintRouteChanges(
 		if err != nil {
 			return nil, err
 		}
-		changes = append(changes, etcd.EnvironmentBlueprintRouteChange{Record: record})
+		changes = append(changes, blueprints.EnvironmentBlueprintRouteChange{Record: record})
 	}
 	if len(currentByID) != 0 {
 		return nil, errs.New(

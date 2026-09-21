@@ -7,6 +7,7 @@ import (
 	backupconfigrecord "github.com/AlanD20/groundplane/internal/infra/etcd/backupconfiguration"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -152,7 +153,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 					snapshot.BackingProjectID,
 				),
 				hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID),
-				environmentBlueprintHeadKey(snapshot.BackingEnvironmentID),
+				blueprints.EnvironmentBlueprintHeadKey(snapshot.BackingEnvironmentID),
 			}, fixedRevision)
 			if readErr != nil {
 				clearBackupRuntimeMutations(mutations)
@@ -176,7 +177,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				{attachrecord.AttachFactsKey(source.TargetID), snapshot.AttachFactsRevision},
 				{hierarchyrecord.ProjectKey(snapshot.BackingProjectID), snapshot.BackingProjectRevision},
 				{hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID), snapshot.BackingEnvironmentRevision},
-				{environmentBlueprintHeadKey(snapshot.BackingEnvironmentID), snapshot.BackingServiceRevision},
+				{blueprints.EnvironmentBlueprintHeadKey(snapshot.BackingEnvironmentID), snapshot.BackingServiceRevision},
 			} {
 				if err := addCondition(fact.key, fact.revision); err != nil {
 					clearBackupRuntimeMutations(mutations)
@@ -187,7 +188,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 			snapshot := source.Snapshot.Volume
 			keys := []string{
 				hierarchyrecord.EnvironmentKey(snapshot.EnvironmentID),
-				environmentBlueprintHeadKey(snapshot.EnvironmentID),
+				blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID),
 				environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID),
 			}
 			for _, service := range snapshot.Services {
@@ -212,7 +213,7 @@ func (repository *BackupRuntimeRepository) loadBackupRunPublicationEvidence(
 				clearBackupRuntimeMutations(mutations)
 				return nil, nil, err
 			}
-			if err := addCondition(environmentBlueprintHeadKey(snapshot.EnvironmentID), source.TargetRevision); err != nil {
+			if err := addCondition(blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID), source.TargetRevision); err != nil {
 				clearBackupRuntimeMutations(mutations)
 				return nil, nil, err
 			}

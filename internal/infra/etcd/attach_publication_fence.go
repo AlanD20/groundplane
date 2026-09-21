@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -14,7 +15,7 @@ func attachDesiredHeadConditions(
 	services []etcdstore.Versioned[servicerecord.ServiceRecord],
 ) ([]etcdstore.Condition, error) {
 	candidates := []etcdstore.Condition{{
-		Key: environmentBlueprintHeadKey(consumerEnvironmentID), ModRevision: consumerRevision,
+		Key: blueprints.EnvironmentBlueprintHeadKey(consumerEnvironmentID), ModRevision: consumerRevision,
 	}, servicerecord.ServiceDesiredCondition(backingService)}
 	for _, service := range services {
 		candidates = append(candidates, servicerecord.ServiceDesiredCondition(service))

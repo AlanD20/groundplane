@@ -6,6 +6,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -65,7 +66,7 @@ func (resolver *TaskPlanResolver) resolveEnvironmentRemovalPlan(
 		ids.Validate(ids.KindStep, task.Steps[1].ID) != nil {
 		return nil, errs.New(errs.KindInternal, "Environment removal procedure is invalid")
 	}
-	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
+	revisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
 	if task.Params[taskjournal.TaskMaterializationEnvironmentParam] != task.Target ||
 		ids.Validate(ids.KindTask, revisionID) != nil || ids.Validate(ids.KindConfig, artifactID) != nil {

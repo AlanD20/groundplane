@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -15,7 +16,7 @@ func (repository *TaskRepository) prepareDesiredEntryRemovalRetry(
 	ctx context.Context, source, retry TaskRecord, intent EntryRemovalIntent, sourceIntentRevision, revision int64,
 ) (routeTaskChange, error) {
 	desired := intent.Desired
-	keys := []string{environmentBlueprintHeadKey(intent.EnvironmentID),
+	keys := []string{blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		deletionTombstoneKey(
 			string(deletionrecord.DeletionTargetEntry),
 			intent.EntryID,

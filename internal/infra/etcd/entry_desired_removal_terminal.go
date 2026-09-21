@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -89,7 +90,7 @@ func (repository *TaskRepository) prepareEntryRemovalHeadPromotion(
 	ctx context.Context, intent EntryRemovalIntent, revision int64,
 ) (routeTaskChange, error) {
 	desired := intent.Desired
-	keys := []string{environmentBlueprintHeadKey(intent.EnvironmentID),
+	keys := []string{blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		environmentBlueprintDescriptorKeyByID(desired.DescriptorID),
 		environmentBlueprintRootKey(intent.EnvironmentID, desired.RevisionID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), blueprintEntryEnvironmentPrefix + intent.EntryID}

@@ -10,6 +10,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -63,7 +64,7 @@ func (service *Service) prepareBlueprintAttaches(
 	environmentID string,
 	taskID string,
 	specs map[string]core.AttachmentSpec,
-	serviceChanges []etcd.EnvironmentBlueprintServiceChange,
+	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
 	current []etcdstore.Versioned[attachrecord.Record],
 	namedID func(ids.Kind, string) string,
 	ownsEnvironmentFence bool,

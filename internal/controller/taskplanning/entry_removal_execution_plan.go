@@ -7,6 +7,7 @@ import (
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"github.com/AlanD20/groundplane/proto/agentpb"
@@ -44,7 +45,7 @@ func (resolver *TaskPlanResolver) buildEntryRemovalPlan(
 		return nil, errs.New(errs.KindInternal, "durable Entry removal Task shape is invalid")
 	}
 	candidate := *intent.CandidateProjection
-	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
+	revisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[taskjournal.TaskComposeArtifactParam]
 	if task.Params[taskjournal.TaskEntryEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != intent.EnvironmentID ||

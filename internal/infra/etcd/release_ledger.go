@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -461,7 +462,7 @@ func releaseDesiredRecordKey(kind ReleaseDesiredKind, id string, environmentID s
 	switch kind {
 	case ReleaseDesiredService:
 		if ids.Validate(ids.KindService, id) == nil && ids.Validate(ids.KindEnvironment, environmentID) == nil {
-			return environmentBlueprintHeadKey(environmentID), nil
+			return blueprints.EnvironmentBlueprintHeadKey(environmentID), nil
 		}
 	case ReleaseDesiredGroup:
 		if ids.Validate(ids.KindReleaseGroup, id) == nil {

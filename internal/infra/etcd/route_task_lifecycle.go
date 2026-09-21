@@ -1,6 +1,7 @@
 package etcd
 
 import (
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -69,7 +70,7 @@ func validateRouteRemovalTaskOwner(task TaskRecord, intent RouteRemovalIntent) e
 		validParams = intent.CandidateProjection != nil && len(task.Params) == 4 &&
 			task.Params[taskjournal.TaskRouteEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[taskjournal.TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
-			task.Params[EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID
+			task.Params[blueprints.EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID
 	}
 	if task.ID != intent.TaskID || task.Executor != expectedExecutor || task.Type != taskjournal.TaskRemove ||
 		task.Target != intent.RouteID || !task.CreatedAt.Equal(intent.CreatedAt) || !validParams {

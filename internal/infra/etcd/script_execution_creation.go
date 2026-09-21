@@ -3,6 +3,7 @@ package etcd
 import (
 	"encoding/hex"
 	"github.com/AlanD20/groundplane/internal/common/executionplan"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -166,7 +167,7 @@ func validateScriptExecutionSources(sources ScriptExecutionSources, execution Sc
 func scriptExecutionProjectionConditions(sources ScriptExecutionSources) []etcdstore.Condition {
 	conditions := []etcdstore.Condition{
 		{
-			Key:         environmentBlueprintHeadKey(sources.Environment.Record.ID),
+			Key:         blueprints.EnvironmentBlueprintHeadKey(sources.Environment.Record.ID),
 			ModRevision: sources.DesiredHead.Revision,
 		},
 		{

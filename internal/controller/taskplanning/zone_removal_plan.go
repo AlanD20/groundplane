@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"math"
@@ -43,10 +44,10 @@ func (resolver *TaskPlanResolver) PrepareZoneRemovalTask(
 	prepared := task
 	prepared.RenderGeneration = int32(intent.CandidateProjection.RenderGeneration)
 	prepared.Params = map[string]string{
-		taskjournal.TaskZoneEnvironmentParam:      intent.EnvironmentID,
-		taskjournal.TaskZoneRemovalOperationParam: intent.OperationID,
-		etcd.EnvironmentDesiredRevisionParam:      intent.Claim.RevisionID,
-		taskjournal.TaskComposeArtifactParam:      procedure.ArtifactID,
+		taskjournal.TaskZoneEnvironmentParam:       intent.EnvironmentID,
+		taskjournal.TaskZoneRemovalOperationParam:  intent.OperationID,
+		blueprints.EnvironmentDesiredRevisionParam: intent.Claim.RevisionID,
+		taskjournal.TaskComposeArtifactParam:       procedure.ArtifactID,
 	}
 	prepared.Steps = make([]taskjournal.TaskStepRecord, 0, len(procedure.ServiceStepIDs)+1)
 	for _, stepID := range procedure.ServiceStepIDs {
@@ -97,7 +98,7 @@ func (resolver *TaskPlanResolver) buildZoneRemovalPlan(
 		task.TimeoutSeconds > math.MaxUint32 || uint64(task.RenderGeneration) != intent.CandidateProjection.RenderGeneration ||
 		task.Params[taskjournal.TaskZoneEnvironmentParam] != intent.EnvironmentID ||
 		task.Params[taskjournal.TaskZoneRemovalOperationParam] != intent.OperationID ||
-		task.Params[etcd.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID {
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID {
 		return nil, errs.New(errs.KindInternal, "durable Zone removal Task shape is invalid")
 	}
 	artifactID := task.Params[taskjournal.TaskComposeArtifactParam]

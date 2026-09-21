@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -50,7 +51,7 @@ func (repository *HierarchyRepository) GetEnvironmentComposeProjection(
 	if err := recordcodec.ValidateID(ids.KindEnvironment, environmentID); err != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}
-	head, err := repository.store.Get(ctx, environmentBlueprintHeadKey(environmentID))
+	head, err := repository.store.Get(ctx, blueprints.EnvironmentBlueprintHeadKey(environmentID))
 	if err != nil {
 		return etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]{}, false, err
 	}

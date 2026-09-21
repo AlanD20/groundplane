@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -26,7 +27,7 @@ func (service *MutationService) prepareRemoval(
 	}
 	runtime := removal.Runtime{
 		OperationID: task.OperationID, EnvironmentID: request.environmentID, VolumeID: request.volumeID, Key: request.key,
-		DesiredRevisionID: task.Params[etcd.EnvironmentDesiredRevisionParam], DesiredGeneration: uint64(task.RenderGeneration),
+		DesiredRevisionID: task.Params[blueprints.EnvironmentDesiredRevisionParam], DesiredGeneration: uint64(task.RenderGeneration),
 		ImpactSHA256: [sha256.Size]byte(impact), IntentSHA256: sha256.Sum256(marker.Intent.Ciphertext),
 		RootResponseSHA256: sha256.Sum256(marker.Response.Body),
 		RootLocator: removal.ReplayLocator{

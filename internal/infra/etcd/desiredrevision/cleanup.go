@@ -2,6 +2,7 @@ package desiredrevision
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	recordcodec "github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	"strings"
@@ -382,7 +383,7 @@ func (repository *Repository) cleanupPublishedEnvironmentBlueprintDescriptor(
 	}
 	task, err := etcd.DecodeCapabilityTaskRecord(evidence.Values[4].Value)
 	if err != nil || task.ID != stored.Claim.TaskID ||
-		task.Params[etcd.EnvironmentDesiredRevisionParam] != stored.Claim.RevisionID {
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != stored.Claim.RevisionID {
 		return false, etcd.CorruptDesiredRevisionStage()
 	}
 	conditions := []etcdstore.Condition{{Key: descriptorKey, ModRevision: evidence.Values[0].ModRevision}}

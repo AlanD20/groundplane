@@ -9,6 +9,7 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	scriptrecord "github.com/AlanD20/groundplane/internal/infra/etcd/scripts"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -38,7 +39,7 @@ func (service *Service) prepareDeployHooks(
 		task: task, members: members, preStepIDs: make([][]string, len(members)), postStepIDs: make([][]string, len(members)),
 		sources: make(map[string]etcd.ScriptExecutionSources),
 	}
-	candidateByService := make(map[string]etcd.EnvironmentBlueprintServiceChange, len(input.ServiceChanges))
+	candidateByService := make(map[string]blueprints.EnvironmentBlueprintServiceChange, len(input.ServiceChanges))
 	for _, change := range input.ServiceChanges {
 		candidateByService[change.Record.Desired.ID] = change
 	}

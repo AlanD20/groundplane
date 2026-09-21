@@ -2,7 +2,8 @@ package desiredrevision
 
 import (
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -14,7 +15,7 @@ import (
 
 func NextGeneration(
 	environmentID string,
-	head etcdstore.Versioned[etcd.EnvironmentBlueprintHead],
+	head etcdstore.Versioned[blueprints.EnvironmentBlueprintHead],
 	hasHead bool,
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	hasProjection bool,

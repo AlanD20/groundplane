@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -25,7 +26,7 @@ func (repository *TaskRepository) prepareZoneRemovalAcknowledgement(
 	keys := []string{
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		zonePoolRegistryKey(environmentID), componentAddressRegistryKey(task.Target),
-		zoneRemovalIntentKey(operationID), environmentBlueprintHeadKey(environmentID),
+		zoneRemovalIntentKey(operationID), blueprints.EnvironmentBlueprintHeadKey(environmentID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID), componentTaskActiveEnvironmentKey(environmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
@@ -176,7 +177,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 	keys := []string{
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetZone), task.Target),
 		zonePoolRegistryKey(environmentID), zoneRemovalIntentKey(operationID),
-		environmentBlueprintHeadKey(environmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
+		blueprints.EnvironmentBlueprintHeadKey(environmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(environmentID),
 		componentTaskActiveEnvironmentKey(environmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: readRevision})
@@ -196,7 +197,7 @@ func (repository *TaskRepository) validateZoneRemovalReplay(
 		return err
 	}
 	if terminalStatus == taskjournal.TaskStatusCompleted {
-		if state.Values[2] != nil || headID != task.Params[EnvironmentDesiredRevisionParam] ||
+		if state.Values[2] != nil || headID != task.Params[blueprints.EnvironmentDesiredRevisionParam] ||
 			applied.RevisionID != headID || projectionContainsZone(applied, task.Target) {
 			return errs.New(errs.KindStateConflict, "completed Zone removal retained old desired state")
 		}

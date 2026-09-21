@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -251,7 +252,7 @@ func validateZoneRemovalTaskOwner(task TaskRecord, intent ZoneRemovalIntent) err
 			intent.ActiveTaskCreatedAt,
 		) || task.Params[taskjournal.TaskZoneRemovalOperationParam] != intent.OperationID ||
 		task.Params[taskjournal.TaskZoneEnvironmentParam] != intent.EnvironmentID ||
-		task.Params[EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID {
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID {
 		return errs.New(errs.KindStateConflict, "Zone removal intent does not belong to its Task")
 	}
 	if task.Executor == taskjournal.TaskExecutorAgent {

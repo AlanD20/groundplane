@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -121,7 +122,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 			hierarchyrecord.TenantKey(project.Record.TenantID),
 			hierarchyrecord.EnvironmentNameKey(environment.Record.ProjectID, environment.Record.Name),
 			hierarchyrecord.EnvironmentOwnerKey(environment.Record.ProjectID, environment.Record.ID),
-			environmentBlueprintHeadKey(environment.Record.ID),
+			blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
 			projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
 			hierarchyrecord.EnvironmentMutationEpochKey(environment.Record.ID),
 			hierarchyrecord.EnvironmentOperationLockKey(environment.Record.ID),
@@ -201,7 +202,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 	} else if evidence.Values[5] == nil || evidence.Values[6] == nil ||
 		evidence.Values[5].ModRevision != expectedBlueprintRevision ||
 		evidence.Values[6].ModRevision != expectedBlueprintRevision ||
-		len(task.Params) != 4 || task.Params[EnvironmentDesiredRevisionParam] == "" ||
+		len(task.Params) != 4 || task.Params[blueprints.EnvironmentDesiredRevisionParam] == "" ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != environment.Record.ID {
 		return IdempotencyTransactionResult{}, errs.New(
 			errs.KindStateConflict,
@@ -266,7 +267,7 @@ func (repository *HierarchyRepository) BeginEnvironmentDeletionWithTask(
 		},
 		{Key: tombstoneKey},
 		{
-			Key:         environmentBlueprintHeadKey(environment.Record.ID),
+			Key:         blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
 			ModRevision: expectedBlueprintRevision,
 		},
 		{

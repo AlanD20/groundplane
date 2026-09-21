@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -28,9 +29,9 @@ func (repository *HierarchyRepository) PublishEnvironmentDesiredRevisionWithTask
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
-	zoneChanges []EnvironmentBlueprintZoneChange,
-	serviceChanges []EnvironmentBlueprintServiceChange,
-	routeChanges []EnvironmentBlueprintRouteChange,
+	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
+	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
+	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
 	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
@@ -65,9 +66,9 @@ func (repository *EnvironmentBlueprintRepository) PublishEnvironmentBlueprintDes
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
-	zoneChanges []EnvironmentBlueprintZoneChange,
-	serviceChanges []EnvironmentBlueprintServiceChange,
-	routeChanges []EnvironmentBlueprintRouteChange,
+	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
+	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
+	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
 	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
@@ -103,9 +104,9 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 	claim EnvironmentBlueprintStageClaim,
 	revision EnvironmentDesiredRevisionIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
-	zoneChanges []EnvironmentBlueprintZoneChange,
-	serviceChanges []EnvironmentBlueprintServiceChange,
-	routeChanges []EnvironmentBlueprintRouteChange,
+	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
+	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
+	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
 	releaseGroupPreparation ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation ComponentTaskPreparation,
 	attachPreparation BlueprintAttachTaskPreparation,
@@ -145,7 +146,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		claim.EnvironmentID != revision.EnvironmentID || claim.RevisionID != revision.RevisionID ||
 		claim.TaskID != task.ID || projection.EnvironmentID != revision.EnvironmentID ||
 		projection.RevisionID != revision.RevisionID ||
-		task.Params[EnvironmentDesiredRevisionParam] != revision.RevisionID ||
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != revision.RevisionID ||
 		taskEnvironmentErr != nil || !ownsDesired || taskEnvironment != revision.EnvironmentID ||
 		task.Status != taskjournal.TaskStatusPending {
 		return IdempotencyTransactionResult{}, errs.New(
@@ -377,7 +378,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
-		{Key: environmentBlueprintHeadKey(revision.EnvironmentID), ModRevision: expectedHeadRevision},
+		{Key: blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID), ModRevision: expectedHeadRevision},
 		{Key: zonePoolRegistryKey(revision.EnvironmentID), ModRevision: zonePool.currentRevision},
 	}
 	mutations := []etcdstore.Mutation{
@@ -387,7 +388,7 @@ func (repository *HierarchyRepository) publishEnvironmentDesiredRevisionWithTask
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(task.Executor, task.ID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
-		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},
+		{Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(revision.EnvironmentID), Value: reference},
 		{Type: etcdstore.MutationPut, Key: zonePoolRegistryKey(revision.EnvironmentID), Value: zonePool.value},
 	}
 	zonePoolConditionIndex := len(conditions) - 1

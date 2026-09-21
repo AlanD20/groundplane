@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
 	"github.com/AlanD20/groundplane/internal/common/ids"
@@ -32,7 +33,7 @@ func (resolver *TaskPlanResolver) BlueprintManagedComponentTeardown(
 	prerequisite string,
 	releaseForward bool,
 ) (BlueprintManagedComponentTeardown, error) {
-	desiredRevisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
+	desiredRevisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	if resolver == nil || resolver.blueprints == nil || ctx == nil || candidate == nil ||
 		projection.EnvironmentID != task.Target || ids.Validate(ids.KindTask, desiredRevisionID) != nil ||
 		projection.RevisionID != desiredRevisionID ||

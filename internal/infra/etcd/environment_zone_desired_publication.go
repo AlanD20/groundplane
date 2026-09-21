@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -112,7 +113,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
-		{Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
+		{Key: blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
 		{Key: zonePoolRegistryKey(input.Environment.Record.ID), ModRevision: registry.Revision},
 	}
 	removalLockIndex := len(conditions)
@@ -122,7 +123,7 @@ func (repository *HierarchyRepository) PublishEnvironmentZoneDesiredRevisionDire
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
-		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
+		{Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
 		{Type: etcdstore.MutationPut, Key: zonePoolRegistryKey(input.Environment.Record.ID), Value: registryValue},
 		epochMutation,
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
@@ -44,7 +45,7 @@ func (repository *BackupRuntimeRepository) prepareManualPostgresSource(
 	backingRead, err := repository.readFixedKeys(ctx, []string{
 		hierarchyrecord.ProjectKey(attach.BackingProjectID),
 		hierarchyrecord.EnvironmentKey(attach.BackingEnvironmentID),
-		environmentBlueprintHeadKey(attach.BackingEnvironmentID),
+		blueprints.EnvironmentBlueprintHeadKey(attach.BackingEnvironmentID),
 	}, fixedRevision)
 	if err != nil {
 		return backupruntime.BackupRunSourceAttemptRecord{}, err

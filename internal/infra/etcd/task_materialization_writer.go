@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -250,7 +251,7 @@ func (repository *TaskRepository) prepareTaskMaterializationProjectionAcknowledg
 	if terminalStatus != taskjournal.TaskStatusCompleted {
 		return taskMaterializationProjectionChange{}, nil
 	}
-	revisionID, declared := record.Params[EnvironmentDesiredRevisionParam]
+	revisionID, declared := record.Params[blueprints.EnvironmentDesiredRevisionParam]
 	if !declared {
 		return taskMaterializationProjectionChange{}, nil
 	}

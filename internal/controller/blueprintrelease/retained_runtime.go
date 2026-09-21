@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	servicerecord "github.com/AlanD20/groundplane/internal/infra/etcd/services"
@@ -27,7 +28,7 @@ type retainedRuntime struct {
 func (service *Service) captureRetainedRuntime(
 	ctx context.Context,
 	environmentID string,
-	changes, candidates []etcd.EnvironmentBlueprintServiceChange,
+	changes, candidates []blueprints.EnvironmentBlueprintServiceChange,
 ) (*retainedRuntime, error) {
 	selected := make(map[string]bool, len(candidates))
 	for _, candidate := range candidates {
@@ -103,7 +104,7 @@ func (service *Service) captureRetainedRuntime(
 func (service *Service) PrepareRuntimeArtifact(
 	workloads WorkloadPreparation,
 	artifact *agentpb.ComposeArtifact,
-	changes []etcd.EnvironmentBlueprintServiceChange,
+	changes []blueprints.EnvironmentBlueprintServiceChange,
 ) (*agentpb.ComposeArtifact, error) {
 	artifact, err := service.prepareNativeRuntimeArtifact(workloads, artifact, changes)
 	if err != nil {
@@ -123,7 +124,7 @@ func (service *Service) PrepareRuntimeArtifact(
 func (service *Service) prepareNativeRuntimeArtifact(
 	workloads WorkloadPreparation,
 	artifact *agentpb.ComposeArtifact,
-	changes []etcd.EnvironmentBlueprintServiceChange,
+	changes []blueprints.EnvironmentBlueprintServiceChange,
 ) (*agentpb.ComposeArtifact, error) {
 	if workloads.retained == nil || len(workloads.retained.services) == 0 {
 		return artifact, nil

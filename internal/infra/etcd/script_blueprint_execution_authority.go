@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	domain "github.com/AlanD20/groundplane/internal/core/release"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -17,7 +18,7 @@ func blueprintScriptTaskShape(task TaskRecord) bool {
 		releases.ValidatePublicationID(task.Params[TaskReleasePublicationParam]) == nil &&
 		task.Owner.EnvironmentID != "" && task.Target == task.Owner.EnvironmentID &&
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] == task.Owner.EnvironmentID &&
-		ids.Validate(ids.KindTask, task.Params[EnvironmentDesiredRevisionParam]) == nil
+		ids.Validate(ids.KindTask, task.Params[blueprints.EnvironmentDesiredRevisionParam]) == nil
 }
 
 func (repository *ScriptRepository) validateBlueprintScriptExecutionAuthority(

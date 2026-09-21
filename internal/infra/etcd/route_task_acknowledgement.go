@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -51,7 +52,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 	keys := []string{
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), intent.RouteID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
-		environmentBlueprintHeadKey(intent.EnvironmentID),
+		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 	}
 	state, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: revision})
 	if err != nil {
@@ -100,7 +101,7 @@ func (repository *TaskRepository) prepareRouteTaskAcknowledgement(
 				ModRevision: state.Values[0].ModRevision,
 			},
 			{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: state.Values[1].ModRevision},
-			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
+			{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
 		},
 		mutations: []etcdstore.Mutation{
 			{Type: etcdstore.MutationPut, Key: routeRemovalIntentKey(task.ID), Value: intentBytes},

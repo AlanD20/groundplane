@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	zonerecord "github.com/AlanD20/groundplane/internal/infra/etcd/zones"
@@ -14,7 +15,7 @@ import (
 
 type ScriptAttachSources struct {
 	Networks []etcdstore.Versioned[zonerecord.Record]
-	Heads    []etcdstore.Versioned[EnvironmentBlueprintHead]
+	Heads    []etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]
 	Attaches []etcdstore.Versioned[attachrecord.Record]
 }
 
@@ -53,7 +54,7 @@ func resolveScriptAttachNetworks(
 ) (ScriptAttachSources, error) {
 	result := ScriptAttachSources{}
 	resolved := make(map[string]etcdstore.Versioned[zonerecord.Record])
-	heads := make(map[string]etcdstore.Versioned[EnvironmentBlueprintHead])
+	heads := make(map[string]etcdstore.Versioned[blueprints.EnvironmentBlueprintHead])
 	for _, value := range attaches {
 		attach := value.Record
 		if attach.EnvironmentID != environmentID {
@@ -128,7 +129,7 @@ func scriptAttachSourceConditions(sources ScriptAttachSources) []etcdstore.Condi
 		byKey[key] = etcdstore.Condition{Key: key, ModRevision: attach.Revision}
 	}
 	for _, head := range sources.Heads {
-		key := environmentBlueprintHeadKey(head.Record.EnvironmentID)
+		key := blueprints.EnvironmentBlueprintHeadKey(head.Record.EnvironmentID)
 		byKey[key] = etcdstore.Condition{Key: key, ModRevision: head.Revision}
 		for _, network := range sources.Networks {
 			if network.Record.EnvironmentID != head.Record.EnvironmentID {

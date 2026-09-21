@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"crypto/sha256"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -114,7 +115,7 @@ func prepareRouteHeadPublication(
 		conditions: []etcdstore.Condition{
 			{Key: environmentBlueprintDescriptorKeyByID(claim.DescriptorID)},
 			{Key: environmentBlueprintRootKey(claim.EnvironmentID, claim.RevisionID)},
-			{Key: environmentBlueprintHeadKey(claim.EnvironmentID), ModRevision: expectedHeadRevision},
+			{Key: blueprints.EnvironmentBlueprintHeadKey(claim.EnvironmentID), ModRevision: expectedHeadRevision},
 			{Key: removalrecord.EnvironmentLockKey(claim.EnvironmentID)},
 		},
 		mutations: []etcdstore.Mutation{{
@@ -166,7 +167,7 @@ func prepareRouteHeadPublication(
 		}
 		publication.values = append(publication.values, reference)
 		publication.mutations = append(publication.mutations, etcdstore.Mutation{
-			Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(claim.EnvironmentID), Value: reference,
+			Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(claim.EnvironmentID), Value: reference,
 		})
 	}
 	_ = store
@@ -211,7 +212,7 @@ func prepareRouteHeadCandidate(
 		strings.TrimPrefix(candidate.RevisionID, string(ids.KindTask)+"_"),
 	)
 	rootKey := environmentBlueprintRootKey(intent.EnvironmentID, candidate.RevisionID)
-	headKey := environmentBlueprintHeadKey(intent.EnvironmentID)
+	headKey := blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID)
 	state, err := store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{descriptorKey, rootKey, headKey}, Revision: revision,
 	})
@@ -325,7 +326,7 @@ func validateCompletedRouteHeadReplay(
 	keys := []string{
 		descriptorKey,
 		environmentBlueprintRootKey(environmentID, candidateRevisionID),
-		environmentBlueprintHeadKey(environmentID),
+		blueprints.EnvironmentBlueprintHeadKey(environmentID),
 		deletionTombstoneKey(string(deletionrecord.DeletionTargetRoute), task.Target),
 		componentTaskActiveEnvironmentKey(environmentID),
 		routerecord.ObservationKey(task.Target),

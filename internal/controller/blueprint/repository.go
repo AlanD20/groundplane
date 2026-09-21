@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
@@ -25,12 +26,12 @@ type environmentBlueprintRepository interface {
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
-	GetEnvironmentBlueprintHead(context.Context, string) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	GetEnvironmentBlueprintHead(context.Context, string) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentBlueprintRevision(
 		context.Context,
 		string,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
+	) (etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
@@ -55,7 +56,7 @@ type environmentBlueprintRepository interface {
 		context.Context,
 		string,
 		string,
-		[]etcd.EnvironmentBlueprintZoneChange,
+		[]blueprints.EnvironmentBlueprintZoneChange,
 		[]etcd.EnvironmentComponentCandidateInput,
 		time.Time,
 	) (etcd.ComponentTaskPreparation, error)
@@ -78,9 +79,9 @@ type environmentBlueprintRepository interface {
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
 		projectionrecord.EnvironmentComposeProjection,
-		[]etcd.EnvironmentBlueprintZoneChange,
-		[]etcd.EnvironmentBlueprintServiceChange,
-		[]etcd.EnvironmentBlueprintRouteChange,
+		[]blueprints.EnvironmentBlueprintZoneChange,
+		[]blueprints.EnvironmentBlueprintServiceChange,
+		[]blueprints.EnvironmentBlueprintRouteChange,
 		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
@@ -287,9 +288,9 @@ func (repository *durableRepository) PublishEnvironmentBlueprintDesiredRevision(
 	claim etcd.EnvironmentBlueprintStageClaim,
 	revision etcd.EnvironmentDesiredRevisionIdentity,
 	projection projectionrecord.EnvironmentComposeProjection,
-	zoneChanges []etcd.EnvironmentBlueprintZoneChange,
-	serviceChanges []etcd.EnvironmentBlueprintServiceChange,
-	routeChanges []etcd.EnvironmentBlueprintRouteChange,
+	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
+	serviceChanges []blueprints.EnvironmentBlueprintServiceChange,
+	routeChanges []blueprints.EnvironmentBlueprintRouteChange,
 	releaseGroupPreparation etcd.ReleaseGroupBlueprintPreparedMutation,
 	componentPreparation etcd.ComponentTaskPreparation,
 	attachPreparation etcd.BlueprintAttachTaskPreparation,

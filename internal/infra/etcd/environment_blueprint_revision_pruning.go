@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -18,7 +19,7 @@ func (repository *TaskRepository) finalizeEnvironmentBlueprintRevisionBatch(
 	task TaskRecord,
 	updatedAt time.Time,
 ) (bool, error) {
-	prefix := environmentBlueprintRevisionsPrefix(task.Target)
+	prefix := blueprints.EnvironmentBlueprintRevisionsPrefix(task.Target)
 	page, err := repository.store.Range(ctx, etcdstore.RangeRequest{
 		Prefix: prefix, Limit: environmentBlueprintDeletionBatchSize,
 	})

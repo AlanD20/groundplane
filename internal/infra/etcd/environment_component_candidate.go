@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -53,7 +54,7 @@ func (repository *HierarchyRepository) PrepareEnvironmentComponentTask(
 	ctx context.Context,
 	taskID string,
 	environmentID string,
-	zoneChanges []EnvironmentBlueprintZoneChange,
+	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 	inputs []EnvironmentComponentCandidateInput,
 	createdAt time.Time,
 ) (ComponentTaskPreparation, error) {
@@ -384,13 +385,13 @@ func componentCandidateSelectedZoneIdentityMatches(
 func componentCandidateZones(
 	environmentID string,
 	wanted []string,
-	changes []EnvironmentBlueprintZoneChange,
-) (map[string]EnvironmentBlueprintZoneChange, error) {
+	changes []blueprints.EnvironmentBlueprintZoneChange,
+) (map[string]blueprints.EnvironmentBlueprintZoneChange, error) {
 	wantedSet := make(map[string]struct{}, len(wanted))
 	for _, zoneID := range wanted {
 		wantedSet[zoneID] = struct{}{}
 	}
-	result := make(map[string]EnvironmentBlueprintZoneChange, len(wanted))
+	result := make(map[string]blueprints.EnvironmentBlueprintZoneChange, len(wanted))
 	for _, change := range changes {
 		zoneID := change.Record.Desired.ID
 		if _, needed := wantedSet[zoneID]; !needed {

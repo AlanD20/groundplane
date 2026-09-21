@@ -7,6 +7,7 @@ import (
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -55,7 +56,7 @@ func (runtime EntryMutationRuntime) PrepareTask(
 	task.Params = map[string]string{
 		taskjournal.TaskResourceKindParam:               taskjournal.TaskResourceEntry,
 		taskjournal.TaskMaterializationEnvironmentParam: candidate.EnvironmentID,
-		etcd.EnvironmentDesiredRevisionParam:            candidate.RevisionID,
+		blueprints.EnvironmentDesiredRevisionParam:      candidate.RevisionID,
 		taskjournal.TaskComposeArtifactParam:            artifact.ArtifactId,
 		EntryMutationBaselineRevisionParam:              baseline.RevisionID,
 		taskjournal.TaskEntryRuntimeEpochParam:          strconv.FormatInt(runtime.EpochRevision, 10),
@@ -148,7 +149,7 @@ func (resolver *TaskPlanResolver) resolveEntryMutationPlan(
 		return nil, errs.New(errs.KindStateConflict, "Entry mutation baseline is unavailable")
 	}
 	candidate, found, err := resolver.blueprints.GetEnvironmentComposeProjectionRevision(
-		ctx, environmentID, task.Params[etcd.EnvironmentDesiredRevisionParam],
+		ctx, environmentID, task.Params[blueprints.EnvironmentDesiredRevisionParam],
 	)
 	if err != nil {
 		return nil, err
@@ -167,7 +168,7 @@ func buildEntryMutationPlan(
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceEntry ||
 		task.Target != candidate.EnvironmentID || baseline.EnvironmentID != candidate.EnvironmentID ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != candidate.EnvironmentID ||
-		task.Params[etcd.EnvironmentDesiredRevisionParam] != candidate.RevisionID ||
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != candidate.RevisionID ||
 		task.Params[EntryMutationBaselineRevisionParam] != baseline.RevisionID ||
 		candidate.RenderGeneration != uint64(
 			task.RenderGeneration,

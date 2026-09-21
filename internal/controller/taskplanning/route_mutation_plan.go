@@ -11,6 +11,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskmaterialization "github.com/AlanD20/groundplane/internal/controller/taskmaterialization"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
@@ -111,7 +112,7 @@ func (resolver *TaskPlanResolver) PrepareRouteMutationTask(
 		taskjournal.TaskResourceKindParam:               taskjournal.TaskResourceRoute,
 		taskjournal.TaskRouteEnvironmentParam:           intent.EnvironmentID,
 		taskjournal.TaskMaterializationEnvironmentParam: intent.EnvironmentID,
-		etcd.EnvironmentDesiredRevisionParam:            candidate.RevisionID,
+		blueprints.EnvironmentDesiredRevisionParam:      candidate.RevisionID,
 		EnvironmentBlueprintArtifactParam:               procedure.ArtifactID,
 	}
 	task.Steps = []taskjournal.TaskStepRecord{
@@ -212,7 +213,7 @@ func (resolver *TaskPlanResolver) buildRouteMutationPlan(
 	}
 	pin := *intent.Provider
 	candidate := *intent.CandidateProjection
-	revisionID := task.Params[etcd.EnvironmentDesiredRevisionParam]
+	revisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	artifactID := task.Params[taskcontract.EnvironmentBlueprintArtifactParam]
 	if task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceRoute ||
 		task.Params[taskjournal.TaskRouteEnvironmentParam] != intent.EnvironmentID ||

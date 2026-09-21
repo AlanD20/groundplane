@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"sort"
@@ -15,14 +16,14 @@ import (
 // callers never construct a parallel set of group member identities.
 func selectCandidates(
 	projection projectionrecord.EnvironmentComposeProjection,
-	changes []etcd.EnvironmentBlueprintServiceChange,
+	changes []blueprints.EnvironmentBlueprintServiceChange,
 	groups map[string]core.ReleaseGroupSpec,
 	memberships NormalizedServiceMemberships,
-) ([]etcd.EnvironmentBlueprintServiceChange, error) {
+) ([]blueprints.EnvironmentBlueprintServiceChange, error) {
 	if !memberships.initialized {
 		return nil, errs.New(errs.KindInternal, "Blueprint normalized Service memberships are absent")
 	}
-	selected := make(map[string]etcd.EnvironmentBlueprintServiceChange)
+	selected := make(map[string]blueprints.EnvironmentBlueprintServiceChange)
 	groupMembers := releaseGroupMembers(groups, changes)
 	for _, change := range changes {
 		service := change.Record.Desired
@@ -65,7 +66,7 @@ func selectCandidates(
 			selected[service.Name] = change
 		}
 	}
-	ordered := make([]etcd.EnvironmentBlueprintServiceChange, 0, len(selected))
+	ordered := make([]blueprints.EnvironmentBlueprintServiceChange, 0, len(selected))
 	seen := make(map[string]struct{}, len(selected))
 	for _, name := range projection.DeployDependencyPlan.OrderedServices {
 		if change, exists := selected[name]; exists {
@@ -88,7 +89,7 @@ func selectCandidates(
 
 func releaseGroupMembers(
 	groups map[string]core.ReleaseGroupSpec,
-	changes []etcd.EnvironmentBlueprintServiceChange,
+	changes []blueprints.EnvironmentBlueprintServiceChange,
 ) map[string]struct{} {
 	byName := make(map[string]string, len(changes))
 	for _, change := range changes {

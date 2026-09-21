@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	desiredrevisionstore "github.com/AlanD20/groundplane/internal/infra/etcd/desiredrevision"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -18,7 +19,7 @@ type serviceMutationRepository interface {
 	GetTenant(context.Context, string) (etcdstore.Versioned[hierarchyrecord.TenantRecord], error)
 	GetEnvironment(context.Context, string) (etcdstore.Versioned[hierarchyrecord.EnvironmentRecord], error)
 	GetProject(context.Context, string) (etcdstore.Versioned[hierarchyrecord.ProjectRecord], error)
-	GetEnvironmentBlueprintHead(context.Context, string) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	GetEnvironmentBlueprintHead(context.Context, string) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
@@ -101,7 +102,7 @@ func (repository *MutationRepository) GetProject(
 func (repository *MutationRepository) GetEnvironmentBlueprintHead(
 	ctx context.Context,
 	environmentID string,
-) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error) {
+) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error) {
 	return repository.hierarchy.GetEnvironmentBlueprintHead(ctx, environmentID)
 }
 

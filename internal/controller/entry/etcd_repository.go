@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -405,7 +406,7 @@ func applyRemovalTaskPlan(task etcd.TaskRecord, plan RemovalTaskPlan) (etcd.Task
 		task.Params = map[string]string{
 			taskjournal.TaskEntryEnvironmentParam:           plan.EnvironmentID,
 			taskjournal.TaskMaterializationEnvironmentParam: plan.EnvironmentID,
-			etcd.EnvironmentDesiredRevisionParam:            plan.BlueprintRevisionID,
+			blueprints.EnvironmentDesiredRevisionParam:      plan.BlueprintRevisionID,
 			taskjournal.TaskComposeArtifactParam:            plan.ArtifactID,
 			taskjournal.TaskEntryTenantSlugParam:            identity.TenantSlug,
 			taskjournal.TaskEntryProjectSlugParam:           identity.ProjectSlug,

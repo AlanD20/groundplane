@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -213,7 +214,7 @@ func (repository *HierarchyRepository) PublishBackingServiceWithTask(
 		{Type: etcdstore.MutationPut, Key: taskjournal.TaskQueueKey(creation.Task.Executor, creation.Task.ID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
-		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(creation.Environment.ID), Value: taskReference},
+		{Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(creation.Environment.ID), Value: taskReference},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectKey(creation.Project.ID), Value: projectValue},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectSlugKey(creation.Project), Value: []byte(creation.Project.ID)},
 		{Type: etcdstore.MutationPut, Key: hierarchyrecord.ProjectOwnerKey(creation.Project), Value: []byte(creation.Project.ID)},

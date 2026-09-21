@@ -3,6 +3,7 @@ package blueprintrelease
 import (
 	"bytes"
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskassignments "github.com/AlanD20/groundplane/internal/infra/etcd/taskassignments"
@@ -27,7 +28,7 @@ type predecessorSnapshot struct {
 func (service *Service) preparePredecessor(
 	ctx context.Context,
 	input PrepareInput,
-	candidate etcd.EnvironmentBlueprintServiceChange,
+	candidate blueprints.EnvironmentBlueprintServiceChange,
 	render *etcd.ReleaseRenderInput,
 	intent *domain.Intent,
 ) error {

@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -30,7 +31,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		Keys: []string{
 			hierarchyrecord.EnvironmentKey(task.Target),
 			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
-			environmentBlueprintHeadKey(task.Target),
+			blueprints.EnvironmentBlueprintHeadKey(task.Target),
 			projectionrecord.EnvironmentComposeProjectionStorageKey(task.Target),
 			environmentPoolRegistryKey,
 			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),
@@ -126,7 +127,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			Key:         deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.ID),
 			ModRevision: tombstoneValue.ModRevision,
 		},
-		{Key: environmentBlueprintHeadKey(environment.ID), ModRevision: keyValueRevision(stored.Values[2])},
+		{Key: blueprints.EnvironmentBlueprintHeadKey(environment.ID), ModRevision: keyValueRevision(stored.Values[2])},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(environment.ID), ModRevision: keyValueRevision(stored.Values[3])},
 		{Key: hierarchyrecord.EnvironmentMutationEpochKey(environment.ID), ModRevision: stored.Values[5].ModRevision},
 		{Key: hierarchyrecord.EnvironmentOperationLockKey(environment.ID), ModRevision: stored.Values[6].ModRevision},
@@ -202,7 +203,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 			})
 		}
 		remaining, err := repository.store.Range(ctx, etcdstore.RangeRequest{
-			Prefix: environmentBlueprintRevisionsPrefix(
+			Prefix: blueprints.EnvironmentBlueprintRevisionsPrefix(
 				environment.ID,
 			),
 			Limit:    1,
@@ -226,7 +227,7 @@ func (repository *TaskRepository) prepareEnvironmentRemovalAcknowledgement(
 		if stored.Values[2] != nil {
 			mutations = append(
 				mutations,
-				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: environmentBlueprintHeadKey(environment.ID)},
+				etcdstore.Mutation{Type: etcdstore.MutationDelete, Key: blueprints.EnvironmentBlueprintHeadKey(environment.ID)},
 				etcdstore.Mutation{
 					Type: etcdstore.MutationDelete,
 					Key:  projectionrecord.EnvironmentComposeProjectionStorageKey(environment.ID),

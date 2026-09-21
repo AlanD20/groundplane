@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -172,7 +173,7 @@ func EnvironmentVolumeRemovalTaskParams(runtime removalrecord.Runtime, attemptOr
 	return map[string]string{
 		taskjournal.TaskResourceKindParam:               taskjournal.TaskResourceVolume,
 		taskjournal.TaskMaterializationEnvironmentParam: runtime.EnvironmentID,
-		EnvironmentDesiredRevisionParam:                 runtime.DesiredRevisionID,
+		blueprints.EnvironmentDesiredRevisionParam:      runtime.DesiredRevisionID,
 		removalrecord.EnvironmentParam:                  runtime.EnvironmentID,
 		removalrecord.OriginTaskParam:                   runtime.OriginTaskID,
 		removalrecord.AttemptParam:                      strconv.FormatUint(uint64(attemptOrdinal), 10),

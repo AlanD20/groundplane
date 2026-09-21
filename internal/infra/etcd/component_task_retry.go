@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -108,7 +109,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 		keys,
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
-		environmentBlueprintHeadKey(intent.EnvironmentID),
+		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID),
 		environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 	)
 	for _, candidate := range intent.Candidates {
@@ -182,7 +183,7 @@ func (repository *TaskRepository) prepareComponentTaskRetry(
 				Key:         projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 				ModRevision: keyValueRevision(state.Values[1]),
 			},
-			{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
+			{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: state.Values[2].ModRevision},
 			{
 				Key:         environmentBlueprintRootKey(intent.EnvironmentID, desiredRevisionID),
 				ModRevision: state.Values[3].ModRevision,

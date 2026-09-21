@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"strconv"
 	"strings"
@@ -44,7 +45,7 @@ func (resolver *TaskPlanResolver) volumeRemovalPlanParams(
 	ordinal, err := strconv.ParseUint(task.Params[removal.AttemptParam], 10, 32)
 	if err != nil || ordinal == 0 || ids.Validate(ids.KindTask, origin) != nil ||
 		manifest.OperationID != task.OperationID || manifest.VolumeID != task.Target ||
-		manifest.DesiredRevisionID != task.Params[etcd.EnvironmentDesiredRevisionParam] ||
+		manifest.DesiredRevisionID != task.Params[blueprints.EnvironmentDesiredRevisionParam] ||
 		(ordinal == 1 && (task.ID != origin || task.RetryOf != "")) ||
 		(ordinal > 1 && (task.ID == origin || ids.Validate(ids.KindTask, task.RetryOf) != nil)) {
 		return nil, errs.New(errs.KindStateConflict, "Volume removal plan identity changed")
@@ -68,7 +69,7 @@ func (resolver *TaskPlanResolver) volumeRemovalPlanParams(
 	return map[string]string{
 		taskjournal.TaskResourceKindParam:               taskjournal.TaskResourceVolume,
 		taskjournal.TaskMaterializationEnvironmentParam: manifest.EnvironmentID,
-		etcd.EnvironmentDesiredRevisionParam:            manifest.DesiredRevisionID,
+		blueprints.EnvironmentDesiredRevisionParam:      manifest.DesiredRevisionID,
 		taskjournal.TaskComposeArtifactParam:            "cfg_" + strings.TrimPrefix(origin, "task_"),
 		VolumeTaskActionParam:                           VolumeTaskActionRemove, VolumeTaskComposeKeyParam: manifest.Key,
 		VolumeTaskIntentSHA256Param: hex.EncodeToString(

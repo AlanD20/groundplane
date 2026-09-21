@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -22,7 +23,7 @@ type EnvironmentServiceDesiredPublication struct {
 	Claim                EnvironmentBlueprintStageClaim
 	Revision             EnvironmentDesiredRevisionIdentity
 	Projection           projectionrecord.EnvironmentComposeProjection
-	Change               EnvironmentBlueprintServiceChange
+	Change               blueprints.EnvironmentBlueprintServiceChange
 	References           ServiceMutationReferences
 	Marker               idempotencyrecord.IdempotencyMarker
 }
@@ -121,7 +122,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 		},
 		{Key: publication.descriptorKey, ModRevision: publication.descriptorRevision},
 		{Key: publication.locatorKey, ModRevision: publication.locatorRevision},
-		{Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
+		{Key: blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID), ModRevision: input.ExpectedHeadRevision},
 		{Key: deletionTombstoneKey("service", serviceID)},
 	}
 	if input.Change.Current == nil {
@@ -136,7 +137,7 @@ func (repository *HierarchyRepository) PublishEnvironmentServiceDesiredRevisionD
 	mutations := []etcdstore.Mutation{
 		{Type: etcdstore.MutationPut, Key: publication.descriptorKey, Value: publication.publishedDescriptor},
 		{Type: etcdstore.MutationDelete, Key: publication.locatorKey},
-		{Type: etcdstore.MutationPut, Key: environmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
+		{Type: etcdstore.MutationPut, Key: blueprints.EnvironmentBlueprintHeadKey(input.Revision.EnvironmentID), Value: headReference},
 	}
 	if input.Change.Current == nil {
 		runtimeValue, runtimeErr := servicerecord.EncodeServiceRuntimeRecord(servicerecord.NewServiceRuntimeRecord(input.Change.Record))

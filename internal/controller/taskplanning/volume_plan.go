@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -58,7 +59,7 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 		params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceVolume ||
 		ids.Validate(ids.KindEnvironment, params[taskjournal.TaskMaterializationEnvironmentParam]) != nil ||
 		params[taskjournal.TaskMaterializationEnvironmentParam] == "" ||
-		ids.Validate(ids.KindTask, params[etcd.EnvironmentDesiredRevisionParam]) != nil ||
+		ids.Validate(ids.KindTask, params[blueprints.EnvironmentDesiredRevisionParam]) != nil ||
 		ids.Validate(ids.KindConfig, params[taskjournal.TaskComposeArtifactParam]) != nil ||
 		!composerender.ValidVolumeArtifactKey(params[VolumeTaskComposeKeyParam]) {
 		return nil, errs.New(errs.KindInternal, "durable Volume Task shape is invalid")
@@ -74,7 +75,7 @@ func (resolver *TaskPlanResolver) resolveVolumePlan(
 		return nil, err
 	}
 	environmentID := params[taskjournal.TaskMaterializationEnvironmentParam]
-	candidateRevisionID := params[etcd.EnvironmentDesiredRevisionParam]
+	candidateRevisionID := params[blueprints.EnvironmentDesiredRevisionParam]
 	candidateArtifactID := params[taskjournal.TaskComposeArtifactParam]
 	candidateProjection, found, err := resolver.blueprints.GetEnvironmentComposeProjectionRevision(
 		ctx, environmentID, candidateRevisionID,

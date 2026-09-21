@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -49,7 +50,7 @@ func (repository *TaskRepository) transactVolumeRemovalTerminal(
 		removalrecord.AttemptKey(runtime.OperationID, runtime.AttemptOrdinal), removalrecord.OwnerKey(runtime.VolumeID),
 		removalrecord.EnvironmentLockKey(
 			runtime.EnvironmentID,
-		), markerKey, replayKey, environmentBlueprintHeadKey(runtime.EnvironmentID)}
+		), markerKey, replayKey, blueprints.EnvironmentBlueprintHeadKey(runtime.EnvironmentID)}
 	read, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: keys, Revision: runtimeRead.ReadRevision})
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
@@ -299,7 +300,7 @@ func (repository *TaskRepository) transactVolumeRemovalAttemptTerminal(
 	if err != nil {
 		return etcdstore.TransactionResult{}, err
 	}
-	keys = append(keys, environmentBlueprintHeadKey(runtime.EnvironmentID), replayKey,
+	keys = append(keys, blueprints.EnvironmentBlueprintHeadKey(runtime.EnvironmentID), replayKey,
 		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), runtime.EnvironmentID),
 		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetProject), task.Owner.ProjectID))
 	if task.Owner.TenantID != "" {

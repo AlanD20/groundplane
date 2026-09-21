@@ -1,4 +1,4 @@
-package etcd
+package blueprints
 
 import (
 	"crypto/sha256"
@@ -13,7 +13,7 @@ import (
 )
 
 func encodeEnvironmentBlueprintManifest(revision EnvironmentBlueprintRevision) ([]byte, error) {
-	if err := validateEnvironmentBlueprintRevision(revision); err != nil {
+	if err := ValidateEnvironmentBlueprintRevision(revision); err != nil {
 		return nil, err
 	}
 	manifest := environmentBlueprintManifest{
@@ -44,16 +44,16 @@ func decodeEnvironmentBlueprintManifest(value []byte) (environmentBlueprintManif
 	}
 	createdAt, err := time.Parse(time.RFC3339Nano, manifest.CreatedAt)
 	if err != nil || manifest.CreatedAt != createdAt.UTC().Format(time.RFC3339Nano) {
-		return environmentBlueprintManifest{}, corruptEnvironmentBlueprint()
+		return environmentBlueprintManifest{}, CorruptEnvironmentBlueprint()
 	}
 	manifest.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
 	if err := validateEnvironmentBlueprintManifest(manifest); err != nil {
-		return environmentBlueprintManifest{}, corruptEnvironmentBlueprint()
+		return environmentBlueprintManifest{}, CorruptEnvironmentBlueprint()
 	}
 	return manifest, nil
 }
 
-func validateEnvironmentBlueprintRevision(revision EnvironmentBlueprintRevision) error {
+func ValidateEnvironmentBlueprintRevision(revision EnvironmentBlueprintRevision) error {
 	if err := recordcodec.ValidateID(ids.KindEnvironment, revision.EnvironmentID); err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func validateEnvironmentBlueprintManifest(manifest environmentBlueprintManifest)
 	if err := validateEnvironmentBlueprintPath(manifest.RootPath); err != nil {
 		return err
 	}
-	if len(manifest.Files) == 0 || len(manifest.Files) > environmentBlueprintMaxFiles ||
+	if len(manifest.Files) == 0 || len(manifest.Files) > EnvironmentBlueprintMaxFiles ||
 		len(manifest.ComposeSources) == 0 || manifest.ComposeSources[0] != manifest.RootPath {
 		return errs.New(errs.KindValidationFailed, "Blueprint revision file namespace is invalid")
 	}
@@ -100,7 +100,7 @@ func validateEnvironmentBlueprintManifest(manifest environmentBlueprintManifest)
 		if validateEnvironmentBlueprintPath(file.Path) != nil ||
 			(index > 0 && file.Path <= previous) ||
 			file.Size < 0 ||
-			file.Size > environmentBlueprintMaxFileBytes ||
+			file.Size > EnvironmentBlueprintMaxFileBytes ||
 			len(file.SHA256) != sha256.Size*2 {
 			return errs.New(
 				errs.KindValidationFailed,
@@ -159,7 +159,7 @@ func validateEnvironmentBlueprintPath(value string) error {
 	if value == "" || !utf8.ValidString(value) || strings.ContainsRune(value, 0) ||
 		len(
 			value,
-		) > environmentBlueprintMaxPathBytes || strings.Contains(value, `\`) || path.IsAbs(value) {
+		) > EnvironmentBlueprintMaxPathBytes || strings.Contains(value, `\`) || path.IsAbs(value) {
 		return errs.New(errs.KindValidationFailed, "Blueprint revision path is invalid")
 	}
 	cleaned := path.Clean(value)
@@ -180,6 +180,6 @@ func cloneEnvironmentBlueprintInterpolation(values map[string]string) map[string
 	return cloned
 }
 
-func corruptEnvironmentBlueprint() error {
+func CorruptEnvironmentBlueprint() error {
 	return errs.New(errs.KindInternal, "Environment Blueprint revision is corrupt")
 }

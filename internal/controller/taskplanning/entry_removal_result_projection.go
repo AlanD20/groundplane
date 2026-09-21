@@ -4,6 +4,7 @@ import (
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
 	entrycapability "github.com/AlanD20/groundplane/internal/controller/entry"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -13,7 +14,7 @@ func entryRemovalTaskPlan(task etcd.TaskRecord) (entrycapability.RemovalTaskPlan
 		Executor: entrycapability.RemovalExecutorAgent, PlanHash: task.PlanHash,
 		RenderGeneration:    task.RenderGeneration,
 		EnvironmentID:       task.Params[taskjournal.TaskEntryEnvironmentParam],
-		BlueprintRevisionID: task.Params[etcd.EnvironmentDesiredRevisionParam],
+		BlueprintRevisionID: task.Params[blueprints.EnvironmentDesiredRevisionParam],
 		ArtifactID:          task.Params[taskjournal.TaskComposeArtifactParam], TimeoutSeconds: task.TimeoutSeconds,
 		Identity: entrycapability.RemovalEnvironmentIdentity{
 			TenantID: task.Owner.TenantID, TenantSlug: task.Params[taskjournal.TaskEntryTenantSlugParam],

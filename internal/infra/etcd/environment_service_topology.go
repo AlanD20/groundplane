@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -66,7 +67,7 @@ func (repository *ServiceRepository) GetServiceByName(
 		if service.Desired.Name == name &&
 			!componentGeneratedService(projection.Record.Components, service.Desired.ID) {
 			return servicerecord.ReadJoined(ctx, repository.store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, service.Desired.ID,
-				environmentBlueprintHeadKey(environmentID))
+				blueprints.EnvironmentBlueprintHeadKey(environmentID))
 		}
 	}
 	return etcdstore.Versioned[servicerecord.ServiceRecord]{}, errs.New(errs.KindServiceNotFound, "Service was not found")
@@ -103,7 +104,7 @@ func (repository *ServiceRepository) ListServices(
 	items := make([]etcdstore.Versioned[servicerecord.ServiceRecord], 0, end-start)
 	for _, service := range desired[start:end] {
 		joined, joinErr := servicerecord.ReadJoined(ctx, repository.store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, service.Desired.ID,
-			environmentBlueprintHeadKey(environmentID))
+			blueprints.EnvironmentBlueprintHeadKey(environmentID))
 		if joinErr != nil {
 			return etcdstore.Page[servicerecord.ServiceRecord]{}, joinErr
 		}
@@ -193,7 +194,7 @@ func findServiceAtRevision(
 					return etcdstore.Versioned[servicerecord.ServiceRecord]{}, projectionrecord.CorruptEnvironmentComposeProjection()
 				}
 				joined, joinErr := servicerecord.ReadJoined(ctx, store, servicerecord.DesiredSelection{Services: projection.Record.DesiredServices, Revision: projection.Revision, ReadRevision: projection.ReadRevision}, serviceID,
-					environmentBlueprintHeadKey(environmentID))
+					blueprints.EnvironmentBlueprintHeadKey(environmentID))
 				if joinErr != nil {
 					return etcdstore.Versioned[servicerecord.ServiceRecord]{}, joinErr
 				}

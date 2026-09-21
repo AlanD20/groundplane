@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -23,7 +24,7 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 	ctx context.Context,
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord],
 	task TaskRecord,
-	zoneChanges []EnvironmentBlueprintZoneChange,
+	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 	preparation ComponentTaskPreparation,
 ) (preparedComponentTaskPublication, error) {
 	publication := preparedComponentTaskPublication{
@@ -65,7 +66,7 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 	}
 	publication.conditions = append(publication.conditions, appliedProjectionCondition)
 	publication.conditions = append(publication.conditions, etcdstore.Condition{
-		Key: environmentBlueprintHeadKey(environment.Record.ID), ModRevision: preparation.desiredProjectionRevision,
+		Key: blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID), ModRevision: preparation.desiredProjectionRevision,
 	})
 	for _, candidate := range preparation.Intent.Candidates {
 		publication.conditions = append(publication.conditions, etcdstore.Condition{
@@ -111,9 +112,9 @@ func (repository *HierarchyRepository) prepareComponentTaskPublication(
 
 func validateComponentTaskPublicationZones(
 	preparation ComponentTaskPreparation,
-	zoneChanges []EnvironmentBlueprintZoneChange,
+	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 ) error {
-	changes := make(map[string]EnvironmentBlueprintZoneChange, len(zoneChanges))
+	changes := make(map[string]blueprints.EnvironmentBlueprintZoneChange, len(zoneChanges))
 	for _, change := range zoneChanges {
 		changes[change.Record.Desired.ID] = change
 	}

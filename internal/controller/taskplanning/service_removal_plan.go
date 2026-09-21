@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	taskplan "github.com/AlanD20/groundplane/internal/controller/taskplan"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
 
@@ -32,10 +33,10 @@ func (resolver *TaskPlanResolver) PrepareServiceRemovalTask(
 	prepared := task
 	prepared.RenderGeneration = int32(intent.CurrentProjection.RenderGeneration)
 	prepared.Params = map[string]string{
-		taskjournal.TaskResourceKindParam:       taskjournal.TaskResourceService,
-		taskjournal.TaskServiceEnvironmentParam: intent.EnvironmentID,
-		taskjournal.TaskComposeArtifactParam:    artifactID,
-		etcd.EnvironmentDesiredRevisionParam:    intent.Claim.RevisionID,
+		taskjournal.TaskResourceKindParam:          taskjournal.TaskResourceService,
+		taskjournal.TaskServiceEnvironmentParam:    intent.EnvironmentID,
+		taskjournal.TaskComposeArtifactParam:       artifactID,
+		blueprints.EnvironmentDesiredRevisionParam: intent.Claim.RevisionID,
 	}
 	prepared.Steps = []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: stepID}}
 	plan, err := resolver.buildServiceRemovalPlan(ctx, prepared, intent)
@@ -116,7 +117,7 @@ func validateServiceRemovalPlanTask(task etcd.TaskRecord, intent etcd.ServiceRem
 		task.Target != intent.ServiceID || len(task.Params) != 4 || len(task.Steps) != 1 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
 		task.Params[taskjournal.TaskServiceEnvironmentParam] != intent.EnvironmentID ||
-		task.Params[etcd.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID ||
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID ||
 		ids.Validate(ids.KindConfig, task.Params[taskjournal.TaskComposeArtifactParam]) != nil ||
 		ids.Validate(ids.KindStep, task.Steps[0].ID) != nil || task.TimeoutSeconds <= 0 ||
 		uint64(task.RenderGeneration) != intent.CurrentProjection.RenderGeneration {

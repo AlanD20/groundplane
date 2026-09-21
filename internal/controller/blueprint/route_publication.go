@@ -4,11 +4,12 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	routerecord "github.com/AlanD20/groundplane/internal/infra/etcd/routes"
 )
 
-func (service *Service) prepareRoutePublication(componentEnvironment core.Environment, pinnedComponents []componentrecord.Record, componentPreparation etcd.ComponentTaskPreparation, generation uint64, routeChanges []etcd.EnvironmentBlueprintRouteChange) (etcd.ComponentTaskPreparation, []etcd.EnvironmentBlueprintRouteChange, error) {
+func (service *Service) prepareRoutePublication(componentEnvironment core.Environment, pinnedComponents []componentrecord.Record, componentPreparation etcd.ComponentTaskPreparation, generation uint64, routeChanges []blueprints.EnvironmentBlueprintRouteChange) (etcd.ComponentTaskPreparation, []blueprints.EnvironmentBlueprintRouteChange, error) {
 	routeProvider, routeProjection, err := taskplanning.ResolveComponentTaskRouteProvider(
 		service.componentCatalog,
 		componentEnvironment,

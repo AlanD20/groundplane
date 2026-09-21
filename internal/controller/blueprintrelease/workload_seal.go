@@ -2,6 +2,7 @@ package blueprintrelease
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
 	"github.com/AlanD20/groundplane/internal/controller/workloadseal"
@@ -24,7 +25,7 @@ type WorkloadPreparation struct {
 func (service *Service) Preflight(
 	ctx context.Context,
 	environmentID string,
-	changes []etcd.EnvironmentBlueprintServiceChange,
+	changes []blueprints.EnvironmentBlueprintServiceChange,
 	memberships NormalizedServiceMemberships,
 	groups map[string]core.ReleaseGroupSpec,
 ) (WorkloadPreparation, error) {

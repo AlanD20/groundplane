@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	entryvalues "github.com/AlanD20/groundplane/internal/infra/etcd/entryvalues"
@@ -473,14 +474,14 @@ func validateEntryRemovalTaskOwner(task TaskRecord, intent EntryRemovalIntent) e
 		validParams = intent.CandidateProjection != nil && len(task.Params) == 8 &&
 			task.Params[taskjournal.TaskEntryEnvironmentParam] == intent.EnvironmentID &&
 			task.Params[taskjournal.TaskMaterializationEnvironmentParam] == intent.EnvironmentID &&
-			task.Params[EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID &&
+			task.Params[blueprints.EnvironmentDesiredRevisionParam] == intent.CandidateProjection.RevisionID &&
 			recordcodec.ValidateID(ids.KindConfig, task.Params[taskjournal.TaskComposeArtifactParam]) == nil &&
 			task.Params[taskjournal.TaskEntryProjectSlugParam] != "" && task.Params[taskjournal.TaskEntryEnvironmentNameParam] != "" &&
 			task.Params[taskjournal.TaskEntryAuthorizedVolumeDirParam] != "" &&
 			(task.Owner.WorkspaceType == taskjournal.TaskWorkspacePlatform && task.Params[taskjournal.TaskEntryTenantSlugParam] == "" ||
 				task.Owner.WorkspaceType == taskjournal.TaskWorkspaceTenant && task.Params[taskjournal.TaskEntryTenantSlugParam] != "")
 	}
-	if intent.Desired != nil && (task.Params[EnvironmentDesiredRevisionParam] != intent.Desired.RevisionID ||
+	if intent.Desired != nil && (task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Desired.RevisionID ||
 		uint64(task.RenderGeneration) != intent.Desired.RenderGeneration) {
 		validParams = false
 	}

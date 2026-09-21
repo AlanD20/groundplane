@@ -2,13 +2,14 @@ package etcd
 
 import (
 	"crypto/sha256"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	"sort"
 
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
 
-func encodeEnvironmentBlueprintAuditStream(revision EnvironmentBlueprintRevision) ([]byte, error) {
-	if err := validateEnvironmentBlueprintRevision(revision); err != nil {
+func encodeEnvironmentBlueprintAuditStream(revision blueprints.EnvironmentBlueprintRevision) ([]byte, error) {
+	if err := blueprints.ValidateEnvironmentBlueprintRevision(revision); err != nil {
 		return nil, err
 	}
 	writer := blueprintRecordWriter{value: []byte("GPAU")}
@@ -48,31 +49,31 @@ func encodeEnvironmentBlueprintAuditStream(revision EnvironmentBlueprintRevision
 	return writer.value, nil
 }
 
-func decodeEnvironmentBlueprintAuditStream(value []byte) (EnvironmentBlueprintRevision, error) {
+func decodeEnvironmentBlueprintAuditStream(value []byte) (blueprints.EnvironmentBlueprintRevision, error) {
 	if len(value) < 6 || len(value) > environmentBlueprintMaximumAuditBytes || string(value[:4]) != "GPAU" {
-		return EnvironmentBlueprintRevision{}, corruptEnvironmentBlueprint()
+		return blueprints.EnvironmentBlueprintRevision{}, blueprints.CorruptEnvironmentBlueprint()
 	}
 	reader := blueprintRecordReader{value: value[4:]}
 	if reader.uint16() != 1 {
-		return EnvironmentBlueprintRevision{}, corruptEnvironmentBlueprint()
+		return blueprints.EnvironmentBlueprintRevision{}, blueprints.CorruptEnvironmentBlueprint()
 	}
-	revision := EnvironmentBlueprintRevision{
+	revision := blueprints.EnvironmentBlueprintRevision{
 		EnvironmentID: reader.string(128),
 		RevisionID:    reader.string(128),
-		RootPath:      reader.string(environmentBlueprintMaxPathBytes),
+		RootPath:      reader.string(blueprints.EnvironmentBlueprintMaxPathBytes),
 		CreatedAt:     reader.timestamp(),
 	}
 	sourceCount := int(reader.uint16())
-	if reader.err != nil || sourceCount > environmentBlueprintMaxFiles {
-		return EnvironmentBlueprintRevision{}, corruptEnvironmentBlueprint()
+	if reader.err != nil || sourceCount > blueprints.EnvironmentBlueprintMaxFiles {
+		return blueprints.EnvironmentBlueprintRevision{}, blueprints.CorruptEnvironmentBlueprint()
 	}
 	revision.ComposeSources = make([]string, sourceCount)
 	for index := range revision.ComposeSources {
-		revision.ComposeSources[index] = reader.string(environmentBlueprintMaxPathBytes)
+		revision.ComposeSources[index] = reader.string(blueprints.EnvironmentBlueprintMaxPathBytes)
 	}
 	interpolationCount := int(reader.uint16())
 	if reader.err != nil || interpolationCount > 256 {
-		return EnvironmentBlueprintRevision{}, corruptEnvironmentBlueprint()
+		return blueprints.EnvironmentBlueprintRevision{}, blueprints.CorruptEnvironmentBlueprint()
 	}
 	revision.Interpolation = make(map[string]string, interpolationCount)
 	previousKey := ""
@@ -80,34 +81,34 @@ func decodeEnvironmentBlueprintAuditStream(value []byte) (EnvironmentBlueprintRe
 		key := reader.string(128)
 		item := reader.string(4096)
 		if reader.err != nil || key <= previousKey {
-			return EnvironmentBlueprintRevision{}, corruptEnvironmentBlueprint()
+			return blueprints.EnvironmentBlueprintRevision{}, blueprints.CorruptEnvironmentBlueprint()
 		}
 		revision.Interpolation[key] = item
 		previousKey = key
 	}
 	fileCount := int(reader.uint16())
-	if reader.err != nil || fileCount > environmentBlueprintMaxFiles {
-		return EnvironmentBlueprintRevision{}, corruptEnvironmentBlueprint()
+	if reader.err != nil || fileCount > blueprints.EnvironmentBlueprintMaxFiles {
+		return blueprints.EnvironmentBlueprintRevision{}, blueprints.CorruptEnvironmentBlueprint()
 	}
-	revision.Files = make([]EnvironmentBlueprintFile, fileCount)
+	revision.Files = make([]blueprints.EnvironmentBlueprintFile, fileCount)
 	for index := range revision.Files {
-		path := reader.string(environmentBlueprintMaxPathBytes)
+		path := reader.string(blueprints.EnvironmentBlueprintMaxPathBytes)
 		digest := reader.digest()
-		content := reader.bytes(environmentBlueprintMaxFileBytes)
+		content := reader.bytes(blueprints.EnvironmentBlueprintMaxFileBytes)
 		if reader.err != nil || sha256.Sum256(content) != digest {
 			clear(content)
 			for previous := 0; previous < index; previous++ {
 				clear(revision.Files[previous].Content)
 			}
-			return EnvironmentBlueprintRevision{}, corruptEnvironmentBlueprint()
+			return blueprints.EnvironmentBlueprintRevision{}, blueprints.CorruptEnvironmentBlueprint()
 		}
-		revision.Files[index] = EnvironmentBlueprintFile{Path: path, Content: content}
+		revision.Files[index] = blueprints.EnvironmentBlueprintFile{Path: path, Content: content}
 	}
-	if reader.done() != nil || validateEnvironmentBlueprintRevision(revision) != nil {
+	if reader.done() != nil || blueprints.ValidateEnvironmentBlueprintRevision(revision) != nil {
 		for index := range revision.Files {
 			clear(revision.Files[index].Content)
 		}
-		return EnvironmentBlueprintRevision{}, corruptEnvironmentBlueprint()
+		return blueprints.EnvironmentBlueprintRevision{}, blueprints.CorruptEnvironmentBlueprint()
 	}
 	return revision, nil
 }

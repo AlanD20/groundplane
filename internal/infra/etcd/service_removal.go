@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -166,7 +167,7 @@ func (repository *ServiceRepository) BeginServiceRemovalWithTask(
 		return IdempotencyTransactionResult{}, err
 	}
 	indexes, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
-		environmentBlueprintHeadKey(environment.Record.ID),
+		blueprints.EnvironmentBlueprintHeadKey(environment.Record.ID),
 		projectionrecord.EnvironmentComposeProjectionStorageKey(environment.Record.ID),
 		serviceLifecycleActiveKey(current.Record.Desired.ID),
 		componentTaskActiveEnvironmentKey(environment.Record.ID),

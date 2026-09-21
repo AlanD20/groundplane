@@ -6,6 +6,7 @@ import (
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/backupscheduling"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -239,7 +240,7 @@ func backupRunExternalConditions(
 	for _, source := range run.Sources {
 		allowed[backuppolicy.BackupSourceKey(source.SourceID)] = struct{}{}
 		if source.Snapshot.Postgres != nil {
-			allowed[environmentBlueprintHeadKey(source.Snapshot.Postgres.BackingEnvironmentID)] = struct{}{}
+			allowed[blueprints.EnvironmentBlueprintHeadKey(source.Snapshot.Postgres.BackingEnvironmentID)] = struct{}{}
 		}
 		if source.Snapshot.Volume != nil {
 			allowed[projectionrecord.EnvironmentComposeProjectionStorageKey(source.Snapshot.Volume.EnvironmentID)] = struct{}{}

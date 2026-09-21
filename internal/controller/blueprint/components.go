@@ -14,6 +14,7 @@ import (
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -36,7 +37,7 @@ func (service *Service) prepareBlueprintComponents(
 	allocate func(ids.Kind) string,
 	specs map[string]core.ComponentSpec,
 	current []etcdstore.Versioned[componentrecord.Record],
-	zoneChanges []etcd.EnvironmentBlueprintZoneChange,
+	zoneChanges []blueprints.EnvironmentBlueprintZoneChange,
 ) (etcd.ComponentTaskPreparation, []componentrecord.Record, []core.Component, error) {
 	currentComponents := make([]core.Component, len(current))
 	currentByID := make(map[string]etcdstore.Versioned[componentrecord.Record], len(current))

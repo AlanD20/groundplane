@@ -3,6 +3,7 @@ package etcd
 import (
 	"context"
 	"encoding/json"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/internal/infra/etcd/recordcodec"
@@ -111,7 +112,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateTerminalAcknowledgeme
 	}
 	if task.Executor != taskjournal.TaskExecutorAgent || task.Owner.EnvironmentID == "" ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != task.Owner.EnvironmentID ||
-		task.Params[EnvironmentDesiredRevisionParam] == "" {
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] == "" {
 		return blueprintCandidateTerminalChange{}, releases.CorruptReleaseRecord()
 	}
 	if validateTaskMaterializationWriterForTask(writer, task, task.Owner.EnvironmentID) != nil {
@@ -296,7 +297,7 @@ func (repository *TaskRepository) validateBlueprintCandidateTerminalReplay(
 	if publicationID == "" || task.Type != taskjournal.TaskUpdate {
 		return nil
 	}
-	desiredRevisionID := task.Params[EnvironmentDesiredRevisionParam]
+	desiredRevisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	keys := []string{
 		releases.ReleasePublicationKey(publicationID),
 		releases.ReleaseManifestStagingKey(publicationID),
@@ -502,7 +503,7 @@ func (repository *TaskRepository) prepareBlueprintCandidateRetry(
 	if err != nil {
 		return releaseTaskRetryChange{}, err
 	}
-	desiredRevisionID := source.Params[EnvironmentDesiredRevisionParam]
+	desiredRevisionID := source.Params[blueprints.EnvironmentDesiredRevisionParam]
 	rootRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys:     []string{environmentBlueprintRootKey(source.Owner.EnvironmentID, desiredRevisionID)},
 		Revision: revision,

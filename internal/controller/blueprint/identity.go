@@ -5,9 +5,9 @@ import (
 	"github.com/AlanD20/groundplane/internal/common/ids"
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
 	composerender "github.com/AlanD20/groundplane/internal/controller/composerender"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	"github.com/AlanD20/groundplane/pkg/errs"
 	"math"
@@ -15,7 +15,7 @@ import (
 
 func environmentBlueprintState(
 	environmentID string,
-	head etcdstore.Versioned[etcd.EnvironmentBlueprintHead],
+	head etcdstore.Versioned[blueprints.EnvironmentBlueprintHead],
 	hasHead bool,
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	hasProjection bool,

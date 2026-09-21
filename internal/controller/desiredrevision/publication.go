@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -43,9 +44,9 @@ type PublicationRepository interface {
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
 		projectionrecord.EnvironmentComposeProjection,
-		[]etcd.EnvironmentBlueprintZoneChange,
-		[]etcd.EnvironmentBlueprintServiceChange,
-		[]etcd.EnvironmentBlueprintRouteChange,
+		[]blueprints.EnvironmentBlueprintZoneChange,
+		[]blueprints.EnvironmentBlueprintServiceChange,
+		[]blueprints.EnvironmentBlueprintRouteChange,
 		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
@@ -80,9 +81,9 @@ type Repository interface {
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
 		projectionrecord.EnvironmentComposeProjection,
-		[]etcd.EnvironmentBlueprintZoneChange,
-		[]etcd.EnvironmentBlueprintServiceChange,
-		[]etcd.EnvironmentBlueprintRouteChange,
+		[]blueprints.EnvironmentBlueprintZoneChange,
+		[]blueprints.EnvironmentBlueprintServiceChange,
+		[]blueprints.EnvironmentBlueprintRouteChange,
 		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
@@ -176,9 +177,9 @@ type PublishInput struct {
 	Staged                  StagedPublication
 	Evidence                Evidence
 	Locator                 idempotencyrecord.IdempotencyLocator
-	ZoneChanges             []etcd.EnvironmentBlueprintZoneChange
-	ServiceChanges          []etcd.EnvironmentBlueprintServiceChange
-	RouteChanges            []etcd.EnvironmentBlueprintRouteChange
+	ZoneChanges             []blueprints.EnvironmentBlueprintZoneChange
+	ServiceChanges          []blueprints.EnvironmentBlueprintServiceChange
+	RouteChanges            []blueprints.EnvironmentBlueprintRouteChange
 	ReleaseGroupPreparation etcd.ReleaseGroupBlueprintPreparedMutation
 	ComponentPreparation    etcd.ComponentTaskPreparation
 	AttachPreparation       etcd.BlueprintAttachTaskPreparation
@@ -214,7 +215,7 @@ type stagedPublicationState struct {
 
 type StageInput struct {
 	Claim      etcd.EnvironmentBlueprintStageClaim
-	Blueprint  etcd.EnvironmentBlueprintRevision
+	Blueprint  blueprints.EnvironmentBlueprintRevision
 	Projection projectionrecord.EnvironmentComposeProjection
 }
 

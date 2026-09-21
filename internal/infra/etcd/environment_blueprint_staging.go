@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"crypto/sha256"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	"time"
@@ -102,7 +103,7 @@ type EnvironmentBlueprintStageClaim struct {
 
 type EnvironmentBlueprintStageRequest struct {
 	Claim            EnvironmentBlueprintStageClaim
-	Blueprint        *EnvironmentBlueprintRevision
+	Blueprint        *blueprints.EnvironmentBlueprintRevision
 	Mutation         *EnvironmentDesiredMutationAudit
 	Projection       projectionrecord.EnvironmentComposeProjection
 	DependencyDigest [sha256.Size]byte

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -103,7 +104,7 @@ func (gate BlueprintRequirementGate) validateTaskIdentity(task TaskRecord, requi
 	}
 	if gate.TaskID != task.ID || gate.OperationID != task.OperationID || gate.PlanID != task.PlanID ||
 		gate.RetryOf != task.RetryOf || task.Type != taskjournal.TaskUpdate || task.Executor != taskjournal.TaskExecutorAgent ||
-		task.Params[EnvironmentDesiredRevisionParam] != gate.DAG.RootTaskID {
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != gate.DAG.RootTaskID {
 		return errs.New(errs.KindValidationFailed, "Blueprint requirement gate does not match its Task")
 	}
 	if requireMarker && task.Params[TaskBlueprintRequirementGateSHA256Param] != gate.DAGDigest {
@@ -278,7 +279,7 @@ func (repository *TaskRepository) observeBlueprintRequirementGateForClaim(
 	task TaskRecord,
 	revision int64,
 ) (blueprintRequirementGateClaimEvidence, bool, bool, error) {
-	desiredRevision := task.Params[EnvironmentDesiredRevisionParam]
+	desiredRevision := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	if task.Type != taskjournal.TaskUpdate || task.Executor != taskjournal.TaskExecutorAgent || desiredRevision == "" {
 		return blueprintRequirementGateClaimEvidence{}, false, true, nil
 	}
@@ -392,7 +393,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 		return nil, nil, errs.New(errs.KindInternal, "Blueprint prerequisite epoch fence is invalid")
 	}
 
-	headKey := environmentBlueprintHeadKey(fence.environmentID)
+	headKey := blueprints.EnvironmentBlueprintHeadKey(fence.environmentID)
 	headRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{headKey}, Revision: readRevision,
 	})
@@ -426,7 +427,7 @@ func (repository *TaskRepository) prepareBlueprintRequirementGatePrerequisiteAck
 	candidate, err := decodeTaskRecord(candidateRead.Values[0].Value)
 	if err != nil || candidate.Status != taskjournal.TaskStatusPending ||
 		candidate.Owner.EnvironmentID != fence.environmentID || candidate.Target != fence.environmentID ||
-		candidate.Params[EnvironmentDesiredRevisionParam] != candidateTaskID ||
+		candidate.Params[blueprints.EnvironmentDesiredRevisionParam] != candidateTaskID ||
 		!taskHasBlueprintCandidateAppliedAuthority(candidate) ||
 		releases.ValidatePublicationID(candidate.Params[TaskReleasePublicationParam]) != nil {
 		return nil, nil, nil

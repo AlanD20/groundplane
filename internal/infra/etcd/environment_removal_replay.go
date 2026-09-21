@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -21,7 +22,7 @@ func (repository *TaskRepository) validateEnvironmentRemovalReplay(
 		Keys: []string{
 			hierarchyrecord.EnvironmentKey(task.Target),
 			deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), task.Target),
-			environmentBlueprintHeadKey(task.Target),
+			blueprints.EnvironmentBlueprintHeadKey(task.Target),
 			projectionrecord.EnvironmentComposeProjectionStorageKey(task.Target),
 			environmentPoolRegistryKey,
 			hierarchyrecord.EnvironmentMutationEpochKey(task.Target),

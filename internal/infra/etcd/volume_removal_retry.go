@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchydeletion "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchydeletion"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -79,7 +80,7 @@ func (repository *TaskRepository) retryVolumeRemovalTask(
 		removalrecord.AttemptKey(runtime.OperationID, runtime.AttemptOrdinal), removalrecord.OwnerKey(runtime.VolumeID),
 		removalrecord.EnvironmentLockKey(
 			runtime.EnvironmentID,
-		), rootKey, replayKey, environmentBlueprintHeadKey(runtime.EnvironmentID),
+		), rootKey, replayKey, blueprints.EnvironmentBlueprintHeadKey(runtime.EnvironmentID),
 		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetEnvironment), runtime.EnvironmentID),
 		hierarchydeletion.HierarchyDeletionTombstoneKey(string(hierarchydeletion.HierarchyDeletionTargetProject), source.Record.Owner.ProjectID)}
 	if source.Record.Owner.TenantID != "" {

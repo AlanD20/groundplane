@@ -3,6 +3,7 @@ package blueprint
 import (
 	"context"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -18,7 +19,7 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/entry"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+
 	apiTypes "github.com/AlanD20/groundplane/pkg/api"
 	"github.com/AlanD20/groundplane/pkg/errs"
 )
@@ -27,7 +28,7 @@ type environmentBlueprintSnapshot struct {
 	tenant      etcdstore.Versioned[hierarchyrecord.TenantRecord]
 	project     etcdstore.Versioned[hierarchyrecord.ProjectRecord]
 	environment etcdstore.Versioned[hierarchyrecord.EnvironmentRecord]
-	head        etcdstore.Versioned[etcd.EnvironmentBlueprintHead]
+	head        etcdstore.Versioned[blueprints.EnvironmentBlueprintHead]
 	projection  etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection]
 	hasHead     bool
 }
@@ -180,7 +181,7 @@ func (service *Service) loadEnvironmentBlueprintSnapshot(
 }
 
 func environmentBlueprintRevision(
-	head etcdstore.Versioned[etcd.EnvironmentBlueprintHead],
+	head etcdstore.Versioned[blueprints.EnvironmentBlueprintHead],
 	found bool,
 ) string {
 	if !found {

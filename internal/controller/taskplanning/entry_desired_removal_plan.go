@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -78,7 +79,7 @@ func (planner *EntryRemovalPlanner) PrepareDesiredEntryRemoval(
 		task.Executor, task.TimeoutSeconds = taskjournal.TaskExecutorController, 30
 		task.RenderGeneration = int32(claim.RenderGeneration)
 		task.Params = map[string]string{taskjournal.TaskResourceKindParam: taskjournal.TaskResourceEntry,
-			taskjournal.TaskEntryEnvironmentParam: claim.EnvironmentID, etcd.EnvironmentDesiredRevisionParam: claim.RevisionID}
+			taskjournal.TaskEntryEnvironmentParam: claim.EnvironmentID, blueprints.EnvironmentDesiredRevisionParam: claim.RevisionID}
 		task.Materializations = nil
 		task.Steps = []taskjournal.TaskStepRecord{{ID: ids.New(ids.KindStep), Kind: taskjournal.TaskStepOperation}}
 		digest := sha256.Sum256(

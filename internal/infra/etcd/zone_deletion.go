@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -174,7 +175,7 @@ func (repository *ZoneRepository) BeginZoneDeletionWithTask(
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), environment.Record.ID)},
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), project.Record.ID)},
 		{Key: zoneRemovalIntentKey(intent.OperationID)},
-		{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: intent.DesiredHeadRevision},
+		{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: intent.DesiredHeadRevision},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), ModRevision: intent.AppliedProjectionRevision},
 		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID)},
 		{
@@ -390,7 +391,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 	parentResult, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{Keys: []string{
 		taskjournal.TaskStorageKey(parentTaskID), zoneRemovalIntentKey(intent.OperationID),
 		componentTaskActiveEnvironmentKey(intent.EnvironmentID),
-		environmentBlueprintHeadKey(intent.EnvironmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
+		blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID),
 	}, Revision: tombstone.ReadRevision})
 	if err != nil {
 		return IdempotencyTransactionResult{}, err
@@ -486,7 +487,7 @@ func (repository *ZoneRepository) HandoffBackingZoneDeletion(
 		},
 		{Key: zoneRemovalIntentKey(intent.OperationID), ModRevision: parentResult.Values[1].ModRevision},
 		{Key: componentTaskActiveEnvironmentKey(intent.EnvironmentID), ModRevision: parentResult.Values[2].ModRevision},
-		{Key: environmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: parentResult.Values[3].ModRevision},
+		{Key: blueprints.EnvironmentBlueprintHeadKey(intent.EnvironmentID), ModRevision: parentResult.Values[3].ModRevision},
 		{Key: projectionrecord.EnvironmentComposeProjectionStorageKey(intent.EnvironmentID), ModRevision: parentResult.Values[4].ModRevision},
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetEnvironment), intent.EnvironmentID)},
 		{Key: deletionTombstoneKey(string(deletionrecord.DeletionTargetProject), zone.Record.Desired.OwnerID)},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -437,7 +438,7 @@ func (service *MutationService) mutateOnce(
 	params := map[string]string{
 		taskjournal.TaskResourceKindParam:               taskjournal.TaskResourceVolume,
 		taskjournal.TaskMaterializationEnvironmentParam: request.environmentID,
-		etcd.EnvironmentDesiredRevisionParam:            claim.RevisionID,
+		blueprints.EnvironmentDesiredRevisionParam:      claim.RevisionID,
 		taskjournal.TaskComposeArtifactParam:            artifactID,
 		volumeActionParam:                               request.action, volumeComposeKeyParam: request.key,
 		taskplanning.VolumeTaskIntentSHA256Param: hex.EncodeToString(intentDigest),

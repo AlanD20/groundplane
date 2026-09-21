@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AlanD20/groundplane/internal/infra/etcd"
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -21,12 +22,12 @@ type attachMutationRepository interface {
 	GetEnvironmentBlueprintHead(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
 	GetEnvironmentBlueprintRevision(
 		context.Context,
 		string,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentBlueprintRevision], bool, error)
+	) (etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision], bool, error)
 	GetEnvironmentComposeProjection(
 		context.Context,
 		string,
@@ -120,7 +121,7 @@ func (repository *durableAttachMutationRepository) GetEnvironmentBlueprintRevisi
 	ctx context.Context,
 	environmentID string,
 	revisionID string,
-) (etcdstore.Versioned[etcd.EnvironmentBlueprintRevision], bool, error) {
+) (etcdstore.Versioned[blueprints.EnvironmentBlueprintRevision], bool, error) {
 	return repository.hierarchy.GetEnvironmentBlueprintRevision(ctx, environmentID, revisionID)
 }
 
@@ -141,7 +142,7 @@ func (repository *durableAttachMutationRepository) GetService(
 func (repository *durableAttachMutationRepository) GetEnvironmentBlueprintHead(
 	ctx context.Context,
 	environmentID string,
-) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error) {
+) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error) {
 	return repository.hierarchy.GetEnvironmentBlueprintHead(ctx, environmentID)
 }
 

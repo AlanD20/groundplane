@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	materializationrecord "github.com/AlanD20/groundplane/internal/common/taskmaterialization"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -194,7 +195,7 @@ func validateSemanticAuthority(
 		projection.RenderGeneration != record.RenderGeneration || task.ID != record.ProducingTaskID ||
 		task.Executor != taskjournal.TaskExecutorAgent || uint64(task.RenderGeneration) != record.RenderGeneration ||
 		task.Params[taskjournal.TaskMaterializationEnvironmentParam] != record.EnvironmentID ||
-		task.Params[base.EnvironmentDesiredRevisionParam] != record.AppliedRevisionID {
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != record.AppliedRevisionID {
 		return authorityConflict()
 	}
 	services := make(map[string]string, len(projection.DesiredServices))

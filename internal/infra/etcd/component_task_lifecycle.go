@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"github.com/AlanD20/groundplane/internal/common/ids"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -40,7 +41,7 @@ func componentTaskDesiredProjectionZones(
 	intent ComponentTaskIntent,
 	zones []string,
 ) (string, map[string]zonerecord.Record, error) {
-	desiredRevisionID := task.Params[EnvironmentDesiredRevisionParam]
+	desiredRevisionID := task.Params[blueprints.EnvironmentDesiredRevisionParam]
 	if ids.Validate(ids.KindTask, desiredRevisionID) != nil {
 		return "", nil, errs.New(errs.KindStateConflict, "Component Task desired revision is invalid")
 	}

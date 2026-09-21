@@ -3,6 +3,7 @@ package etcd
 import (
 	"bytes"
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -470,7 +471,7 @@ func validateServiceRemovalTaskOwner(task TaskRecord, intent ServiceRemovalInten
 		task.Target != intent.ServiceID || !task.CreatedAt.Equal(intent.CreatedAt) || len(task.Params) != 4 ||
 		task.Params[taskjournal.TaskResourceKindParam] != taskjournal.TaskResourceService ||
 		task.Params[taskjournal.TaskServiceEnvironmentParam] != intent.EnvironmentID ||
-		task.Params[EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID ||
+		task.Params[blueprints.EnvironmentDesiredRevisionParam] != intent.Claim.RevisionID ||
 		task.Params[taskjournal.TaskComposeArtifactParam] == "" {
 		return errs.New(errs.KindStateConflict, "Service removal intent does not belong to its Task")
 	}

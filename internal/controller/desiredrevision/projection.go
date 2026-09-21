@@ -2,6 +2,7 @@ package desiredrevision
 
 import (
 	composeidentity "github.com/AlanD20/groundplane/internal/controller/composeidentity"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	componentrecord "github.com/AlanD20/groundplane/internal/infra/etcd/components"
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
 )
 
 func ComposeProjection(
@@ -104,12 +104,12 @@ func BlueprintRevision(
 	revisionID string,
 	createdAt time.Time,
 	bundle core.BlueprintBundle,
-) etcd.EnvironmentBlueprintRevision {
-	files := make([]etcd.EnvironmentBlueprintFile, len(bundle.Files))
+) blueprints.EnvironmentBlueprintRevision {
+	files := make([]blueprints.EnvironmentBlueprintFile, len(bundle.Files))
 	for index, file := range bundle.Files {
-		files[index] = etcd.EnvironmentBlueprintFile{Path: file.Path, Content: file.Content}
+		files[index] = blueprints.EnvironmentBlueprintFile{Path: file.Path, Content: file.Content}
 	}
-	return etcd.EnvironmentBlueprintRevision{
+	return blueprints.EnvironmentBlueprintRevision{
 		EnvironmentID: environmentID, RevisionID: revisionID, RootPath: bundle.RootPath,
 		ComposeSources: append([]string(nil), bundle.ComposeSources...),
 		Interpolation:  cloneBlueprintInterpolation(bundle.Interpolation),

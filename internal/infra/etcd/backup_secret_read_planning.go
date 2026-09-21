@@ -6,6 +6,7 @@ import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
 	backupruntime "github.com/AlanD20/groundplane/internal/infra/etcd/backupruntime"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
@@ -125,13 +126,13 @@ func (reader *BackupSecretResolutionReader) planDynamicKeys(
 			dynamic.add(attachrecord.AttachFactsKey(source.TargetID))
 			dynamic.add(hierarchyrecord.ProjectKey(snapshot.BackingProjectID))
 			dynamic.add(hierarchyrecord.EnvironmentKey(snapshot.BackingEnvironmentID))
-			dynamic.add(environmentBlueprintHeadKey(snapshot.BackingEnvironmentID))
+			dynamic.add(blueprints.EnvironmentBlueprintHeadKey(snapshot.BackingEnvironmentID))
 		case backupruntime.BackupRuntimeSourceVolume:
 			snapshot := source.Snapshot.Volume
 			if snapshot == nil {
 				return "", nil, nil, errs.New(errs.KindInternal, "volume backup source snapshot is corrupt")
 			}
-			dynamic.add(environmentBlueprintHeadKey(snapshot.EnvironmentID))
+			dynamic.add(blueprints.EnvironmentBlueprintHeadKey(snapshot.EnvironmentID))
 			dynamic.add(environmentBlueprintRootKey(snapshot.EnvironmentID, snapshot.DesiredRevisionID))
 			for _, service := range snapshot.Services {
 				dynamic.add(servicerecord.ServiceRuntimeKey(service.ServiceID))

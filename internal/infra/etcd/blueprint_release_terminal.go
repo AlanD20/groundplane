@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
 	releases "github.com/AlanD20/groundplane/internal/infra/etcd/releases"
@@ -47,7 +48,7 @@ func (repository *TaskRepository) finalizeBlueprintReleaseTaskBatch(
 	}
 	rootRead, err := repository.store.GetMany(ctx, etcdstore.GetManyRequest{
 		Keys: []string{environmentBlueprintRootKey(
-			task.Owner.EnvironmentID, task.Params[EnvironmentDesiredRevisionParam],
+			task.Owner.EnvironmentID, task.Params[blueprints.EnvironmentDesiredRevisionParam],
 		)},
 		Revision: readRevision,
 	})

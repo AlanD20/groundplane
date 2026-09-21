@@ -10,7 +10,8 @@ import (
 	"github.com/AlanD20/groundplane/internal/controller/taskcontract"
 	taskplanning "github.com/AlanD20/groundplane/internal/controller/taskplanning"
 	"github.com/AlanD20/groundplane/internal/core"
-	"github.com/AlanD20/groundplane/internal/infra/etcd"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
+
 	entryrecord "github.com/AlanD20/groundplane/internal/infra/etcd/entries"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	taskjournal "github.com/AlanD20/groundplane/internal/infra/etcd/taskjournal"
@@ -54,7 +55,7 @@ func prepareBackingCreationSteps(input backingCreationStepInput) (backingCreatio
 	}
 	stepRecords := []taskjournal.TaskStepRecord{{Kind: taskjournal.TaskStepOperation, ID: environmentStepID}}
 	taskParams := map[string]string{
-		etcd.EnvironmentDesiredRevisionParam:               input.TaskID,
+		blueprints.EnvironmentDesiredRevisionParam:         input.TaskID,
 		taskjournal.TaskMaterializationEnvironmentParam:    environment.ID,
 		taskjournal.TaskBackingServiceCreationParam:        serviceID,
 		taskjournal.TaskBackingServiceVolumeDirectoryParam: environment.VolumeDir,

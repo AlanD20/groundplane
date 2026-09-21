@@ -2,6 +2,7 @@ package volume
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	projectionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentprojection"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
@@ -64,7 +65,7 @@ type MutationRepository interface {
 	GetEnvironmentBlueprintHead(
 		context.Context,
 		string,
-	) (etcdstore.Versioned[etcd.EnvironmentBlueprintHead], bool, error)
+	) (etcdstore.Versioned[blueprints.EnvironmentBlueprintHead], bool, error)
 	ClaimEnvironmentBlueprintStage(
 		context.Context,
 		etcd.EnvironmentBlueprintStageClaimRequest,
@@ -81,9 +82,9 @@ type MutationRepository interface {
 		etcd.EnvironmentBlueprintStageClaim,
 		etcd.EnvironmentDesiredRevisionIdentity,
 		projectionrecord.EnvironmentComposeProjection,
-		[]etcd.EnvironmentBlueprintZoneChange,
-		[]etcd.EnvironmentBlueprintServiceChange,
-		[]etcd.EnvironmentBlueprintRouteChange,
+		[]blueprints.EnvironmentBlueprintZoneChange,
+		[]blueprints.EnvironmentBlueprintServiceChange,
+		[]blueprints.EnvironmentBlueprintRouteChange,
 		etcd.ReleaseGroupBlueprintPreparedMutation,
 		etcd.ComponentTaskPreparation,
 		etcd.BlueprintAttachTaskPreparation,
@@ -94,7 +95,7 @@ type MutationRepository interface {
 
 func desiredState(
 	environmentID string,
-	head etcdstore.Versioned[etcd.EnvironmentBlueprintHead],
+	head etcdstore.Versioned[blueprints.EnvironmentBlueprintHead],
 	hasHead bool,
 	projection etcdstore.Versioned[projectionrecord.EnvironmentComposeProjection],
 	hasProjection bool,

@@ -3,6 +3,7 @@ package etcd
 import (
 	attachrecord "github.com/AlanD20/groundplane/internal/infra/etcd/attachments"
 	backuppolicy "github.com/AlanD20/groundplane/internal/infra/etcd/backuppolicy"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	connectorrecord "github.com/AlanD20/groundplane/internal/infra/etcd/connectors"
 	deletionrecord "github.com/AlanD20/groundplane/internal/infra/etcd/deletions"
 	coordinationrecord "github.com/AlanD20/groundplane/internal/infra/etcd/environmentcoordination"
@@ -140,7 +141,7 @@ func prepareBackupPolicyReplacement(
 			plan.compare(
 				backupPolicyCompareVolume,
 				source.Volume.Volume.ID,
-				environmentBlueprintHeadKey(source.Source.Record.EnvironmentID),
+				blueprints.EnvironmentBlueprintHeadKey(source.Source.Record.EnvironmentID),
 				source.Volume.Projection.Revision,
 			)
 			plan.compare(

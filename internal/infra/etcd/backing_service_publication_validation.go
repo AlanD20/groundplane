@@ -2,6 +2,7 @@ package etcd
 
 import (
 	"context"
+	blueprints "github.com/AlanD20/groundplane/internal/infra/etcd/blueprints"
 	hierarchyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/hierarchy"
 	idempotencyrecord "github.com/AlanD20/groundplane/internal/infra/etcd/idempotency"
 	etcdstore "github.com/AlanD20/groundplane/internal/infra/etcd/keyvalue"
@@ -167,7 +168,7 @@ func validateBackingServiceCreation(ctx context.Context, creation BackingService
 		creation.Task.Executor != taskjournal.TaskExecutorAgent || creation.Task.Type != taskjournal.TaskUpdate ||
 		creation.Task.Target != creation.Environment.ID || creation.Task.Status != taskjournal.TaskStatusPending ||
 		creation.Task.RenderGeneration != 1 ||
-		creation.Task.Params[EnvironmentDesiredRevisionParam] != creation.Task.ID ||
+		creation.Task.Params[blueprints.EnvironmentDesiredRevisionParam] != creation.Task.ID ||
 		creation.Task.Params[taskjournal.TaskMaterializationEnvironmentParam] != creation.Environment.ID ||
 		creation.Task.Params[taskjournal.TaskBackingServiceCreationParam] != creation.Service.Desired.ID ||
 		hasHealthStep != hasDesiredHealth || hasHealthStep && healthServiceID != creation.Service.Desired.ID ||
